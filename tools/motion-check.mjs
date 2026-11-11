@@ -10,6 +10,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
+import { createRoutes } from '../src/routes.js';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
@@ -45,7 +46,22 @@ const angle = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 
 
 const netFile = new URL('../public/rail-net.json', import.meta.url);
 const net = !argv.includes('--nonet') && existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null;
-const drawnTrains = createTrains({ net, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
+// The planned routes: from the recording's timetable (data/timetable-<same time>.jsonl) and data/stations.json,
+// when there are both (recordings from 2026-11-11 22:45 on). --noroutes: without them.
+const ttFile = file.replace('positions-', 'timetable-');
+let routes = null;
+if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('data/stations.json')) {
+  const stations = new Map(JSON.parse(readFileSync('data/stations.json', 'utf8')).map(st => {
+    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(st.Geometry?.WGS84 ?? '');
+    return [st.LocationSignature, m ? { lon: Number(m[1]), lat: Number(m[2]) } : null];
+  }).filter(([, v]) => v));
+  routes = createRoutes({ stations, net });
+  routes.add(readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+    .filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation)
+    .map(a => ({ key: `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}`, sig: a.LocationSignature,
+      activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
+}
+const drawnTrains = createTrains({ net, routes, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
 const truth = createTrains({ net });
 // How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
 const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
@@ -63,7 +79,7 @@ const feed = (trains, upTo, i, skip) => {
 };
 
 const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
-  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, coastToStop: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
 function turnBack(dirs, id, p) {
@@ -96,6 +112,15 @@ for (let T = start; T < end; T += STEP) {
     s.all++;
     const sim = PLAIN ? null : drawnTrains.simOf(d.id);
     if (sim?.syncing) s.syncMoments++;
+    // A coasting train must never pass its next planned stop (it waits 200 m before it).
+    if (sim && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
+      s.coastToStop++;
+      if (sim.s > sim.stopAt + 200) {
+        s.pastStop++;
+        if (argv.includes('--why') && !s.pastShown?.has(d.id) && (s.pastShown ??= new Set()).add(d.id) && s.pastShown.size <= 8)
+          console.log('past stop', d.id, new Date(t).toISOString().slice(11, 19), `${Math.round(sim.s - sim.stopAt - 200)} m past the stop's place; ${Math.round(sim.pastLast)} m past the last report; target ${sim.target}, ${Math.round(sim.v * 3.6)} km/h`);
+      }
+    }
     if (sim?.jumped) s.jumps++;
     const last = prev.get(d.id);
     const now = { p: d, dir: last?.dir ?? null, synced: sim?.syncing ?? false, frozenRun: 0 };
@@ -152,7 +177,7 @@ const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
-console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}, ${net ? 'on the rail network' : 'straight lines'}; ` +
+console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}, ${net ? 'on the rail network' : 'straight lines'}${routes ? `, with ${routes.count} planned routes` : ''}; ` +
   `replayed in ${((performance.now() - t0) / 1000).toFixed(0)} s`);
 console.log(`cleaning: ${JSON.stringify(drawnTrains.counts)}`);
 console.log(`(below: only where the truth is known, reports at most 30 s apart; ${pct(s.silentMoving, s.silentMoving + s.moving)} of moving moments are in longer silences, drawn standing ${pct(s.silentFrozen, s.silentMoving)} of those)`);
@@ -164,6 +189,7 @@ console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.tru
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
+if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop}`);
 if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);
 if (!PLAIN) {

@@ -3,8 +3,9 @@ import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
-import { followPassings, fetchStationNames, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
+import { createRoutes } from './routes.js';
 
 window.__started = true;   // index.html reports it on screen if this line is never reached
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
@@ -15,9 +16,14 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
 });
 const trains = createTrains();
 if (import.meta.env.DEV) window.__trains = trains;   // for the tools in tools/; not in a build
+// Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
+// and it waits before that stop rather than arriving in the drawing.
+const routes = createRoutes();
+trains.useRoutes(routes);
+netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
-let stationNames = new Map();
-const stationName = sig => stationNames.get(sig) ?? sig;
+let stations = new Map();   // signature -> { name, lon, lat }
+const stationName = sig => stations.get(sig)?.name ?? sig;
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
@@ -110,7 +116,28 @@ if (hasKey) {
       if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
     },
   });
-  fetchStationNames().then(m => { stationNames = m; }).catch(e => console.warn('station names:', e.message));
+  fetchStations().then((m) => {
+    stations = m;
+    routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
+  }).catch(e => console.warn('stations:', e.message));
+
+  // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
+  // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.
+  const asked = new Map();   // train key -> when its route was last asked for
+  async function askRoutes() {
+    const now = Date.now();
+    const want = trains.reports().filter(r => routes.until(r.id) < now + 30 * 60000 && !(now - (asked.get(r.id) ?? 0) < 5 * 60000));
+    if (!want.length) return;
+    for (const r of want) asked.set(r.id, now);
+    try {
+      routes.add(await fetchPlannedRoutes([...new Set(want.map(r => r.operational))], now - 30 * 60000, now + 90 * 60000));
+    } catch (e) {
+      console.warn('planned routes:', e.message);
+      for (const r of want) asked.delete(r.id);
+    }
+  }
+  setTimeout(askRoutes, 5000);
+  setInterval(askRoutes, 30000);
 }
 
 const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped' };

@@ -28,7 +28,7 @@ While the map is private the key is built into the page; the public version will
 
 ## On the map
 - **Dots**: the colour shows lateness: green +2 minutes or less, yellow +3 to +5, red +6 or more, grey not known.
-- **Movement**: the map runs about 25 s behind real time. Each train is a small simulation that follows the tracks and chases where its reports say it was: it speeds up and slows down gently and never drives backwards; with no new position it coasts on for at most 30 s, then waits. A train that has fallen far behind its data fast-forwards, with `»»` after its label.
+- **Movement**: the map runs about 25 s behind real time. Each train is a small simulation that follows the tracks and chases where its reports say it was: it speeds up and slows down gently and never drives backwards; with no new position it coasts on for at most 30 s, along its planned route, and never to its next planned stop (it waits 200 m before it). A train that has fallen far behind its data fast-forwards, with `»»` after its label.
 - **Labels** (zoom in to see them): board number and minutes off the timetable at the last station passed: `2042 (+2)` late, `2057 (-21)` early.
 - **Tap a train**: a ring marks it, a panel lists its stops with planned and actual times, and the camera follows the train (the **Following** button). Zooming, turning and tilting keep following; dragging the map away stops it (the button turns to **Follow**: press it to go back). Tap the map or × to close.
 - **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
@@ -36,9 +36,10 @@ While the map is private the key is built into the page; the public version will
 - **Top**: the status line (number of trains, seconds since the last report, `live` / `reconnecting` / `every 10 s`, red text when something is wrong) and the rail line switch (Trafikverket / OpenStreetMap / none).
 
 ## What is where
-- `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s), passings, a train's route, station names.
+- `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s), passings, a train's route, the planned routes of many trains, stations and their places.
 - `src/trains-source.js`: train positions, from that file.
 - `src/trains.js`: each train's reports, cleaned (repeats, noise against the train's direction, far jumps), and the simulation that is drawn.
+- `src/routes.js`: each train's planned route (timetable): where a coasting train heads at junctions, and the stop it must wait before.
 - `src/rail-net.js`: the rail network: the track under a place, the way along the tracks between two places (never reversing through a switch), the track ahead of a train.
 - `src/lateness.js`: minutes off timetable per train; the label text.
 - `src/panel.js`: the panel for a tapped train.

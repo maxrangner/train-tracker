@@ -200,13 +200,15 @@ export function netFromJSON({ scale, n, d }) {
 
   // ---- The track ahead of a train ----
   // From snapped place a, heading (the direction of travel), for `metres`. toward (a snapped place, optional): the
-  // next place on the train's planned route; the way there is taken at junctions. Elsewhere, the straightest line.
+  // next place on the train's planned route; the way there is taken at junctions (and poly.towardAt says how far
+  // it is). Elsewhere, the straightest line.
   function ahead(a, heading, metres, toward = null) {
     const dir = angle(a.heading, heading) <= 90 ? +1 : -1;
     let poly = toward ? route(a, toward, 20000, dir) : null;
     let li, d, at;
     if (poly) {
-      if (poly.cum[poly.cum.length - 1] >= metres) return poly;
+      poly.towardAt = poly.cum[poly.cum.length - 1];   // metres to the planned place
+      if (poly.towardAt >= metres) return poly;
       // Past the planned place: carry on from there, the way the train arrives.
       const h = poly.lon.length > 1 ? (Math.atan2((poly.lon.at(-1) - poly.lon.at(-2)) * Math.cos(poly.lat.at(-1) * R), poly.lat.at(-1) - poly.lat.at(-2)) / R + 360) % 360 : heading;
       ({ li } = toward); d = angle(toward.heading, h) <= 90 ? +1 : -1; at = toward.along;

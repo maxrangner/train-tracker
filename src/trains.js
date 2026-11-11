@@ -23,6 +23,8 @@ const STILL_M = 5;                   // a report this close to the last place is
 let COAST_MS = 30 * 1000;            // with no new position, coast on at the last speed at most this long
 const AHEAD_M = 3000;                // the track ahead worked out for coasting (300 km/h for 30 s is 2.5 km)
 let NET = null;                      // the rail network, when given (createTrains({ net }))
+let ROUTES = null;                   // the planned routes (src/routes.js), when given
+const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop
 const STAND_MS = 0.5;                // m/s: slower than this counts as standing
 
 // The chase. Gaps are measured along the path, in metres.
@@ -64,22 +66,29 @@ function coastHeading(h) {
   return h.at(-1).bearing;
 }
 
-// The track ahead of train tr's last report, worked out once per last report (null without a network).
-function trackAhead(tr) {
+// The track ahead of train tr's last report: { poly, stopAt (s where coasting must stop: before the next planned
+// stop) }, or null without a network. Worked out again when the last report changes, and every 10 s (the planned
+// route can arrive later).
+function trackAhead(tr, now = 0) {
   const h = tr.hist, last = h[h.length - 1];
   if (!NET || !last.snap) return null;
-  if (tr.ext?.last !== last) {
+  if (tr.ext?.last !== last || now - tr.ext.at > 10000) {
     const hd = coastHeading(h);
-    tr.ext = { last, poly: hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M) };
+    const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd) : null;
+    if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig) {
+      const poly = hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M, toward?.snap ?? null);
+      const stopAt = toward?.stop && poly?.towardAt !== undefined ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
+      tr.ext = { last, sig: toward?.sig, poly, stopAt, at: now };
+    } else tr.ext.at = now;
   }
-  return tr.ext.poly;
+  return tr.ext;
 }
 
 // The place s metres along train tr's path, and the path's direction there.
 function pointAt(tr, s) {
   const h = tr.hist, last = h[h.length - 1];
   if (s >= last.s) {
-    const track = s - last.s >= 0.01 ? trackAhead(tr) : null;
+    const track = s - last.s >= 0.01 ? trackAhead(tr)?.poly : null;
     if (track) return polyAt(track, s - last.s);
     const hd = coastHeading(h);
     if (s - last.s < 0.01 || hd === null || hd === undefined) return { lon: last.lon, lat: last.lat, heading: hd ?? null };
@@ -121,12 +130,15 @@ function coastSpeed(h) {
 // Where the reports say the train was at time t: { s, v (m/s), coasting, inJump }.
 // (Tried 2026-11-11: letting a train that still sends reports, repeating its last position, coast up to 2 minutes:
 // barely fewer standing trains in silences, 47 % -> 44 %, and a little less true elsewhere. Not kept.)
-function targetAt(h, t) {
+// cap: where coasting must stop (before the next planned stop).
+function targetAt(h, t, cap = Infinity) {
   if (t <= h[0].time) return { s: h[0].s, v: 0 };
   const last = h[h.length - 1];
   if (t >= last.time) {
     const since = (t - last.time) / 1000, v = coastSpeed(h);
-    return { s: last.s + v * Math.min(since, COAST_MS / 1000), v: since < COAST_MS / 1000 ? v : 0, coasting: true };
+    const s = last.s + v * Math.min(since, COAST_MS / 1000);
+    if (s >= cap) return { s: Math.max(last.s, cap), v: 0, coasting: true, capped: true };
+    return { s, v: since < COAST_MS / 1000 ? v : 0, coasting: true };
   }
   let i = h.length - 1;
   while (h[i - 1].time > t) i--;
@@ -138,11 +150,12 @@ function targetAt(h, t) {
 
 // ---------- The trains ----------
 
-// options.net: the rail network (src/rail-net.js), to follow the tracks. options.coastMs: try another coasting
-// limit (tools/motion-check.mjs --coast).
+// options.net: the rail network (src/rail-net.js), to follow the tracks. options.routes: the planned routes
+// (src/routes.js), for junctions and stops. options.coastMs: try another coasting limit (tools/motion-check.mjs).
 export function createTrains(options = {}) {
   if (options.coastMs) COAST_MS = options.coastMs;
   if (options.net) NET = options.net;
+  if (options.routes) ROUTES = options.routes;
   const byId = new Map();   // id -> { latest, hist, pending, against, sim }
   let lastReport = 0;       // time of the newest report we have, from Trafikverket's clock
   let simTime = null;       // the moment the simulations have reached
@@ -213,7 +226,8 @@ export function createTrains(options = {}) {
   // Move one train's simulation on by dt seconds, to time t.
   function step(tr, t, dt) {
     const h = tr.hist;
-    const T = targetAt(h, t);
+    const cap = t >= h[h.length - 1].time ? trackAhead(tr, t)?.stopAt ?? Infinity : Infinity;
+    const T = targetAt(h, t, cap);
     let sim = tr.sim;
     if (!sim) {
       tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(tr, T.s).heading ?? null, jumped: false };
@@ -245,6 +259,8 @@ export function createTrains(options = {}) {
     // Never faster than lets it slow to the target's speed by the time it gets there (with braking to spare), so
     // it doesn't shoot past: into a stop, or after a fast-forward.
     want = Math.min(want, T.v + Math.sqrt(2 * (sim.syncing ? down / 2 : STOP_BRAKE) * Math.max(0, e)));
+    // Never past the place where coasting must stop (before the next planned stop), whatever the target does.
+    if (Number.isFinite(cap)) want = Math.min(want, Math.sqrt(2 * STOP_BRAKE * Math.max(0, cap - sim.s)));
     want = Math.max(0, want);                                       // never backwards
     sim.v = Math.max(0, sim.v + Math.max(-down * dt, Math.min(up * dt, want - sim.v)));
     sim.s += sim.v * dt;
@@ -286,6 +302,8 @@ export function createTrains(options = {}) {
     DELAY_MS,
     // Follow the tracks of this rail network from now on (src/rail-net.js).
     useNet(net) { NET = net; },
+    // Follow these planned routes at junctions, and wait before planned stops (src/routes.js).
+    useRoutes(routes) { ROUTES = routes; },
     // Take in a batch of records. Returns true if anything changed.
     update(records, now = Date.now()) {
       let changed = false;
@@ -310,6 +328,8 @@ export function createTrains(options = {}) {
       return changed;
     },
     get(id) { return byId.get(id)?.latest ?? null; },
+    // Every train's latest report.
+    reports() { return [...byId.values()].map(tr => tr.latest); },
     // Where train id is drawn at time t.
     placeOf(id, t) {
       advance(t);
@@ -362,10 +382,11 @@ export function createTrains(options = {}) {
       const tr = byId.get(id), sim = tr?.sim;
       if (!sim) return null;
       const silentFor = simTime === null ? 0 : (simTime - tr.hist[tr.hist.length - 1].time) / 1000;
-      const T = targetAt(tr.hist, simTime);
-      const out = { s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
+      const ext = tr.ext?.last === tr.hist[tr.hist.length - 1] ? tr.ext : null;
+      const T = targetAt(tr.hist, simTime, simTime >= tr.hist[tr.hist.length - 1].time ? ext?.stopAt ?? Infinity : Infinity);
+      const out = { stopAt: ext?.stopAt ?? Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
-        target: T.inJump ? 'jump' : T.coasting ? (T.v > 0 ? 'coasting' : 'coasted out') : T.v > 0 ? 'moving' : 'standing' };
+        target: T.inJump ? 'jump' : T.capped ? 'waiting before a stop' : T.coasting ? (T.v > 0 ? 'coasting' : 'coasted out') : T.v > 0 ? 'moving' : 'standing' };
       sim.jumped = false;
       return out;
     },

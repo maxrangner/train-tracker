@@ -164,12 +164,40 @@ export async function fetchRoute(operationalNumber, departureDate) {
   };
 }
 
-// ---------- Station names ----------
+// ---------- Stations ----------
 
-// Signature -> name for every station, e.g. "Cst" -> "Stockholm C".
-export async function fetchStationNames() {
+// Signature -> { name, lon, lat } for every station, e.g. "Cst" -> Stockholm C and its place.
+export async function fetchStations() {
   const r = await ask(
     `<QUERY objecttype="TrainStation" namespace="rail.infrastructure" schemaversion="1.5">` +
-    `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedLocationName</INCLUDE></QUERY>`);
-  return new Map((r.TrainStation ?? []).map(s => [s.LocationSignature, s.AdvertisedLocationName]));
+    `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedLocationName</INCLUDE><INCLUDE>Geometry.WGS84</INCLUDE></QUERY>`);
+  return new Map((r.TrainStation ?? []).map(s => {
+    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(s.Geometry?.WGS84 ?? '');
+    return [s.LocationSignature, { name: s.AdvertisedLocationName, lon: m ? Number(m[1]) : null, lat: m ? Number(m[2]) : null }];
+  }));
+}
+
+// ---------- Planned routes ----------
+
+// The timetable rows of these trains (internal numbers) planned between from and to (ms): every location they pass
+// or stop at. [{ key (trainKey), sig, activity ('Ankomst' arrival / 'Avgang' departure), planned (ms) }].
+// Asked in groups of 100 numbers.
+export async function fetchPlannedRoutes(numbers, from, to) {
+  const out = [];
+  for (let i = 0; i < numbers.length; i += 100) {
+    const r = await ask(
+      `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9">` +
+      `<FILTER><IN name="OperationalTrainNumber" value="${numbers.slice(i, i + 100).join(',')}"/>` +
+      `<GT name="AdvertisedTimeAtLocation" value="${new Date(from).toISOString()}"/>` +
+      `<LT name="AdvertisedTimeAtLocation" value="${new Date(to).toISOString()}"/></FILTER>` +
+      `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
+      `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>AdvertisedTimeAtLocation</INCLUDE>` +
+      `<INCLUDE>Deleted</INCLUDE></QUERY>`);
+    for (const a of r.TrainAnnouncement ?? []) {
+      if (a.Deleted || !a.AdvertisedTimeAtLocation) continue;
+      out.push({ key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime), sig: a.LocationSignature,
+        activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) });
+    }
+  }
+  return out;
 }
