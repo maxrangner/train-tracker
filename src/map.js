@@ -2,6 +2,7 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, NavigationControl, setWorkerUrl } from 'maplibre-gl';
+import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM } from './trains-3d.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -15,7 +16,8 @@ export const RAIL_SOURCES = {
   osm: { name: 'OpenStreetMap', url: '/rail-osm.geojson', color: '#8250df' },
 };
 
-export function createMap(container, { onTrainTap } = {}) {
+// getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
+export function createMap(container, { onTrainTap, getTrains3d } = {}) {
   const map = new Map({
     container,
     style: STYLE,
@@ -70,8 +72,12 @@ export function createMap(container, { onTrainTap } = {}) {
         'circle-color': ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f'],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
+        // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
+        'circle-opacity': ['step', ['zoom'], 1, MODEL_ZOOM, 0],
+        'circle-stroke-opacity': ['step', ['zoom'], 1, MODEL_ZOOM, 0],
       },
     });
+    if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
     map.addLayer({
       id: 'train-labels',
       type: 'symbol',

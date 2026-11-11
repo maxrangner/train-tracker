@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Train brands</title>
+  <link rel="icon" href="data:,">
+  <style>
+    html, body { margin: 0; background: #f6f8fa; color: #1b1f24; font: 13px/1.35 system-ui, sans-serif; }
+    h1 { font-size: 17px; margin: 14px 16px 2px; }
+    p.note { margin: 0 16px 10px; color: #59636e; }
+    #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+    .brand { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 8px 10px; }
+    .brand h2 { font-size: 14px; margin: 0; display: flex; justify-content: space-between; gap: 8px; }
+    .brand h2 span { color: #59636e; font-weight: 400; font-variant-numeric: tabular-nums; }
+    .brand canvas { width: 100%; height: 120px; display: block; }
+    .swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .sw { display: flex; align-items: center; gap: 4px; color: #59636e; font-size: 11px; }
+    .sw i { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+    .src { color: #59636e; font-size: 11px; margin-top: 3px; overflow-wrap: anywhere; }
+  </style>
+</head>
+<body>
+  <h1>Train brands in today's timetable</h1>
+  <p class="note" id="note"></p>
+  <div id="sheet"></div>
+  <script type="module" src="./brands.js"></script>
+</body>
+</html>

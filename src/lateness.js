@@ -1,12 +1,14 @@
-// Minutes off the timetable per train, from its latest actual passing of a station.
+// Per train, from the timetable feed: minutes off the timetable (from its latest actual passing) and its brand.
 
 export function createLateness() {
-  const byKey = new Map();   // trainKey -> {minutes, station, time}
+  const byKey = new Map();    // trainKey -> {minutes, station, time}
+  const brands = new Map();   // trainKey -> brand, e.g. "Pågatågen"
   return {
     // Take in passings. Returns true if any train's minutes changed.
     update(passings) {
       let changed = false;
       for (const p of passings) {
+        if (p.brand) brands.set(p.key, p.brand);
         const known = byKey.get(p.key);
         if (known && known.time > p.time) continue;           // an older passing than the one we have
         if (!known || known.minutes !== p.minutes) changed = true;
@@ -15,6 +17,7 @@ export function createLateness() {
       return changed;
     },
     get(key) { return byKey.get(key) ?? null; },
+    brand(key) { return brands.get(key) ?? null; },
     get count() { return byKey.size; },
   };
 }

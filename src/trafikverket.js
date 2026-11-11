@@ -104,7 +104,7 @@ const changeAttrs = ({ changeId, stream }) =>
 export const trainKey = (operationalNumber, departureDate) => `${operationalNumber}/${departureDate.slice(0, 10)}`;
 
 // Follow actual passings at stations (the timetable feed). onPassings(list) gets
-// [{key, minutes, station, time}] where minutes = actual - planned, rounded (+ late, - early).
+// [{key, minutes, station, time, brand}] where minutes = actual - planned, rounded (+ late, - early).
 export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
   return follow({
     makeQuery: (c) => {
@@ -113,7 +113,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
         `<FILTER><GT name="TimeAtLocation" value="${since}"/></FILTER>` +
         `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
         `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedTimeAtLocation</INCLUDE>` +
-        `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Deleted</INCLUDE></QUERY>`;
+        `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Deleted</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`;
     },
     onResult: (r) => {
       const list = [];
@@ -124,6 +124,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
           minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
           station: a.LocationSignature,
           time: Date.parse(a.TimeAtLocation),
+          brand: a.ProductInformation?.[0]?.Description ?? null,   // e.g. "Pågatågen"; a second entry is a line
         });
       }
       if (list.length) onPassings(list);

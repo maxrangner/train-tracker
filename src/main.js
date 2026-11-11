@@ -16,6 +16,7 @@ const propsFor = r => ({ label: labelFor(r), late: lateClass(minutesOf(r)) });
 
 const panel = createPanel(document.getElementById('panel'), { stationName, onSelect: id => map.select(id) });
 const map = createMap('map', {
+  getTrains3d: () => trains.placedAt(Date.now() - DELAY_MS).map(t => ({ ...t, brand: lateness.brand(t.id) })),
   onTrainTap(id) {
     const r = id && trains.get(id);
     if (r) {
