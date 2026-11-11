@@ -50,5 +50,6 @@ While the map is private the key is built into the page; the public version will
   - `shot.mjs`: a picture of the running page (`--view`, `--rail`, `--tap`, `--size`), into `shots/`.
   - `soak.mjs [minutes]`: keeps the page open and logs the status line.
   - `glide-check.mjs`: drawn speed against reported speed.
+  - `motion-check.mjs [--delay 15]`: replays a recording through the page's train code: how often moving trains are drawn standing or turning back.
   - `follow-check.mjs [--fastest]`: taps a moving train and measures how well the camera follows it, through drags, a zoom and the Follow button.
   - `ping.mjs`, `peek.mjs`, `late-peek.mjs`, `route-peek.mjs`: small checks of the key, the raw stream, passings and a route.
