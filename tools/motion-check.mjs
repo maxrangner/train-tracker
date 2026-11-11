@@ -1,16 +1,19 @@
-// How smoothly are the trains drawn? Replays a recording (tools/collect.mjs) through the page's own src/trains.js,
-// feeding each report in when it arrived, and steps the drawing clock like the page does. Counts, for trains that
-// are really moving (worked out afterwards from all their reports):
-//   - frozen: drawn standing still (waiting for a report that hasn't arrived, or held before a jump)
-//   - backwards: the drawn movement turns more than 120° from one moment to the next
-//   - nose off: the 3D model's heading (the latest report's Bearing) more than 45° from the drawn movement
-// Run: node tools/motion-check.mjs [recording.jsonl] [--delay 15]
+// How smoothly and how truly are the trains drawn? Replays a recording (tools/collect.mjs) through the page's own
+// src/trains.js: each report goes in when it arrived, and the drawing clock steps like the page's.
+// The truth to compare with: the same cleaned reports, known two minutes ahead (hindsight), joined by straight lines.
+// Run: node tools/motion-check.mjs [recording.jsonl] [--delay 25] [--coast 30] [--plain] [--cut 120] [--trace id] [--why]
+//   --plain   draw the cleaned reports directly (no simulation): the old way, for comparison
+//   --cut N   no data arrives for N seconds from the middle of the replay (a lost connection)
+//   --coast N try another coasting limit (seconds)
+//   --trace id  print one train's simulation every second;  --why  print the first turn-backs and fast-forwards
 import { readFileSync, readdirSync } from 'node:fs';
-import { createTrains } from '../src/trains.js';
+import { createTrains, DELAY_MS } from '../src/trains.js';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
-const DELAY = flag('delay', 15) * 1000;
+const DELAY = flag('delay', DELAY_MS / 1000) * 1000;
+const PLAIN = argv.includes('--plain');
+const CUT = flag('cut', 0) * 1000;
 const STEP = 100;   // ms between drawing moments
 const file = argv.find(a => a.endsWith('.jsonl')) ??
   'data/' + readdirSync('data').filter(f => f.startsWith('positions-')).sort().at(-1);
@@ -30,107 +33,130 @@ for (const line of readFileSync(file, 'utf8').split('\n')) {
 }
 recs.sort((a, b) => a.got - b.got);
 
+const R = Math.PI / 180;
 const metres = (a, b) => {
-  const r = Math.PI / 180;
-  const x = (b.lon - a.lon) * r * Math.cos((a.lat + b.lat) / 2 * r), y = (b.lat - a.lat) * r;
+  const x = (b.lon - a.lon) * R * Math.cos((a.lat + b.lat) / 2 * R), y = (b.lat - a.lat) * R;
   return Math.hypot(x, y) * 6371000;
 };
-const heading = (a, b) => (Math.atan2((b.lon - a.lon) * Math.cos(a.lat * Math.PI / 180), b.lat - a.lat) * 180 / Math.PI + 360) % 360;
+const heading = (a, b) => (Math.atan2((b.lon - a.lon) * Math.cos(a.lat * R), b.lat - a.lat) / R + 360) % 360;
 const angle = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 
-// The truth, from every report a train sent: its real speed at time t (km/h), from the two reports around t.
-const all = new Map();
-for (const r of recs) if (!r.gone) (all.get(r.id) ?? all.set(r.id, []).get(r.id)).push(r);
-for (const h of all.values()) h.sort((a, b) => a.time - b.time);
-function realKmh(id, t) {
-  const h = all.get(id);
-  let i = h.findIndex(r => r.time > t);
-  if (i <= 0) return null;
-  const a = h[i - 1], b = h[i];
-  const kmh = metres(a, b) / ((b.time - a.time) / 1000) * 3.6;
-  return kmh > 300 ? null : kmh;   // a position jump: not counted
-}
-
-const trains = createTrains();
+const drawnTrains = createTrains(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {});
+const truth = createTrains();
 const start = recs.find(r => r.got - recs[0].got > 60_000).got;   // skip the first minute (the start batch)
-const end = recs.at(-1).got;
-let k = 0;
-while (recs[k].got < start) k++;
-trains.update(recs.slice(0, k), start);
-
-const prev = new Map();   // id -> { p, dir }
-const s = { moving: 0, frozen: 0, backwards: 0, noseFrames: 0, noseOff: 0, noseFlip: 0, freezes: 0, freezeLens: [], why: {}, turns: [] };
-const frozenRun = new Map();
-for (let T = start; T < end; T += STEP) {
+const end = recs.at(-1).got - 120_000;                             // the truth needs two minutes of hindsight
+const cutFrom = start + (end - start) / 2 - CUT / 2, cutTo = cutFrom + CUT;
+let k = 0, kt = 0;
+const feed = (trains, upTo, i, skip) => {
   const batch = [];
-  while (k < recs.length && recs[k].got <= T) batch.push(recs[k++]);
-  if (batch.length) trains.update(batch, T);
+  while (i < recs.length && recs[i].got <= upTo) { if (!skip?.(recs[i])) batch.push(recs[i]); i++; }
+  if (batch.length) trains.update(batch, upTo);
+  return i;
+};
+
+const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+const prev = new Map();     // id -> { p, dir, synced, frozenRun }
+const truthDir = new Map(), drawnDir = new Map();
+function turnBack(dirs, id, p) {
+  const a = dirs.get(id);
+  if (!a) { dirs.set(id, { p, dir: null }); return 0; }
+  if (metres(a.p, p) < 5) return 0;
+  const dir = heading(a.p, p);
+  dirs.set(id, { p, dir });
+  return a.dir !== null && angle(a.dir, dir) > 120 ? 1 : 0;
+}
+const cutLog = [];
+const seen = new Set();
+for (let T = start; T < end; T += STEP) {
+  const k0 = k;
+  k = feed(drawnTrains, T, k, r => CUT && r.got >= cutFrom && r.got < cutTo);
+  for (let i = k0; i < k; i++) seen.add(recs[i].id);
+  kt = feed(truth, T + 120_000, kt);
   const t = T - DELAY;
-  for (const tr of trains.placedAt(t)) {
-    const kmh = realKmh(tr.id, t);
-    const last = prev.get(tr.id);
-    const now = { p: tr, dir: null, bearing: tr.bearing, lastDir: last?.lastDir ?? null };
-    if (last) {
-      const d = metres(last.p, tr);
-      if (d > 0.05) now.dir = now.lastDir = heading(last.p, tr);
-      if (kmh !== null && kmh > 15) {
-        s.moving++;
-        if (d < 0.05) {
-          s.frozen++;
-          // Why: no report after t has arrived yet (waiting), or the two reports around t are a jump, or the same place.
-          const h = all.get(tr.id);
-          const nextArrived = h.find(r => r.time > t && r.got <= T);
-          const why = !nextArrived ? 'waiting' : (() => {
-            const a = h.filter(r => r.time <= t).at(-1);
-            if (!a) return 'before first';
-            const dd = metres(a, nextArrived);
-            return dd < 1 ? 'same place' : dd / ((nextArrived.time - a.time) / 1000) * 3.6 > 300 ? 'jump' : 'other';
-          })();
-          s.why[why] = (s.why[why] ?? 0) + 1;
-          frozenRun.set(tr.id, (frozenRun.get(tr.id) ?? 0) + 1);
-        } else {
-          const run = frozenRun.get(tr.id);
-          if (run >= 5) { s.freezes++; s.freezeLens.push(run * STEP / 1000); }   // half a second or more
-          frozenRun.delete(tr.id);
-          if (last.lastDir !== null) {
-            const turn = angle(last.lastDir, now.dir);
-            if (turn > 120) s.backwards++;
-            if (turn > 30) s.turns.push({ id: tr.id, turn: Math.round(turn), kmh: Math.round(kmh), at: new Date(t).toISOString().slice(11, 19) });
-          }
-          if (tr.bearing !== null) {
-            s.noseFrames++;
-            if (angle(tr.bearing, now.dir) > 45) s.noseOff++;
-          }
-        }
-        if (last.bearing !== null && tr.bearing !== null && angle(last.bearing, tr.bearing) > 90) s.noseFlip++;
-      }
+  const drawn = PLAIN
+    ? [...seen].map(id => ({ id, ...drawnTrains.reportedAt(id, t) })).filter(x => x.lon !== undefined)
+    : drawnTrains.placedAt(t);
+  const traceId = argv.includes('--trace') ? argv[argv.indexOf('--trace') + 1] : null;
+  if (traceId && (T - start) % 1000 < STEP) {
+    const sim = drawnTrains.simOf(traceId), tru = truth.reportedAt(traceId, t);
+    if (sim) console.log(new Date(t).toISOString().slice(11, 19), `sim s ${Math.round(sim.s)} v ${(sim.v * 3.6).toFixed(0)} km/h, target ${sim.target} ${Math.round(sim.gap)} m ahead of it, silent ${Math.round(sim.silentFor)} s${sim.syncing ? ' SYNC' : ''}; truth ${Math.round(tru?.kmh)} km/h`);
+  }
+  for (const d of drawn) {
+    const tru = truth.reportedAt(d.id, t);
+    if (!tru) continue;
+    s.all++;
+    const sim = PLAIN ? null : drawnTrains.simOf(d.id);
+    if (sim?.syncing) s.syncMoments++;
+    if (sim?.jumped) s.jumps++;
+    const last = prev.get(d.id);
+    const now = { p: d, dir: last?.dir ?? null, synced: sim?.syncing ?? false, frozenRun: 0 };
+    if (sim?.syncing && !last?.synced) {
+      s.syncStarts++;
+      const why = sim.lastGap > 30 ? 'after a silence over 30 s' : `gap ${Math.round(sim.gap)} m, target ${sim.target}`;
+      s.syncWhy.push(why);
+      if (argv.includes('--why') && !why.startsWith('after') && s.syncWhy.filter(w => !w.startsWith('after')).length <= 3)
+        console.log('sync start', d.id, new Date(t).toISOString().slice(11, 21), why);
     }
-    prev.set(tr.id, now);
+    // Turn-backs, judged over every 5 m moved (so a standing train's jitter doesn't count). The truth's own
+    // (a train reversing at a terminus is real) for comparison.
+    s.truthBack += turnBack(truthDir, d.id, tru);
+    const tb = turnBack(drawnDir, d.id, d);
+    s.back += tb;
+    if (tb && argv.includes('--why') && s.back <= 12) console.log('turn-back', d.id, new Date(t).toISOString().slice(11, 21), JSON.stringify(sim), 'truth', Math.round(tru.kmh), 'km/h, off', Math.round(metres(d, tru)), 'm');
+
+    const off = metres(d, tru);
+    if (tru.kmh < 1 && tru.gap <= 30) s.standM.push(off);
+    if (last) {
+      const moved = metres(last.p, d);
+      if (moved > 0.05) {
+        now.dir = heading(last.p, d);
+      }
+      // Only where the truth is known: reports at most 30 s apart around this moment. Elsewhere the train was
+      // silent (to the page too, if its last report is over 30 s old: it coasts at most that long, then waits).
+      if (tru.kmh > 15) {
+        if (tru.gap <= 30) {
+          s.moving++;
+          s.lagM.push(off); s.lagS.push(off / (tru.kmh / 3.6));
+          if (moved <= 0.05) {
+            s.frozen++; now.frozenRun = last.frozenRun + 1;
+            if (sim) { const why = sim.gap < -1 ? `ahead of the target (${sim.target})` : `target ${sim.target}`; s.why[why] = (s.why[why] ?? 0) + 1; }
+          }
+        } else {
+          s.silentMoving++;
+          if (moved <= 0.05) s.silentFrozen++;
+        }
+      }
+      if (now.frozenRun === 0 && last.frozenRun >= 5) s.freezes.push(last.frozenRun * STEP / 1000);
+    }
+    prev.set(d.id, now);
+  }
+  const tick = Math.floor((T - cutFrom) / 10_000);
+  if (CUT && T >= cutFrom - 20_000 && T < cutTo + 60_000 && tick !== s.lastTick && (s.lastTick = tick, true)) {
+    const still = drawn.filter(d => { const n = prev.get(d.id); return n && n.frozenRun > 0; }).length;
+    const syncing = PLAIN ? 0 : drawn.filter(d => drawnTrains.simOf(d.id)?.syncing).length;
+    cutLog.push(`${Math.round((T - cutFrom) / 1000)} s: ${still} of ${drawn.length} drawn standing while really moving, ${syncing} syncing`);
   }
 }
 
 const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
-const q = (arr, f) => { const x = [...arr].sort((a, b) => a - b); return x[Math.floor(f * (x.length - 1))]; };
+const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
+const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
-console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, every ${STEP} ms`);
-console.log(`moving train-moments: ${s.moving}`);
-console.log(`frozen while really moving: ${pct(s.frozen, s.moving)}`);
-console.log(`stops of 0.5 s or more while really moving: ${s.freezes} (${(s.freezes / minutes).toFixed(0)} a minute across the map); ` +
-  `length median ${q(s.freezeLens, 0.5)} s, 90 % ${q(s.freezeLens, 0.9)} s, longest ${q(s.freezeLens, 1)} s`);
-console.log('why frozen:', Object.entries(s.why).map(([w, n]) => `${w} ${pct(n, s.frozen)}`).join(', '));
-console.log(`drawn movement turning back (>120°): ${s.backwards} times; turning more than 30° in one step: ${s.turns.length} ` +
-  `(${new Set(s.turns.map(x => x.id)).size} trains); 60°+: ${s.turns.filter(x => x.turn > 60).length}`);
-{
-  // Reports that moved more than 20 m against the direction the train itself reports (Bearing): noise.
-  let against = 0, pairs = 0;
-  for (const h of all.values()) for (let i = 1; i < h.length; i++) {
-    const a = h[i - 1], b = h[i];
-    if (b.bearing === null || metres(a, b) < 20) continue;
-    pairs++;
-    if (angle(heading(a, b), b.bearing) > 120) against++;
-  }
-  console.log(`report pairs moving 20 m or more: ${pairs}; against the train's own bearing: ${against} (${pct(against, pairs)})`);
+console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}`);
+console.log(`cleaning: ${JSON.stringify(drawnTrains.counts)}`);
+console.log(`(below: only where the truth is known, reports at most 30 s apart; ${pct(s.silentMoving, s.silentMoving + s.moving)} of moving moments are in longer silences, drawn standing ${pct(s.silentFrozen, s.silentMoving)} of those)`);
+console.log(`frozen while really moving (over 15 km/h): ${pct(s.frozen, s.moving)}`);
+if (!PLAIN) console.log('  why:', Object.entries(s.why).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${pct(n, s.frozen)}`).join(', '));
+console.log(`stops of 0.5 s or more while really moving: ${s.freezes.length} (${(s.freezes.length / minutes).toFixed(0)} a minute across the map); ` +
+  `length median ${f1(q(s.freezes, 0.5))} s, 90 % ${f1(q(s.freezes, 0.9))} s`);
+console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}`);
+console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
+  `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
+console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
+if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);
+if (!PLAIN) {
+  const silence = s.syncWhy.filter(w => w.startsWith('after')).length;
+  console.log(`  of the syncs: ${silence} after a silence over 30 s; others e.g. ${s.syncWhy.filter(w => !w.startsWith('after')).slice(0, 6).join('; ')}`);
 }
-console.log('  e.g.', s.turns.filter(x => x.turn > 60).slice(0, 8).map(x => `${x.id} ${x.turn}° at ${x.kmh} km/h ${x.at}`).join('; '));
-console.log(`3D nose more than 45° off the drawn movement: ${pct(s.noseOff, s.noseFrames)}`);
-console.log(`3D nose turning more than 90° in one step: ${s.noseFlip}`);
+if (CUT) console.log(`connection cut for ${CUT / 1000} s (0 s = the cut starts):\n  ` + cutLog.join('\n  '));

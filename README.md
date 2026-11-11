@@ -26,7 +26,8 @@ Get one at data.trafikverket.se: Kom igång → Registrera, then Skapa nyckel.
 While the map is private the key is built into the page; the public version will keep it on a small server instead (PLAN.md, decision 3).
 
 ## On the map
-- **Dots**: blue moving, red standing, grey not known yet (the train sends no speed and has only one report so far).
+- **Dots**: the colour shows lateness: green +2 minutes or less, yellow +3 to +5, red +6 or more, grey not known.
+- **Movement**: the map runs about 25 s behind real time. Each train is a small simulation that chases where its reports say it was: it speeds up and slows down gently and never drives backwards; with no new position it coasts on for at most 30 s, then waits. A train that has fallen far behind its data fast-forwards, with `»»` after its label.
 - **Labels** (zoom in to see them): board number and minutes off the timetable at the last station passed: `2042 (+2)` late, `2057 (-21)` early.
 - **Tap a train**: a ring marks it, a panel lists its stops with planned and actual times, and the camera follows the train (the **Following** button). Zooming, turning and tilting keep following; dragging the map away stops it (the button turns to **Follow**: press it to go back). Tap the map or × to close.
 - **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
@@ -36,7 +37,7 @@ While the map is private the key is built into the page; the public version will
 ## What is where
 - `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s), passings, a train's route, station names.
 - `src/trains-source.js`: train positions, from that file.
-- `src/trains.js`: the newest report per train; drops reports over 10 minutes old; works out movement when no speed is sent.
+- `src/trains.js`: each train's reports, cleaned (repeats, noise against the train's direction, far jumps), and the simulation that is drawn.
 - `src/lateness.js`: minutes off timetable per train; the label text.
 - `src/panel.js`: the panel for a tapped train.
 - `src/map.js`: the map (OpenFreeMap, Positron style), rail lines, dots, labels, ring.
@@ -44,12 +45,12 @@ While the map is private the key is built into the page; the public version will
 - `tools/`: helpers run with Node.
   - `rail-trv.mjs`, `rail-osm.mjs`: download the rail lines.
   - `rail-compare.mjs`: how close recorded positions sit to each set of lines.
-  - `collect.mjs [minutes]`: records the live stream to `data/`.
+  - `collect.mjs [minutes] [--at 07:00]`: records the live positions and timetable to `data/` (and the stations once), for replays; `--at` waits until that time.
   - `measure.mjs`: numbers from the newest recording.
   - `crosscheck.mjs`: a few trains' positions against their last station.
   - `shot.mjs`: a picture of the running page (`--view`, `--rail`, `--tap`, `--size`), into `shots/`.
   - `soak.mjs [minutes]`: keeps the page open and logs the status line.
   - `glide-check.mjs`: drawn speed against reported speed.
-  - `motion-check.mjs [--delay 15]`: replays a recording through the page's train code: how often moving trains are drawn standing or turning back.
+  - `motion-check.mjs [--delay 25] [--coast 30] [--plain] [--cut 120] [--trace id] [--why]`: replays a recording through the page's train code and compares with the truth (the cleaned reports, in hindsight): how often moving trains are drawn standing or turning back, how far off they are, how often they fast-forward. `--plain` draws the reports directly (the old way); `--cut` drops the data for a while (a lost connection).
   - `follow-check.mjs [--fastest]`: taps a moving train and measures how well the camera follows it, through drags, a zoom and the Follow button.
   - `ping.mjs`, `peek.mjs`, `late-peek.mjs`, `route-peek.mjs`: small checks of the key, the raw stream, passings and a route.

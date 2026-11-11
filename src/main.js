@@ -13,7 +13,8 @@ const stationName = sig => stationNames.get(sig) ?? sig;
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
-const propsFor = r => ({ label: labelFor(r), late: lateClass(minutesOf(r)) });
+// While a train fast-forwards to catch up with its data, its label gets »» (the map's font has no ⏩).
+const propsFor = (r, sim) => ({ label: labelFor(r) + (sim?.syncing ? ' »»' : ''), late: lateClass(minutesOf(r)) });
 
 const placeNow = id => trains.placeOf(id, Date.now() - DELAY_MS);
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
@@ -41,7 +42,7 @@ const map = createMap('map', {
   },
 });
 
-// ---- Drawing: every frame (at most 30 a second), each train where it was DELAY_MS ago ----
+// ---- Drawing: every frame (at most 30 a second), each train's simulation brought to DELAY_MS ago ----
 let lastDraw = 0;
 function frame(ts) {
   if (ts - lastDraw >= 33) {
