@@ -294,6 +294,7 @@ export function createTrains(options = {}) {
   // at most 0.1 s.
   function advance(t) {
     const from = simTime ?? t;
+    if (t < from - 5000) { simTime = t; return; }   // the clock was set back (a replay starting): start from there
     if (t < from) return;
     simTime = t;
     const dt = (t - from) / 1000, n = Math.max(1, Math.ceil(dt / 0.1));

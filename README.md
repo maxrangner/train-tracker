@@ -18,6 +18,8 @@ It prints two addresses:
 
 The map's place is kept in the address (`#view=zoom/lat/lon`), so a link opens the same view.
 
+**Replay**: add `&replay=<recording>` to play a recording from `data/` instead of the live data, at normal speed, e.g. `http://localhost:5173/#view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z` (the part after `positions-` in the file name). Recordings made with `tools/collect.mjs` from 2026-11-11 22:45 on also bring their timetable (lateness colours, planned routes). Only with `npm run dev`.
+
 ## The key
 The Trafikverket key lives in `.env` (never in git):
 ```
@@ -40,6 +42,8 @@ While the map is private the key is built into the page; the public version will
 - `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s), passings, a train's route, the planned routes of many trains, stations and their places.
 - `src/trains-source.js`: train positions, from that file.
 - `src/trains.js`: each train's reports, cleaned (repeats, noise against the train's direction, far jumps), and the simulation that is drawn.
+- `src/clock.js`: the page's clock (the recording's time in a replay).
+- `src/replay-source.js`: plays a recording instead of the live data.
 - `src/routes.js`: each train's planned route (timetable): where a coasting train heads at junctions, and the stop it must wait before.
 - `src/rail-net.js`: the rail network: the track under a place, the way along the tracks between two places (never reversing through a switch), the track ahead of a train.
 - `src/lateness.js`: minutes off timetable per train; the label text.
