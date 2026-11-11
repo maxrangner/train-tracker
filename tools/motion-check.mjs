@@ -118,6 +118,7 @@ for (let T = start; T < end; T += STEP) {
   if (newPassings.length) { routes.addPassings(newPassings); drawnTrains.addPassings(newPassings); }
   kt = feed(truth, T + 120_000, kt);
   const t = T - DELAY;
+  if ((T - start) % 1000 < STEP) drawnTrains.prune(T);   // as the page does every second
   const drawn = PLAIN
     ? [...seen].map(id => ({ id, ...drawnTrains.reportedAt(id, t) })).filter(x => x.lon !== undefined)
     : drawnTrains.placedAt(t);

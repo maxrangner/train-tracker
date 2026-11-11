@@ -27,6 +27,7 @@ let ROUTES = null;                   // the planned routes (src/routes.js), when
 const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop
 const SILENT_MS = 10 * 60 * 1000;    // no position and no passing for this long: the train is shown as stale (grey)...
 const SILENT_NO_ROUTE_MS = 2 * 60 * 1000;   // ...or this long, for a train whose timetable is not known
+const FINISHED_MS = 2 * 60 * 1000;   // a train that arrived at the end of its trip is removed after this long quiet
 const MAX_PACE = 250 / 3.6;          // m/s: the fastest a train is moved by its timetable
 const STOOD_M = 30, STOOD_MS = 60000; // positions this close over this long before a silence: it stood still
 const PASSING_MAX_M = 80000;         // a reported passing is used when its station is this close ahead on the tracks...
@@ -440,7 +441,10 @@ export function createTrains(options = {}) {
     // Drop trains that have been silent too long. Returns true if any were dropped.
     prune(now = Date.now()) {
       let changed = false;
-      for (const [id, t] of byId) if (t.heard < now - MAX_AGE_MS) { byId.delete(id); changed = true; }
+      for (const [id, t] of byId) {
+        // Gone after MAX_AGE_MS with nothing from it; sooner (FINISHED_MS) when it has arrived at the end of its trip.
+        if (t.heard < now - MAX_AGE_MS || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; }
+      }
       return changed;
     },
     get(id) { return byId.get(id)?.latest ?? null; },
