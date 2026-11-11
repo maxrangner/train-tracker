@@ -54,6 +54,19 @@
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
+    /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
+    .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
+      display: grid; place-items: center; pointer-events: none; }
+    .sel-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff; background: #8c959f; }
+    .sel-train.model .sel-dot { display: none; }
+    .sel-train.late-ontime .sel-dot { background: #1a7f37; }
+    .sel-train.late-some .sel-dot { background: #d4a72c; }
+    .sel-train.late-late .sel-dot { background: #d1242f; }
+    .sel-train.late-stale { opacity: 0.45; }
+    .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap;
+      font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--ink);
+      text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
+
     #panel {
       position: fixed;
       left: calc(var(--gap) + env(safe-area-inset-left, 0px));

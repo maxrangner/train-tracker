@@ -65,6 +65,42 @@ const watch = async (what, seconds) => {
 };
 mkdirSync('shots', { recursive: true });
 await watch('following, 10 s', 10);
+
+// Smoothness while following, frame by frame: at every frame the map draws, where the followed train's 3D model
+// (as the 3D layer drew it) and its ring sit on screen, against the follow point. Steady = 0 change between frames.
+const frames = (zoom) => page.evaluate((id, zoom) => new Promise((done) => {
+  const map = window.__map;
+  map.jumpTo({ zoom });
+  const out = [];
+  let stopAt = null;
+  const onRender = () => {
+    const now = performance.now();
+    stopAt ??= now + 5000;
+    const c = map.project(map.getCenter());
+    const t = (window.__last3d ?? []).find(x => x.id === id);
+    const at = p => { const q = map.project(p); return [q.x - c.x, q.y - c.y]; };
+    // The ring: the selection marker on top of the map (its middle, in the map's own pixels).
+    const el = document.querySelector('.sel-train'), box = map.getCanvas().getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    const ring = r ? [r.left + r.width / 2 - box.left - c.x, r.top + r.height / 2 - box.top - c.y] : null;
+    out.push({ ms: now, model: t ? at([t.lon, t.lat]) : null, ring });
+    if (now > stopAt) { map.off('render', onRender); done(out); }
+  };
+  map.on('render', onRender);
+  map.triggerRepaint();
+}), pick.id, zoom);
+for (const zoom of [11, 15]) {
+  const f = await frames(zoom);
+  const jumps = (key) => {
+    const d = [];
+    for (let i = 1; i < f.length; i++) if (f[i][key] && f[i - 1][key]) d.push(Math.hypot(f[i][key][0] - f[i - 1][key][0], f[i][key][1] - f[i - 1][key][1]));
+    d.sort((a, b) => a - b);
+    return d.length ? `median ${d[d.length >> 1].toFixed(1)} px, 90 % ${d[Math.floor(d.length * 0.9)].toFixed(1)} px, max ${d[d.length - 1].toFixed(1)} px` : 'not drawn';
+  };
+  const fps = (f.length - 1) / ((f[f.length - 1].ms - f[0].ms) / 1000);
+  console.log(`zoom ${zoom}: ${f.length} frames (${fps.toFixed(0)} a second); frame-to-frame jump of the 3D model ${jumps('model')}; of the ring ${jumps('ring')}`);
+}
+await page.evaluate(() => window.__map.jumpTo({ zoom: 12 }));
 await page.screenshot({ path: 'shots/follow-1.png' });
 
 const drag = async (dx, dy) => {

@@ -1,7 +1,7 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, NavigationControl, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM } from './trains-3d.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -17,6 +17,10 @@ export const RAIL_SOURCES = {
   trv: { name: 'Trafikverket', color: '#6e7781' },
   osm: { name: 'OpenStreetMap', url: '/rail-osm.geojson', color: '#8250df' },
 };
+
+// A dot's opacity: grey trains faded; none from MODEL_ZOOM in (3D trains) or for the selected train (its marker).
+const dotOpacity = sel => ['step', ['zoom'],
+  ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -52,19 +56,6 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
     }
 
     map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-    // A ring around the tapped train, under its dot.
-    map.addLayer({
-      id: 'train-selected',
-      type: 'circle',
-      source: 'trains',
-      filter: ['==', ['get', 'id'], ''],
-      paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 8, 10, 13],
-        'circle-color': 'rgba(0,0,0,0)',
-        'circle-stroke-color': '#1b1f24',
-        'circle-stroke-width': 2.5,
-      },
-    });
     map.addLayer({
       id: 'train-dots',
       type: 'circle',
@@ -78,8 +69,9 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
-        'circle-opacity': ['step', ['zoom'], ['case', ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0],
-        'circle-stroke-opacity': ['step', ['zoom'], ['case', ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0],
+        // The selected train's dot is invisible too: it is drawn by the selection marker (below).
+        'circle-opacity': dotOpacity(''),
+        'circle-stroke-opacity': dotOpacity(''),
       },
     });
     if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
@@ -110,6 +102,18 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
     resolve();
   }));
+
+  // ---- The selected train: ring, dot and label as one marker on top of the map ----
+  // The map's own layers get their data through a background worker, a frame or more late; while the camera follows
+  // a train every frame, a ring drawn by them jitters around the train. The marker is placed in the same frame as
+  // the camera (setSelectedPlace), so it can't lag.
+  let selected = null;
+  const selEl = document.createElement('div');
+  selEl.className = 'sel-train';
+  selEl.innerHTML = '<div class="sel-dot"></div><div class="sel-label"></div>';
+  const selDot = selEl.firstChild, selLabel = selEl.lastChild;
+  const selMarker = new Marker({ element: selEl, anchor: 'center' });
+  let selShown = false, selText = '', selClass = '';
 
   // ---- Following a train ----
   let following = null;       // { getPlace, onEnd, locked }
@@ -207,11 +211,30 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       await ready;
       setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     },
-    // Ring the train with this id (null: none).
+    // Ring the train with this id (null: none). Its dot and label are then drawn by the selection marker.
     async select(id) {
       await ready;
-      map.setFilter('train-selected', ['==', ['get', 'id'], id ?? '']);
+      selected = id;
+      map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id ?? ''));
+      map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id ?? ''));
+      map.setFilter('train-labels', ['!=', ['get', 'id'], id ?? '']);
+      if (!id && selShown) { selMarker.remove(); selShown = false; }
     },
+    // Called every frame with the selected train's place (the one the camera uses) and its label and colour
+    // ({ label, late, stale }), or null.
+    setSelectedPlace(place, props) {
+      if (!isReady || !selected || !place) {
+        if (selShown) { selMarker.remove(); selShown = false; }
+        return;
+      }
+      selMarker.setLngLat([place.lon, place.lat]);
+      if (!selShown) { selMarker.addTo(map); selShown = true; }
+      if (props.label !== selText) selLabel.textContent = selText = props.label;
+      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= MODEL_ZOOM ? ' model' : ''}`;
+      if (cls !== selClass) selEl.className = selClass = cls;
+    },
+    // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
+    drawNow() { if (isReady) map.redraw(); },
     // Show one set of rail lines (a key of RAIL_SOURCES), or none (null).
     async showRail(id) {
       await ready;
