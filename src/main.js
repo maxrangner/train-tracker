@@ -15,15 +15,26 @@ const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
 const propsFor = r => ({ label: labelFor(r), late: lateClass(minutesOf(r)) });
 
-const panel = createPanel(document.getElementById('panel'), { stationName, onSelect: id => map.select(id) });
+const placeNow = id => trains.placeOf(id, Date.now() - DELAY_MS);
+const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
+const panel = createPanel(document.getElementById('panel'), {
+  stationName,
+  onSelect(id) {
+    map.select(id);
+    if (!id) { map.unfollow(); map.unpad(); }
+  },
+  onFollow(id, on) {
+    if (on) follow(id); else map.unfollow();
+  },
+});
 const map = createMap('map', {
   getTrains3d: () => trains.placedAt(Date.now() - DELAY_MS).map(t => ({ ...t, brand: lateness.brand(t.id) })),
+  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it.
   onTrainTap(id) {
     const r = id && trains.get(id);
     if (r) {
       panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
-      const p = trains.placeOf(id, Date.now() - DELAY_MS);
-      map.focus(p.lon, p.lat);
+      follow(id);
     } else {
       panel.close();
     }
@@ -36,6 +47,7 @@ function frame(ts) {
   if (ts - lastDraw >= 33) {
     lastDraw = ts;
     map.setTrains(trains.toGeoJSON(Date.now() - DELAY_MS, propsFor));
+    map.tick(ts);
   }
   requestAnimationFrame(frame);
 }

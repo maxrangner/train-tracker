@@ -105,6 +105,50 @@ export function createMap(container, { onTrainTap, getTrains3d } = {}) {
     resolve();
   }));
 
+  // ---- Following a train ----
+  let following = null;       // { getPlace, onEnd, locked }
+  let lastTick = 0;
+  const pointers = new Set(); // fingers (or the mouse button) down on the map
+  const box = map.getContainer();
+  box.addEventListener('pointerdown', e => pointers.add(e.pointerId), true);
+  for (const type of ['pointerup', 'pointercancel'])
+    window.addEventListener(type, e => pointers.delete(e.pointerId), true);
+  window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
+  // How far (in screen pixels) a place is from the point the camera keeps the train at.
+  const offFocus = (p) => {
+    const at = map.project([p.lon, p.lat]), c = map.project(map.getCenter());
+    return Math.hypot(at.x - c.x, at.y - c.y);
+  };
+  // While following, a zoom (wheel or pinch) zooms around the train rather than around the fingers.
+  function zoomAroundCenter(on) {
+    map.scrollZoom.enable(on ? { around: 'center' } : undefined);
+    map.touchZoomRotate.enable(on ? { around: 'center' } : undefined);
+  }
+  function stopFollowing() {
+    const end = following?.onEnd;
+    following = null;
+    zoomAroundCenter(false);
+    end?.();
+  }
+  // After the user has moved the map: if the train is now far from the middle, they went to look elsewhere.
+  let userMoved = false;
+  map.on('movestart', (e) => { if (e.originalEvent) userMoved = true; });
+  map.on('moveend', () => {
+    if (!userMoved) return;
+    userMoved = false;
+    const p = following?.getPlace();
+    if (!p) return;
+    const { clientWidth: w, clientHeight: h } = box;
+    if (offFocus(p) > 0.25 * Math.min(w, h * 0.55)) stopFollowing();
+  });
+  // Change the room kept free at the screen's edges, keeping the map still: the camera's new middle is the place
+  // already showing there.
+  function setPadding(padding) {
+    const { clientWidth: w, clientHeight: h } = box;
+    const at = map.unproject([(w + padding.left - padding.right) / 2, (h + padding.top - padding.bottom) / 2]);
+    map.jumpTo({ center: at, padding });
+  }
+
   const loaded = new Set();
   let shownRail = null;
 
@@ -122,11 +166,40 @@ export function createMap(container, { onTrainTap, getTrains3d } = {}) {
     },
     get tilted() { return map.getPitch() > 5; },
     onViewChange(fn) { map.on('pitchend', fn); },
-    // Slide the map so this point shows above the train panel (which covers up to 45 % of the screen's bottom).
-    async focus(lon, lat) {
+    // Follow a train: keep it in the middle of the view above the train panel (which covers up to 45 % of the
+    // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
+    // Zoom, turn and tilt stay the user's. Dragging the map far from the train stops following; a small nudge or a
+    // pinch doesn't. onEnd() is called when following stops by itself (dragged away, or the train is gone).
+    async follow(getPlace, onEnd) {
       await ready;
       const h = map.getContainer().clientHeight;
-      map.easeTo({ center: [lon, lat], padding: { top: 0, bottom: Math.round(h * 0.45) + 20, left: 0, right: 0 }, duration: 600 });
+      setPadding({ top: 0, bottom: Math.round(h * 0.45) + 20, left: 0, right: 0 });
+      following = { getPlace, onEnd, locked: false };
+      zoomAroundCenter(true);
+    },
+    unfollow() { following = null; zoomAroundCenter(false); },
+    get following() { return Boolean(following); },
+    // Called every drawing frame: move the camera along with the followed train.
+    tick(now) {
+      const dt = Math.min(now - lastTick, 200);
+      lastTick = now;
+      if (!following || !isReady) return;
+      // Moving the camera cancels any gesture just starting, so keep still while a finger or the mouse is down,
+      // and during the map's own animations (the Tilt button, the compass, a wheel zoom, a fling).
+      if (pointers.size || map.isMoving()) { following.locked = false; return; }
+      const p = following.getPlace();
+      if (!p) return stopFollowing();
+      const off = offFocus(p);
+      if (following.locked && off < 30) { map.jumpTo({ center: [p.lon, p.lat] }); return; }
+      // Not on it yet (just tapped, or the train jumped): glide over in about half a second, then stay locked on.
+      if (off < 1) { following.locked = true; map.jumpTo({ center: [p.lon, p.lat] }); return; }
+      const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
+      map.jumpTo({ center: [c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k] });
+    },
+    // Take the room kept for the panel away again, without moving what is on screen.
+    async unpad() {
+      await ready;
+      setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     },
     // Ring the train with this id (null: none).
     async select(id) {
