@@ -11,7 +11,9 @@ npm run dev
 ```
 It prints two addresses:
 - **Local** (`http://localhost:5173/`): open on this computer.
-- **Network** (`http://192.168.x.x:5173/`): open on a phone on the same wifi. The first time, Windows may ask whether Node.js may use the network: allow it for private networks.
+- **Network** (`http://192.168.x.x:5173/`): open on a phone on the same wifi. The first time, Windows may ask whether Node.js may use the network: allow it.
+  - On Android, Chrome needs the **Nearby devices** permission (Settings → Apps → Chrome → Permissions) to reach anything at home; without it every home address fails with `ERR_TOO_MANY_RETRIES`, the router's too. Type the address in the Chrome app itself, not in a link opened inside another app.
+  - Errors show in red in the top box, since a phone has no console. `node tools/hello.mjs` runs a tiny page on port 8099 that logs every visitor, to see whether a phone's request arrives at all.
 
 The map's place is kept in the address (`#view=zoom/lat/lon`), so a link opens the same view.
 
