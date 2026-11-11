@@ -38,7 +38,7 @@ export async function startReplaySource(name, { onRecords, onStatus, onPlanned, 
     if (a.TimeAtLocation) passings.push({ got: Date.parse(a.got), p: {
       key, station: a.LocationSignature, time: Date.parse(a.TimeAtLocation),
       minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
-      brand: a.ProductInformation?.[0]?.Description ?? null } });
+      brand: a.ProductInformation?.[0]?.Description ?? null, activity: a.ActivityType ?? null } });
   }
   // The planned routes are all given at once: the page would have asked for them ahead of time.
   onPlanned?.(timetable.filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation).map(a => ({

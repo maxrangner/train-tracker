@@ -199,16 +199,17 @@ export function netFromJSON({ scale, n, d }) {
   }
 
   // ---- The track ahead of a train ----
-  // From snapped place a, heading (the direction of travel), for `metres`. toward (a snapped place, optional): the
+  // From snapped place a, heading (the direction of travel), for `metres`. toward (a snapped place, optional, within
+  // maxM along the tracks): the
   // next place on the train's planned route; the way there is taken at junctions (and poly.towardAt says how far
   // it is). Elsewhere, the straightest line.
-  function ahead(a, heading, metres, toward = null) {
+  function ahead(a, heading, metres, toward = null, maxM = 80000) {
     const dir = angle(a.heading, heading) <= 90 ? +1 : -1;
-    let poly = toward ? route(a, toward, 20000, dir) : null;
-    let li, d, at;
+    let poly = toward ? route(a, toward, maxM, dir) : null;
+    let li, d, at, want = metres;
     if (poly) {
       poly.towardAt = poly.cum[poly.cum.length - 1];   // metres to the planned place
-      if (poly.towardAt >= metres) return poly;
+      want = poly.towardAt + metres;                    // and `metres` beyond it
       // Past the planned place: carry on from there, the way the train arrives.
       const h = poly.lon.length > 1 ? (Math.atan2((poly.lon.at(-1) - poly.lon.at(-2)) * Math.cos(poly.lat.at(-1) * R), poly.lat.at(-1) - poly.lat.at(-2)) / R + 360) % 360 : heading;
       ({ li } = toward); d = angle(toward.heading, h) <= 90 ? +1 : -1; at = toward.along;
@@ -218,7 +219,7 @@ export function netFromJSON({ scale, n, d }) {
     }
     for (let guard = 0; guard < 200; guard++) {
       addPiece(poly, li, at, d > 0 ? len[li] : 0);
-      if (poly.cum[poly.cum.length - 1] >= metres) break;
+      if (poly.cum[poly.cum.length - 1] >= want) break;
       const node = nodeOf[2 * li + (d > 0 ? 1 : 0)], hin = arriveHeading(li, d);
       let next = null, nextTurn = MAX_TURN;
       for (const end of nodeEnds[node]) {

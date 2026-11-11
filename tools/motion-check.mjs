@@ -50,13 +50,23 @@ const net = !argv.includes('--nonet') && existsSync(netFile) ? netFromJSON(JSON.
 // when there are both (recordings from 2026-11-11 22:45 on). --noroutes: without them.
 const ttFile = file.replace('positions-', 'timetable-');
 let routes = null;
+const passings = [];
 if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('data/stations.json')) {
   const stations = new Map(JSON.parse(readFileSync('data/stations.json', 'utf8')).map(st => {
     const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(st.Geometry?.WGS84 ?? '');
     return [st.LocationSignature, m ? { lon: Number(m[1]), lat: Number(m[2]) } : null];
   }).filter(([, v]) => v));
   routes = createRoutes({ stations, net });
-  routes.add(readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  const rows = readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  // The actual passings, fed in when they arrived (as the page gets them from its passings stream).
+  if (!argv.includes('--nopassings')) for (const a of rows) {
+    if (a.Deleted || !a.TimeAtLocation || !a.OperationalTrainNumber || !a.AdvertisedTimeAtLocation) continue;
+    passings.push({ got: Date.parse(a.got), p: { key: `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}`,
+      station: a.LocationSignature, time: Date.parse(a.TimeAtLocation), activity: a.ActivityType,
+      minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000) } });
+  }
+  passings.sort((x, y) => x.got - y.got);
+  routes.add(rows
     .filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation)
     .map(a => ({ key: `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}`, sig: a.LocationSignature,
       activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
@@ -70,7 +80,7 @@ const t0 = performance.now();
 const start = recs.find(r => r.got - recs[0].got > 60_000).got;   // skip the first minute (the start batch)
 const end = recs.at(-1).got - 120_000;                             // the truth needs two minutes of hindsight
 const cutFrom = start + (end - start) / 2 - CUT / 2, cutTo = cutFrom + CUT;
-let k = 0, kt = 0, lastArrival = start;
+let k = 0, kt = 0, lastArrival = start, kp = 0;
 const feed = (trains, upTo, i, skip) => {
   const batch = [];
   while (i < recs.length && recs[i].got <= upTo) { if (!skip?.(recs[i])) batch.push(recs[i]); i++; }
@@ -79,7 +89,7 @@ const feed = (trains, upTo, i, skip) => {
 };
 
 const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
-  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
 function turnBack(dirs, id, p) {
@@ -99,6 +109,12 @@ for (let T = start; T < end; T += STEP) {
   const fed = recs.slice(k0, k).some(r => !(CUT && r.got >= cutFrom && r.got < cutTo));
   if (fed) { lastArrival = T; drawnTrains.setHalted(false); } else if (T - lastArrival > 60_000) drawnTrains.setHalted(true);
   for (let i = k0; i < k; i++) seen.add(recs[i].id);
+  const newPassings = [];
+  while (kp < passings.length && passings[kp].got <= T) {
+    const x = passings[kp++];
+    if (!(CUT && x.got >= cutFrom && x.got < cutTo)) newPassings.push(x.p);
+  }
+  if (newPassings.length) { routes.addPassings(newPassings); drawnTrains.addPassings(newPassings); }
   kt = feed(truth, T + 120_000, kt);
   const t = T - DELAY;
   const drawn = PLAIN
@@ -116,6 +132,8 @@ for (let T = start; T < end; T += STEP) {
     if (d.stale) s.stale++;
     const sim = PLAIN ? null : drawnTrains.simOf(d.id);
     if (sim?.syncing) s.syncMoments++;
+    // A train that stood still before its GPS went quiet must not be moved on before new data says so.
+    { const was = prev.get(d.id); if (sim?.mode === 'stood' && sim.silentFor > 30 && sim.pastLast > 1 && was && metres(was.p, d) > 0.05 && sim.v > 0.5) { s.stoodMoved++; if (argv.includes('--why') && !(s.stoodShown ??= new Set()).has(d.id) && s.stoodShown.add(d.id).size <= 6) console.log('moved after stood', d.id, new Date(t).toISOString().slice(11, 19), JSON.stringify(sim)); } }
     // A coasting train must never pass its next planned stop (it waits 200 m before it).
     if (sim && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
       s.coastToStop++;
@@ -163,6 +181,7 @@ for (let T = start; T < end; T += STEP) {
         } else {
           s.silentMoving++;
           if (moved <= 0.05) s.silentFrozen++;
+          s.silentLagS.push(off / (tru.kmh / 3.6));
         }
       }
       if (now.frozenRun === 0 && last.frozenRun >= 5) s.freezes.push(last.frozenRun * STEP / 1000);
@@ -196,7 +215,9 @@ console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.tru
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
-if (!PLAIN) console.log(`grey (silent 2 minutes or more): ${pct(s.stale, s.all)} of train-moments`);
+if (!PLAIN) console.log(`grey: ${pct(s.stale, s.all)} of train-moments`);
+if (!PLAIN) console.log(`in longer silences, off from the (straight-line) truth: median ${f1(q(s.silentLagS, 0.5))} s of travel, ` +
+  `90 % ${f1(q(s.silentLagS, 0.9))} s; moving on past where it stood, 30 s or more after its GPS went quiet (must be 0): ${s.stoodMoved}`);
 if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop}`);
 if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);

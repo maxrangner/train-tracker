@@ -22,7 +22,7 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
   return null;
 });
 const trains = createTrains();
-if (import.meta.env.DEV) window.__trains = trains;   // for the tools in tools/; not in a build
+if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
 // Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
 // and it waits before that stop rather than arriving in the drawing.
 const routes = createRoutes();
@@ -113,6 +113,13 @@ const status = { positions: 'starting', passings: 'starting', error: null };
 const NO_DATA_MS = 60 * 1000;
 let lastDataAt = null;
 
+// Station passings: the lateness label, each train's delay and last passing, and a train whose GPS is quiet moves
+// on to a station it is reported passing.
+function onPassings(list) {
+  lateness.update(list);
+  routes.addPassings(list);
+  trains.addPassings(list);
+}
 const positionHandlers = {
   onRecords(records) {
     lastDataAt = now();
@@ -128,7 +135,7 @@ const positionHandlers = {
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
   if (!replay) return startTrainSource(positionHandlers);
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
-  startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings: list => lateness.update(list) });
+  startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
 });
 
 if (hasKey && replay) {
@@ -139,7 +146,7 @@ if (hasKey && replay) {
 }
 if (hasKey && !replay) {
   followPassings({
-    onPassings(list) { lateness.update(list); },
+    onPassings,
     onStatus(s) {
       status.passings = s.mode;
       if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
@@ -174,6 +181,25 @@ const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'recon
 const statusEl = document.getElementById('status');
 
 const clock = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
+
+// The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
+function statusLine(st, noData) {
+  if (!st) return 'No longer on the map (nothing from it for 15 minutes).';
+  if (noData) return `No data from Trafikverket since ${clock(lastDataAt)}.`;
+  if (st.syncing) return 'Catching up with its latest report (fast-forward).';
+  const quiet = st.gpsSilentFor >= 60 ? `No GPS for ${mins(st.gpsSilentFor)}` : null;
+  const passed = st.lastPassing && st.lastPassing.time > now() - 3 * 3600000
+    ? ` · last passed ${stationName(st.lastPassing.sig)} ${clock(st.lastPassing.time)}` : '';
+  if (st.stale) return `Nothing from this train for ${mins(st.silentFor)}; shown where it was last known.`;
+  if (st.mode === 'stood') return quiet ? `${quiet} · it stood still before it went quiet${passed}` : '';
+  if (st.mode === 'waiting' && st.lastPassing?.sig === st.waitingFor && st.lastPassing.activity === 'Ankomst')
+    return `${quiet ?? 'No new position'} · at ${stationName(st.waitingFor)} (arrived ${clock(st.lastPassing.time)})`;
+  if (st.mode === 'waiting') return `${quiet ?? 'No new position'} · waiting before ${stationName(st.waitingFor)} until it is confirmed${passed}`;
+  if (st.mode === 'timetable') return `${quiet ?? 'No new position'} · moving by its timetable${passed}`;
+  if (st.mode === 'coasted out') return `${quiet ?? 'No new position'} · stopped where it was last seen${passed}`;
+  return '';
+}
 
 setInterval(() => {
   const t = now();
@@ -189,12 +215,6 @@ setInterval(() => {
     (status.error ? ` · ${status.error}` : '');
   statusEl.classList.toggle('problem', Boolean(status.error) || noData);
 
-  // The open train's panel: say when it is silent, or catching up.
-  if (panel.openId) {
-    const st = trains.stateOf(panel.openId, t - DELAY_MS);
-    panel.setStatus(!st ? 'No longer on the map (no report for 10 minutes).'
-      : noData ? `No data from Trafikverket since ${clock(lastDataAt)}.`
-        : st.stale ? `No report from this train for ${Math.floor(st.silentFor / 60)} min; shown where it was last seen.`
-          : st.syncing ? 'Catching up with its latest report (fast-forward).' : '');
-  }
+  // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
+  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, t - DELAY_MS), noData));
 }, 1000);
