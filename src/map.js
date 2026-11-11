@@ -12,12 +12,15 @@ setWorkerUrl(workerUrl);
 const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
 export const RAIL_SOURCES = {
-  trv: { name: 'Trafikverket', url: '/rail-trv.geojson', color: '#6e7781' },
+  // Trafikverket's lines come from the rail network the trains follow (public/rail-net.json, 1.7 MB instead of
+  // the 11 MB rail-trv.geojson), handed over by main.js as railData.trv.
+  trv: { name: 'Trafikverket', color: '#6e7781' },
   osm: { name: 'OpenStreetMap', url: '/rail-osm.geojson', color: '#8250df' },
 };
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
-export function createMap(container, { onTrainTap, getTrains3d } = {}) {
+// railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
+export function createMap(container, { onTrainTap, getTrains3d, railData = {} } = {}) {
   const map = new Map({
     container,
     style: STYLE,
@@ -214,7 +217,9 @@ export function createMap(container, { onTrainTap, getTrains3d } = {}) {
         map.setLayoutProperty(`rail-${key}`, 'visibility', key === id ? 'visible' : 'none');
       if (id && !loaded.has(id)) {
         loaded.add(id);
-        map.getSource(`rail-${id}`).setData(RAIL_SOURCES[id].url);
+        const source = map.getSource(`rail-${id}`);
+        if (railData[id]) railData[id]().then(g => source.setData(g)).catch(e => console.warn(`rail lines: ${e.message}`));
+        else source.setData(RAIL_SOURCES[id].url);
       }
     },
     get shownRail() { return shownRail; },

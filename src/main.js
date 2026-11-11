@@ -4,9 +4,17 @@ import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
 import { followPassings, fetchStationNames, hasKey } from './trafikverket.js';
+import { loadNet } from './rail-net.js';
 
 window.__started = true;   // index.html reports it on screen if this line is never reached
+// The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
+// has loaded (or failed: then trains move in straight lines between reports).
+const netReady = loadNet('/rail-net.json').catch((e) => {
+  console.warn(`rail network: ${e.message} (run node tools/rail-net.mjs)`);
+  return null;
+});
 const trains = createTrains();
+if (import.meta.env.DEV) window.__trains = trains;   // for the tools in tools/; not in a build
 const lateness = createLateness();
 let stationNames = new Map();
 const stationName = sig => stationNames.get(sig) ?? sig;
@@ -29,6 +37,7 @@ const panel = createPanel(document.getElementById('panel'), {
   },
 });
 const map = createMap('map', {
+  railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   getTrains3d: () => trains.placedAt(Date.now() - DELAY_MS).map(t => ({ ...t, brand: lateness.brand(t.id) })),
   // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it.
   onTrainTap(id) {
@@ -84,14 +93,14 @@ map.ready.then(showTilt);
 // ---- Live data ----
 const status = { positions: 'starting', passings: 'starting', error: null };
 
-startTrainSource({
+netReady.then(net => { if (net) trains.useNet(net); }).finally(() => startTrainSource({
   onRecords(records) { trains.update(records); },
   onStatus(s) {
     status.positions = s.mode;
     status.error = s.error ?? null;
     if (s.error) console.warn('positions:', s.error);
   },
-});
+}));
 
 if (hasKey) {
   followPassings({

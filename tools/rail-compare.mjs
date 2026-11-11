@@ -1,6 +1,7 @@
 // Which rail lines match where trains really are? For every recorded position, the distance to the nearest
 // line in each source. Run: node tools/rail-compare.mjs [recording]
 import { readFileSync, readdirSync } from 'node:fs';
+import { netFromJSON } from '../src/rail-net.js';
 
 const dir = new URL('../data/', import.meta.url);
 const file = process.argv[2] ?? new URL(readdirSync(dir).filter(f => f.startsWith('positions-')).sort().at(-1), dir);
@@ -48,13 +49,18 @@ function nearest({ grid, segs }, [lon, lat]) {
 }
 
 const pct = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
+const f2 = v => v.toFixed(2);
 console.log(`${positions.length} recorded positions`);
-for (const name of ['trv', 'osm']) {
-  const g = JSON.parse(readFileSync(new URL(`../public/rail-${name}.geojson`, import.meta.url), 'utf8'));
+// net: the page's rail network (public/rail-net.json, simplified from trv by tools/rail-net.mjs).
+for (const name of ['trv', 'net', 'osm']) {
+  const g = name === 'net'
+    ? netFromJSON(JSON.parse(readFileSync(new URL('../public/rail-net.json', import.meta.url), 'utf8'))).toGeoJSON()
+    : JSON.parse(readFileSync(new URL(`../public/rail-${name}.geojson`, import.meta.url), 'utf8'));
+  if (name === 'net') g.features = g.features[0].geometry.coordinates.map(c => ({ geometry: { coordinates: c } }));
   const idx = index(g);
   const d = positions.map(p => nearest(idx, p)).sort((a, b) => a - b);
   const share = lim => (100 * d.filter(v => v <= lim).length / d.length).toFixed(1);
   console.log(`${name}: ${g.features.length} lines; distance to nearest line: median ${pct(d, .5).toFixed(1)} m, ` +
-    `90% within ${pct(d, .9).toFixed(1)} m, 99% within ${pct(d, .99).toFixed(0)} m; ` +
+    `(${f2(pct(d, .5))}), 90% within ${pct(d, .9).toFixed(1)} m (${f2(pct(d, .9))}), 99% within ${pct(d, .99).toFixed(0)} m; ` +
     `within 10 m: ${share(10)}%, within 25 m: ${share(25)}%, over 2 km: ${(100 * d.filter(v => v === Infinity).length / d.length).toFixed(1)}%`);
 }

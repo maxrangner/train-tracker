@@ -9,8 +9,10 @@
 // Its speed changes gently; it catches up or slows down to close the gap, and never drives backwards. With no
 // newer report it coasts on at the last speed for up to COAST_MS, then stops. A big gap is closed by fast-
 // forwarding (shown as "syncing"); a confirmed position jump in the data is jumped.
-// Position is a distance along the train's own path: its cleaned reports joined by straight lines (step 3 of the
-// plan puts it on the rail network instead).
+// Position is a distance along the train's own path: its cleaned reports joined along the rail network
+// (src/rail-net.js), or by straight lines where there is no network or no way along it. Past its last report a
+// coasting train follows the track ahead.
+import { polyAt } from './rail-net.js';
 
 export const DELAY_MS = 25 * 1000;
 const MAX_AGE_MS = 10 * 60 * 1000;   // a report older than this is not shown; a train silent this long is removed
@@ -19,6 +21,8 @@ const JUMP_KMH = 300;                // a position jump: faster than this betwee
 const JUMP_FAR_M = 2000;             // ...and further than this (report times are rough: 360 m "in 1 s" happens)
 const STILL_M = 5;                   // a report this close to the last place is the train standing (GPS jitter)
 let COAST_MS = 30 * 1000;            // with no new position, coast on at the last speed at most this long
+const AHEAD_M = 3000;                // the track ahead worked out for coasting (300 km/h for 30 s is 2.5 km)
+let NET = null;                      // the rail network, when given (createTrains({ net }))
 const STAND_MS = 0.5;                // m/s: slower than this counts as standing
 
 // The chase. Gaps are measured along the path, in metres.
@@ -50,17 +54,33 @@ const ahead = (p, h, d) => ({
 
 // ---------- One train's path: its accepted reports, each with s = metres along the path from the first ----------
 
-// The direction to coast in past the last report: the last real movement, else the train's own Bearing.
+// The direction of travel at the end of the path: the last real movement (along its route, when it has one),
+// else the train's own Bearing.
 function coastHeading(h) {
-  for (let i = h.length - 1; i > 0 && i >= h.length - 6; i--)
-    if (!h[i].jump && h[i].s - h[i - 1].s > 5) return headingOf(h[i - 1], h[i]);
+  for (let i = h.length - 1; i > 0 && i >= h.length - 6; i--) {
+    if (h[i].jump || h[i].s - h[i - 1].s <= 5) continue;
+    return h[i].route ? polyAt(h[i].route, h[i].s - h[i - 1].s).heading : headingOf(h[i - 1], h[i]);
+  }
   return h.at(-1).bearing;
 }
 
-// The place s metres along the path, and the path's direction there.
-function pointAt(h, s) {
-  const last = h[h.length - 1];
+// The track ahead of train tr's last report, worked out once per last report (null without a network).
+function trackAhead(tr) {
+  const h = tr.hist, last = h[h.length - 1];
+  if (!NET || !last.snap) return null;
+  if (tr.ext?.last !== last) {
+    const hd = coastHeading(h);
+    tr.ext = { last, poly: hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M) };
+  }
+  return tr.ext.poly;
+}
+
+// The place s metres along train tr's path, and the path's direction there.
+function pointAt(tr, s) {
+  const h = tr.hist, last = h[h.length - 1];
   if (s >= last.s) {
+    const track = s - last.s >= 0.01 ? trackAhead(tr) : null;
+    if (track) return polyAt(track, s - last.s);
     const hd = coastHeading(h);
     if (s - last.s < 0.01 || hd === null || hd === undefined) return { lon: last.lon, lat: last.lat, heading: hd ?? null };
     return { ...ahead(last, hd, s - last.s), heading: hd };
@@ -68,7 +88,9 @@ function pointAt(h, s) {
   if (s <= h[0].s) return { lon: h[0].lon, lat: h[0].lat, heading: null };
   let lo = 0, hi = h.length - 1;   // h[lo].s <= s < h[hi].s
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (h[mid].s <= s) lo = mid; else hi = mid; }
-  const a = h[lo], b = h[hi], f = (s - a.s) / (b.s - a.s);
+  const a = h[lo], b = h[hi];
+  if (b.route) return polyAt(b.route, s - a.s);
+  const f = (s - a.s) / (b.s - a.s);
   return { lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f, heading: b.s - a.s > 5 ? headingOf(a, b) : null };
 }
 
@@ -116,22 +138,39 @@ function targetAt(h, t) {
 
 // ---------- The trains ----------
 
-// options.coastMs: try another coasting limit (tools/motion-check.mjs --coast).
+// options.net: the rail network (src/rail-net.js), to follow the tracks. options.coastMs: try another coasting
+// limit (tools/motion-check.mjs --coast).
 export function createTrains(options = {}) {
   if (options.coastMs) COAST_MS = options.coastMs;
+  if (options.net) NET = options.net;
   const byId = new Map();   // id -> { latest, hist, pending, against, sim }
   let lastReport = 0;       // time of the newest report we have, from Trafikverket's clock
   let simTime = null;       // the moment the simulations have reached
-  const counts = { repeats: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0 };
+  const counts = { repeats: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
   function append(tr, r, jump = false) {
     const h = tr.hist, last = h[h.length - 1];
-    const before = tr.sim && h.length ? pointAt(h, tr.sim.s) : null;
-    h.push({ time: r.time, lon: r.lon, lat: r.lat, speed: r.speed, bearing: r.bearing, s: last ? last.s + metres(last, r) : 0, jump });
+    const before = tr.sim && h.length ? pointAt(tr, tr.sim.s) : null;
+    const e = { time: r.time, lon: r.lon, lat: r.lat, speed: r.speed, bearing: r.bearing, s: 0, jump, route: null, snap: null };
+    // On the network: the report moved onto its track (they sit within 1 m of it), and the way there from the last
+    // report along the tracks (when one exists within 3 times the straight distance + 500 m).
+    if (NET && !jump) {
+      e.snap = last?.snap && last.lon === r.lon && last.lat === r.lat ? last.snap : NET.snap(r, r.bearing);
+      if (e.snap) { e.lon = e.snap.lon; e.lat = e.snap.lat; }
+    }
+    if (last) {
+      const straight = metres(last, e);
+      if (e.snap && last.snap && straight > 0.01) {
+        e.route = NET.route(last.snap, e.snap, 3 * straight + 500);
+        counts[e.route ? 'routed' : 'unrouted']++;
+      }
+      e.s = last.s + (e.route ? e.route.cum[e.route.cum.length - 1] : straight);
+    }
+    h.push(e);
     if (before) {
-      const after = pointAt(h, tr.sim.s);
+      const after = pointAt(tr, tr.sim.s);
       tr.sim.off.lon += before.lon - after.lon;
       tr.sim.off.lat += before.lat - after.lat;
     }
@@ -177,7 +216,7 @@ export function createTrains(options = {}) {
     const T = targetAt(h, t);
     let sim = tr.sim;
     if (!sim) {
-      tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(h, T.s).heading ?? null, jumped: false };
+      tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(tr, T.s).heading ?? null, jumped: false };
       return;
     }
     const e = T.s - sim.s;
@@ -212,7 +251,7 @@ export function createTrains(options = {}) {
     const k = Math.exp(-dt / 0.8);
     sim.off.lon *= k; sim.off.lat *= k;
     // The nose follows the path's direction, turning at most 120° a second.
-    const hd = pointAt(h, sim.s).heading;
+    const hd = pointAt(tr, sim.s).heading;
     if (hd !== null && hd !== undefined) {
       if (sim.heading === null) sim.heading = hd;
       else {
@@ -239,12 +278,14 @@ export function createTrains(options = {}) {
 
   // Where train tr is drawn now, with its heading.
   function drawn(tr) {
-    const sim = tr.sim, p = pointAt(tr.hist, sim.s);
+    const sim = tr.sim, p = pointAt(tr, sim.s);
     return { lon: p.lon + sim.off.lon, lat: p.lat + sim.off.lat, heading: sim.heading ?? tr.latest.bearing ?? 0 };
   }
 
   return {
     DELAY_MS,
+    // Follow the tracks of this rail network from now on (src/rail-net.js).
+    useNet(net) { NET = net; },
     // Take in a batch of records. Returns true if anything changed.
     update(records, now = Date.now()) {
       let changed = false;
@@ -310,7 +351,7 @@ export function createTrains(options = {}) {
       if (!h?.length) return null;
       const tt = Math.min(t, h[h.length - 1].time);
       const T = targetAt(h, tt);
-      const p = pointAt(h, T.s);
+      const p = pointAt(byId.get(id), T.s);
       // gap: seconds between the two reports around t (a long gap means the place in between is a guess).
       const i = h.findIndex(r => r.time > tt);
       const gap = i > 0 ? (h[i].time - h[i - 1].time) / 1000 : Infinity;

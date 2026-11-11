@@ -5,9 +5,11 @@
 //   --plain   draw the cleaned reports directly (no simulation): the old way, for comparison
 //   --cut N   no data arrives for N seconds from the middle of the replay (a lost connection)
 //   --coast N try another coasting limit (seconds)
+//   --nonet   don't use the rail network (public/rail-net.json, from tools/rail-net.mjs): straight lines
 //   --trace id  print one train's simulation every second;  --why  print the first turn-backs and fast-forwards
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
+import { netFromJSON } from '../src/rail-net.js';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
@@ -41,8 +43,14 @@ const metres = (a, b) => {
 const heading = (a, b) => (Math.atan2((b.lon - a.lon) * Math.cos(a.lat * R), b.lat - a.lat) / R + 360) % 360;
 const angle = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 
-const drawnTrains = createTrains(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {});
-const truth = createTrains();
+const netFile = new URL('../public/rail-net.json', import.meta.url);
+const net = !argv.includes('--nonet') && existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null;
+const drawnTrains = createTrains({ net, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
+const truth = createTrains({ net });
+// How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
+const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
+const offTrack = [];
+const t0 = performance.now();
 const start = recs.find(r => r.got - recs[0].got > 60_000).got;   // skip the first minute (the start batch)
 const end = recs.at(-1).got - 120_000;                             // the truth needs two minutes of hindsight
 const cutFrom = start + (end - start) / 2 - CUT / 2, cutTo = cutFrom + CUT;
@@ -106,6 +114,7 @@ for (let T = start; T < end; T += STEP) {
     if (tb && argv.includes('--why') && s.back <= 12) console.log('turn-back', d.id, new Date(t).toISOString().slice(11, 21), JSON.stringify(sim), 'truth', Math.round(tru.kmh), 'km/h, off', Math.round(metres(d, tru)), 'm');
 
     const off = metres(d, tru);
+    if (anyNet && (T - start) % 2000 < STEP) offTrack.push(anyNet.snap(d, null, 1000)?.dist ?? 1000);
     if (tru.kmh < 1 && tru.gap <= 30) s.standM.push(off);
     if (last) {
       const moved = metres(last.p, d);
@@ -143,7 +152,8 @@ const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
-console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}`);
+console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}, ${net ? 'on the rail network' : 'straight lines'}; ` +
+  `replayed in ${((performance.now() - t0) / 1000).toFixed(0)} s`);
 console.log(`cleaning: ${JSON.stringify(drawnTrains.counts)}`);
 console.log(`(below: only where the truth is known, reports at most 30 s apart; ${pct(s.silentMoving, s.silentMoving + s.moving)} of moving moments are in longer silences, drawn standing ${pct(s.silentFrozen, s.silentMoving)} of those)`);
 console.log(`frozen while really moving (over 15 km/h): ${pct(s.frozen, s.moving)}`);
@@ -154,6 +164,7 @@ console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.tru
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
+if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);
 if (!PLAIN) {
   const silence = s.syncWhy.filter(w => w.startsWith('after')).length;
