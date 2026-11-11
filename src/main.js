@@ -27,8 +27,11 @@ const stationName = sig => stations.get(sig)?.name ?? sig;
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
-// While a train fast-forwards to catch up with its data, its label gets »» (the map's font has no ⏩).
-const propsFor = (r, sim) => ({ label: labelFor(r) + (sim?.syncing ? ' »»' : ''), late: lateClass(minutesOf(r)) });
+// While a train fast-forwards to catch up with its data, its label gets »» (the map's font has no ⏩). A stale train
+// (silent for 2 minutes, or no data at all) is drawn grey and faded.
+const propsFor = (r, sim) => ({
+  label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
+});
 
 const placeNow = id => trains.placeOf(id, Date.now() - DELAY_MS);
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
@@ -98,9 +101,17 @@ map.ready.then(showTilt);
 
 // ---- Live data ----
 const status = { positions: 'starting', passings: 'starting', error: null };
+// When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a
+// stop and turns grey, and the status line says since when; when data returns they fast-forward to their places.
+const NO_DATA_MS = 60 * 1000;
+let lastDataAt = null;
 
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => startTrainSource({
-  onRecords(records) { trains.update(records); },
+  onRecords(records) {
+    lastDataAt = Date.now();
+    if (trains.halted) trains.setHalted(false);
+    trains.update(records);
+  },
   onStatus(s) {
     status.positions = s.mode;
     status.error = s.error ?? null;
@@ -143,13 +154,27 @@ if (hasKey) {
 const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped' };
 const statusEl = document.getElementById('status');
 
+const clock = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+
 setInterval(() => {
+  const now = Date.now();
+  const noData = lastDataAt !== null && now - lastDataAt > NO_DATA_MS;
+  if (noData && !trains.halted) trains.setHalted(true);
   trains.prune();
-  const ago = trains.lastReport ? Math.max(0, Math.round((Date.now() - trains.lastReport) / 1000)) : null;
+  const ago = trains.lastReport ? Math.max(0, Math.round((now - trains.lastReport) / 1000)) : null;
   statusEl.textContent =
     `${trains.count} trains · ` +
-    (ago === null ? 'no report yet' : `last report ${ago} s ago`) +
+    (noData ? `no data since ${clock(lastDataAt)}` : ago === null ? 'no report yet' : `last report ${ago} s ago`) +
     ` · ${MODE_TEXT[status.positions] ?? status.positions}` +
     (status.error ? ` · ${status.error}` : '');
-  statusEl.classList.toggle('problem', Boolean(status.error));
+  statusEl.classList.toggle('problem', Boolean(status.error) || noData);
+
+  // The open train's panel: say when it is silent, or catching up.
+  if (panel.openId) {
+    const st = trains.stateOf(panel.openId, now - DELAY_MS);
+    panel.setStatus(!st ? 'No longer on the map (no report for 10 minutes).'
+      : noData ? `No data from Trafikverket since ${clock(lastDataAt)}.`
+        : st.stale ? `No report from this train for ${Math.floor(st.silentFor / 60)} min; shown where it was last seen.`
+          : st.syncing ? 'Catching up with its latest report (fast-forward).' : '');
+  }
 }, 1000);

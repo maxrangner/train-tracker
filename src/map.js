@@ -72,12 +72,14 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7],
         // Minutes off timetable: green on time (+2 or less), yellow +3 to +5, red +6 or more, grey not known yet.
-        'circle-color': ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f'],
+        // A stale train (silent for 2 minutes, or no data at all) is grey and faded.
+        'circle-color': ['case', ['get', 'stale'], '#8c959f',
+          ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f']],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
-        'circle-opacity': ['step', ['zoom'], 1, MODEL_ZOOM, 0],
-        'circle-stroke-opacity': ['step', ['zoom'], 1, MODEL_ZOOM, 0],
+        'circle-opacity': ['step', ['zoom'], ['case', ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0],
+        'circle-stroke-opacity': ['step', ['zoom'], ['case', ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0],
       },
     });
     if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
@@ -93,7 +95,8 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
       },
-      paint: { 'text-color': '#1b1f24', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+      paint: { 'text-color': '#1b1f24', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
 
     // Tapping a train: a generous hit area, since dots are small on a phone.

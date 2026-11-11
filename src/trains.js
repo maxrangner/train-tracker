@@ -25,6 +25,7 @@ const AHEAD_M = 3000;                // the track ahead worked out for coasting 
 let NET = null;                      // the rail network, when given (createTrains({ net }))
 let ROUTES = null;                   // the planned routes (src/routes.js), when given
 const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop
+const SILENT_MS = 2 * 60 * 1000;     // no report of any kind for this long: the train is shown as stale (grey)
 const STAND_MS = 0.5;                // m/s: slower than this counts as standing
 
 // The chase. Gaps are measured along the path, in metres.
@@ -159,6 +160,10 @@ export function createTrains(options = {}) {
   const byId = new Map();   // id -> { latest, hist, pending, against, sim }
   let lastReport = 0;       // time of the newest report we have, from Trafikverket's clock
   let simTime = null;       // the moment the simulations have reached
+  let halted = false;       // no data arriving at all: every train brakes to a stop (setHalted)
+  // Stale: shown grey. The connection is lost, or this train has sent nothing for SILENT_MS (a repeat of its last
+  // position counts as something: it is still talking). t is the drawing moment (DELAY_MS behind).
+  const staleAt = (tr, t) => halted || t + DELAY_MS - tr.latest.time > SILENT_MS;
   const counts = { repeats: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
@@ -226,6 +231,14 @@ export function createTrains(options = {}) {
   // Move one train's simulation on by dt seconds, to time t.
   function step(tr, t, dt) {
     const h = tr.hist;
+    // No data at all for a while (the connection is lost): every train slows to a stop where it is.
+    if (halted && tr.sim) {
+      const sim = tr.sim;
+      sim.syncing = false;
+      sim.v = Math.max(0, sim.v - BRAKE * dt);
+      sim.s += sim.v * dt;
+      return;
+    }
     const cap = t >= h[h.length - 1].time ? trackAhead(tr, t)?.stopAt ?? Infinity : Infinity;
     const T = targetAt(h, t, cap);
     let sim = tr.sim;
@@ -302,6 +315,16 @@ export function createTrains(options = {}) {
     DELAY_MS,
     // Follow the tracks of this rail network from now on (src/rail-net.js).
     useNet(net) { NET = net; },
+    // No data arriving at all (true): every train brakes to a stop and is shown stale. false: back to normal (the
+    // trains fast-forward to where their data now says).
+    setHalted(on) { halted = on; },
+    get halted() { return halted; },
+    // How it stands with train id at drawing moment t: { stale, silentFor (s since its last report), syncing }.
+    stateOf(id, t) {
+      const tr = byId.get(id);
+      if (!tr) return null;
+      return { stale: staleAt(tr, t), silentFor: (t + DELAY_MS - tr.latest.time) / 1000, syncing: tr.sim?.syncing ?? false };
+    },
     // Follow these planned routes at junctions, and wait before planned stops (src/routes.js).
     useRoutes(routes) { ROUTES = routes; },
     // Take in a batch of records. Returns true if anything changed.
@@ -346,7 +369,7 @@ export function createTrains(options = {}) {
       for (const tr of byId.values()) {
         if (!tr.sim) continue;
         const p = drawn(tr);
-        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing });
+        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t) });
       }
       return out;
     },
@@ -360,7 +383,7 @@ export function createTrains(options = {}) {
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-          properties: { id: tr.latest.id, bearing: p.heading, ...propsFor(tr.latest, { syncing: tr.sim.syncing }) },
+          properties: { id: tr.latest.id, bearing: p.heading, ...propsFor(tr.latest, { syncing: tr.sim.syncing, stale: staleAt(tr, t) }) },
         });
       }
       return { type: 'FeatureCollection', features };

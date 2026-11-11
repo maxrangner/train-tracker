@@ -90,5 +90,18 @@ export function createPanel(el, { stationName, onSelect, onFollow }) {
     if (box && next) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
 
-  return { open, close, setFollowing };
+  // A short line under the head saying how it stands with the train ('' for nothing), e.g. "No report for 3 min".
+  function setStatus(text) {
+    let line = el.querySelector('.panel-status');
+    if (!text) { line?.remove(); return; }
+    if (!line) {
+      const head = el.querySelector('.panel-head');
+      if (!head) return;
+      line = Object.assign(document.createElement('p'), { className: 'panel-status' });
+      head.after(line);
+    }
+    line.textContent = text;
+  }
+
+  return { open, close, setFollowing, setStatus, get openId() { return openId; } };
 }

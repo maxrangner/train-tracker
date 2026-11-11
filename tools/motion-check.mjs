@@ -70,7 +70,7 @@ const t0 = performance.now();
 const start = recs.find(r => r.got - recs[0].got > 60_000).got;   // skip the first minute (the start batch)
 const end = recs.at(-1).got - 120_000;                             // the truth needs two minutes of hindsight
 const cutFrom = start + (end - start) / 2 - CUT / 2, cutTo = cutFrom + CUT;
-let k = 0, kt = 0;
+let k = 0, kt = 0, lastArrival = start;
 const feed = (trains, upTo, i, skip) => {
   const batch = [];
   while (i < recs.length && recs[i].got <= upTo) { if (!skip?.(recs[i])) batch.push(recs[i]); i++; }
@@ -79,7 +79,7 @@ const feed = (trains, upTo, i, skip) => {
 };
 
 const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
-  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, coastToStop: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
 function turnBack(dirs, id, p) {
@@ -95,6 +95,9 @@ const seen = new Set();
 for (let T = start; T < end; T += STEP) {
   const k0 = k;
   k = feed(drawnTrains, T, k, r => CUT && r.got >= cutFrom && r.got < cutTo);
+  // As the page does (src/main.js): no data for 60 s, every train brakes to a stop; data again, back to normal.
+  const fed = recs.slice(k0, k).some(r => !(CUT && r.got >= cutFrom && r.got < cutTo));
+  if (fed) { lastArrival = T; drawnTrains.setHalted(false); } else if (T - lastArrival > 60_000) drawnTrains.setHalted(true);
   for (let i = k0; i < k; i++) seen.add(recs[i].id);
   kt = feed(truth, T + 120_000, kt);
   const t = T - DELAY;
@@ -110,6 +113,7 @@ for (let T = start; T < end; T += STEP) {
     const tru = truth.reportedAt(d.id, t);
     if (!tru) continue;
     s.all++;
+    if (d.stale) s.stale++;
     const sim = PLAIN ? null : drawnTrains.simOf(d.id);
     if (sim?.syncing) s.syncMoments++;
     // A coasting train must never pass its next planned stop (it waits 200 m before it).
@@ -169,7 +173,10 @@ for (let T = start; T < end; T += STEP) {
   if (CUT && T >= cutFrom - 20_000 && T < cutTo + 60_000 && tick !== s.lastTick && (s.lastTick = tick, true)) {
     const still = drawn.filter(d => { const n = prev.get(d.id); return n && n.frozenRun > 0; }).length;
     const syncing = PLAIN ? 0 : drawn.filter(d => drawnTrains.simOf(d.id)?.syncing).length;
-    cutLog.push(`${Math.round((T - cutFrom) / 1000)} s: ${still} of ${drawn.length} drawn standing while really moving, ${syncing} syncing`);
+    const moving = PLAIN ? 0 : drawn.filter(d => drawnTrains.simOf(d.id)?.v > 0.5).length;
+    const grey = drawn.filter(d => d.stale).length;
+    cutLog.push(`${Math.round((T - cutFrom) / 1000)} s: ${moving} of ${drawn.length} drawn moving, ${grey} grey, ${syncing} fast-forwarding` +
+      `${drawnTrains.halted ? ' (halted: no data for 60 s)' : ''}`);
   }
 }
 
@@ -189,6 +196,7 @@ console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.tru
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
+if (!PLAIN) console.log(`grey (silent 2 minutes or more): ${pct(s.stale, s.all)} of train-moments`);
 if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop}`);
 if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);
