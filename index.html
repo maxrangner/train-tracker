@@ -92,6 +92,29 @@
     <div class="card tilt-card"><button id="tilt" type="button" aria-pressed="false">Tilt</button></div>
   </div>
   <div id="panel" class="card" hidden></div>
+  <script>
+    // Show any error on screen (phones have no console to look at), and say so if the program never starts.
+    (function () {
+      var shown = false;
+      function show(text) {
+        var el = document.getElementById('status');
+        if (!el) return;
+        el.textContent = 'Error: ' + text;
+        el.classList.add('problem');
+        el.style.whiteSpace = 'normal';
+        shown = true;
+      }
+      window.addEventListener('error', function (e) {
+        show((e.message || 'a file failed to load') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''));
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) { show(String(e.reason && e.reason.message || e.reason)); });
+      setTimeout(function () {
+        var el = document.getElementById('status');
+        if (!shown && el && el.textContent.indexOf('connecting') === 0 && !window.__started)
+          show('the page\'s program did not start within 20 s');
+      }, 20000);
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

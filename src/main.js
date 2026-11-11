@@ -5,6 +5,7 @@ import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
 import { followPassings, fetchStationNames, hasKey } from './trafikverket.js';
 
+window.__started = true;   // index.html reports it on screen if this line is never reached
 const trains = createTrains();
 const lateness = createLateness();
 let stationNames = new Map();

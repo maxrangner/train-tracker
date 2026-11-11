@@ -1,4 +1,4 @@
-// Open the running page in Edge (no window), wait in real time, save a picture and print the console.
+﻿// Open the running page in Edge (no window), wait in real time, save a picture and print the console.
 // Run (with `npm run dev` going):
 //   node tools/shot.mjs [--wait 25] [--out shots/shot.png] [--size 900x1100] [--view zoom/lat/lon] [--rail trv|osm|none] [--tap]
 // --view opens that place; --tap taps the moving train nearest the middle of the screen before the picture.
@@ -27,7 +27,7 @@ page.on('requestfailed', r => console.log(`[request failed] ${r.url().slice(0, 1
 
 if (args.rail) await page.evaluateOnNewDocument(r => { try { localStorage.setItem('rail', r === 'none' ? 'null' : r); } catch {} }, args.rail);
 // --page demo/brands.html opens another page of the project (no status line there); --full takes the whole page.
-await page.goto(`http://localhost:5173/${args.page ?? ''}${args.view ? `#view=${args.view}` : ''}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${args.host ? `http://${args.host}/` : 'http://localhost:5173/'}${args.page ?? ''}${args.view ? `#view=${args.view}` : ''}`, { waitUntil: 'domcontentloaded' });
 await new Promise(r => setTimeout(r, wait * 1000));
 
 // --closeup zoom[/pitch[/angle]]: jump to the train nearest the middle and look at it from the side
@@ -89,3 +89,4 @@ mkdirSync(dirname(out), { recursive: true });
 await page.screenshot({ path: out, fullPage: Boolean(args.full) });
 console.log('picture:', out);
 await browser.close();
+
