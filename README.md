@@ -27,6 +27,8 @@ While the map is private the key is built into the page; the public version will
 - **Dots**: blue moving, red standing, grey not known yet (the train sends no speed and has only one report so far).
 - **Labels** (zoom in to see them): board number and minutes off the timetable at the last station passed: `2042 (+2)` late, `2057 (-21)` early.
 - **Tap a train**: a ring marks it, and a panel lists its stops with planned and actual times. Tap the map or × to close.
+- **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
+- **The brand sheet**: `/demo/brands.html` shows every brand's train with its colours and their sources (run `node tools/brands.mjs` first).
 - **Top**: the status line (number of trains, seconds since the last report, `live` / `reconnecting` / `every 10 s`, red text when something is wrong) and the rail line switch (Trafikverket / OpenStreetMap / none).
 
 ## What is where

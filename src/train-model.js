@@ -46,7 +46,8 @@ const mat = (color) => {
   return materials.get(color);
 };
 
-// colours: { body, skirt, band, roof, nose, windscreen } (any left out fall back to sensible ones)
+// colours: { body, skirt, band, roof, nose, windscreen, stripe } (any left out fall back to sensible ones;
+// no stripe unless given)
 // cars: how many cars. Returns a THREE.Group, the train's middle at the origin, the front towards +y.
 export function buildTrain({ colours = {}, cars = 3, carLength = 25 } = {}) {
   const c = {
@@ -74,6 +75,12 @@ export function buildTrain({ colours = {}, cars = 3, carLength = 25 } = {}) {
     const roof = new THREE.Mesh(box(W - 0.5, bodyLen - 0.4, 0.3, 0.12), mat(c.roof));
     roof.position.set(0, mid, TOP + 0.1);
     car.add(body, skirt, band, roof);
+    // An optional thin stripe along the side, just under the windows (e.g. Öresundståg's orange line).
+    if (c.stripe) {
+      const stripe = new THREE.Mesh(box(W + 0.05, bodyLen, 0.22), mat(c.stripe));
+      stripe.position.set(0, mid, 2.0);
+      car.add(stripe);
+    }
     // Pillars between the windows: thin strips of body colour across the band, about every 2.6 m.
     const bandLen = bodyLen - 1.2, n = Math.max(2, Math.round(bandLen / 2.6));
     for (let k = 1; k < n; k++) {

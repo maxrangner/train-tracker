@@ -81,7 +81,7 @@ export function createTrains() {
         features.push({
           type: 'Feature',
           geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-          properties: { id: tr.latest.id, ...propsFor(tr.latest) },
+          properties: { id: tr.latest.id, bearing: tr.latest.bearing, ...propsFor(tr.latest) },
         });
       }
       return { type: 'FeatureCollection', features };

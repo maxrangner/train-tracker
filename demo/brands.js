@@ -10,7 +10,7 @@ document.getElementById('note').textContent =
   `${today.date}: ${today.brands.length} brands; ${today.withoutBrand} trains with no brand (freight, service) get the generic look.`;
 
 const entries = [...today.brands, { brand: null, trains: today.withoutBrand }];
-const COLOUR_NAMES = { body: 'body', skirt: 'lower', band: 'windows', roof: 'roof', nose: 'front' };
+const COLOUR_NAMES = { body: 'body', skirt: 'lower', roof: 'roof', nose: 'front', stripe: 'stripe' };
 
 for (const b of entries) {
   const style = styleFor(b.brand);

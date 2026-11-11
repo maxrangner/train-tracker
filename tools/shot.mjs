@@ -43,14 +43,21 @@ if (args.closeup) {
     for (const f of feats) {
       const [lon, lat] = f.geometry.coordinates;
       const d = Math.hypot((lon - c.lng) * Math.cos(lat * Math.PI / 180), lat - c.lat);
-      if (!best || d < best.d) best = { d, lon, lat, label: f.properties.label, bearing: f.properties.bearing ?? 0 };
+      if (!best || d < best.d) best = { d, lon, lat, id: f.properties.id, label: f.properties.label, bearing: f.properties.bearing ?? 0 };
     }
     if (!best) return null;
     map.jumpTo({ center: [best.lon, best.lat], zoom, pitch, bearing: best.bearing + angle });
-    return best.label;
+    return best;
   }, zoom, pitch, angle);
-  console.log('close-up of:', picked);
+  console.log('close-up of:', picked?.label);
   await new Promise(r => setTimeout(r, 3000));
+  // The train glides on meanwhile: centre on it again just before the picture.
+  if (picked) await page.evaluate((id) => {
+    const map = window.__map, data = map.getSource('trains')._data;
+    const f = (data.geojson ?? data).features.find(x => x.properties.id === id);
+    if (f) map.jumpTo({ center: f.geometry.coordinates });
+  }, picked.id);
+  await new Promise(r => setTimeout(r, 600));
 }
 
 if (args.tap) {
