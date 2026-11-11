@@ -1,0 +1,17 @@
+{
+  "name": "train-map",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "maplibre-gl": "6.16.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.16.0",
+    "vite": "8.3.5"
+  }
+}

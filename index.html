@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Train map</title>
+  <link rel="icon" href="data:,">
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { font: 13px/1.3 system-ui, sans-serif; }
+    #map { position: fixed; inset: 0; }
+    #status {
+      position: fixed;
+      left: calc(10px + env(safe-area-inset-left, 0px));
+      top: calc(10px + env(safe-area-inset-top, 0px));
+      max-width: calc(100% - 20px);
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.92);
+      color: #1b1f24;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      font-variant-numeric: tabular-nums;
+    }
+    #status.problem { color: #a40e26; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="status">connecting…</div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
