@@ -40,7 +40,8 @@ const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
 });
 
-const placeNow = id => trains.placeOf(id, now() - DELAY_MS);
+// Where a train is drawn in this frame (the camera follows exactly this place).
+const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
@@ -54,7 +55,8 @@ const panel = createPanel(document.getElementById('panel'), {
 });
 const map = createMap('map', {
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
-  getTrains3d: () => trains.placedAt(now() - DELAY_MS).map(t => ({ ...t, brand: lateness.brand(t.id) })),
+  // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
+  getTrains3d: () => frameTrains,
   // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it.
   onTrainTap(id) {
     const r = id && trains.get(id);
@@ -67,14 +69,28 @@ const map = createMap('map', {
   },
 });
 
-// ---- Drawing: every frame (at most 30 a second), each train's simulation brought to DELAY_MS ago ----
+// ---- Drawing: one clock per frame ----
+// Each frame every train's simulation is brought to one moment (DELAY_MS ago), once. The camera (following), the
+// 3D trains and the selected train's marker all use those same places, and while a train is selected the map is
+// drawn in this same frame, so nothing creeps against anything else (the 3D trains used to be placed at a slightly
+// later moment than the camera, a stutter on fast trains at close zoom). The dots and labels of the other trains go
+// through the map's background worker, 30 times a second.
 let lastDraw = 0;
+let frameTrains = [], frameById = new Map();
 function frame(ts) {
+  const t = now() - DELAY_MS;
+  frameTrains = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+  frameById = new Map(frameTrains.map(x => [x.id, x]));
+  if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
   if (ts - lastDraw >= 33) {
     lastDraw = ts;
-    map.setTrains(trains.toGeoJSON(now() - DELAY_MS, propsFor));
-    map.tick(ts);
+    map.setTrains(trains.toGeoJSON(t, propsFor));
   }
+  map.tick(ts);
+  const sel = panel.openId && frameById.get(panel.openId);
+  const r = sel && trains.get(sel.id);
+  map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
+  if (sel) map.drawNow();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
