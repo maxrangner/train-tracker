@@ -64,6 +64,14 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     },
     // The planned time of the train's last known location (0: nothing known yet), to know when to ask for more.
     until(key) { return byKey.get(key)?.until ?? 0; },
+    // Has the train finished its trip? Its latest reported passing is its arrival where its timetable ends (a
+    // location with an arrival and no departure).
+    finished(key) {
+      const e = byKey.get(key), p = e?.passed;
+      if (!p || p.activity !== 'Ankomst') return false;
+      const loc = locsOf(e).find(l => l.sig === p.sig);
+      return Boolean(loc && loc.arr !== null && loc.dep === null);
+    },
     // Whether anything of the train's timetable is known.
     knows(key) { return Boolean(byKey.get(key)?.rows.size); },
     // Where it last passed: { sig, time, activity } or null.
