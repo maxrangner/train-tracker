@@ -1,6 +1,7 @@
 // The map and how trains are drawn on it.
-// Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off.
-import { Map, setWorkerUrl } from 'maplibre-gl';
+// Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
+// the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
+import { Map, NavigationControl, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -20,9 +21,12 @@ export function createMap(container, { onTrainTap } = {}) {
     style: STYLE,
     center: [16.5, 62.5],   // middle of Sweden
     zoom: 4.3,
-    hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon), so a link opens the same place
+    hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
+    maxPitch: 70,
     attributionControl: { compact: true },
   });
+  // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
 
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
@@ -62,7 +66,8 @@ export function createMap(container, { onTrainTap } = {}) {
       source: 'trains',
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7],
-        'circle-color': ['match', ['get', 'moving'], 1, '#1f6feb', 0, '#d1242f', '#8c959f'],
+        // Minutes off timetable: green on time (+2 or less), yellow +3 to +5, red +6 or more, grey not known yet.
+        'circle-color': ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f'],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
       },
@@ -97,20 +102,20 @@ export function createMap(container, { onTrainTap } = {}) {
   const loaded = new Set();
   let shownRail = null;
 
-  // Redraw trains at most twice a second, however fast reports arrive.
-  let pending = null;
-  let timer = null;
+  let isReady = false;
+  ready.then(() => { isReady = true; });
   return {
     ready,
+    // Called every animation frame with the trains where they are now.
     setTrains(geojson) {
-      pending = geojson;
-      if (timer) return;
-      timer = setTimeout(async () => {
-        timer = null;
-        await ready;
-        map.getSource('trains').setData(pending);
-      }, 500);
+      if (isReady) map.getSource('trains').setData(geojson);
     },
+    // Tilt the view (55°) or lay it flat again.
+    toggleTilt() {
+      map.easeTo({ pitch: map.getPitch() > 5 ? 0 : 55, duration: 700 });
+    },
+    get tilted() { return map.getPitch() > 5; },
+    onViewChange(fn) { map.on('pitchend', fn); },
     // Slide the map so this point shows above the train panel (which covers up to 45 % of the screen's bottom).
     async focus(lon, lat) {
       await ready;

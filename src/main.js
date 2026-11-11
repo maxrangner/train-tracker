@@ -1,6 +1,6 @@
 import { startTrainSource } from './trains-source.js';
-import { createTrains } from './trains.js';
-import { createLateness, label } from './lateness.js';
+import { createTrains, DELAY_MS } from './trains.js';
+import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
 import { followPassings, fetchStationNames, hasKey } from './trafikverket.js';
@@ -10,8 +10,9 @@ const lateness = createLateness();
 let stationNames = new Map();
 const stationName = sig => stationNames.get(sig) ?? sig;
 
-const labelFor = r => label(r.number, lateness.get(r.id)?.minutes);
-const redraw = () => map.setTrains(trains.toGeoJSON(labelFor));
+const minutesOf = r => lateness.get(r.id)?.minutes;
+const labelFor = r => label(r.number, minutesOf(r));
+const propsFor = r => ({ label: labelFor(r), late: lateClass(minutesOf(r)) });
 
 const panel = createPanel(document.getElementById('panel'), { stationName, onSelect: id => map.select(id) });
 const map = createMap('map', {
@@ -19,12 +20,24 @@ const map = createMap('map', {
     const r = id && trains.get(id);
     if (r) {
       panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
-      map.focus(r.lon, r.lat);
+      const p = trains.placeOf(id, Date.now() - DELAY_MS);
+      map.focus(p.lon, p.lat);
     } else {
       panel.close();
     }
   },
 });
+
+// ---- Drawing: every frame (at most 30 a second), each train where it was DELAY_MS ago ----
+let lastDraw = 0;
+function frame(ts) {
+  if (ts - lastDraw >= 33) {
+    lastDraw = ts;
+    map.setTrains(trains.toGeoJSON(Date.now() - DELAY_MS, propsFor));
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 
 // ---- Rail line switch (step 2): Trafikverket / OpenStreetMap / none ----
 const railEl = document.getElementById('rail');
@@ -46,11 +59,18 @@ let savedRail = 'trv';
 try { savedRail = localStorage.getItem('rail') ?? 'trv'; } catch { /* default */ }
 chooseRail(savedRail === 'null' ? null : savedRail in RAIL_SOURCES ? savedRail : 'trv');
 
+// ---- Tilt button ----
+const tiltEl = document.getElementById('tilt');
+const showTilt = () => tiltEl.setAttribute('aria-pressed', String(map.tilted));
+tiltEl.onclick = () => map.toggleTilt();
+map.onViewChange(showTilt);
+map.ready.then(showTilt);
+
 // ---- Live data ----
 const status = { positions: 'starting', passings: 'starting', error: null };
 
 startTrainSource({
-  onRecords(records) { if (trains.update(records)) redraw(); },
+  onRecords(records) { trains.update(records); },
   onStatus(s) {
     status.positions = s.mode;
     status.error = s.error ?? null;
@@ -60,7 +80,7 @@ startTrainSource({
 
 if (hasKey) {
   followPassings({
-    onPassings(list) { if (lateness.update(list)) redraw(); },
+    onPassings(list) { lateness.update(list); },
     onStatus(s) {
       status.passings = s.mode;
       if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
@@ -73,7 +93,7 @@ const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'recon
 const statusEl = document.getElementById('status');
 
 setInterval(() => {
-  if (trains.prune()) redraw();
+  trains.prune();
   const ago = trains.lastReport ? Math.max(0, Math.round((Date.now() - trains.lastReport) / 1000)) : null;
   statusEl.textContent =
     `${trains.count} trains · ` +

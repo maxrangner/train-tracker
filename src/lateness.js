@@ -19,6 +19,15 @@ export function createLateness() {
   };
 }
 
+// The colour group for minutes off timetable: on time (+2 or less, early included), a little late (+3 to +5),
+// late (+6 or more; Trafikverket's own punctuality counts up to 5 minutes as on time), or not known yet.
+export function lateClass(minutes) {
+  if (minutes === null || minutes === undefined) return 'unknown';
+  if (minutes <= 2) return 'ontime';
+  if (minutes <= 5) return 'some';
+  return 'late';
+}
+
 // "2042 (+2)", "2057 (-21)", "1877 (0)"; just the number when the minutes aren't known yet.
 export function label(number, minutes) {
   if (minutes === null || minutes === undefined) return String(number);

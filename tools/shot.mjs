@@ -35,7 +35,7 @@ if (args.tap) {
     const c = map.project(map.getCenter());
     const { width, height } = map.getCanvas().getBoundingClientRect();
     const all = map.queryRenderedFeatures([[0, 0], [width, height]], { layers: ['train-dots'] });
-    const dots = all.filter(f => Number(f.properties.moving) === 1);
+    const dots = all;
     if (!dots.length) return { none: true, seen: all.length };
     let best = null;
     for (const f of dots) {

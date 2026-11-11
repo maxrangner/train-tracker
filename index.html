@@ -39,8 +39,8 @@
     #top > * { pointer-events: auto; }
     #status { padding: 6px 10px; font-variant-numeric: tabular-nums; }
     #status.problem { color: var(--late); }
-    #rail { display: flex; padding: 3px; gap: 2px; }
-    #rail button {
+    #rail, .tilt-card { display: flex; padding: 3px; gap: 2px; }
+    #rail button, #tilt {
       font: inherit;
       border: 0;
       border-radius: 6px;
@@ -49,8 +49,10 @@
       color: var(--muted);
       cursor: pointer;
     }
-    #rail button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-    #rail button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #rail button[aria-pressed="true"], #tilt[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #rail button:focus-visible, #tilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* leave room on the right for the zoom buttons and compass */
+    #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
     #panel {
       position: fixed;
@@ -87,6 +89,7 @@
   <div id="top">
     <div id="status" class="card">connecting…</div>
     <div id="rail" class="card" role="group" aria-label="Rail lines"></div>
+    <div class="card tilt-card"><button id="tilt" type="button" aria-pressed="false">Tilt</button></div>
   </div>
   <div id="panel" class="card" hidden></div>
   <script type="module" src="/src/main.js"></script>
