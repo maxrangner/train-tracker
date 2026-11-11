@@ -7,6 +7,7 @@
 //   --coast N try another coasting limit (seconds)
 //   --nonet   don't use the rail network (public/rail-net.json, from tools/rail-net.mjs): straight lines
 //   --trace id  print one train's simulation every second;  --why  print the first turn-backs and fast-forwards
+//   --json    the main numbers as one JSON line (for tools/check.mjs)
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
@@ -203,6 +204,20 @@ const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
+// --json: the main numbers as one JSON line (tools/check.mjs reads it), instead of the text below.
+if (argv.includes('--json')) {
+  const r = (v, d = 2) => (Number.isFinite(v) ? Number(v.toFixed(d)) : null);
+  console.log(JSON.stringify({
+    file, minutes: r(minutes, 1), routes: routes?.count ?? 0,
+    frozenPct: r(100 * s.frozen / s.moving), stopsPerMin: r(s.freezes.length / minutes, 1),
+    lagMedianS: r(q(s.lagS, 0.5)), lag90S: r(q(s.lagS, 0.9)), lag99S: r(q(s.lagS, 0.99)),
+    offTrack99M: offTrack.length ? r(q(offTrack, 0.99)) : null,
+    turnBacks: s.back, truthTurnBacks: s.truthBack,
+    greyPct: r(100 * s.stale / s.all), silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
+    pastStop: s.pastStop, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
+  }));
+  process.exit(0);
+}
 console.log(`${file}, ${minutes.toFixed(1)} minutes, drawn ${DELAY / 1000} s behind, ${PLAIN ? 'reports directly (no simulation)' : 'simulated'}, ${net ? 'on the rail network' : 'straight lines'}${routes ? `, with ${routes.count} planned routes` : ''}; ` +
   `replayed in ${((performance.now() - t0) / 1000).toFixed(0)} s`);
 console.log(`cleaning: ${JSON.stringify(drawnTrains.counts)}`);
