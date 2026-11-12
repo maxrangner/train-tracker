@@ -39,8 +39,8 @@
     #top > * { pointer-events: auto; }
     #status { padding: 6px 10px; font-variant-numeric: tabular-nums; }
     #status.problem { color: var(--late); }
-    #rail, .tilt-card { display: flex; padding: 3px; gap: 2px; }
-    #rail button, #tilt {
+    .tilt-card { display: flex; padding: 3px; gap: 2px; }
+    #tilt {
       font: inherit;
       border: 0;
       border-radius: 6px;
@@ -49,8 +49,8 @@
       color: var(--muted);
       cursor: pointer;
     }
-    #rail button[aria-pressed="true"], #tilt[aria-pressed="true"] { background: var(--accent); color: #fff; }
-    #rail button:focus-visible, #tilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #tilt[aria-pressed="true"] { background: var(--accent); color: #fff; }
+    #tilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
     #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
     #menu-button[aria-expanded="true"] { background: var(--accent); color: #fff; }
@@ -80,7 +80,7 @@
     .menu-text { margin: 0; color: var(--ink); }
     .menu-item { font: inherit; font-size: 15px; text-align: left; padding: 8px 6px; border: 0; background: transparent; color: var(--accent); cursor: pointer; }
     .menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    /* The map credit: shown when the app opens, folded away on the first touch of the map or after 10 s (main.js). */
+    /* The map credit: shown when the app opens, folded away on the first touch of the map or after 5 s (main.js). */
     #credit {
       position: fixed; right: calc(var(--gap) + env(safe-area-inset-right, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
       max-width: calc(100% - 2 * var(--gap)); padding: 4px 8px; font-size: 11px; color: var(--muted);
@@ -102,8 +102,6 @@
     .help-body a { color: var(--accent); }
     .menu-section { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-    #rail { display: flex; flex-wrap: wrap; gap: 4px; }
-    #menu #rail button { font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); }
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
@@ -192,10 +190,6 @@
       <div class="menu-label">Live data</div>
       <p id="status-full" class="menu-text">connecting…</p>
     </div>
-    <div class="menu-section">
-      <div class="menu-label">Rail lines</div>
-      <div id="rail" role="group" aria-label="Rail lines"></div>
-    </div>
   </div>
   <div id="credit" class="card">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>
     · <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>
@@ -211,7 +205,7 @@
         <li>Close in, each train is a small model of its company's usual train. Further out it is a dot.</li>
         <li><b>The label</b> is the company, then the train number and the minutes off the timetable: <b>2311 (+3)</b> is 3 minutes late, <b>2057 (-2)</b> 2 minutes early.</li>
         <li><b>Dot colours</b>: green on time (up to 2 minutes late), yellow 3–5 minutes late, red 6 or more, grey not known. A faded grey train has sent nothing for a while; it is shown where it was last known.</li>
-        <li><b>Stations</b> are small rings; their names show when you zoom in.</li>
+        <li><b>Stations</b> are small rings; their names show when you zoom in. The grey lines are Trafikverket's tracks.</li>
       </ul>
       <h3>Tap</h3>
       <ul>
@@ -222,7 +216,6 @@
       <h3>The menu (☰)</h3>
       <ul>
         <li><b>Search</b> for a train number or a station. A number also finds today's trains that are not running right now.</li>
-        <li><b>Rail lines</b>: Trafikverket's tracks, OpenStreetMap's, or none.</li>
         <li><b>Tilt</b> (top) tilts the map so the trains stand up; two fingers up or down do the same.</li>
       </ul>
       <h3>Credits and licences</h3>

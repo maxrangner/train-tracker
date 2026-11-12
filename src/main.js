@@ -1,7 +1,7 @@
 import { startTrainSource } from './trains-source.js';
 import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
-import { createMap, RAIL_SOURCES } from './map.js';
+import { createMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
@@ -144,12 +144,12 @@ function showPath() {
 setInterval(showPath, 2000);
 
 // ---- Help and the map credit ----
-// The credit shows when the app opens and folds away on the first touch of the map, or after 10 s; after that the
+// The credit shows when the app opens and folds away on the first touch of the map, or after 5 s; after that the
 // credits are in Help (OpenStreetMap's attribution guidelines allow this: shown at start, then findable in a menu).
 const creditEl = document.getElementById('credit');
 const foldCredit = () => creditEl.classList.add('gone');
 document.getElementById('map').addEventListener('pointerdown', foldCredit, { once: true });
-setTimeout(foldCredit, 10000);
+setTimeout(foldCredit, 5000);
 const helpEl = document.getElementById('help');
 function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
@@ -205,25 +205,8 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
-// ---- Rail line switch (step 2): Trafikverket / OpenStreetMap / none ----
-const railEl = document.getElementById('rail');
-const RAIL_CHOICES = [...Object.entries(RAIL_SOURCES).map(([id, s]) => [id, s.name]), [null, 'No lines']];
-function chooseRail(id) {
-  map.showRail(id);
-  for (const b of railEl.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.id === String(id)));
-  try { localStorage.setItem('rail', String(id)); } catch { /* storage may be blocked */ }
-}
-for (const [id, name] of RAIL_CHOICES) {
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.dataset.id = String(id);
-  b.textContent = name;
-  b.onclick = () => chooseRail(id);
-  railEl.append(b);
-}
-let savedRail = 'trv';
-try { savedRail = localStorage.getItem('rail') ?? 'trv'; } catch { /* default */ }
-chooseRail(savedRail === 'null' ? null : savedRail in RAIL_SOURCES ? savedRail : 'trv');
+// ---- Rail lines: Trafikverket's, always shown ----
+map.showRail('trv');
 
 // ---- Tilt button ----
 const tiltEl = document.getElementById('tilt');
