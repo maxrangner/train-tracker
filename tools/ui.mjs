@@ -1,0 +1,57 @@
+// Drive the page like a phone, step by step, and take pictures on the way.
+// Run (with `npm run dev` going):
+//   node tools/ui.mjs <picture-prefix> "<address settings>" <step> <step> ...
+//   e.g. node tools/ui.mjs shots/menu- "replay=1&view=12/59.33/18.06&train=toy&lang=sv" click:#menu-button wait:500 shot:open
+// The address settings go after the # (replay=1 plays the rush-hour recording). Steps:
+//   wait:<ms>        wait
+//   click:<css>      tap an element, e.g. click:#menu-button   (a card's × : "click:#panel .panel-close")
+//   type:<text>      type into the focused field
+//   tapat:<lon>,<lat>  tap the map at a place
+//   tapgroup         tap the first "N trains" label on screen
+//   taptrain         tap the moving train nearest the middle
+//   shot:<name>      save <picture-prefix><name>.jpg
+//   json:<js>        run a line in the page and print its result
+import { launch, openMap, sleep, RUSH_HOUR } from './lib/browser.mjs';
+
+const [prefix, hashText = '', ...steps] = process.argv.slice(2);
+if (!prefix) { console.log('see the top of tools/ui.mjs'); process.exit(1); }
+const hash = Object.fromEntries(new URLSearchParams(hashText));
+if (hash.replay === '1') hash.replay = RUSH_HOUR;
+
+const browser = await launch();
+const page = await openMap(browser, hash);
+for (const step of steps) {
+  const [kind, ...rest] = step.split(':');
+  const v = rest.join(':');
+  if (kind === 'wait') await sleep(Number(v));
+  else if (kind === 'click') await page.click(v);
+  else if (kind === 'type') await page.keyboard.type(v, { delay: 60 });
+  else if (kind === 'tapat') {
+    const [lon, lat] = v.split(',').map(Number);
+    const pt = await page.evaluate((lon, lat) => window.__map.project([lon, lat]), lon, lat);
+    await page.mouse.click(pt.x, pt.y);
+  } else if (kind === 'tapgroup') {
+    const pt = await page.evaluate(() => {
+      const m = window.__map, f = m.queryRenderedFeatures({ layers: ['train-group-labels'] })[0];
+      if (!f) return null;
+      const q = m.project(f.geometry.coordinates);
+      return { x: q.x, y: q.y + 12, n: f.properties.point_count };
+    });
+    console.log('group', JSON.stringify(pt));
+    if (pt) await page.mouse.click(pt.x, pt.y);
+  } else if (kind === 'taptrain') {
+    await page.evaluate(() => {
+      const m = window.__map, c = m.project(m.getCenter());
+      const d = f => { const q = m.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
+      const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => !f.properties.stale).sort((a, b) => d(a) - d(b))[0];
+      const q = m.project(f.geometry.coordinates);
+      m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
+    });
+  } else if (kind === 'shot') {
+    await page.screenshot({ path: `${prefix}${v}.jpg`, quality: 82 });
+    console.log('shot', `${prefix}${v}.jpg`);
+  } else if (kind === 'json') console.log(JSON.stringify(await page.evaluate(v)));
+  else console.log('unknown step:', step);
+}
+if (page.errors.length) console.log('page errors:', page.errors);
+await browser.close();

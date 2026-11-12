@@ -3,7 +3,7 @@
 import puppeteer from 'puppeteer-core';
 
 const [minutes = '60', every = '5'] = process.argv.slice(2);
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+import { BROWSER_PATH as EDGE } from './lib/browser.mjs';
 
 const browser = await puppeteer.launch({
   executablePath: EDGE,
