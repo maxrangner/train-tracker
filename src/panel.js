@@ -2,6 +2,8 @@
 import { fetchRoute } from './trafikverket.js';
 import { t } from './i18n.js';
 
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 const time = t => (t ? new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '');
 const off = (planned, at) => {
   if (!at) return '';
@@ -96,7 +98,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         `<td class="t">${a ? time(a.planned) : ''}</td>` +
         `<td class="t">${d ? time(d.planned) : ''}</td>` +
         `<td class="t act">${main.canceled ? t('cancelledStop') : time(seen)}${main.actual ? '' : seen ? `<span class="est">${t('est')}</span>` : ''}</td>` +
-        `<td class="t dev">${off(main.planned, seen)}</td></tr>`;
+        `<td class="t dev">${off(main.planned, seen)}</td>` +
+        `<td class="trk">${esc(d?.track || a?.track || '')}</td></tr>`;
     }).join('');
 
     const from = route.from ? stationName(route.from) : '';
@@ -105,7 +108,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       head(train.label) +
       `<p class="panel-note">${[route.product, from && to ? `${from} → ${to}` : ''].filter(Boolean).join(' · ')}</p>` +
       (stops.length
-        ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th><th class="trk">${t('track')}</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<p class="panel-note">${t('noStops')}</p>`);
     wireHead();
     // Scroll the table (only the table) so the next stop is in view.
