@@ -8,7 +8,7 @@ import { settings } from './settings.js';
 export const lang = () => settings.language;
 
 const EN = {
-  title: 'Train map',
+  title: 'Spårad',
   menu: 'Menu and search',
   connecting: 'connecting…',
   tilt: 'Tilt',
@@ -97,7 +97,7 @@ const EN = {
 };
 
 const SV = {
-  title: 'Tågkarta',
+  title: 'Spårad',
   menu: 'Meny och sök',
   connecting: 'ansluter…',
   tilt: 'Luta',
