@@ -40,6 +40,7 @@ const TAU_S = 8;          // close a gap over about this many seconds
 const ACCEL = 1.0;        // m/s², speeding up
 const BRAKE = 3.0;        // m/s², slowing down
 const STOP_BRAKE = 1.0;   // m/s², the braking curve used to stop at a standing target without passing it
+const TURN_SPAN = 15;     // m: a drawn train's direction is the track's over 15 m behind to 15 m ahead
 const SYNC_START_M = 1000; // further behind than this, and than SYNC_START_S of travel: fast-forward
 const SYNC_START_S = 25;
 const SYNC_END_M = 50;    // ...until this close
@@ -338,8 +339,12 @@ export function createTrains(options = {}) {
     sim.s += sim.v * dt;
     const k = Math.exp(-dt / 0.8);
     sim.off.lon *= k; sim.off.lat *= k;
-    // The nose follows the path's direction, turning at most 120° a second.
-    const hd = pointAt(tr, sim.s).heading;
+    // The nose follows the path's direction, turning at most 120° a second. The direction is taken over a stretch
+    // of track, from TURN_SPAN metres behind to TURN_SPAN ahead: a bend is short straight pieces (corners a median
+    // 48 m apart, 3.3° each), and the piece the train is on made it swing at every corner (Max, 2026-11-12: "clicking"
+    // round a bend). Over a stretch it turns a little every frame instead.
+    const back = pointAt(tr, Math.max(tr.hist[0].s, sim.s - TURN_SPAN)), fwd = pointAt(tr, sim.s + TURN_SPAN);
+    const hd = metres(back, fwd) > 2 ? headingOf(back, fwd) : pointAt(tr, sim.s).heading;
     if (hd !== null && hd !== undefined) {
       if (sim.heading === null) sim.heading = hd;
       else {
