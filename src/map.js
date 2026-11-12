@@ -46,6 +46,7 @@ const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'path-stops', 'stati
 export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, railData = {} } = {}) {
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
+  let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
   let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
   const map = new Map({
     container,
@@ -151,7 +152,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-opacity': dotOpacity(selected ?? ''),
       },
     });
-    if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
+    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
@@ -220,6 +221,31 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     applySelectionFilters();
   }
 
+  // The id of the model under screen point pt (or null): each drawn model's ground outline projected to the screen,
+  // a margin of 8 px round it, and its roof's height taken into account by also testing a bit above it.
+  function modelAt(pt) {
+    const R = Math.PI / 180, M = 111195;
+    let best = null, bestD = Infinity;
+    for (const [id, o] of layer3d?.outlines() ?? []) {
+      const kx = Math.cos(o.lat * R), half = o.length / 2;
+      const end = s => map.project([o.lon + s * half * Math.sin(o.bearing * R) / (M * kx), o.lat + s * half * Math.cos(o.bearing * R) / M]);
+      const a = end(-1), b = end(1), c = map.project([o.lon, o.lat]);
+      const side = map.project([o.lon + (o.width / 2) * Math.cos(o.bearing * R) / (M * kx), o.lat - (o.width / 2) * Math.sin(o.bearing * R) / M]);
+      const halfW = Math.hypot(side.x - c.x, side.y - c.y) + 8;
+      const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1;
+      // Tested at the ground and lifted by about a model's height (in a tilted view the model stands up).
+      for (const lift of [0, halfW * 1.5]) {
+        const px = pt.x - a.x, py = pt.y + lift - a.y;
+        const f = Math.max(0, Math.min(1, (px * vx + py * vy) / L2));
+        const d = Math.hypot(px - vx * f, py - vy * f);
+        const extra = Math.hypot(pt.x - c.x, pt.y + lift - c.y) / 1e4;   // equal hits: the nearer middle wins
+        if (d <= halfW && d + extra < bestD) { bestD = d + extra; best = id; }
+        if (map.getPitch() < 5) break;
+      }
+    }
+    return best;
+  }
+
   function removeLayers() {
     for (const id of OUR_LAYERS) if (map.getLayer(id)) map.removeLayer(id);
   }
@@ -237,8 +263,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     addSources();
     addLayers();
 
-    // Tapping a train: a generous hit area, since dots are small on a phone.
-    // With the toy trains a tap anywhere on the toy counts (half its length round its middle); the nearest wins.
+    // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
+    // are small on a phone). The nearest wins.
     map.on('click', (e) => {
       // A "3 trains" label: list them.
       const gp = 12;
@@ -252,10 +278,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         const byId = new globalThis.Map(near.map(f => [f.properties.id, f.properties]));
         if (byId.size) return onGroupTap([...byId.values()]);
       }
+      const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
+      // A train's label (Max, 2026-11-12: "it should be the entire train model, and the label").
+      const lp = 3;
+      const label = map.queryRenderedFeatures([[e.point.x - lp, e.point.y - lp], [e.point.x + lp, e.point.y + lp]],
+        { layers: ['train-labels', 'train-labels-near'] }).find(f => f.properties.id);
+      if (label) return onTrainTap?.(label.properties.id);
+      // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
+      const onModel = map.getZoom() >= modelZoom() ? modelAt(e.point) : null;
+      if (onModel) return onTrainTap?.(onModel);
       const pad = isToy() && map.getZoom() >= modelZoom() ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
-      const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
       const nearest = hits.reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
       // No train there: a station?
       if (!nearest && onStationTap && map.getZoom() >= 9) {
