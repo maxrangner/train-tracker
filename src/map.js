@@ -2,7 +2,7 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
-import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM } from './trains-3d.js';
+import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM, TOY, TOY_PX } from './trains-3d.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -92,11 +92,14 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
     });
 
     // Tapping a train: a generous hit area, since dots are small on a phone.
+    // With the toy trains a tap anywhere on the toy counts (half its length round its middle); the nearest wins.
     map.on('click', (e) => {
-      const pad = 12;
+      const pad = TOY && map.getZoom() >= MODEL_ZOOM ? Math.max(12, TOY_PX / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
-      onTrainTap?.(hits[0]?.properties.id ?? null);
+      const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
+      const nearest = hits.reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
+      onTrainTap?.(nearest?.properties.id ?? null);
     });
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });

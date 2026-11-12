@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toy trains</title>
+  <link rel="icon" href="data:,">
+  <style>
+    html, body { margin: 0; background: #f6f8fa; color: #1b1f24; font: 14px/1.4 system-ui, sans-serif; }
+    h1 { font-size: 18px; margin: 14px 16px 2px; }
+    p.note { margin: 0 16px 10px; color: #59636e; }
+    #sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; padding: 0 16px 16px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: 8px 10px; }
+    .card h2 { font-size: 15px; margin: 0; }
+    .card canvas { width: 100%; height: 210px; display: block; touch-action: pan-y; }
+    .card .src { color: #59636e; font-size: 12px; }
+    .card a { color: #0969da; }
+  </style>
+</head>
+<body>
+  <h1>Toy trains</h1>
+  <p class="note">Each company's usual train as a toy. Drag a picture sideways to turn it.</p>
+  <div id="sheet"></div>
+  <script type="module" src="./trains.js"></script>
+</body>
+</html>

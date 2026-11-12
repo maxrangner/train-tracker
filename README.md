@@ -37,6 +37,7 @@ While the map is private the key is built into the page; the public version will
 - **Tap a train**: a ring marks it, a panel lists its stops with planned and actual times, and the camera follows the train (the **Following** button). Zooming, turning and tilting keep following; dragging the map away stops it (the button turns to **Follow**: press it to go back). Tap the map or × to close.
 - **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
 - **The brand sheet**: `/demo/brands.html` shows every brand's train with its colours and their sources (run `node tools/brands.mjs` first).
+- **Toy trains (test, branch `ui/look`)**: add `&train=toy` to the address (e.g. `http://localhost:5173/#view=12/59.33/18.06&train=toy`) to draw each company's usual train as a toy, at least 70 px long (`&toysize=100` to change) from zoom 11 (`&toyzoom=12`). The gallery is `/demo/trains.html`; `node tools/gallery.mjs --out <file>` packs it into one page that opens anywhere. Pictures: `node tools/shot.mjs --hash "train=toy" ...`.
 - **Top**: the status line (number of trains, seconds since the last report, `live` / `reconnecting` / `every 10 s`, red text when something is wrong) and the rail line switch (Trafikverket / OpenStreetMap / none).
 
 ## What is where
@@ -49,6 +50,8 @@ While the map is private the key is built into the page; the public version will
 - `src/rail-net.js`: the rail network: the track under a place, the way along the tracks between two places (never reversing through a switch), the track ahead of a train.
 - `src/lateness.js`: minutes off timetable per train; the label text.
 - `src/panel.js`: the panel for a tapped train.
+- `src/toy-trains.js`: the toy trains: one flexible shape set per train model (X61, Regina, X2000, Rc ...).
+- `src/toy-brands.js`: each company's toy: its usual train model, its paint and the photo it was read from.
 - `src/map.js`: the map (OpenFreeMap, Positron style), rail lines, dots, labels, ring.
 - `src/main.js`: ties them together; the status line; the rail switch.
 - `tools/`: helpers run with Node.
