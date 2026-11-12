@@ -243,7 +243,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   selEl.className = 'sel-train';
   selEl.innerHTML = '<div class="sel-dot"></div><div class="sel-label"></div>';
   const selDot = selEl.firstChild, selLabel = selEl.lastChild;
-  const selMarker = new Marker({ element: selEl, anchor: 'center' });
+  // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
+  // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
+  const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
 
   // ---- Following a train ----
