@@ -11,14 +11,15 @@ const DEFAULTS = {
   toyZoom: 11,          // toys from this zoom in (further out: dots)
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
 };
-// The address name of each setting, and whether a change needs the page reloaded (the map's layers are set up once).
+// The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
+// whoever shows a setting listens with onSettingChange.
 const KEYS = {
-  theme: { param: 'theme', reload: true },
-  language: { param: 'lang', reload: true },
-  trainStyle: { param: 'train', reload: true },
-  toySize: { param: 'toysize', reload: false },
-  toyZoom: { param: 'toyzoom', reload: true },
-  boardRows: { param: 'boardrows', reload: false },
+  theme: { param: 'theme' },
+  language: { param: 'lang' },
+  trainStyle: { param: 'train' },
+  toySize: { param: 'toysize' },
+  toyZoom: { param: 'toyzoom' },
+  boardRows: { param: 'boardrows' },
 };
 const STORE = 'settings';
 
@@ -37,13 +38,20 @@ const valid = {
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
   [k, valid[k](hash.get(KEYS[k].param)) ?? valid[k](saved[k]) ?? d]));
 
-// Dark or light, as chosen (Auto: as the phone is set now). The page's colours follow <html data-theme>.
-export const dark = settings.theme === 'dark' ||
-  (settings.theme === 'auto' && typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches);
-if (typeof document !== 'undefined') document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+// ---- Changes: fn(key) is called after a setting changed ('theme' also when the phone switches while on Auto) ----
+const listeners = [];
+export const onSettingChange = fn => listeners.push(fn);
+const changed = key => { for (const fn of listeners) fn(key); };
 
-// Change a setting from the menu: remembered, and taken out of the address (which would otherwise win next time).
-// Returns true when the page must be reloaded for it to show.
+// Dark or light now, as chosen (Auto: as the phone is set now). The page's colours follow <html data-theme>.
+const phoneDark = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+export const isDark = () => settings.theme === 'dark' || (settings.theme === 'auto' && Boolean(phoneDark?.matches));
+const showTheme = () => { if (typeof document !== 'undefined') document.documentElement.dataset.theme = isDark() ? 'dark' : 'light'; };
+showTheme();
+phoneDark?.addEventListener('change', () => { if (settings.theme === 'auto') { showTheme(); changed('theme'); } });
+
+// Change a setting from the menu: remembered, taken out of the address (which would otherwise win next time), and
+// announced. Returns true when it changed.
 export function setSetting(key, value) {
   const v = valid[key](value);
   if (v === undefined || v === settings[key]) return false;
@@ -55,5 +63,7 @@ export function setSetting(key, value) {
     now.delete(KEYS[key].param);
     history.replaceState(null, '', `#${now.toString().replace(/%2F/g, '/')}`);
   }
-  return KEYS[key].reload;
+  if (key === 'theme') showTheme();
+  changed(key);
+  return true;
 }

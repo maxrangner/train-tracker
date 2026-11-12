@@ -88,5 +88,8 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     timer = setInterval(refresh, REFRESH_MS);
   }
 
-  return { open, close, get openSig() { return station?.sig ?? null; } };
+  // Load and draw it again (Settings: language or number of rows changed).
+  const relabel = () => { if (station) refresh(); };
+
+  return { open, close, relabel, get openSig() { return station?.sig ?? null; } };
 }

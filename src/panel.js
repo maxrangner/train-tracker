@@ -20,6 +20,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
   let number = null;      // the open train's public number (for the star)
+  let shown = null;       // { train, route }: what the panel shows, to redraw it in another language
 
   // The top line: the train's label, the Follow button (pressed while the camera follows the train) and ×.
   const head = label =>
@@ -55,6 +56,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     canFollow = follow;
     onSelect?.(train.id);
     el.hidden = false;
+    shown = { train, route: null };
     el.innerHTML = head(train.label) + `<p class="panel-note">${t('loadingRoute')}</p>`;
     wireHead();
 
@@ -67,7 +69,12 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
     onRoute?.(train.id, route);
+    shown = { train, route };
+    draw(train, route);
+  }
 
+  // The panel's table for a train whose route has loaded.
+  function draw(train, route) {
     // One line per passenger stop: arrival and departure at the same station merged (they can come in either
     // order when both have the same planned minute).
     const stops = [];
@@ -106,6 +113,14 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     if (box && next) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
 
+  // Draw it again as it is (Settings → Language changed): no new request, the map stays as it is.
+  function relabel() {
+    if (!openId || !shown) return;
+    if (shown.route) { draw(shown.train, shown.route); return; }
+    el.innerHTML = head(shown.train.label) + `<p class="panel-note">${t('loadingRoute')}</p>`;
+    wireHead();
+  }
+
   // A short line under the head saying how it stands with the train ('' for nothing), e.g. "No report for 3 min".
   function setStatus(text) {
     let line = el.querySelector('.panel-status');
@@ -119,5 +134,5 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     line.textContent = text;
   }
 
-  return { open, close, setFollowing, setStatus, get openId() { return openId; } };
+  return { open, close, setFollowing, setStatus, relabel, get openId() { return openId; } };
 }
