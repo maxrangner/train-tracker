@@ -314,7 +314,10 @@ export function createTrains(options = {}) {
     const past = t >= last.time ? aheadOf(tr, t)
       : tr.sim && tr.sim.s > last.s ? { cap: aheadOf(tr, t).cap, o: {} } : { cap: Infinity, o: {} };
     const cap = past.cap;
-    const T = targetAt(h, t, cap, past.o);
+    let T = targetAt(h, t, cap, past.o);
+    // A train turning grey (stale) stops where it is drawn: its target is its last report, which a train moved on
+    // by its timetable has long passed, and going back there was a jump backwards (about 15 an hour, 2026-11-12).
+    if (T.mode === 'stale' && tr.sim && T.s < tr.sim.s) T = { ...T, s: tr.sim.s };
     let sim = tr.sim;
     if (!sim) {
       tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(tr, T.s).heading ?? null, jumped: false };
