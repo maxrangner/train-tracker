@@ -57,6 +57,20 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
       });
     }
 
+    // The open train's path (setPath): the part still ahead in blue, the part travelled grey, its stops as rings.
+    map.addSource('path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
+    map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['match', ['get', 'part'], 'ahead', '#1f6feb', '#9aa3ad'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
+    map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6], 'circle-color': '#ffffff',
+        'circle-stroke-color': ['match', ['get', 'part'], 'ahead', '#1f6feb', '#9aa3ad'],
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
+
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
@@ -261,6 +275,29 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
       await ready;
       map.getSource('stations').setData({ type: 'FeatureCollection', features: list.map(st => ({
         type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) });
+    },
+    // Draw a train's path (path.js) split at point index `split` (travelled before it, ahead after it); null: none.
+    async setPath(path, split = 0) {
+      await ready;
+      const features = [];
+      if (path && path.coords.length > 1) {
+        const k = Math.max(0, Math.min(split, path.coords.length - 1));
+        const line = (coords, part) => coords.length > 1 && features.push({ type: 'Feature', properties: { part }, geometry: { type: 'LineString', coordinates: coords } });
+        line(path.coords.slice(0, k + 1), 'done');
+        line(path.coords.slice(k), 'ahead');
+        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { part: path.stopAt[i] <= k ? 'done' : 'ahead' },
+          geometry: { type: 'Point', coordinates: c } }));
+      }
+      map.getSource('path').setData({ type: 'FeatureCollection', features });
+    },
+    // Show the whole of a path above the panel at the bottom.
+    async fitPath(path) {
+      await ready;
+      if (!path || path.coords.length < 2) return;
+      const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
+      const h = map.getContainer().clientHeight;
+      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+        { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
     },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
     async goTo(place, minZoom) {
