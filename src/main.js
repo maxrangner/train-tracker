@@ -91,7 +91,26 @@ const map = createMap('map', {
     if (menu.justClosed) return;
     openStation(sig);
   },
+  onGroupTap(list) {
+    if (menu.justClosed) return;
+    showPicker(list);
+  },
 });
+
+// ---- Several trains close together ("3 trains"): pick one ----
+const pickerEl = document.getElementById('picker');
+const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+function showPicker(list) {
+  panel.close();
+  board.close();
+  const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
+  pickerEl.innerHTML = `<div class="panel-head"><strong>${rows.length} trains here</strong><span class="panel-buttons">` +
+    `<button class="panel-close" type="button" aria-label="Close">×</button></span></div><ul class="pick-list">` +
+    rows.map((t, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(t.label)}</b> <span>${escHtml(t.company || 'Train')}</span></button></li>`).join('') + '</ul>';
+  pickerEl.hidden = false;
+  pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
+  for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
+}
 
 // ---- A station's board (where the train panel opens; one of them at a time) ----
 const board = createBoard(document.getElementById('board'), {
@@ -123,6 +142,7 @@ function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
   board.close();
+  pickerEl.hidden = true;
   panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);

@@ -122,7 +122,7 @@
       font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--ink);
       text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; }
 
-    #panel, #board {
+    #panel, #board, #picker {
       position: fixed;
       left: calc(var(--gap) + env(safe-area-inset-left, 0px));
       bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
@@ -158,6 +158,12 @@
     tr.canceled td { color: var(--late); text-decoration: line-through; }
     td.dev { color: var(--late); text-align: right; }
     .est { color: var(--muted); font-weight: 400; }
+    /* Picking one of several trains standing close together ("3 trains") */
+    .pick-list { list-style: none; margin: 6px 0 0; padding: 0; overflow: auto; min-height: 0; }
+    .pick-list button { width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 9px 4px; border: 0; border-bottom: 1px solid var(--line);
+      background: transparent; color: var(--ink); cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+    .pick-list button span { color: var(--muted); font-size: 13px; }
+    .pick-list button:hover, .pick-list button:focus-visible { background: #f0f4fa; outline: none; }
     /* A station's board */
     .board-tabs { display: flex; gap: 4px; margin: 6px 0; }
     .board-tabs button { font: inherit; font-size: 14px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--muted); cursor: pointer; }
@@ -219,6 +225,7 @@
       <h3>Tap</h3>
       <ul>
         <li><b>A train</b>: its stops, planned and actual, and its whole path (grey behind it, blue ahead). The map follows it; drag the map away to stop, <b>Follow</b> to go back.</li>
+        <li><b>"3 trains"</b>: trains standing close together share one label; tap it to pick one.</li>
         <li><b>A station</b>: its next departures and arrivals, with new times in red and the track. Tap a row to see that train.</li>
         <li><b>The map</b> anywhere else closes what is open.</li>
       </ul>
@@ -239,6 +246,7 @@
   </div>
   <div id="panel" class="card" hidden></div>
   <div id="board" class="card" hidden></div>
+  <div id="picker" class="card" hidden></div>
   <script>
     // Show any error on screen (phones have no console to look at), and say so if the program never starts.
     (function () {

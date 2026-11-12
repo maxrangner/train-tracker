@@ -19,14 +19,17 @@ export const RAIL_SOURCES = {
   trv: { name: 'Trafikverket', color: '#6e7781' },
 };
 
+// Trains closer than this on the screen (pixels) share one label close in ("3 trains").
+const GROUP_PX = 40;
+
 // A dot's opacity: grey trains faded; none from MODEL_ZOOM in (3D trains) or for the selected train (its marker).
 const dotOpacity = sel => ['step', ['zoom'],
   ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
-// onStationTap(sig): a station was tapped (and no train).
-export function createMap(container, { onTrainTap, onStationTap, getTrains3d, railData = {} } = {}) {
+// onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
+export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, railData = {} } = {}) {
   const map = new Map({
     container,
     style: STYLE,
@@ -122,11 +125,13 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
       },
     });
     if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
+    // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
       type: 'symbol',
       source: 'trains',
       minzoom: 6,
+      maxzoom: MODEL_ZOOM,
       layout: {
         // From the zoom where the trains are drawn as models, the company goes above the number and lateness
         // (Max, 2026-11-12: a label is company, train number and on time). Further out just the number.
@@ -146,9 +151,62 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
         'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
 
+    // Close in, where the models show: trains standing close together share one label, "3 trains" (Max, 2026-11-12:
+    // labels stacked on each other at Stockholm C). The map groups them by distance on the screen; a tap on the group
+    // lists them (onGroupTap). A train on its own keeps its full label: company above number (lateness).
+    map.addSource('train-groups', { type: 'geojson', data: { type: 'FeatureCollection', features: [] },
+      cluster: true, clusterRadius: GROUP_PX, clusterMaxZoom: 19 });
+    map.addLayer({
+      id: 'train-labels-near',
+      type: 'symbol',
+      source: 'train-groups',
+      minzoom: MODEL_ZOOM,
+      filter: ['!', ['has', 'point_count']],
+      layout: {
+        'text-field': ['case', ['!=', ['get', 'company'], ''],
+          ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
+          ['get', 'label']],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': 11,
+        'text-overlap': 'always',   // every train shows its label (option A)
+        'text-offset': [0, 1.1],
+        'text-anchor': 'top',
+      },
+      paint: { 'text-color': '#1b1f24', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
+    });
+    map.addLayer({
+      id: 'train-group-labels',
+      type: 'symbol',
+      source: 'train-groups',
+      minzoom: MODEL_ZOOM,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['concat', ['to-string', ['get', 'point_count']], ' trains'],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': 13,
+        'text-overlap': 'always',
+        'text-offset': [0, 1.1],
+        'text-anchor': 'top',
+      },
+      paint: { 'text-color': '#1f6feb', 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
+    });
+
     // Tapping a train: a generous hit area, since dots are small on a phone.
     // With the toy trains a tap anywhere on the toy counts (half its length round its middle); the nearest wins.
     map.on('click', (e) => {
+      // A "3 trains" label: list them.
+      const gp = 12;
+      const group = onGroupTap && map.queryRenderedFeatures([[e.point.x - gp, e.point.y - gp], [e.point.x + gp, e.point.y + gp]],
+        { layers: ['train-group-labels'] })[0];
+      if (group) {
+        // The trains round the group's place, within the grouping distance (asking the map for the group's members
+        // fails when the trains have moved and the groups were redone meanwhile, 30 times a second).
+        const c = map.project(group.geometry.coordinates), r = GROUP_PX * 1.2;
+        const near = map.queryRenderedFeatures([[c.x - r, c.y - r], [c.x + r, c.y + r]], { layers: ['train-dots'] });
+        const byId = new globalThis.Map(near.map(f => [f.properties.id, f.properties]));
+        if (byId.size) return onGroupTap([...byId.values()]);
+      }
       const pad = TOY && map.getZoom() >= MODEL_ZOOM ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
@@ -233,7 +291,11 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
     ready,
     // Called every animation frame with the trains where they are now.
     setTrains(geojson) {
-      if (isReady) map.getSource('trains').setData(geojson);
+      if (!isReady) return;
+      map.getSource('trains').setData(geojson);
+      // Grouped labels close in; the selected train has its own label (the marker), so it isn't counted in a group.
+      if (map.getZoom() >= MODEL_ZOOM - 1) map.getSource('train-groups').setData(selected
+        ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson);
     },
     // Tilt the view (55°) or lay it flat again.
     toggleTilt() {
@@ -322,6 +384,7 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
       map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id ?? ''));
       map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id ?? ''));
       map.setFilter('train-labels', ['!=', ['get', 'id'], id ?? '']);
+      map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id ?? '']]);
       if (!id && selShown) { selMarker.remove(); selShown = false; }
     },
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
