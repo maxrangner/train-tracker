@@ -273,10 +273,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (group) {
         // The trains round the group's place, within the grouping distance (asking the map for the group's members
         // fails when the trains have moved and the groups were redone meanwhile, 30 times a second).
+        // Exactly as many as the label says: the nearest to its point, which is the middle of its trains (the area
+        // searched can reach into the next group: "2 trains" listed 3, Max 2026-11-12). The open train is in no group.
         const c = map.project(group.geometry.coordinates), r = GROUP_PX * 1.2;
         const near = map.queryRenderedFeatures([[c.x - r, c.y - r], [c.x + r, c.y + r]], { layers: ['train-dots'] });
-        const byId = new globalThis.Map(near.map(f => [f.properties.id, f.properties]));
-        if (byId.size) return onGroupTap([...byId.values()]);
+        const byId = new globalThis.Map(near.filter(f => f.properties.id !== selected).map(f => [f.properties.id, f]));
+        const fromMiddle = f => { const q = map.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
+        const members = [...byId.values()].sort((a, b) => fromMiddle(a) - fromMiddle(b)).slice(0, group.properties.point_count);
+        if (members.length) return onGroupTap(members.map(f => f.properties));
       }
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
       // A train's label (Max, 2026-11-12: "it should be the entire train model, and the label").
