@@ -10,7 +10,8 @@
 
 import { t } from './i18n.js';
 
-const MAX_ROWS = 8;
+// All matches are listed (Max, 2026-11-12: 8 was too few; "2" matches 66 trains at rush hour); the list scrolls.
+const MAX_ROWS = 200;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation,
