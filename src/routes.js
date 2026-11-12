@@ -67,11 +67,31 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     addPassings(list) {
       for (const p of list) {
         const e = entry(p.key);
+        if (p.activity === 'Avgang') (e.departed ??= new Set()).add(p.station);
         if (e.passed && e.passed.time > p.time) continue;
         e.passed = { sig: p.station, time: p.time, activity: p.activity ?? null };
         e.delay = p.minutes ?? e.delay;
       }
     },
+    // A planned stop (with an arrival and a departure) within 300 m of place (platforms are long: trains measured
+    // standing up to 300 m from the station's point) that the train hasn't been reported
+    // leaving: { sig, until }, or null. For the dwell rule in trains.js. until: 2 minutes after the later of its
+    // planned departure (+ latest delay) and `at` (when the train was there); the reported departure normally ends
+    // the dwell first, and the known delay lags (2556 at Stockholms södra 2026-11-12 was a minute later than it).
+    dwellAt(key, place, at = 0) {
+      const e = byKey.get(key);
+      if (!e || !place) return null;
+      let best = null, bestD = 300;
+      for (const l of locsOf(e)) {
+        const st = stations.get(l.sig);
+        if (!st || l.arr === null || l.dep === null) continue;
+        const d = metres(place, st);
+        if (d < bestD) { bestD = d; best = l; }
+      }
+      return best ? { sig: best.sig, until: Math.max(best.dep + e.delay * 60000, at) + 120000 } : null;
+    },
+    // Has the train been reported leaving this location?
+    departed(key, sig) { return Boolean(byKey.get(key)?.departed?.has(sig)); },
     // The planned time of the train's last known location (0: nothing known yet), to know when to ask for more.
     until(key) { return byKey.get(key)?.until ?? 0; },
     // Has the train finished its trip? Its latest reported passing is its arrival where its timetable ends (a

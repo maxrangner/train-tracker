@@ -143,7 +143,14 @@ function coastSpeed(h) {
   const last = h[h.length - 1], prev = h[h.length - 2];
   let v = 0;
   if (last.speed !== null && last.speed !== undefined) v = last.speed / 3.6;
-  else if (prev && !last.jump && last.time - prev.time < 60000) v = speedAround(h, h.length - 1, last.time);
+  else if (prev && !last.jump && last.time - prev.time < 60000) {
+    v = speedAround(h, h.length - 1, last.time);
+    // Not much faster than the speeds it reported just before: after a frozen position jumps on, the average over
+    // the jump is far too high (2556 at Stockholms södra 2026-11-12: 600 m "in 8 s" after standing; it left at
+    // 145 km/h). Trains that never report a speed keep the average.
+    const said = h.slice(-4, -1).map(e => e.speed).filter(x => x !== null && x !== undefined);
+    if (said.length) v = Math.min(v, Math.max(...said) / 3.6 + 5);
+  }
   return v < STAND_MS ? 0 : v;
 }
 
@@ -162,6 +169,7 @@ function targetAt(h, t, cap = Infinity, o = {}) {
   const last = h[h.length - 1];
   if (t >= last.time) {
     if (o.stood || o.frozen) return { s: last.s, v: 0, coasting: true, mode: o.stood ? 'stood' : 'stale' };
+    if (o.dwell) return { s: last.s, v: 0, coasting: true, mode: 'dwell' };
     const since = (t - last.time) / 1000, v = coastSpeed(h);
     const C = v > 0 ? COAST_MS / 1000 : 0;
     let s, sv, mode;
@@ -214,12 +222,27 @@ export function createTrains(options = {}) {
   const silentLimit = tr => (ROUTES?.knows(tr.latest.id) ? SILENT_MS : SILENT_NO_ROUTE_MS);
   const staleAt = (tr, t) => halted || t + DELAY_MS - tr.heard > silentLimit(tr);
   // What the target needs past the last report: whether it stood still, is stale, and its timetable (trackAhead).
+  // Dwell: a train whose last report is at a planned stop (within 300 m), and not moving fast there, stands until it
+  // is reported leaving, a new position shows it moved, or 2 minutes after its planned departure (+ delay) or its
+  // arrival, whichever is later (routes.dwellAt).
+  // Trains at platforms often send only exact repeats with no speed (taken as "no new position"), and were drawn
+  // driving through (bug hunt 2026-11-12: at Stockholms södra 16 of 26 that really stopped).
+  const dwellOf = (tr, t) => {
+    const last = tr.hist[tr.hist.length - 1];
+    if (!ROUTES || last.passing) return null;
+    if (tr.dwellFor !== last) {
+      tr.dwellFor = last;
+      tr.dwellInfo = last.speed !== null && last.speed !== undefined && last.speed > 10 ? null : ROUTES.dwellAt(tr.latest.id, last, last.time);
+    }
+    const dw = tr.dwellInfo;
+    return dw && t < dw.until && !ROUTES.departed(tr.latest.id, dw.sig) ? dw : null;
+  };
   const aheadOf = (tr, t) => {
     const ext = trackAhead(tr, t);
     return { cap: ext?.stopAt ?? Infinity,
-      o: { stood: tr.stood, frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
+      o: { stood: tr.stood, dwell: Boolean(dwellOf(tr, t)), frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, resent: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -266,7 +289,14 @@ export function createTrains(options = {}) {
     const repeat = tr.raw && tr.raw.lon === r.lon && tr.raw.lat === r.lat;
     tr.raw = r;
     if (!last) return append(tr, r);
-    if (repeat && !(r.speed !== null && r.speed !== undefined && r.speed < 2)) { counts.repeats++; return; }
+    // An exact repeat says nothing new (often a frozen GPS on a moving train), unless the train reports standing,
+    // or it is at a planned stop it hasn't been reported leaving: then it is standing at the platform (commuter
+    // trains send their dwell only as repeats with no speed; dropped, they were drawn driving through, 2026-11-12).
+    if (repeat && !(r.speed !== null && r.speed !== undefined && r.speed < 2)) {
+      const dw = ROUTES && !last.passing ? ROUTES.dwellAt(r.id, last, last.time) : null;
+      if (!dw || ROUTES.departed(r.id, dw.sig) || r.time > dw.until) { counts.repeats++; return; }
+      counts.dwellRepeats++;
+    }
     // An earlier position sent again (exactly the same coordinates as one this train sent within 10 minutes, but
     // not where it is now): an old fix re-sent, often with Speed 1 between new ones. Taken in, the drawn train
     // turned back to it (e.g. 2713 at Stockholms S, 2026-11-12 07:05: three re-sends of a place 400 m back; Max saw

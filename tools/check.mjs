@@ -10,6 +10,9 @@ const CHECKS = [
   ['movedAfterStanding', v => v === 0, 'a train moved on after standing still with its GPS quiet (must be 0)'],
   ['frozenPct', v => v <= 1.5, 'moving trains drawn standing more than 1.5 % of the time'],
   ['lag90S', v => v <= 10, '90 % of moments further than 10 s of travel from the truth'],
+  // Real stops (an actual arrival and departure) the drawn train passed without standing 5 s: 19-21 % before the
+  // dwell rule, 16-18 % after (2026-11-12).
+  ['dwellThroughPct', v => v === null || v <= 22, 'over 22 % of real stops drawn driving through'],
   ['offTrack99M', v => v === null || v <= 1, '99 % of drawn trains further than 1 m from a track'],
   // U-turns drawn beyond the data's own (2026-11-12, after ignoring re-sent old positions: 216, 215 and 181 in the
   // hour-long rush recordings, from 220, 222 and 184): must not grow again.
