@@ -90,6 +90,9 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
             ['get', 'label']]],
         'text-font': ['Noto Sans Bold'],
         'text-size': 11,
+        // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,
+        // option A: the label is the only place a toy shows its lateness). Further out, overlapping labels are left out.
+        'text-overlap': ['step', ['zoom'], 'never', MODEL_ZOOM, 'always'],
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
       },
