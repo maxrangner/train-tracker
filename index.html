@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <!-- The page itself never zooms, only the map (Max, 2026-11-12: a pinch while loading zoomed the page). -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Train map</title>
   <link rel="icon" href="data:,">
   <style>
@@ -89,9 +89,13 @@
       top: calc(var(--gap) + 40px + env(safe-area-inset-top, 0px));
       width: min(420px, calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
       max-height: calc(100% - 70px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      overflow: auto; background: var(--bg); padding: 10px 12px; box-sizing: border-box; z-index: 5;
+      overflow: hidden; background: var(--bg); padding: 10px 12px; box-sizing: border-box; z-index: 5;
       display: flex; flex-direction: column; gap: 10px;
     }
+    /* The search box stays on top; the results scroll in between (the phone's keyboard shrinks the page:
+       interactive-widget in the viewport line, so the last rows are never behind it). */
+    #menu > * { flex: none; }
+    #menu > #search-results { flex: 0 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
     .menu-head { display: flex; gap: 6px; align-items: center; }
     #search { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
       background: var(--bg); color: var(--ink); }
