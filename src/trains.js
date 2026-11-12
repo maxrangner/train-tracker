@@ -289,7 +289,12 @@ export function createTrains(options = {}) {
       sim.s += sim.v * dt;
       return;
     }
-    const past = t >= h[h.length - 1].time ? aheadOf(tr, t) : { cap: Infinity, o: {} };
+    // Past the last report in time (a quiet GPS) the target runs on by itself; the stop limit (cap) also holds while
+    // the drawn train is ahead of its last report on the track (e.g. its timetable put it further than where the GPS
+    // came back): it may slow down rather than stop for the train behind it, but not drive past an unconfirmed stop.
+    const last = h[h.length - 1];
+    const past = t >= last.time ? aheadOf(tr, t)
+      : tr.sim && tr.sim.s > last.s ? { cap: aheadOf(tr, t).cap, o: {} } : { cap: Infinity, o: {} };
     const cap = past.cap;
     const T = targetAt(h, t, cap, past.o);
     let sim = tr.sim;
@@ -419,7 +424,10 @@ export function createTrains(options = {}) {
         let tr = byId.get(r.id);
         if (tr && tr.latest.time >= r.time) continue;           // not newer than what we have
         // The GPS is back: it replaces the passings used shortly before it (their times are only whole minutes).
-        while (tr?.hist.length > 1 && tr.hist[tr.hist.length - 1].passing && tr.hist[tr.hist.length - 1].time > r.time - GPS_OVER_PASSING_MS) {
+        // Not an exact repeat of its last position, though: that is a frozen GPS, not a new place (take ignores it),
+        // and replacing the passings with nothing would leave the train drawn past where it should wait.
+        const frozen = tr?.raw && tr.raw.lon === r.lon && tr.raw.lat === r.lat && !(r.speed !== null && r.speed !== undefined && r.speed < 2);
+        while (!frozen && tr?.hist.length > 1 && tr.hist[tr.hist.length - 1].passing && tr.hist[tr.hist.length - 1].time > r.time - GPS_OVER_PASSING_MS) {
           tr.hist.pop();
           counts.passingsReplaced++;
         }

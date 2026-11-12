@@ -90,7 +90,7 @@ const feed = (trains, upTo, i, skip) => {
 };
 
 const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
-  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
 function turnBack(dirs, id, p) {
@@ -136,8 +136,9 @@ for (let T = start; T < end; T += STEP) {
     if (sim?.syncing) s.syncMoments++;
     // A train that stood still before its GPS went quiet must not be moved on before new data says so.
     { const was = prev.get(d.id); if (sim?.mode === 'stood' && sim.silentFor > 30 && sim.pastLast > 1 && was && metres(was.p, d) > 0.05 && sim.v > 0.5) { s.stoodMoved++; if (argv.includes('--why') && !(s.stoodShown ??= new Set()).has(d.id) && s.stoodShown.add(d.id).size <= 6) console.log('moved after stood', d.id, new Date(t).toISOString().slice(11, 19), JSON.stringify(sim)); } }
-    // A coasting train must never pass its next planned stop (it waits 200 m before it).
-    if (sim && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
+    // A coasting train must never pass its next planned stop (it waits 200 m before it). Only while it is drawn
+    // without GPS: once a newer position is in, the train follows that (it may pass the stop with it).
+    if (sim && sim.mode !== 'gps' && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
       s.coastToStop++;
       if (sim.s > sim.stopAt + 200) {
         s.pastStop++;
@@ -145,9 +146,12 @@ for (let T = start; T < end; T += STEP) {
           console.log('past stop', d.id, new Date(t).toISOString().slice(11, 19), `${Math.round(sim.s - sim.stopAt - 200)} m past the stop's place; ${Math.round(sim.pastLast)} m past the last report; target ${sim.target}, ${Math.round(sim.v * 3.6)} km/h`);
       }
     }
+    // When the GPS comes back after the train moved by its timetable: how far ahead of the new GPS it was drawn
+    // (negative: behind). The timetable pace guesses; far ahead means it then waits for the real train.
+    if (sim && sim.mode === 'gps' && ['timetable', 'waiting'].includes(prev.get(d.id)?.mode)) s.returnAheadM.push(-sim.gap);
     if (sim?.jumped) s.jumps++;
     const last = prev.get(d.id);
-    const now = { p: d, dir: last?.dir ?? null, synced: sim?.syncing ?? false, frozenRun: 0 };
+    const now = { p: d, dir: last?.dir ?? null, synced: sim?.syncing ?? false, frozenRun: 0, mode: sim?.mode };
     if (sim?.syncing && !last?.synced) {
       s.syncStarts++;
       const why = sim.lastGap > 30 ? 'after a silence over 30 s' : `gap ${Math.round(sim.gap)} m, target ${sim.target}`;
@@ -214,7 +218,8 @@ if (argv.includes('--json')) {
     lagMedianS: r(q(s.lagS, 0.5)), lag90S: r(q(s.lagS, 0.9)), lag99S: r(q(s.lagS, 0.99)),
     offTrack99M: offTrack.length ? r(q(offTrack, 0.99)) : null,
     turnBacks: s.back, truthTurnBacks: s.truthBack,
-    greyPct: r(100 * s.stale / s.all), silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
+    greyPct: r(100 * s.stale / s.all), timetableReturns: s.returnAheadM.length,
+    returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
     pastStop: s.pastStop, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
   }));
   process.exit(0);
@@ -232,6 +237,9 @@ console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} 
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
 if (!PLAIN) console.log(`grey: ${pct(s.stale, s.all)} of train-moments`);
+if (!PLAIN && s.returnAheadM.length) console.log(`GPS back after moving by the timetable: ${s.returnAheadM.length} times; drawn ahead of it ` +
+  `median ${Math.round(q(s.returnAheadM, 0.5))} m, 90 % ${Math.round(q(s.returnAheadM, 0.9))} m, more than 500 m ahead ${s.returnAheadM.filter(m => m > 500).length}, ` +
+  `more than 500 m behind ${s.returnAheadM.filter(m => m < -500).length}`);
 if (!PLAIN) console.log(`in longer silences, off from the (straight-line) truth: median ${f1(q(s.silentLagS, 0.5))} s of travel, ` +
   `90 % ${f1(q(s.silentLagS, 0.9))} s; moving on past where it stood, 30 s or more after its GPS went quiet (must be 0): ${s.stoodMoved}`);
 if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop}`);
