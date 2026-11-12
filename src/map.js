@@ -2,8 +2,8 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
-import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM, TOY } from './trains-3d.js';
-import { settings, dark } from './settings.js';
+import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
+import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -12,35 +12,44 @@ setWorkerUrl(workerUrl);
 
 // OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out; in dark their Dark
 // style (Max, 2026-11-12: B, near black, of Dark and Fiord).
-const STYLE = `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
+const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
 // Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
-const C = dark
+const colours = dark => (dark
   ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
       rail: '#7d8590', casing: '#000000', done: '#6e7781', ahead: '#388bfd', stopFill: '#161b22' }
   : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#6e7781', casing: '#ffffff', done: '#9aa3ad', ahead: '#1f6feb', stopFill: '#ffffff' };
+      rail: '#6e7781', casing: '#ffffff', done: '#9aa3ad', ahead: '#1f6feb', stopFill: '#ffffff' });
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
 // removed 2026-11-12 (Max: decided, no need for the option).
 export const RAIL_SOURCES = {
-  trv: { name: 'Trafikverket', color: C.rail },
+  trv: { name: 'Trafikverket' },
 };
 
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 
-// A dot's opacity: grey trains faded; none from MODEL_ZOOM in (3D trains) or for the selected train (its marker).
+// A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
 const dotOpacity = sel => ['step', ['zoom'],
-  ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], MODEL_ZOOM, 0];
+  ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], modelZoom(), 0];
+
+const empty = () => ({ type: 'FeatureCollection', features: [] });
+// Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
+// adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
+const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'path-stops', 'station-dots', 'station-names', 'train-dots',
+  'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
 // onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
 export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, railData = {} } = {}) {
+  let dark = isDark();   // the base map now showing
+  let selected = null;   // the tapped train's id
+  let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
   const map = new Map({
     container,
-    style: STYLE,
+    style: styleUrl(dark),
     center: [16.5, 62.5],   // middle of Sweden
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
@@ -53,24 +62,37 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
 
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
-  const ready = new Promise(resolve => map.on('load', () => {
-    // Rail lines first, so they sit under the trains. Each source is its own layer; loaded when first shown.
-    for (const [id, s] of Object.entries(RAIL_SOURCES)) {
-      map.addSource(`rail-${id}`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
+  const data = { path: empty(), stations: empty(), trains: empty(), 'train-groups': empty() };
+
+  function addSources() {
+    const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
+    for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
+    add('path');
+    add('stations');
+    add('trains');
+    // Close in, trains standing close together share one label (see train-group-labels).
+    add('train-groups', { cluster: true, clusterRadius: GROUP_PX, clusterMaxZoom: 19 });
+  }
+
+  // Our layers, with the colours, model zoom and language as they are now.
+  function addLayers() {
+    const C = colours(dark), MODEL_ZOOM = modelZoom();
+    // Rail lines first, so they sit under the trains.
+    for (const id of Object.keys(RAIL_SOURCES)) {
       map.addLayer({
         id: `rail-${id}`,
         type: 'line',
         source: `rail-${id}`,
-        layout: { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' },
+        layout: { visibility: id === shownRail ? 'visible' : 'none', 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': s.color,
+          'line-color': C.rail,
           'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 8, 1.2, 14, 3],
         },
       });
     }
 
     // The open train's path (setPath): the part still ahead in blue, the part travelled grey, its stops as rings.
-    map.addSource('path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
@@ -82,9 +104,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6], 'circle-color': C.stopFill,
         'circle-stroke-color': ['match', ['get', 'part'], 'ahead', C.ahead, C.done],
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
-
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
-    map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
       id: 'station-dots',
       type: 'circle',
@@ -113,7 +133,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
     });
 
-    map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
       id: 'train-dots',
       type: 'circle',
@@ -128,8 +147,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
         // The selected train's dot is invisible too: it is drawn by the selection marker (below).
-        'circle-opacity': dotOpacity(''),
-        'circle-stroke-opacity': dotOpacity(''),
+        'circle-opacity': dotOpacity(selected ?? ''),
+        'circle-stroke-opacity': dotOpacity(selected ?? ''),
       },
     });
     if (getTrains3d) map.addLayer(createTrainLayer({ getTrains: getTrains3d }));
@@ -162,8 +181,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Close in, where the models show: trains standing close together share one label, "3 trains" (Max, 2026-11-12:
     // labels stacked on each other at Stockholm C). The map groups them by distance on the screen; a tap on the group
     // lists them (onGroupTap). A train on its own keeps its full label: company above number (lateness).
-    map.addSource('train-groups', { type: 'geojson', data: { type: 'FeatureCollection', features: [] },
-      cluster: true, clusterRadius: GROUP_PX, clusterMaxZoom: 19 });
     map.addLayer({
       id: 'train-labels-near',
       type: 'symbol',
@@ -200,6 +217,26 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       paint: { 'text-color': C.group, 'text-halo-color': C.halo, 'text-halo-width': 2 },
     });
 
+    applySelectionFilters();
+  }
+
+  function removeLayers() {
+    for (const id of OUR_LAYERS) if (map.getLayer(id)) map.removeLayer(id);
+  }
+
+  // The selected train's own dot and label are drawn by its marker, so the layers leave it out.
+  function applySelectionFilters() {
+    const id = selected ?? '';
+    map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id));
+    map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id));
+    map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
+    map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id]]);
+  }
+
+  const ready = new Promise(resolve => map.on('load', () => {
+    addSources();
+    addLayers();
+
     // Tapping a train: a generous hit area, since dots are small on a phone.
     // With the toy trains a tap anywhere on the toy counts (half its length round its middle); the nearest wins.
     map.on('click', (e) => {
@@ -215,7 +252,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         const byId = new globalThis.Map(near.map(f => [f.properties.id, f.properties]));
         if (byId.size) return onGroupTap([...byId.values()]);
       }
-      const pad = TOY && map.getZoom() >= MODEL_ZOOM ? Math.max(12, settings.toySize / 2) : 12;
+      const pad = isToy() && map.getZoom() >= modelZoom() ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
@@ -238,7 +275,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // The map's own layers get their data through a background worker, a frame or more late; while the camera follows
   // a train every frame, a ring drawn by them jitters around the train. The marker is placed in the same frame as
   // the camera (setSelectedPlace), so it can't lag.
-  let selected = null;
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
   selEl.innerHTML = '<div class="sel-dot"></div><div class="sel-label"></div>';
@@ -293,7 +329,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
 
   const loaded = new Set();
-  let shownRail = null;
 
   let isReady = false;
   ready.then(() => { isReady = true; });
@@ -301,11 +336,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     ready,
     // Called every animation frame with the trains where they are now.
     setTrains(geojson) {
+      data.trains = geojson;
       if (!isReady) return;
       map.getSource('trains').setData(geojson);
       // Grouped labels close in; the selected train has its own label (the marker), so it isn't counted in a group.
-      if (map.getZoom() >= MODEL_ZOOM - 1) map.getSource('train-groups').setData(selected
-        ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson);
+      if (map.getZoom() >= modelZoom() - 1) {
+        data['train-groups'] = selected
+          ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
+        map.getSource('train-groups').setData(data['train-groups']);
+      }
     },
     // Tilt the view (55°) or lay it flat again.
     toggleTilt() {
@@ -345,13 +384,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     async setStations(list) {
+      data.stations = { type: 'FeatureCollection', features: list.map(st => ({
+        type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
       await ready;
-      map.getSource('stations').setData({ type: 'FeatureCollection', features: list.map(st => ({
-        type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) });
+      if (isReady) map.getSource('stations').setData(data.stations);
     },
     // Draw a train's path (path.js) split at point index `split` (travelled before it, ahead after it); null: none.
     async setPath(path, split = 0) {
-      await ready;
       const features = [];
       if (path && path.coords.length > 1) {
         const k = Math.max(0, Math.min(split, path.coords.length - 1));
@@ -361,7 +400,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { part: path.stopAt[i] <= k ? 'done' : 'ahead' },
           geometry: { type: 'Point', coordinates: c } }));
       }
-      map.getSource('path').setData({ type: 'FeatureCollection', features });
+      data.path = { type: 'FeatureCollection', features };
+      await ready;
+      if (isReady) map.getSource('path').setData(data.path);
     },
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
@@ -389,12 +430,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     },
     // Ring the train with this id (null: none). Its dot and label are then drawn by the selection marker.
     async select(id) {
-      await ready;
       selected = id;
-      map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id ?? ''));
-      map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id ?? ''));
-      map.setFilter('train-labels', ['!=', ['get', 'id'], id ?? '']);
-      map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id ?? '']]);
+      await ready;
+      if (isReady) applySelectionFilters();
       if (!id && selShown) { selMarker.remove(); selShown = false; }
     },
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
@@ -406,12 +444,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       }
       selMarker.setLngLat([place.lon, place.lat]);
       if (!selShown) { selMarker.addTo(map); selShown = true; }
-      const text = props.company && map.getZoom() >= MODEL_ZOOM ? `${props.company}\n${props.label}` : props.label;
+      const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
-      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= MODEL_ZOOM ? ' model' : ''}`;
+      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
-      const ring = TOY && map.getZoom() >= MODEL_ZOOM ? `${settings.toySize + 16}px` : '';
+      const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
       if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }
     },
     // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
@@ -420,15 +458,35 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     async showRail(id) {
       await ready;
       shownRail = id;
-      for (const key of Object.keys(RAIL_SOURCES))
+      if (isReady) for (const key of Object.keys(RAIL_SOURCES))
         map.setLayoutProperty(`rail-${key}`, 'visibility', key === id ? 'visible' : 'none');
-      if (id && !loaded.has(id)) {
+      if (id && !loaded.has(id) && railData[id]) {
         loaded.add(id);
-        const source = map.getSource(`rail-${id}`);
-        if (railData[id]) railData[id]().then(g => source.setData(g)).catch(e => console.warn(`rail lines: ${e.message}`));
-        else source.setData(RAIL_SOURCES[id].url);
+        railData[id]().then((g) => { data[`rail-${id}`] = g; map.getSource(`rail-${id}`)?.setData(g); })
+          .catch(e => console.warn(`rail lines: ${e.message}`));
       }
     },
     get shownRail() { return shownRail; },
+    // After a settings change (look, language, toys, zoom): our layers again, and for light/dark the other base map
+    // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.
+    async applySettings() {
+      await ready;
+      const want = isDark();
+      if (want === dark) {
+        if (!isReady) return;   // a base map swap is under way; it adds the layers as they should be
+        removeLayers();
+        addLayers();
+        return;
+      }
+      dark = want;
+      isReady = false;
+      map.once('style.load', () => {
+        removeLayers();
+        addSources();
+        addLayers();
+        isReady = true;
+      });
+      map.setStyle(styleUrl(dark), { diff: false });
+    },
   };
 }

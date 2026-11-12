@@ -115,6 +115,8 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
 
   return {
     open, close,
+    // Show the results again (Settings → Language changed).
+    refresh() { if (!el.hidden) show(input.value.trim()); },
     get isOpen() { return !el.hidden; },
     // True just after a tap outside closed the menu: that tap shouldn't also deselect a train on the map.
     get justClosed() { return performance.now() - closedAt < 500; },

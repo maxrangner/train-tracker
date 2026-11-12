@@ -4,7 +4,8 @@
 // data-t (the text), data-t-aria (aria-label), data-t-ph (placeholder); a [data-lang] block shows only in its language.
 import { settings } from './settings.js';
 
-export const lang = settings.language;
+// The chosen language, read at each call: a change in Settings shows at once (translatePage, and each part redraws).
+export const lang = () => settings.language;
 
 const EN = {
   title: 'Train map',
@@ -177,18 +178,16 @@ const SV = {
   stoppedLastSeen: (q, p) => `${q} · stannat där det sågs senast${p}`,
 };
 
-const WORDS = lang === 'sv' ? SV : EN;
-
 export function t(key, ...values) {
-  const v = WORDS[key] ?? EN[key] ?? key;
+  const v = (lang() === 'sv' ? SV : EN)[key] ?? EN[key] ?? key;
   return typeof v === 'function' ? v(...values) : v;
 }
 
 export function translatePage(root = document) {
-  document.documentElement.lang = lang;
+  document.documentElement.lang = lang();
   document.title = t('title');
   for (const el of root.querySelectorAll('[data-t]')) el.textContent = t(el.dataset.t);
   for (const el of root.querySelectorAll('[data-t-aria]')) el.setAttribute('aria-label', t(el.dataset.tAria));
   for (const el of root.querySelectorAll('[data-t-ph]')) el.placeholder = t(el.dataset.tPh);
-  for (const el of root.querySelectorAll('[data-lang]')) el.hidden = el.dataset.lang !== lang;
+  for (const el of root.querySelectorAll('[data-lang]')) el.hidden = el.dataset.lang !== lang();
 }

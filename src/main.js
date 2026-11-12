@@ -7,7 +7,7 @@ import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, nearestIndex } from './path.js';
 import { favourites } from './favourites.js';
-import { settings, setSetting } from './settings.js';
+import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
@@ -244,8 +244,8 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
-// ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; trains, zoom, look
-// and language reload the page (the view stays: it is in the address), size and board rows apply at once. ----
+// ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; every change shows at
+// once, without reloading the page (Max: reloading was a bad experience). ----
 const settingsPage = document.getElementById('settings-page');
 const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
@@ -255,9 +255,20 @@ document.getElementById('open-settings').onclick = () => {
   settingsPage.querySelector('.panel-close').focus();
 };
 settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
-// Look: Auto follows the phone, also when the phone switches between light and dark while the map is open.
-if (settings.theme === 'auto' && typeof matchMedia === 'function')
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
+// A change (also Look on Auto when the phone switches between light and dark): each part shows it.
+onSettingChange((key) => {
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
+  if (key === 'language') {
+    translatePage();
+    map.applySettings();   // "3 trains" on the map
+    menu.refresh();
+    panel.relabel();
+    board.relabel();
+    pickerEl.hidden = true;
+  }
+  if (key === 'boardRows') board.relabel();
+  showSettings();
+});
 function showSettings() {
   for (const seg of settingsEl.querySelectorAll('.seg'))
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
@@ -267,8 +278,7 @@ function showSettings() {
 }
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
-    if (setSetting(seg.dataset.key, b.dataset.v)) location.reload();
-    else showSettings();
+    setSetting(seg.dataset.key, b.dataset.v);
   };
 }
 const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');
@@ -354,7 +364,7 @@ if (hasKey && !replay) {
   setInterval(askRoutes, 30000);
 }
 
-const MODE_TEXT = t('mode');
+const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusFullEl = document.getElementById('status-full');
 
@@ -387,13 +397,13 @@ setInterval(() => {
   trains.prune(tNow);
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
-  const mode = `${MODE_TEXT[status.positions] ?? status.positions}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  const mode = `${modeText(status.positions)}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
   statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : status.error ? status.error : mode);
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
-    ` · ${MODE_TEXT[status.positions] ?? status.positions}` +
+    ` · ${modeText(status.positions)}` +
     (replay ? t('replayOf', new Date(tNow).toLocaleTimeString('sv-SE')) : '') +
     (status.error ? ` · ${status.error}` : '');
   statusEl.classList.toggle('problem', Boolean(status.error) || noData);
