@@ -64,12 +64,17 @@ function noseBand(curve, v1, v2, depth) {
   return [...surf, ...surf.slice().reverse().map(([u, v]) => [u - depth, v])];
 }
 
+// order: which part wins where two parts lie on (almost) the same surface: higher on top (the body 0; skirt and
+// window band 1; nose paint, pillars and vents 2; roof, stripe and frame 3; windscreen 4; lights 5). Without it they
+// flickered (Max, 2026-11-12); the graphics card pulls a higher part a little towards the eye (polygonOffset).
 const materials = new Map();
-const mat = (color) => {
-  if (!materials.has(color)) materials.set(color, new THREE.MeshLambertMaterial({ color }));
-  return materials.get(color);
+const mat = (color, order = 0) => {
+  const key = `${color}|${order}`;
+  if (!materials.has(key)) materials.set(key, new THREE.MeshLambertMaterial(order
+    ? { color, polygonOffset: true, polygonOffsetFactor: -order, polygonOffsetUnits: -2 * order } : { color }));
+  return materials.get(key);
 };
-const mesh = (geo, color, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); return m; };
+const mesh = (geo, color, x = 0, y = 0, z = 0, order = 0) => { const m = new THREE.Mesh(geo, mat(color, order)); m.position.set(x, y, z); return m; };
 
 // ---- One vehicle ----
 // spec: { length, height, front, back (noses or null: a flat end), decks (window rows), panto, roofBoxes,
@@ -93,18 +98,18 @@ function vehicle(spec, c) {
 
   // Lower body (skirt) and roof in their own colours, as thin shells along the straight part.
   const straight = yF - yB;
-  if (c.skirt !== c.body) g.add(mesh(boxGeo(W + 0.06, straight, 0.7), c.skirt, 0, (yF + yB) / 2, FLOOR + 0.35));
-  if (c.roof !== c.body) g.add(mesh(extrude([[yB - 0.2, top - 0.5], [yF + 0.2, top - 0.5], [yF, top], [yB, top]], W + 0.06, 0.15), c.roof));
-  if (c.stripe) g.add(mesh(boxGeo(W + 0.08, straight, 0.22), c.stripe, 0, (yF + yB) / 2, FLOOR + 0.95));
+  if (c.skirt !== c.body) g.add(mesh(boxGeo(W + 0.06, straight, 0.7), c.skirt, 0, (yF + yB) / 2, FLOOR + 0.35, 1));
+  if (c.roof !== c.body) g.add(mesh(extrude([[yB - 0.2, top - 0.5], [yF + 0.2, top - 0.5], [yF, top], [yB, top]], W + 0.06, 0.15), c.roof, 0, 0, 0, 3));
+  if (c.stripe) g.add(mesh(boxGeo(W + 0.08, straight, 0.22), c.stripe, 0, (yF + yB) / 2, FLOOR + 0.95, 3));
 
   // Window rows: dark bands along the sides (one per deck), split by pillars.
   const rows = spec.decks === 2 ? [FLOOR + H * 0.3, FLOOR + H * 0.68] : [FLOOR + H * 0.6];
   const winH = spec.decks === 2 ? H * 0.2 : H * 0.28;
   const winLen = straight - 0.6;
   if (winLen > 0.5 && !spec.noWindows) for (const z of rows) {
-    g.add(mesh(boxGeo(W + 0.05, winLen, winH), c.band, 0, (yF + yB) / 2, z));
+    g.add(mesh(boxGeo(W + 0.05, winLen, winH), c.band, 0, (yF + yB) / 2, z, 1));
     const n = Math.max(1, Math.round(winLen / 1.6));
-    for (let k = 1; k < n; k++) g.add(mesh(boxGeo(W + 0.08, 0.22, winH + 0.02), c.body, 0, yB + 0.3 + k * winLen / n, z));
+    for (let k = 1; k < n; k++) g.add(mesh(boxGeo(W + 0.08, 0.22, winH + 0.02), c.body, 0, yB + 0.3 + k * winLen / n, z, 2));
   }
 
   // The ends: painted front, windscreen, lights. Back noses are built the same way and turned around.
@@ -113,25 +118,25 @@ function vehicle(spec, c) {
     const end = new THREE.Group();
     if (nose.paint ?? true) {
       const v1 = FLOOR, v2 = top;
-      end.add(mesh(extrude(noseBand(curve, v1 + 0.02, v2 - 0.02, nose.len + 0.6), W + 0.08), c.nose, 0, 0.03, 0));
+      end.add(mesh(extrude(noseBand(curve, v1 + 0.02, v2 - 0.02, nose.len + 0.6), W + 0.08), c.nose, 0, 0.03, 0, 2));
     }
     const [s1, s2] = nose.screen;
     const sv1 = FLOOR + s1 * H, sv2 = FLOOR + s2 * H;
     if (c.frame) {   // a coloured frame round the windscreen (Västtågen's blue, Norrtåg's yellow)
-      end.add(mesh(extrude(noseBand(curve, sv1 - 0.3, Math.min(top, sv2 + 0.3), 0.8), W + 0.12, 0.14), c.frame, 0, 0.05, 0));
+      end.add(mesh(extrude(noseBand(curve, sv1 - 0.3, Math.min(top, sv2 + 0.3), 0.8), W + 0.12, 0.14), c.frame, 0, 0.05, 0, 3));
     }
     if (nose.twin) {   // two separate windscreens (X11, Rc)
       for (const x of [-0.75, 0.75]) {
         const sg = extrude(noseBand(curve, sv1, sv2, 0.3), 1.2, 0.08);
         sg.translate(x, 0.09, 0);
-        end.add(mesh(sg, c.windscreen));
+        end.add(mesh(sg, c.windscreen, 0, 0, 0, 4));
       }
     } else {
-      end.add(mesh(extrude(noseBand(curve, sv1, sv2, 0.6), W + (nose.wrap ? 0.14 : -0.5), 0.12), c.windscreen, 0, 0.08, 0));
+      end.add(mesh(extrude(noseBand(curve, sv1, sv2, 0.6), W + (nose.wrap ? 0.14 : -0.5), 0.12), c.windscreen, 0, 0.08, 0, 4));
     }
     for (const x of [-1.05, 1.05]) {
       const lv = FLOOR + (nose.lights ?? 0.18) * H;
-      end.add(mesh(boxGeo(0.5, 0.12, 0.28), c.light, x, frontAt(curve, lv) + 0.1, lv));
+      end.add(mesh(boxGeo(0.5, 0.12, 0.28), c.light, x, frontAt(curve, lv) + 0.1, lv, 5));
     }
     if (nose.coupler) end.add(mesh(boxGeo(1.0, 0.5, 0.5), c.bogie, 0, nose.len + 0.15, FLOOR + 0.1));
     end.position.y = yAt;
@@ -142,7 +147,7 @@ function vehicle(spec, c) {
   // A locomotive's side: ribbed vents instead of windows.
   if (spec.vents) {
     const n = 7, len = straight * 0.6;
-    for (let k = 0; k < n; k++) g.add(mesh(boxGeo(W + 0.06, len / n * 0.5, H * 0.3), c.band, 0, (yF + yB) / 2 - len / 2 + (k + 0.5) * len / n, FLOOR + H * 0.6));
+    for (let k = 0; k < n; k++) g.add(mesh(boxGeo(W + 0.06, len / n * 0.5, H * 0.3), c.band, 0, (yF + yB) / 2 - len / 2 + (k + 0.5) * len / n, FLOOR + H * 0.6, 2));
   }
 
   // Under the body: bogies with chunky wheels.
@@ -162,7 +167,7 @@ function vehicle(spec, c) {
     const a2 = mesh(arm, c.bogie, 0, py + 0.35, top + 0.65); a2.rotation.x = -0.8;
     g.add(a1, a2, mesh(boxGeo(1.8, 0.14, 0.1), c.bogie, 0, py, top + 1.15));
   }
-  for (const y of spec.roofBoxes ?? []) g.add(mesh(extrude([[-0.9, 0], [0.9, 0], [0.9, 0.5], [-0.9, 0.5]], 2.2, 0.12), c.roof, 0, y, top - 0.1));
+  for (const y of spec.roofBoxes ?? []) g.add(mesh(extrude([[-0.9, 0], [0.9, 0], [0.9, 0.5], [-0.9, 0.5]], 2.2, 0.12), c.roof, 0, y, top - 0.1, 1));
 
   // Seen from above, a nose narrows towards its tip (taper: the share of the width lost at the very front).
   // Every part is baked into the vehicle's own space first, so the body and its paint narrow together.
