@@ -1,4 +1,11 @@
 .env
+# the agent's and the owner's working notes: kept on this computer only
+CLAUDE.md
+docs/
+.git-internal/
+MY_NOTES.md
+image*.png
+.claude/settings.local.json
 # the packed app (npm run phone); it holds the Trafikverket key
 dist/
 node_modules/
