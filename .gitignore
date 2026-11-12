@@ -1,4 +1,6 @@
 .env
+# the packed app (npm run phone); it holds the Trafikverket key
+dist/
 node_modules/
 data/
 shots/
