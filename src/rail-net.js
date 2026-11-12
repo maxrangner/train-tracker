@@ -30,17 +30,26 @@ function joinTinyPieces({ scale, n, d }) {
   for (const cnt of n) { const pts = []; for (let i = 0; i < cnt; i++) { x += d[2 * k]; y += d[2 * k + 1]; k++; pts.push([x, y]); } lines.push(pts); }
   const m = (a, b) => Math.hypot((b[0] - a[0]) / scale * Math.cos(a[1] / scale * R), (b[1] - a[1]) / scale) * R * 6371000;
   const length = l => { let s = 0; for (let i = 1; i < l.length; i++) s += m(l[i - 1], l[i]); return s; };
-  const same = (p, q) => p[0] === q[0] && p[1] === q[1];
+  // Line ends by place, so moving the ends at one point is a lookup, not a scan of every line (nationwide the scan
+  // cost about 170 ms at every page load).
+  const key = p => `${p[0]},${p[1]}`;
+  const ends = new Map();   // place -> [[line, 0 start / 1 end]]
+  lines.forEach((l, li) => { for (const e of [0, 1]) { const k = key(e ? l[l.length - 1] : l[0]); (ends.get(k) ?? ends.set(k, []).get(k)).push([li, e]); } });
   let removed = 0;
   for (let li = 0; li < lines.length; li++) {
     const l = lines[li];
     if (!l || length(l) >= TINY_M) continue;
-    const a = l[0], b = l[l.length - 1];
+    const a = l[0], b = l[l.length - 1], ka = key(a), kb = key(b);
     // every line end at b moves to a: the lines on either side now meet at a
-    if (!same(a, b)) for (const o of lines) {
-      if (!o || o === l) continue;
-      if (same(o[0], b)) o[0] = [...a];
-      if (same(o[o.length - 1], b)) o[o.length - 1] = [...a];
+    if (ka !== kb) {
+      const atA = ends.get(ka) ?? ends.set(ka, []).get(ka);
+      for (const [lj, e] of ends.get(kb) ?? []) {
+        const o = lines[lj];
+        if (!o || lj === li) continue;
+        if (e) o[o.length - 1] = [...a]; else o[0] = [...a];
+        atA.push([lj, e]);
+      }
+      ends.delete(kb);
     }
     lines[li] = null;
     removed++;
