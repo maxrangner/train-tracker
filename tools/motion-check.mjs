@@ -89,7 +89,7 @@ const feed = (trains, upTo, i, skip) => {
   return i;
 };
 
-const s = { wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
+const s = { pastStopBounced: 0, wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
   syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
@@ -138,10 +138,13 @@ for (let T = start; T < end; T += STEP) {
     // A train that stood still before its GPS went quiet must not be moved on before new data says so.
     { const was = prev.get(d.id); if (sim?.mode === 'stood' && sim.silentFor > 30 && sim.pastLast > 1 && was && metres(was.p, d) > 0.05 && sim.v > 0.5) { s.stoodMoved++; if (argv.includes('--why') && !(s.stoodShown ??= new Set()).has(d.id) && s.stoodShown.add(d.id).size <= 6) console.log('moved after stood', d.id, new Date(t).toISOString().slice(11, 19), JSON.stringify(sim)); } }
     // A coasting train must never pass its next planned stop (it waits 200 m before it). Only while it is drawn
-    // without GPS: once a newer position is in, the train follows that (it may pass the stop with it).
+    // without GPS: once a newer position is in, the train follows that (it may pass the stop with it). Counted apart
+    // when the train's own data went back on itself within 5 minutes (two position sources taking turns 700 m apart
+    // in the Nässjö yard, 2026-11-12: where the train really was isn't known, and a drawn train never goes back).
     if (sim && sim.mode !== 'gps' && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
       s.coastToStop++;
       if (sim.s > sim.stopAt + 200) {
+        if (t - sim.bounced < 300000) { s.pastStopBounced++; } else
         s.pastStop++;
         if (argv.includes('--why') && !s.pastShown?.has(d.id) && (s.pastShown ??= new Set()).add(d.id) && s.pastShown.size <= 8)
           console.log('past stop', d.id, new Date(t).toISOString().slice(11, 19), `${Math.round(sim.s - sim.stopAt - 200)} m past the stop's place; ${Math.round(sim.pastLast)} m past the last report; target ${sim.target}, ${Math.round(sim.v * 3.6)} km/h`);
@@ -241,7 +244,7 @@ if (argv.includes('--json')) {
     turnBacks: s.back, truthTurnBacks: s.truthBack, wrongWay: s.wrongWay,
     greyPct: r(100 * s.stale / s.all), timetableReturns: s.returnAheadM.length,
     returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
-    pastStop: s.pastStop, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
+    pastStop: s.pastStop, pastStopBounced: s.pastStopBounced, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
   }));
   process.exit(0);
 }
@@ -264,7 +267,7 @@ if (!PLAIN && s.returnAheadM.length) console.log(`GPS back after moving by the t
   `more than 500 m behind ${s.returnAheadM.filter(m => m < -500).length}`);
 if (!PLAIN) console.log(`in longer silences, off from the (straight-line) truth: median ${f1(q(s.silentLagS, 0.5))} s of travel, ` +
   `90 % ${f1(q(s.silentLagS, 0.9))} s; moving on past where it stood, 30 s or more after its GPS went quiet (must be 0): ${s.stoodMoved}`);
-if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop}`);
+if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop} (and ${s.pastStopBounced} where the train's own data went back on itself)`);
 if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);
 if (!PLAIN) {

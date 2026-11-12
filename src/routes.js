@@ -33,6 +33,16 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     }
     return (e.locs = locs);
   }
+  // Every track within 150 m of a station (rail-net.js snapsNear), for the way to it; its nearest one if none.
+  const tracks = new Map();
+  function placesOf(sig) {
+    if (!tracks.has(sig)) {
+      const st = stations.get(sig), near = st && net ? net.snapsNear(st, 150) : [];
+      const one = placeOf(sig);
+      tracks.set(sig, near.length ? near : one ? [one] : null);
+    }
+    return tracks.get(sig);
+  }
   function placeOf(sig) {
     if (!snaps.has(sig)) {
       const st = stations.get(sig);
@@ -42,8 +52,8 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
   }
 
   return {
-    setStations(map) { stations = map; snaps.clear(); },
-    setNet(n) { net = n; snaps.clear(); },
+    setStations(map) { stations = map; snaps.clear(); tracks.clear(); },
+    setNet(n) { net = n; snaps.clear(); tracks.clear(); },
     // rows: [{ key (trainKey), sig, activity ('Ankomst' / 'Avgang'), planned (ms) }]
     add(rows) {
       for (const r of rows) {
@@ -77,7 +87,7 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     // Where it last passed: { sig, time, activity } or null.
     lastPassing(key) { return byKey.get(key)?.passed ?? null; },
     // A station's place on the track (snapped), or null.
-    placeOf,
+    placeOf, placesOf,
     get count() { return byKey.size; },
     // Where train `key`, at `place` going `heading`, is headed next: its next planned stop ahead, else the next
     // location ahead. { sig, stop, snap, eta (expected arrival, ms: planned + its latest delay; null if not planned) }
@@ -99,7 +109,7 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       const snap = placeOf(pick.sig);
       if (!snap) return null;
       const planned = pick.arr ?? pick.dep;
-      return { sig: pick.sig, stop: pick.stop, snap, eta: planned === null ? null : planned + e.delay * 60000 };
+      return { sig: pick.sig, stop: pick.stop, snap, snaps: placesOf(pick.sig), eta: planned === null ? null : planned + e.delay * 60000 };
     },
   };
 }

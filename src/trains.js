@@ -89,7 +89,11 @@ function trackAhead(tr, now = 0) {
     const hd = coastHeading(h);
     const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.reached) : null;
     if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig) {
-      const poly = hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M, toward?.snap ?? null, PASSING_MAX_M);
+      // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
+      // straight distance (a far detour to a track that only happens to lie near the station is not the way).
+      const straight = toward?.snap ? metres(last, toward.snap) : 0;
+      const poly = hd === null || hd === undefined ? null
+        : NET.ahead(last.snap, hd, AHEAD_M, toward?.snaps ?? toward?.snap ?? null, Math.min(PASSING_MAX_M, 1.5 * straight + 2000));
       const reached = poly?.towardAt !== undefined;
       const stopAt = toward?.stop && reached ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
       // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).
@@ -279,7 +283,7 @@ export function createTrains(options = {}) {
       const p = tr.pending;
       tr.pending = null;
       if (metres(last, r) >= metres(last, p) - 50 && !isJump(p, r)) { counts.leapsKept++; append(tr, p); }
-      else counts.spikes++;
+      else { counts.spikes++; tr.bounced = r.time; }
       tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
       return take(tr, r);
     }
@@ -287,9 +291,9 @@ export function createTrains(options = {}) {
       const p = tr.pending;
       // A held jump that the next report comes back from (it lands between the last kept place and the jump) was a
       // bad fix too (550 and 17614 at Nässjö, 2026-11-12: reports without a speed 2-5 km north, then back).
-      if (metres(last, r) < metres(last, p) - 50) { tr.pending = null; counts.jumpsDropped++; tr.raw = null; tr.seen.delete(key); return take(tr, r); }
+      if (metres(last, r) < metres(last, p) - 50) { tr.pending = null; counts.jumpsDropped++; tr.bounced = r.time; tr.raw = null; tr.seen.delete(key); return take(tr, r); }
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
-      if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; }
+      if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; tr.bounced = r.time; }
       else { tr.pending = r; return; }
     }
     // A spike: the last kept report leapt ahead faster than any train (JUMP_KMH, but under JUMP_FAR_M, so it wasn't
@@ -299,7 +303,7 @@ export function createTrains(options = {}) {
     if (prev && !last.passing && !last.jump && metres(prev, last) > 300 && kmhBetween(prev, last) > JUMP_KMH &&
         metres(prev, r) < metres(prev, last) - 50 && angle(headingOf(last, r), headingOf(prev, last)) > 120) {
       h.pop();
-      counts.spikes++;
+      counts.spikes++; tr.bounced = r.time;
       tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
       return take(tr, r);
     }
@@ -311,7 +315,7 @@ export function createTrains(options = {}) {
     const dir = (moving ? r.bearing : null) ?? coastHeading(h) ?? r.bearing;
     if (dir !== null && dir !== undefined && angle(headingOf(last, r), dir) > 120 && tr.against < 2) {
       tr.against++;
-      counts.against++;
+      counts.against++; tr.bounced = r.time;
       return;
     }
     tr.against = 0;
@@ -581,7 +585,8 @@ export function createTrains(options = {}) {
       const ext = tr.ext?.last === tr.hist[tr.hist.length - 1] ? tr.ext : null;
       const past = simTime >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simTime) : { cap: Infinity, o: {} };
       const T = targetAt(tr.hist, simTime, past.cap, past.o);
-      const out = { stopAt: ext?.stopAt ?? Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
+      // bounced: when this train's data last went back on itself (a report against its way, a spike, a dropped jump).
+      const out = { stopAt: ext?.stopAt ?? Infinity, bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
         mode: T.mode, stood: tr.stood,
         // for checks: the fading offset (m) and the direction the track ahead is laid in
