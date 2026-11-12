@@ -5,12 +5,12 @@
 // findStations(text) -> passenger stations whose name matches: [{ sig, name }]
 // searchTimetable(number) -> Promise of today's trains with exactly this number: [{ key, operational, date, number,
 //   product, from, to }] (from/to as names)
-// onPickTrain({ id, operational, date, number, onMap }), onPickStation(station)
+// onPickTrain({ id, operational, date, number, onMap }), onPickStation(station), onHelp()
 
 const MAX_ROWS = 8;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation }) {
+export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation, onHelp }) {
   const input = el.querySelector('#search');
   const list = el.querySelector('#search-results');
   let closedAt = 0;
@@ -31,6 +31,7 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
   }
   button.onclick = () => (el.hidden ? open() : close());
   el.querySelector('.menu-close').onclick = close;
+  el.querySelector('#help-button').onclick = () => { close(); onHelp?.(); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   // A tap outside the menu closes it (and that tap does nothing else, see justClosed).
   document.addEventListener('pointerdown', (e) => {
