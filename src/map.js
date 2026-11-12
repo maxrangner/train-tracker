@@ -300,6 +300,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   };
   // While following, a zoom (wheel or pinch) zooms around the train rather than around the fingers.
   function zoomAroundCenter(on) {
+    // The wheel's enable() does nothing when it is already on (so the option was never taken): off first.
+    map.scrollZoom.disable();
     map.scrollZoom.enable(on ? { around: 'center' } : undefined);
     map.touchZoomRotate.enable(on ? { around: 'center' } : undefined);
   }
