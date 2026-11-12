@@ -266,6 +266,23 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       }
       onTrainTap?.(nearest?.properties.id ?? null);
     });
+    // Arrow keys (Max, 2026-11-12): up and down always tilt the view; left and right turn it while a train is
+    // followed (otherwise they move the map, as the map's own keys do). Not while typing or in Help, Settings or the
+    // menu. Caught before the map's own key handling, which would move the map and end the following.
+    document.addEventListener('keydown', (e) => {
+      if (!e.key.startsWith('Arrow') || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.target?.closest?.('input, textarea, select, #help, #settings-page, #menu')) return;
+      const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+      if (!vertical && !following) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (vertical) {
+        const pitch = Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() + (e.key === 'ArrowUp' ? 10 : -10)));
+        map.easeTo({ pitch, duration: 150 });
+      } else {
+        map.easeTo({ bearing: map.getBearing() + (e.key === 'ArrowLeft' ? -15 : 15), duration: 150 });
+      }
+    }, true);
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
     resolve();
