@@ -1,4 +1,4 @@
-# Train map
+# Spårad
 
 A live map of Sweden's trains, from Trafikverket's open data. The plan and the decisions behind it: [PLAN.md](PLAN.md). What is open: [docs/TODO.md](docs/TODO.md). What we know about the data: [docs/data.md](docs/data.md). How to check and measure: [docs/measuring.md](docs/measuring.md). The history of the movement and of the look: [docs/movement.md](docs/movement.md), [docs/look-and-screens.md](docs/look-and-screens.md).
 
