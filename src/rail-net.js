@@ -132,7 +132,8 @@ export function netFromJSON({ scale, n, d }) {
 
   // ---- A way along the tracks from snapped place a to snapped place b ----
   // dir: +1 / -1 to leave a only towards its line's end / start; 0 either. Null if none within maxM metres.
-  function route(a, b, maxM, dir = 0) {
+  // maxTurn: the sharpest turn allowed where lines meet (a drawn path may allow more where the data is odd).
+  function route(a, b, maxM, dir = 0, maxTurn = MAX_TURN) {
     if (a.li === b.li && (dir === 0 || Math.sign(b.along - a.along) === dir || Math.abs(b.along - a.along) < 1)) {
       const poly = newPoly();
       addPiece(poly, a.li, a.along, b.along);
@@ -176,7 +177,7 @@ export function netFromJSON({ scale, n, d }) {
       for (const end of nodeEnds[node]) {
         const m = end >> 1, e = end & 1;
         if (m === li && e === (d > 0 ? 1 : 0)) continue;   // back the way it came
-        if (angle(hin, leaveHeading(m, e)) > MAX_TURN) continue;
+        if (angle(hin, leaveHeading(m, e)) > maxTurn) continue;
         const nd = e === 0 ? +1 : -1;
         if (m === b.li) {
           const c = cost + (nd > 0 ? b.along : len[m] - b.along);
