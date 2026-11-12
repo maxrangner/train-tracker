@@ -52,5 +52,28 @@
     }
   ],
   "stations": { "bytes": 234693, "sha256": "d9a986eaecc10f3615c71a4b0701fba1dc53663cc120a6b9f994ebb9efc9f05e" },
-  "cases": []
+  "cases": [
+    {
+      "id": "2042-gnesta", "recording": "2026-11-12T17-01-59-418Z", "train": "2042/2026-11-12",
+      "from": "2026-11-12T18:33:30+01:00", "to": "2026-11-12T18:36:00+01:00",
+      "rules": { "noStopWhileMoving": 5, "maxKmh": 350 },
+      "seen": "Max, live, 2026-11-12 18:34: stopped east of Gnesta while the real train ran ~150 km/h, then raced to catch up (~700 km/h). Cause: tiny track pieces at Södermalm cut the way to Stockholm C, so it couldn't move by the timetable.",
+      "fixedBy": "rail-net: tiny pieces joined (main, 'fix/tiny-join-speed')"
+    },
+    {
+      "id": "2556-sodra", "recording": "2026-11-12T17-01-59-418Z", "train": "2556/2026-11-12",
+      "from": "2026-11-12T18:21:30+01:00", "to": "2026-11-12T18:23:30+01:00",
+      "rules": { "standsAt": { "sig": "Sst", "s": 20 } },
+      "seen": "Max, live, 2026-11-12 20:38: 2567 drove through Stockholms södra without stopping (not recorded); 2556 at 18:22 is the same pattern, recorded: the real train stood ~40 s (hindsight track; its GPS repeated the platform position 18:21:56-18:23:08).",
+      "fixedBy": "partly: trains stand at the planned stops they reach (main, 'fix/dwell-at-stops'): drawn 0 -> 7 s. Still failing: the drawn train is ~170 m behind and creeps in at 18 km/h while the dwell runs, then leaves when the departure is reported.",
+      "knownFailing": true
+    },
+    {
+      "id": "2857-kallhall", "recording": "2026-11-12T17-01-59-418Z", "train": "2857/2026-11-12",
+      "from": "2026-11-12T18:02:30+01:00", "to": "2026-11-12T18:10:00+01:00",
+      "rules": { "noSlideWhileStanding": 30 },
+      "seen": "Found in the replay (U-turn hunt, 2026-11-12): GPS wobble at the standing train turned the track ahead round; the drawn train slid ~110 m back and forth at Kallhäll, 18:05.",
+      "fixedBy": "trains: a direction needs 20 m of movement (main, 'fix/wrong-way')"
+    }
+  ]
 }

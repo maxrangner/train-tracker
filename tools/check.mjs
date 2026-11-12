@@ -59,7 +59,9 @@ const stamp = createHash('sha256')
   .update(recordings.flatMap(f => [f, f.replace('positions-', 'timetable-')]).filter(f => existsSync(`data/${f}`))
     .map(f => `${f}:${statSync(`data/${f}`).size}`).join())
   .digest('hex');
-const last = existsSync(PASSED) ? JSON.parse(readFileSync(PASSED, 'utf8')) : null;
+// One stamp per set (core, library, all), so a --library run doesn't make the next everyday run replay again.
+const passedAll = existsSync(PASSED) ? JSON.parse(readFileSync(PASSED, 'utf8')) : {};
+const last = passedAll[MODE] ?? null;
 const skipReplay = !process.argv.includes('--full') && last?.stamp === stamp;
 if (skipReplay) console.log(`replay skipped: the movement code, limits, rail network and ${MODE} recordings are as when all ${last.recordings} passed (${last.when}); --full replays anyway`);
 else console.log(`replaying the ${MODE} recordings (${recordings.length}): ${recordings.map(f => f.slice(10, 29)).join(', ')}`);
@@ -87,8 +89,13 @@ failed += missingCore;
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
     ` (replay ${Math.round((Date.now() - replayStart) / 1000)} s)`);
-  if (!failed) writeFileSync(PASSED, JSON.stringify({ stamp, recordings: recordings.length, when: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC' }));
+  if (!failed) writeFileSync(PASSED, JSON.stringify({ ...(passedAll.stamp ? {} : passedAll),
+    [MODE]: { stamp, recordings: recordings.length, when: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC' } }));
 }
+
+// The cases (tools/recordings.json): seconds, so always run. A case marked knownFailing shows but doesn't fail.
+const cases = spawnSync('node', ['tools/cases.mjs'], { stdio: 'inherit' });
+if (cases.status !== 0) failed++;
 
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
