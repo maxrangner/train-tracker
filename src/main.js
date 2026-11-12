@@ -143,6 +143,18 @@ function showPath() {
 }
 setInterval(showPath, 2000);
 
+// ---- Help and the map credit ----
+// The credit shows when the app opens and folds away on the first touch of the map, or after 10 s; after that the
+// credits are in Help (OpenStreetMap's attribution guidelines allow this: shown at start, then findable in a menu).
+const creditEl = document.getElementById('credit');
+const foldCredit = () => creditEl.classList.add('gone');
+document.getElementById('map').addEventListener('pointerdown', foldCredit, { once: true });
+setTimeout(foldCredit, 10000);
+const helpEl = document.getElementById('help');
+function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
+helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') helpEl.hidden = true; });
+
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
 const menu = createMenu({
@@ -164,6 +176,7 @@ const menu = createMenu({
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
+  onHelp: openHelp,
 });
 
 // ---- Drawing: one clock per frame ----

@@ -34,7 +34,9 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
     maxPitch: 70,
-    attributionControl: { compact: true },
+    // The map credits are our own (index.html #credit, and Help in the menu): shown when the app opens, folded away
+    // on the first touch or after 10 s, as OpenStreetMap's attribution guidelines allow; always in Help after that.
+    attributionControl: false,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
