@@ -1,16 +1,16 @@
 // The menu: opens from the ☰ button, so the main screen stays clean (Max, 2026-11-12). Search for a train number or
-// a station; the full status line; help and credits.
+// a station; the full status line.
 //
 // findTrains(digits) -> trains on the map whose number starts with them: [{ id, number, company }]
 // findStations(text) -> passenger stations whose name matches: [{ sig, name }]
 // searchTimetable(number) -> Promise of today's trains with exactly this number: [{ key, operational, date, number,
 //   product, from, to }] (from/to as names)
-// onPickTrain({ id, operational, date, number, onMap }), onPickStation(station), onHelp()
+// onPickTrain({ id, operational, date, number, onMap }), onPickStation(station)
 
 const MAX_ROWS = 8;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation, onHelp }) {
+export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation }) {
   const input = el.querySelector('#search');
   const list = el.querySelector('#search-results');
   let closedAt = 0;
@@ -31,7 +31,6 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
   }
   button.onclick = () => (el.hidden ? open() : close());
   el.querySelector('.menu-close').onclick = close;
-  el.querySelector('#help-button').onclick = () => { close(); onHelp?.(); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   // A tap outside the menu closes it (and that tap does nothing else, see justClosed).
   document.addEventListener('pointerdown', (e) => {
