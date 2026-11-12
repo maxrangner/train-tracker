@@ -18,7 +18,44 @@ export async function loadNet(url) {
   return netFromJSON(await res.json());
 }
 
-export function netFromJSON({ scale, n, d }) {
+// Tiny line pieces in Trafikverket's data cut through tracks: on Södermalm between Stockholm C and Stockholms S a
+// 1 m piece points backwards, so passing it looked like a 166° turn and there was no way through (Max, 2026-11-12:
+// paths cut straight from Stockholm C). Pieces shorter than TINY_M are taken out and their two ends joined into one,
+// so the lines on either side meet. A trial round Stockholm C only (within TINY_AREA.radius metres); the rest of the
+// country may follow once it is seen to work.
+const TINY_M = 2;
+const TINY_AREA = { lon: 18.0573, lat: 59.33, radius: 3000 };
+function joinTinyPieces({ scale, n, d }) {
+  const lines = [];
+  let x = 0, y = 0, k = 0;
+  for (const cnt of n) { const pts = []; for (let i = 0; i < cnt; i++) { x += d[2 * k]; y += d[2 * k + 1]; k++; pts.push([x, y]); } lines.push(pts); }
+  const m = (a, b) => Math.hypot((b[0] - a[0]) / scale * Math.cos(a[1] / scale * R), (b[1] - a[1]) / scale) * R * 6371000;
+  const length = l => { let s = 0; for (let i = 1; i < l.length; i++) s += m(l[i - 1], l[i]); return s; };
+  const inArea = p => m(p, [TINY_AREA.lon * scale, TINY_AREA.lat * scale]) <= TINY_AREA.radius;
+  const same = (p, q) => p[0] === q[0] && p[1] === q[1];
+  let removed = 0;
+  for (let li = 0; li < lines.length; li++) {
+    const l = lines[li];
+    if (!l || !inArea(l[0]) || length(l) >= TINY_M) continue;
+    const a = l[0], b = l[l.length - 1];
+    // every line end at b moves to a: the lines on either side now meet at a
+    if (!same(a, b)) for (const o of lines) {
+      if (!o || o === l) continue;
+      if (same(o[0], b)) o[0] = [...a];
+      if (same(o[o.length - 1], b)) o[o.length - 1] = [...a];
+    }
+    lines[li] = null;
+    removed++;
+  }
+  if (!removed) return { scale, n, d };
+  const n2 = [], d2 = [];
+  let px = 0, py = 0;
+  for (const l of lines) { if (!l) continue; n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } }
+  return { scale, n: n2, d: d2 };
+}
+
+export function netFromJSON(json) {
+  const { scale, n, d } = joinTinyPieces(json);
   // ---- Points and lines ----
   const P = d.length / 2, L = n.length;
   const lon = new Float64Array(P), lat = new Float64Array(P), cum = new Float64Array(P);
