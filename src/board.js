@@ -1,12 +1,14 @@
 // A station's board: the next departures or arrivals (settings.boardRows of them), opened by tapping a station on
 // the map or picking it in the search. It sits where the train panel does; tapping a row opens that train.
 // load(sig, activity) -> Promise of rows (trafikverket.js fetchBoard); stationName(sig) -> name.
-// onPickTrain({ id, operational, date, number }); onClose().
+// onPickTrain({ id, operational, date, number }); onClose(). isStarred(sig) / onStar(sig) -> starred now: the ☆.
 const time = t => (t ? new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '');
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const REFRESH_MS = 30000;
 
-export function createBoard(el, { load, stationName, onPickTrain, onClose }) {
+import { star } from './panel.js';
+
+export function createBoard(el, { load, stationName, onPickTrain, onClose, isStarred, onStar }) {
   let station = null;     // { sig, name }
   let activity = 'Avgang';
   let timer = null;
@@ -25,12 +27,20 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose }) {
     const dep = activity === 'Avgang';
     el.innerHTML =
       `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
+      (isStarred ? star(isStarred(station.sig)) : '') +
       `<button class="panel-close" type="button" aria-label="Close">×</button></span></div>` +
       `<div class="board-tabs" role="group" aria-label="Departures or arrivals">` +
       `<button type="button" data-act="Avgang" aria-pressed="${dep}">Departures</button>` +
       `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">Arrivals</button></div>` + body;
     el.querySelector('.panel-close').onclick = close;
+    const s = el.querySelector('.panel-star');
+    if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
     for (const b of el.querySelectorAll('[data-act]')) b.onclick = () => { if (b.dataset.act !== activity) { activity = b.dataset.act; refresh(true); } };
+  }
+
+  function frameWire() {
+    const s = el.querySelector('.panel-star');
+    if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
   }
 
   async function refresh(showLoading = false) {

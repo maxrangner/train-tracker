@@ -43,6 +43,7 @@ While the map is private the key is built into the page; the public version will
 - **Groups**: close in, trains standing close together (within 40 px) share one label, "3 trains"; tap it to pick one. A train on its own keeps its full label.
 - **Stations**: passenger stations show as small rings from zoom 9, their names from zoom 11. Tap one (or pick it in the search) for its board: the next departures or arrivals (`boardRows` in `src/settings.js`, 12), with new times in red, cancelled trains and tracks, refreshed every 30 s. Tap a row to open that train.
 - **A train's path**: an open train (tapped, searched or picked on a board) shows its whole path along the rails, start to finish: travelled grey, ahead blue, its stops as rings. A train not on the map (not started yet, or done) shows all of its path.
+- **Favourites**: ☆ on a train's panel (kept by its number, so it works every day) or a station's board; they show in ☰ when the search field is empty (`src/favourites.js`, remembered on that phone/browser).
 - **Settings** (in ☰): toys or real-size trains, toy size, from which zoom the toys show, trains on a station board. Remembered on that phone/browser (`src/settings.js`); the address (`#train=toy` etc.) still wins when given. Changing trains or zoom reloads the page.
 - **? (next to Tilt)**: Help: how to read the map, what a tap does, and the credits and licences.
 
