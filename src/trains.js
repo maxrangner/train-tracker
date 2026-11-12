@@ -215,7 +215,7 @@ export function createTrains(options = {}) {
     return { cap: ext?.stopAt ?? Infinity,
       o: { stood: tr.stood, frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, resent: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { repeats: 0, resent: 0, spikes: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -278,6 +278,17 @@ export function createTrains(options = {}) {
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
       if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; }
       else { tr.pending = r; return; }
+    }
+    // A spike: the last kept report leapt ahead faster than any train (JUMP_KMH, but under JUMP_FAR_M, so it wasn't
+    // held), and this one comes back between the two. The leap was a bad fix: take it out and go on from here
+    // (e.g. 590, 2026-11-12 07:07:08: 900 m in 2 s, back 470 m 14 s later; the drawn train had chased it).
+    const prev = h[h.length - 2];
+    if (prev && !last.passing && !last.jump && metres(prev, last) > 300 && kmhBetween(prev, last) > JUMP_KMH &&
+        metres(prev, r) < metres(prev, last) - 50 && angle(headingOf(last, r), headingOf(prev, last)) > 120) {
+      h.pop();
+      counts.spikes++;
+      tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
+      return take(tr, r);
     }
     const d = metres(last, r);
     if (d < STILL_M) return append(tr, { ...r, lon: last.lon, lat: last.lat });
