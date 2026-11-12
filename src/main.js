@@ -6,7 +6,7 @@ import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, nearestIndex } from './path.js';
-import { settings } from './settings.js';
+import { settings, setSetting } from './settings.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
@@ -200,6 +200,25 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+// ---- Settings (in the menu): remembered on this phone; style and zoom reload the page, the rest apply at once ----
+const settingsEl = document.getElementById('settings');
+function showSettings() {
+  for (const seg of settingsEl.querySelectorAll('.seg'))
+    for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
+  settingsEl.classList.toggle('real', settings.trainStyle !== 'toy');
+  sizeEl.value = settings.toySize;
+  sizeOut.textContent = `${settings.toySize} px`;
+}
+for (const seg of settingsEl.querySelectorAll('.seg')) {
+  for (const b of seg.querySelectorAll('button')) b.onclick = () => {
+    if (setSetting(seg.dataset.key, b.dataset.v)) location.reload();
+    else showSettings();
+  };
+}
+const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');
+sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
+showSettings();
 
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
