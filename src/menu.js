@@ -8,6 +8,8 @@
 // onPickTrain({ id, operational, date, number, onMap }), onPickStation(station)
 // favourites() -> { stations: [{ sig, name }], trains: [{ number, company, onMap }] }; onPickFavouriteTrain(number)
 
+import { t } from './i18n.js';
+
 const MAX_ROWS = 8;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -68,29 +70,29 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
     const digits = /^\d+$/.test(q);
     const trains = digits ? findTrains(q).slice(0, MAX_ROWS) : [];
     const stations = digits ? [] : findStations(q).slice(0, MAX_ROWS);
-    for (const t of trains) {
-      list.append(row(`<b>${esc(t.number)}</b> <span>${esc(t.company || 'Train')} · on the map</span>`,
-        () => onPickTrain({ ...t, onMap: true })));
+    for (const tr of trains) {
+      list.append(row(`<b>${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))} · ${t('onMap')}</span>`,
+        () => onPickTrain({ ...tr, onMap: true })));
     }
-    for (const st of stations) list.append(row(`<b>${esc(st.name)}</b> <span>Station</span>`, () => onPickStation(st)));
-    if (!digits && !stations.length) list.append(note('No station by that name.'));
+    for (const st of stations) list.append(row(`<b>${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
+    if (!digits && !stations.length) list.append(note(t('noStation')));
     if (!digits) return;
 
     // A whole number: also today's timetable, for trains that aren't on the map (not started yet, or done).
-    const waiting = note('Looking in today\'s timetable…');
+    const waiting = note(t('lookingTimetable'));
     list.append(waiting);
     timer = setTimeout(async () => {
       let found;
-      try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.textContent = `Couldn't search the timetable: ${e.message}`; return; }
+      try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.textContent = t('timetableFailed', e.message); return; }
       if (n !== asked) return;
       waiting.remove();
-      const onMap = new Set(trains.map(t => t.id));
-      const more = found.filter(t => !onMap.has(t.key));
-      for (const t of more.slice(0, MAX_ROWS)) {
-        list.append(row(`<b>${esc(t.number)}</b> <span>${esc([t.product, t.from && t.to ? `${t.from} → ${t.to}` : ''].filter(Boolean).join(' · '))}</span>`,
-          () => onPickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false })));
+      const onMap = new Set(trains.map(tr => tr.id));
+      const more = found.filter(tr => !onMap.has(tr.key));
+      for (const tr of more.slice(0, MAX_ROWS)) {
+        list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
+          () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
       }
-      if (!trains.length && !more.length) list.append(note(`No train ${q} today.`));
+      if (!trains.length && !more.length) list.append(note(t('noTrainToday', q)));
     }, 350);
   }
 
@@ -99,15 +101,15 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
     const f = favourites?.();
     if (!f) return;
     if (!f.trains.length && !f.stations.length) {
-      list.append(note('Tap ☆ on a train or a station to keep it here.'));
+      list.append(note(t('favouritesHint')));
       return;
     }
-    list.append(Object.assign(document.createElement('li'), { className: 'menu-label fav-label', textContent: 'Favourites' }));
-    for (const t of f.trains) {
-      list.append(row(`<b>★ ${esc(t.number)}</b> <span>${esc(t.company || 'Train')}${t.onMap ? ' · on the map' : ''}</span>`,
-        () => onPickFavouriteTrain(t.number)));
+    list.append(Object.assign(document.createElement('li'), { className: 'menu-label fav-label', textContent: t('favourites') }));
+    for (const tr of f.trains) {
+      list.append(row(`<b>★ ${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))}${tr.onMap ? ` · ${t('onMap')}` : ''}</span>`,
+        () => onPickFavouriteTrain(tr.number)));
     }
-    for (const st of f.stations) list.append(row(`<b>★ ${esc(st.name)}</b> <span>Station</span>`, () => onPickStation(st)));
+    for (const st of f.stations) list.append(row(`<b>★ ${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
   }
 
   return {

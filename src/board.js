@@ -7,6 +7,7 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 const REFRESH_MS = 30000;
 
 import { star } from './panel.js';
+import { t } from './i18n.js';
 
 export function createBoard(el, { load, stationName, onPickTrain, onClose, isStarred, onStar }) {
   let station = null;     // { sig, name }
@@ -28,10 +29,10 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     el.innerHTML =
       `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
       (isStarred ? star(isStarred(station.sig)) : '') +
-      `<button class="panel-close" type="button" aria-label="Close">×</button></span></div>` +
-      `<div class="board-tabs" role="group" aria-label="Departures or arrivals">` +
-      `<button type="button" data-act="Avgang" aria-pressed="${dep}">Departures</button>` +
-      `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">Arrivals</button></div>` + body;
+      `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div>` +
+      `<div class="board-tabs" role="group" aria-label="${t('depOrArr')}">` +
+      `<button type="button" data-act="Avgang" aria-pressed="${dep}">${t('departures')}</button>` +
+      `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">${t('arrivals')}</button></div>` + body;
     el.querySelector('.panel-close').onclick = close;
     const s = el.querySelector('.panel-star');
     if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
@@ -46,29 +47,29 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
   async function refresh(showLoading = false) {
     if (!station) return;
     const n = ++asked;
-    if (showLoading) frame('<p class="panel-note">Loading…</p>');
+    if (showLoading) frame(`<p class="panel-note">${t('loading')}</p>`);
     let rows;
     try {
       rows = await load(station.sig, activity);
     } catch (e) {
-      if (n === asked && station) frame(`<p class="panel-note">Couldn't load the board: ${esc(e.message)}</p>`);
+      if (n === asked && station) frame(`<p class="panel-note">${esc(t('boardFailed', e.message))}</p>`);
       return;
     }
     if (n !== asked || !station) return;
     const dep = activity === 'Avgang';
     const scroll = el.querySelector('.panel-table')?.scrollTop ?? 0;
-    if (!rows.length) { frame(`<p class="panel-note">No ${dep ? 'departures' : 'arrivals'} in the next hours.</p>`); return; }
+    if (!rows.length) { frame(`<p class="panel-note">${t(dep ? 'noDepartures' : 'noArrivals')}</p>`); return; }
     const body = rows.map((r, i) => {
       const seen = r.actual ?? r.estimated;
       const late = seen ? Math.round((seen - r.planned) / 60000) : 0;
-      const when = r.canceled ? '<span class="late">Cancelled</span>'
+      const when = r.canceled ? `<span class="late">${t('cancelled')}</span>`
         : late > 0 ? `<span class="late">${time(seen)}</span>` : '';
       const place = dep ? r.to : r.from;
       return `<tr data-i="${i}" class="${r.canceled ? 'canceled' : ''}"><td class="t">${time(r.planned)}${when ? `<br>${when}` : ''}</td>` +
         `<td class="st">${esc(place ? stationName(place) : '')}<div class="sub">${esc(r.number)} ${esc(r.product ?? '')}</div></td>` +
         `<td class="trk">${esc(r.track)}</td></tr>`;
     }).join('');
-    frame(`<div class="panel-table"><table class="board"><thead><tr><th>Time</th><th>${dep ? 'To' : 'From'}</th><th>Track</th></tr></thead>` +
+    frame(`<div class="panel-table"><table class="board"><thead><tr><th>${t('time')}</th><th>${t(dep ? 'to' : 'from')}</th><th>${t('track')}</th></tr></thead>` +
       `<tbody>${body}</tbody></table></div>`);
     const box = el.querySelector('.panel-table');
     box.scrollTop = scroll;
