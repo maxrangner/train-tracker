@@ -4,7 +4,9 @@ import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, hasKey } from './trafikverket.js';
+import { createBoard } from './board.js';
+import { settings } from './settings.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now } from './clock.js';
@@ -63,14 +65,44 @@ const map = createMap('map', {
   // closed the menu does nothing more).
   onTrainTap(id) {
     if (menu.justClosed) return;
-    if (!openTrain(id)) panel.close();
+    if (!openTrain(id)) { panel.close(); board.close(); }
+  },
+  onStationTap(sig) {
+    if (menu.justClosed) return;
+    openStation(sig);
   },
 });
+
+// ---- A station's board (where the train panel opens; one of them at a time) ----
+const board = createBoard(document.getElementById('board'), {
+  load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
+  stationName,
+  onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
+  onClose: () => { if (!panel.openId) map.unpad(); },
+});
+async function openStation(sig, { go = false } = {}) {
+  const st = stations.get(sig);
+  if (!st) return;
+  if (panel.openId) panel.close();
+  map.unfollow();
+  await map.pad();   // the station shows above the board
+  board.open(st);
+  if (go) map.goTo(st, 13);
+}
+
+// A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
+function pickTrain(t) {
+  board.close();
+  if (t.onMap && openTrain(t.id, { go: true })) return;
+  map.unfollow();
+  panel.open({ id: t.id, operational: t.operational, date: t.date, label: String(t.number) }, { follow: false });
+}
 
 // Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
 function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
+  board.close();
   panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
@@ -97,18 +129,8 @@ const menu = createMenu({
     const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
     return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to) }));
   },
-  onPickTrain(t) {
-    if (t.onMap && openTrain(t.id, { go: true })) return;
-    // Not on the map (not started yet, or done): its stops in the panel.
-    map.unfollow();
-    panel.open({ id: t.id, operational: t.operational, date: t.date, label: String(t.number) }, { follow: false });
-  },
-  async onPickStation(st) {
-    if (panel.openId) panel.close();
-    map.unfollow();
-    await map.unpad();
-    map.goTo(st, 13);
-  },
+  onPickTrain: pickTrain,
+  onPickStation: st => openStation(st.sig, { go: true }),
 });
 
 // ---- Drawing: one clock per frame ----
@@ -196,11 +218,13 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
 });
 
+function gotStations(m) {
+  stations = m;
+  routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
+  map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null));
+}
 if (hasKey && replay) {
-  fetchStations().then((m) => {
-    stations = m;
-    routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
-  }).catch(e => console.warn('stations:', e.message));
+  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
 }
 if (hasKey && !replay) {
   followPassings({
@@ -210,10 +234,7 @@ if (hasKey && !replay) {
       if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
     },
   });
-  fetchStations().then((m) => {
-    stations = m;
-    routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
-  }).catch(e => console.warn('stations:', e.message));
+  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
 
   // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
   // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.

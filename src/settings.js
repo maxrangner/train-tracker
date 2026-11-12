@@ -5,6 +5,7 @@ const DEFAULTS = {
   trainStyle: 'real',   // 'toy': each company's usual train as a toy, bigger than real; 'real': real size
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
   toyZoom: 11,          // toys from this zoom in (further out: dots)
+  boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
 };
 
 const hash = new URLSearchParams(location.hash.slice(1));
@@ -14,4 +15,5 @@ export const settings = {
   trainStyle: ['toy', 'real'].includes(hash.get('train')) ? hash.get('train') : DEFAULTS.trainStyle,
   toySize: num(hash.get('toysize'), DEFAULTS.toySize),
   toyZoom: num(hash.get('toyzoom'), DEFAULTS.toyZoom),
+  boardRows: num(hash.get('boardrows'), DEFAULTS.boardRows),
 };
