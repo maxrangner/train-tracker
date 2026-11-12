@@ -44,7 +44,7 @@ While the map is private the key is built into the page; the public version will
 - **Stations**: passenger stations show as small rings from zoom 9, their names from zoom 11. Tap one (or pick it in the search) for its board: the next departures or arrivals (`boardRows` in `src/settings.js`, 12), with new times in red, cancelled trains and tracks, refreshed every 30 s. Tap a row to open that train.
 - **A train's path**: an open train (tapped, searched or picked on a board) shows its whole path along the rails, start to finish: travelled grey, ahead blue, its stops as rings. A train not on the map (not started yet, or done) shows all of its path.
 - **Favourites**: ☆ on a train's panel (kept by its number, so it works every day) or a station's board; they show in ☰ when the search field is empty (`src/favourites.js`, remembered on that phone/browser).
-- **Settings** (in ☰): toys or real-size trains, toy size, from which zoom the toys show, trains on a station board. Remembered on that phone/browser (`src/settings.js`); the address (`#train=toy` etc.) still wins when given. Changing trains or zoom reloads the page.
+- **Settings** (☰ → Settings, its own page): toys or real-size trains; look Auto / Light / Dark (Auto follows the phone; dark uses OpenFreeMap's Dark map, labels white with a black border); language Svenska / English (first start: the phone's language); toy size, from which zoom the toys show, trains on a station board. Remembered on that phone/browser (`src/settings.js`); the address (`#train=toy&theme=dark&lang=sv` etc.) still wins when given. Changing trains, zoom, look or language reloads the page (the view stays).
 - **? (next to Tilt)**: Help: how to read the map, what a tap does, and the credits and licences.
 
 ## What is where
@@ -60,7 +60,8 @@ While the map is private the key is built into the page; the public version will
 - `src/board.js`: a station's board (departures and arrivals).
 - `src/path.js`: a train's path along the rails from its timetable places; where along it the train is.
 - `src/panel.js`: the panel for a tapped train.
-- `src/settings.js`: the look settings in one place (toy or real size, toy size, from which zoom); defaults, or from the address.
+- `src/settings.js`: the settings in one place (look, language, toy or real size, toy size, from which zoom, board rows); defaults, or from the address. Sets `<html data-theme>` for the colours in `index.html`.
+- `src/i18n.js`: the page's own words in Swedish and English (`t('key')`); Help is in `index.html` twice (`data-lang`). Names from Trafikverket and the map stay Swedish.
 - `src/toy-trains.js`: the toy trains: one flexible shape set per train model (X61, Regina, X2000, Rc ...).
 - `src/toy-brands.js`: each company's toy: its usual train model, its paint and the photo it was read from.
 - `src/map.js`: the map (OpenFreeMap, Positron style), rail lines, dots, labels, ring.

@@ -8,6 +8,7 @@ import { createBoard } from './board.js';
 import { pathOf, nearestIndex } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting } from './settings.js';
+import { t, translatePage } from './i18n.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
@@ -20,6 +21,7 @@ import { startReplaySource } from './replay-source.js';
 const replay = new URLSearchParams(location.hash.slice(1)).get('replay');
 
 window.__started = true;   // index.html reports it on screen if this line is never reached
+translatePage();           // the page's own words in the chosen language (Settings → Language)
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
 // has loaded (or failed: then trains move in straight lines between reports).
 const netReady = loadNet('/rail-net.json').catch((e) => {
@@ -107,9 +109,9 @@ function showPicker(list) {
   panel.close();
   board.close();
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
-  pickerEl.innerHTML = `<div class="panel-head"><strong>${rows.length} trains here</strong><span class="panel-buttons">` +
-    `<button class="panel-close" type="button" aria-label="Close">×</button></span></div><ul class="pick-list">` +
-    rows.map((t, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(t.label)}</b> <span>${escHtml(t.company || 'Train')}</span></button></li>`).join('') + '</ul>';
+  pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
+    `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div><ul class="pick-list">` +
+    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(r.label)}</b> <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
   for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
@@ -175,7 +177,7 @@ const helpEl = document.getElementById('help');
 function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') helpEl.hidden = true; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; } });
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -242,8 +244,20 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
-// ---- Settings (in the menu): remembered on this phone; style and zoom reload the page, the rest apply at once ----
+// ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; trains, zoom, look
+// and language reload the page (the view stays: it is in the address), size and board rows apply at once. ----
+const settingsPage = document.getElementById('settings-page');
 const settingsEl = document.getElementById('settings');
+document.getElementById('open-settings').onclick = () => {
+  menu.close();
+  helpEl.hidden = true;
+  settingsPage.hidden = false;
+  settingsPage.querySelector('.panel-close').focus();
+};
+settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
+// Look: Auto follows the phone, also when the phone switches between light and dark while the map is open.
+if (settings.theme === 'auto' && typeof matchMedia === 'function')
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => location.reload());
 function showSettings() {
   for (const seg of settingsEl.querySelectorAll('.seg'))
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
@@ -340,8 +354,7 @@ if (hasKey && !replay) {
   setInterval(askRoutes, 30000);
 }
 
-const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped',
-  replay: 'replay' };
+const MODE_TEXT = t('mode');
 const statusEl = document.getElementById('status');
 const statusFullEl = document.getElementById('status-full');
 
@@ -350,40 +363,41 @@ const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
 
 // The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
 function statusLine(st, noData) {
-  if (!st) return 'Not on the map right now (not started yet, done, or nothing from it for 15 minutes).';
-  if (noData) return `No data from Trafikverket since ${clock(lastDataAt)}.`;
-  if (st.syncing) return 'Catching up with its latest report (fast-forward).';
-  const quiet = st.gpsSilentFor >= 60 ? `No GPS for ${mins(st.gpsSilentFor)}` : null;
+  if (!st) return t('notOnMap');
+  if (noData) return t('noDataFromTrv', clock(lastDataAt));
+  if (st.syncing) return t('catchingUp');
+  const quiet = st.gpsSilentFor >= 60 ? t('noGpsFor', mins(st.gpsSilentFor)) : null;
   const passed = st.lastPassing && st.lastPassing.time > now() - 3 * 3600000
-    ? ` · last passed ${stationName(st.lastPassing.sig)} ${clock(st.lastPassing.time)}` : '';
-  if (st.stale) return `Nothing from this train for ${mins(st.silentFor)}; shown where it was last known.`;
-  if (st.mode === 'stood') return quiet ? `${quiet} · it stood still before it went quiet${passed}` : '';
+    ? t('lastPassed', stationName(st.lastPassing.sig), clock(st.lastPassing.time)) : '';
+  const q = quiet ?? t('noNewPosition');
+  if (st.stale) return t('silentFor', mins(st.silentFor));
+  if (st.mode === 'stood') return quiet ? t('stoodStill', quiet, passed) : '';
   if (st.mode === 'waiting' && st.lastPassing?.sig === st.waitingFor && st.lastPassing.activity === 'Ankomst')
-    return `${quiet ?? 'No new position'} · at ${stationName(st.waitingFor)} (arrived ${clock(st.lastPassing.time)})`;
-  if (st.mode === 'waiting') return `${quiet ?? 'No new position'} · waiting before ${stationName(st.waitingFor)} until it is confirmed${passed}`;
-  if (st.mode === 'timetable') return `${quiet ?? 'No new position'} · moving by its timetable${passed}`;
-  if (st.mode === 'coasted out') return `${quiet ?? 'No new position'} · stopped where it was last seen${passed}`;
+    return t('atStation', q, stationName(st.waitingFor), clock(st.lastPassing.time));
+  if (st.mode === 'waiting') return t('waitingBefore', q, stationName(st.waitingFor), passed);
+  if (st.mode === 'timetable') return t('byTimetable', q, passed);
+  if (st.mode === 'coasted out') return t('stoppedLastSeen', q, passed);
   return '';
 }
 
 setInterval(() => {
-  const t = now();
-  const noData = lastDataAt !== null && t - lastDataAt > NO_DATA_MS;
+  const tNow = now();
+  const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
   if (noData && !trains.halted) trains.setHalted(true);
-  trains.prune(t);
-  const ago = trains.lastReport ? Math.max(0, Math.round((t - trains.lastReport) / 1000)) : null;
+  trains.prune(tNow);
+  const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
-  const mode = `${MODE_TEXT[status.positions] ?? status.positions}${replay ? ` ${new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
-  statusEl.textContent = `${trains.count} trains · ` +
-    (noData ? `no data since ${clock(lastDataAt)}` : status.error ? status.error : mode);
+  const mode = `${MODE_TEXT[status.positions] ?? status.positions}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
+    (noData ? t('noDataSince', clock(lastDataAt)) : status.error ? status.error : mode);
   statusFullEl.textContent =
-    `${trains.count} trains · ` +
-    (noData ? `no data since ${clock(lastDataAt)}` : ago === null ? 'no report yet' : `last report ${ago} s ago`) +
+    `${t('trainsCount', trains.count)} · ` +
+    (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${MODE_TEXT[status.positions] ?? status.positions}` +
-    (replay ? ` of ${new Date(t).toLocaleTimeString('sv-SE')}` : '') +
+    (replay ? t('replayOf', new Date(tNow).toLocaleTimeString('sv-SE')) : '') +
     (status.error ? ` · ${status.error}` : '');
   statusEl.classList.toggle('problem', Boolean(status.error) || noData);
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
-  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, t - DELAY_MS), noData));
+  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DELAY_MS), noData));
 }, 1000);

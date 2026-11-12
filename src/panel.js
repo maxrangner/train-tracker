@@ -1,5 +1,6 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 import { fetchRoute } from './trafikverket.js';
+import { t } from './i18n.js';
 
 const time = t => (t ? new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '');
 const off = (planned, at) => {
@@ -9,7 +10,7 @@ const off = (planned, at) => {
 };
 
 // The favourite star (☆ / ★), used by the train panel and the station board.
-export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${on ? 'Remove from favourites' : 'Add to favourites'}">${on ? '★' : '☆'}</button>`;
+export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${on ? '★' : '☆'}</button>`;
 
 // onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): the Follow button was pressed.
 // onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
@@ -24,8 +25,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   const head = label =>
     `<div class="panel-head"><strong>${label}</strong><span class="panel-buttons">` +
     (number && isStarred ? star(isStarred(number)) : '') +
-    (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${following ? 'Following' : 'Follow'}</button>` : '') +
-    `<button class="panel-close" type="button" aria-label="Close">×</button></span></div>`;
+    (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${t(following ? 'following' : 'follow')}</button>` : '') +
+    `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div>`;
   function wireHead() {
     el.querySelector('.panel-close').onclick = close;
     const f = el.querySelector('.panel-follow');
@@ -36,7 +37,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   function setFollowing(on) {
     following = on;
     const b = el.querySelector('.panel-follow');
-    if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = on ? 'Following' : 'Follow'; }
+    if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = t(on ? 'following' : 'follow'); }
   }
 
   function close() {
@@ -54,14 +55,14 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     canFollow = follow;
     onSelect?.(train.id);
     el.hidden = false;
-    el.innerHTML = head(train.label) + `<p class="panel-note">Loading the route…</p>`;
+    el.innerHTML = head(train.label) + `<p class="panel-note">${t('loadingRoute')}</p>`;
     wireHead();
 
     let route;
     try {
       route = await fetchRoute(train.operational, train.date);
     } catch (e) {
-      if (openId === train.id) el.querySelector('.panel-note').textContent = `Couldn't load the route: ${e.message}`;
+      if (openId === train.id) el.querySelector('.panel-note').textContent = t('routeFailed', e.message);
       return;
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
@@ -87,7 +88,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         `<td class="st">${stationName(s.station)}</td>` +
         `<td class="t">${a ? time(a.planned) : ''}</td>` +
         `<td class="t">${d ? time(d.planned) : ''}</td>` +
-        `<td class="t act">${main.canceled ? 'cancelled' : time(seen)}${main.actual ? '' : seen ? '<span class="est"> est.</span>' : ''}</td>` +
+        `<td class="t act">${main.canceled ? t('cancelledStop') : time(seen)}${main.actual ? '' : seen ? `<span class="est">${t('est')}</span>` : ''}</td>` +
         `<td class="t dev">${off(main.planned, seen)}</td></tr>`;
     }).join('');
 
@@ -97,8 +98,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       head(train.label) +
       `<p class="panel-note">${[route.product, from && to ? `${from} → ${to}` : ''].filter(Boolean).join(' · ')}</p>` +
       (stops.length
-        ? `<div class="panel-table"><table><thead><tr><th>Station</th><th>Arr.</th><th>Dep.</th><th>Actual</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
-        : `<p class="panel-note">No passenger stops in today's timetable (likely a freight or service train).</p>`);
+        ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : `<p class="panel-note">${t('noStops')}</p>`);
     wireHead();
     // Scroll the table (only the table) so the next stop is in view.
     const box = el.querySelector('.panel-table'), next = el.querySelector('tr.next');

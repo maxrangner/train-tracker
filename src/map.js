@@ -3,20 +3,28 @@
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM, TOY } from './trains-3d.js';
-import { settings } from './settings.js';
+import { settings, dark } from './settings.js';
+import { t } from './i18n.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
 setWorkerUrl(workerUrl);
 
-// OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out.
-const STYLE = 'https://tiles.openfreemap.org/styles/positron';
+// OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out; in dark their Dark
+// style (Max, 2026-11-12: B, near black, of Dark and Fiord).
+const STYLE = `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
+// Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
+const C = dark
+  ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
+      rail: '#7d8590', casing: '#000000', done: '#6e7781', ahead: '#388bfd', stopFill: '#161b22' }
+  : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
+      rail: '#6e7781', casing: '#ffffff', done: '#9aa3ad', ahead: '#1f6feb', stopFill: '#ffffff' };
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
 // removed 2026-11-12 (Max: decided, no need for the option).
 export const RAIL_SOURCES = {
-  trv: { name: 'Trafikverket', color: '#6e7781' },
+  trv: { name: 'Trafikverket', color: C.rail },
 };
 
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
@@ -65,14 +73,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.addSource('path', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
+      paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
     map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': ['match', ['get', 'part'], 'ahead', '#1f6feb', '#9aa3ad'],
+      paint: { 'line-color': ['match', ['get', 'part'], 'ahead', C.ahead, C.done],
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
     map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
-      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6], 'circle-color': '#ffffff',
-        'circle-stroke-color': ['match', ['get', 'part'], 'ahead', '#1f6feb', '#9aa3ad'],
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6], 'circle-color': C.stopFill,
+        'circle-stroke-color': ['match', ['get', 'part'], 'ahead', C.ahead, C.done],
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
 
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
@@ -84,8 +92,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       minzoom: 9,
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 14, 6],
-        'circle-color': '#ffffff',
-        'circle-stroke-color': '#3d444d',
+        'circle-color': C.ringFill,
+        'circle-stroke-color': C.ring,
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2],
       },
     });
@@ -102,7 +110,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-anchor': 'bottom',
         'text-optional': true,
       },
-      paint: { 'text-color': '#3d444d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
     });
 
     map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -147,7 +155,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
       },
-      paint: { 'text-color': '#1b1f24', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
         'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
 
@@ -172,7 +180,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
       },
-      paint: { 'text-color': '#1b1f24', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5,
+      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
         'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
     map.addLayer({
@@ -182,14 +190,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       minzoom: MODEL_ZOOM,
       filter: ['has', 'point_count'],
       layout: {
-        'text-field': ['concat', ['to-string', ['get', 'point_count']], ' trains'],
+        'text-field': ['concat', ['to-string', ['get', 'point_count']], t('nTrains')],
         'text-font': ['Noto Sans Bold'],
         'text-size': 13,
         'text-overlap': 'always',
         'text-offset': [0, 1.1],
         'text-anchor': 'top',
       },
-      paint: { 'text-color': '#1f6feb', 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
+      paint: { 'text-color': C.group, 'text-halo-color': C.halo, 'text-halo-width': 2 },
     });
 
     // Tapping a train: a generous hit area, since dots are small on a phone.
