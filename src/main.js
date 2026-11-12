@@ -174,7 +174,7 @@ setInterval(showPath, 2000);
 
 // ---- Help, with the map credits: the ? button next to Tilt ----
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
-// attribution guidelines want the credit seen without a tap, so the public version needs it visible again: PLAN.md.)
+// attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
 function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };

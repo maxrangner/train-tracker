@@ -1,0 +1,21 @@
+Spårad: a live map of Sweden's trains
+Copyright (C) 2026 maxrangner
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General
+Public License as published by the Free Software Foundation, version 3 of the License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details. The licence text is in the file LICENSE.
+
+If you run a changed version of this program for others to use over a network, the licence asks you to offer them
+your version's source code.
+
+Data and services used by the program, each under its own terms:
+- Train positions, timetables and stations: Trafikverket's open data (CC0).
+- Map data: (c) OpenStreetMap contributors, Open Database License.
+- Map tiles: OpenFreeMap, built on (c) OpenMapTiles.
+- Drawn with MapLibre GL JS (BSD 3-Clause) and three.js (MIT).
+
+Train companies' names and liveries belong to their owners. This project is not affiliated with any of them, nor
+with Trafikverket.

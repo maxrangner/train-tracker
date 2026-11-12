@@ -1,5 +1,8 @@
 {
   "name": "sparad",
+  "description": "Spårad: a live map of Sweden's trains, from Trafikverket's open data",
+  "license": "AGPL-3.0-only",
+  "author": "maxrangner",
   "private": true,
   "version": "0.1.0",
   "type": "module",
