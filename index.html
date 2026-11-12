@@ -2,7 +2,8 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- The page itself never zooms, only the map (Max, 2026-11-12: a pinch while loading zoomed the page). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Train map</title>
   <link rel="icon" href="data:,">
   <style>
@@ -40,6 +41,10 @@
     :root[data-theme="dark"] .maplibregl-ctrl-group .maplibregl-ctrl-icon { filter: invert(1); }
     [hidden] { display: none !important; }
     html, body { height: 100%; margin: 0; }
+    /* No page zoom by pinching anywhere (cards still scroll); the map takes every gesture from the first moment,
+       before the map library has started. */
+    html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }
+    #map { touch-action: none; }
     body { font: 13px/1.35 system-ui, sans-serif; color: var(--ink); }
     #map { position: fixed; inset: 0; }
 
