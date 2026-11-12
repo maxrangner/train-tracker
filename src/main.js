@@ -38,6 +38,7 @@ const labelFor = r => label(r.number, minutesOf(r));
 // (silent for 2 minutes, or no data at all) is drawn grey and faded.
 const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
+  company: lateness.brand(r.id) ?? '',
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).

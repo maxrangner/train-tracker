@@ -2,7 +2,8 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
-import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM, TOY, TOY_PX } from './trains-3d.js';
+import { createTrainLayer, MIN_ZOOM as MODEL_ZOOM, TOY } from './trains-3d.js';
+import { settings } from './settings.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -81,7 +82,12 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       source: 'trains',
       minzoom: 6,
       layout: {
-        'text-field': ['get', 'label'],
+        // From the zoom where the trains are drawn as models, the company goes above the number and lateness
+        // (Max, 2026-11-12: a label is company, train number and on time). Further out just the number.
+        'text-field': ['step', ['zoom'], ['get', 'label'], MODEL_ZOOM,
+          ['case', ['!=', ['get', 'company'], ''],
+            ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
+            ['get', 'label']]],
         'text-font': ['Noto Sans Bold'],
         'text-size': 11,
         'text-offset': [0, 1.1],
@@ -94,7 +100,7 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
     // Tapping a train: a generous hit area, since dots are small on a phone.
     // With the toy trains a tap anywhere on the toy counts (half its length round its middle); the nearest wins.
     map.on('click', (e) => {
-      const pad = TOY && map.getZoom() >= MODEL_ZOOM ? Math.max(12, TOY_PX / 2) : 12;
+      const pad = TOY && map.getZoom() >= MODEL_ZOOM ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
@@ -232,7 +238,8 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       }
       selMarker.setLngLat([place.lon, place.lat]);
       if (!selShown) { selMarker.addTo(map); selShown = true; }
-      if (props.label !== selText) selLabel.textContent = selText = props.label;
+      const text = props.company && map.getZoom() >= MODEL_ZOOM ? `${props.company}\n${props.label}` : props.label;
+      if (text !== selText) selLabel.textContent = selText = text;
       const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= MODEL_ZOOM ? ' model' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
     },
