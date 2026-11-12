@@ -37,13 +37,20 @@ const windscreenGeometry = (() => {
   const n = [-d[1] / len * 0.06, d[0] / len * 0.06].map(x => -x);   // outward from the slope
   const p = t => [a[0] + d[0] * t, a[1] + d[1] * t];
   const p1 = p(0.08), p2 = p(0.62);
-  return profile([p1, p2, [p2[0] + n[0], p2[1] + n[1]], [p1[0] + n[0], p1[1] + n[1]]], W - 0.5);
+  // Lifted 2 cm off the slope, so it doesn't lie in the nose's own surface (it flickered, Max 2026-11-12).
+  const lift = q => [q[0] + n[0] * 0.33, q[1] + n[1] * 0.33];
+  return profile([lift(p1), lift(p2), [p2[0] + n[0], p2[1] + n[1]], [p1[0] + n[0], p1[1] + n[1]]], W - 0.5);
 })();
 
+// order: which part wins where two parts lie on (almost) the same surface: higher on top (body and nose 0; skirt,
+// window band and roof 1; stripe, pillars and windscreen 2; lights 3). Without it they flickered (Max, 2026-11-12).
 const materials = new Map();
-const mat = (color) => {
-  if (!materials.has(color)) materials.set(color, new THREE.MeshLambertMaterial({ color, flatShading: true }));
-  return materials.get(color);
+const mat = (color, order = 0) => {
+  const key = `${color}|${order}`;
+  if (!materials.has(key)) materials.set(key, new THREE.MeshLambertMaterial(order
+    ? { color, flatShading: true, polygonOffset: true, polygonOffsetFactor: -order, polygonOffsetUnits: -2 * order }
+    : { color, flatShading: true }));
+  return materials.get(key);
 };
 
 // colours: { body, skirt, band, roof, nose, windscreen, stripe } (any left out fall back to sensible ones;
@@ -68,23 +75,23 @@ export function buildTrain({ colours = {}, cars = 3, carLength = 25 } = {}) {
 
     const body = new THREE.Mesh(box(W, bodyLen, TOP - FLOOR, 0.25), mat(c.body));
     body.position.set(0, mid, (FLOOR + TOP) / 2);
-    const skirt = new THREE.Mesh(box(W + 0.02, bodyLen, 0.75), mat(c.skirt));
+    const skirt = new THREE.Mesh(box(W + 0.02, bodyLen, 0.75), mat(c.skirt, 1));
     skirt.position.set(0, mid, FLOOR + 0.375);
-    const band = new THREE.Mesh(box(W + 0.04, bodyLen - 1.2, 1.0), mat(c.band));
+    const band = new THREE.Mesh(box(W + 0.04, bodyLen - 1.2, 1.0), mat(c.band, 1));
     band.position.set(0, mid, 2.75);
-    const roof = new THREE.Mesh(box(W - 0.5, bodyLen - 0.4, 0.3, 0.12), mat(c.roof));
+    const roof = new THREE.Mesh(box(W - 0.5, bodyLen - 0.4, 0.3, 0.12), mat(c.roof, 1));
     roof.position.set(0, mid, TOP + 0.1);
     car.add(body, skirt, band, roof);
     // An optional thin stripe along the side, just under the windows (e.g. Öresundståg's orange line).
     if (c.stripe) {
-      const stripe = new THREE.Mesh(box(W + 0.05, bodyLen, 0.22), mat(c.stripe));
+      const stripe = new THREE.Mesh(box(W + 0.05, bodyLen, 0.22), mat(c.stripe, 2));
       stripe.position.set(0, mid, 2.0);
       car.add(stripe);
     }
     // Pillars between the windows: thin strips of body colour across the band, about every 2.6 m.
     const bandLen = bodyLen - 1.2, n = Math.max(2, Math.round(bandLen / 2.6));
     for (let k = 1; k < n; k++) {
-      const pillar = new THREE.Mesh(box(W + 0.07, 0.35, 1.0), mat(c.body));
+      const pillar = new THREE.Mesh(box(W + 0.07, 0.35, 1.0), mat(c.body, 2));
       pillar.position.set(0, mid - bandLen / 2 + k * bandLen / n, 2.75);
       car.add(pillar);
     }
@@ -98,10 +105,10 @@ export function buildTrain({ colours = {}, cars = 3, carLength = 25 } = {}) {
     for (const end of [first && 1, last && -1].filter(Boolean)) {
       const nose = new THREE.Group();
       nose.add(new THREE.Mesh(noseGeometry, mat(c.nose)),
-        new THREE.Mesh(noseSkirt, mat(c.skirt)),
-        new THREE.Mesh(windscreenGeometry, mat(c.windscreen)));
+        new THREE.Mesh(noseSkirt, mat(c.skirt, 1)),
+        new THREE.Mesh(windscreenGeometry, mat(c.windscreen, 2)));
       for (const x of [-0.95, 0.95]) {
-        const l = new THREE.Mesh(box(0.45, 0.08, 0.3), mat(c.light));
+        const l = new THREE.Mesh(box(0.45, 0.08, 0.3), mat(c.light, 3));
         l.position.set(x, NOSE + 0.02, 1.95);
         nose.add(l);
       }
