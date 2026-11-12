@@ -5,6 +5,7 @@ import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
+import { pathOf, nearestIndex } from './path.js';
 import { settings } from './settings.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
@@ -25,6 +26,9 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
   return null;
 });
 const trains = createTrains();
+let net = null;
+netReady.then((n) => { net = n; });
+let shownPath = null;   // { id, path, places }: the open train's path
 if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
 // Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
 // and it waits before that stop rather than arriving in the drawing.
@@ -52,6 +56,22 @@ const panel = createPanel(document.getElementById('panel'), {
   onSelect(id) {
     map.select(id);
     if (!id) { map.unfollow(); map.unpad(); }
+    if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
+  },
+  // The open train's whole path, start to finish (Max, 2026-11-12): travelled grey, ahead blue.
+  onRoute(id, route) {
+    const places = [];
+    for (const s of route.stops) {
+      const st = stations.get(s.station);
+      if (!st || st.lon === null) continue;
+      const last = places[places.length - 1];
+      if (last && last.sig === s.station) { last.stop ||= s.advertised; last.actual ||= s.actual; continue; }
+      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual });
+    }
+    if (places.length < 2) return;
+    shownPath = { id, path: pathOf(places, net), places };
+    showPath();
+    if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
   },
   onFollow(id, on) {
     if (on) follow(id); else map.unfollow();
@@ -109,6 +129,19 @@ function openTrain(id, { go = false } = {}) {
   if (p) following.then(() => map.goTo(p, 13));
   return true;
 }
+
+// Where the open train is along its path: on the map, its drawn place; otherwise after the last place it was
+// reported at (or before the start).
+function showPath() {
+  if (!shownPath) return;
+  const { path, places } = shownPath;
+  const here = placeNow(shownPath.id);
+  let split = 0;
+  if (here) split = nearestIndex(path, here);
+  else places.forEach((p, i) => { if (p.actual) split = path.at[i]; });
+  map.setPath(path, split);
+}
+setInterval(showPath, 2000);
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -265,7 +298,7 @@ const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
 
 // The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
 function statusLine(st, noData) {
-  if (!st) return 'No longer on the map (nothing from it for 15 minutes).';
+  if (!st) return 'Not on the map right now (not started yet, done, or nothing from it for 15 minutes).';
   if (noData) return `No data from Trafikverket since ${clock(lastDataAt)}.`;
   if (st.syncing) return 'Catching up with its latest report (fast-forward).';
   const quiet = st.gpsSilentFor >= 60 ? `No GPS for ${mins(st.gpsSilentFor)}` : null;

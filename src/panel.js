@@ -9,18 +9,21 @@ const off = (planned, at) => {
 };
 
 // onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): the Follow button was pressed.
-export function createPanel(el, { stationName, onSelect, onFollow }) {
+// onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
+export function createPanel(el, { stationName, onSelect, onFollow, onRoute }) {
   let openId = null;
   let following = false;
+  let canFollow = true;   // false for a train that isn't on the map
 
   // The top line: the train's label, the Follow button (pressed while the camera follows the train) and ×.
   const head = label =>
     `<div class="panel-head"><strong>${label}</strong><span class="panel-buttons">` +
-    `<button class="panel-follow" type="button" aria-pressed="${following}">${following ? 'Following' : 'Follow'}</button>` +
+    (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${following ? 'Following' : 'Follow'}</button>` : '') +
     `<button class="panel-close" type="button" aria-label="Close">×</button></span></div>`;
   function wireHead() {
     el.querySelector('.panel-close').onclick = close;
-    el.querySelector('.panel-follow').onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
+    const f = el.querySelector('.panel-follow');
+    if (f) f.onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
   }
   function setFollowing(on) {
     following = on;
@@ -39,10 +42,10 @@ export function createPanel(el, { stationName, onSelect, onFollow }) {
   async function open(train, { follow = true } = {}) {
     openId = train.id;
     following = follow;   // opening a train on the map starts following it (main.js)
+    canFollow = follow;
     onSelect?.(train.id);
     el.hidden = false;
     el.innerHTML = head(train.label) + `<p class="panel-note">Loading the route…</p>`;
-    if (!follow) el.querySelector('.panel-follow').hidden = true;
     wireHead();
 
     let route;
@@ -53,6 +56,7 @@ export function createPanel(el, { stationName, onSelect, onFollow }) {
       return;
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
+    onRoute?.(train.id, route);
 
     // One line per passenger stop: arrival and departure at the same station merged (they can come in either
     // order when both have the same planned minute).

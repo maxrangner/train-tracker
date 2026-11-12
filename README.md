@@ -41,6 +41,7 @@ While the map is private the key is built into the page; the public version will
 - **Top**: the ☰ menu button, a short status line (number of trains and `live` / `reconnecting` / `every 10 s`, red when something is wrong) and Tilt. The main screen stays clean (Max, 2026-11-12).
 - **The menu (☰)**: search for a train number (trains on the map, and today's timetable for the whole number) or a station (the 720 passenger stations; "goteborg" finds Göteborg C). Picking a train flies to it and follows it; a train not on the map opens its stops. Also the full status line and the rail line switch (Trafikverket / OpenStreetMap / none).
 - **Stations**: passenger stations show as small rings from zoom 9, their names from zoom 11. Tap one (or pick it in the search) for its board: the next departures or arrivals (`boardRows` in `src/settings.js`, 12), with new times in red, cancelled trains and tracks, refreshed every 30 s. Tap a row to open that train.
+- **A train's path**: an open train (tapped, searched or picked on a board) shows its whole path along the rails, start to finish: travelled grey, ahead blue, its stops as rings. A train not on the map (not started yet, or done) shows all of its path.
 
 ## What is where
 - `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s, and tries the stream again every 5 minutes), passings, a train's route, the planned routes of many trains, stations and their places.
@@ -53,6 +54,7 @@ While the map is private the key is built into the page; the public version will
 - `src/lateness.js`: minutes off timetable per train; the label text.
 - `src/menu.js`: the menu: search for trains and stations, the full status line, the rail line switch.
 - `src/board.js`: a station's board (departures and arrivals).
+- `src/path.js`: a train's path along the rails from its timetable places; where along it the train is.
 - `src/panel.js`: the panel for a tapped train.
 - `src/settings.js`: the look settings in one place (toy or real size, toy size, from which zoom); defaults, or from the address.
 - `src/toy-trains.js`: the toy trains: one flexible shape set per train model (X61, Regina, X2000, Rc ...).
