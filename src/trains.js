@@ -219,7 +219,7 @@ export function createTrains(options = {}) {
     return { cap: ext?.stopAt ?? Infinity,
       o: { stood: tr.stood, frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, resent: 0, spikes: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { repeats: 0, resent: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -277,6 +277,16 @@ export function createTrains(options = {}) {
     if (!repeat) tr.seen.set(key, r.time);
     if (tr.seen.size > 300) for (const [k, t] of tr.seen) if (r.time - t > 10 * 60000) tr.seen.delete(k);
     if (sentAt !== undefined && !repeat && r.time - sentAt < 10 * 60000 && metres(last, r) >= STILL_M) { counts.resent++; return; }
+    // A held leap (faster than any train over a shorter distance than a jump, see below): kept when this report
+    // carries on from it, dropped as a spike when this one comes back between.
+    if (tr.pending?.leap) {
+      const p = tr.pending;
+      tr.pending = null;
+      if (metres(last, r) >= metres(last, p) - 50 && !isJump(p, r)) { counts.leapsKept++; append(tr, p); }
+      else counts.spikes++;
+      tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
+      return take(tr, r);
+    }
     if (tr.pending) {
       const p = tr.pending;
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
@@ -307,6 +317,14 @@ export function createTrains(options = {}) {
     }
     tr.against = 0;
     if (isJump(last, r)) { tr.pending = r; counts.jumpsHeld++; return; }
+    // A leap: faster than any train (JUMP_KMH) but shorter than a jump, and over 500 m further than the train's own
+    // recent speed takes it (with 15 s to spare: report times are rough, 360 m "in 1 s" happens with good reports).
+    // Held until the next report says whether the train is really there; a drawn train fast-forwarding to a bad fix
+    // ran past stations (17614, 2026-11-12 15:47: 1.6 km ahead while crawling; 590 at 07:07: 900 m in 2 s).
+    // Kept, it is taken in as a normal report (no jump).
+    if (d > 300 && kmhBetween(last, r) > JUMP_KMH && d > coastSpeed(h) * ((r.time - last.time) / 1000 + 15) + 500) {
+      tr.pending = { ...r, leap: true }; counts.leapsHeld++; return;
+    }
     append(tr, r);
   }
   const isJump = (a, b) => metres(a, b) > JUMP_FAR_M && kmhBetween(a, b) > JUMP_KMH;
