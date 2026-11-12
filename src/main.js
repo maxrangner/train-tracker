@@ -86,6 +86,8 @@ const map = createMap('map', {
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
   getTrains3d: () => frameTrains,
+  // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
+  alongTrack: (id, d) => trains.along(id, d),
   // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it (a tap that only
   // closed the menu does nothing more).
   onTrainTap(id) {
