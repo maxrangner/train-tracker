@@ -2,10 +2,11 @@
 // the drawn speed with the speed the train itself reported.
 // Run (with `npm run dev` going): node tools/glide-check.mjs [wait seconds=40]
 import puppeteer from 'puppeteer-core';
+import { BROWSER_PATH } from './lib/browser.mjs';
 
 const wait = Number(process.argv[2] ?? 40);
 const browser = await puppeteer.launch({
-  executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  executablePath: BROWSER_PATH,
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });

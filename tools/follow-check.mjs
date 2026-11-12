@@ -4,6 +4,7 @@
 // Run (with `npm run dev` going): node tools/follow-check.mjs [--view 12/59.33/18.06] [--size 400x800] [--wait 25] [--fastest]
 // --fastest taps the fastest-moving train on screen instead of the one nearest the middle.
 import puppeteer from 'puppeteer-core';
+import { BROWSER_PATH } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filter(Boolean)
@@ -13,7 +14,7 @@ const [width, height] = String(args.size ?? '400x800').split('x').map(Number);
 const sleep = s => new Promise(r => setTimeout(r, s * 1000));
 
 const browser = await puppeteer.launch({
-  executablePath: 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  executablePath: BROWSER_PATH,
   headless: true,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
 });
@@ -119,7 +120,7 @@ await page.screenshot({ path: 'shots/follow-2.png' });
 await page.click('.panel-follow');
 await watch('after pressing Follow', 4);
 await page.screenshot({ path: 'shots/follow-3.png' });
-await page.click('.panel-close');
+await page.click('#panel .panel-close');   // the train card's × (Help and Settings have one too)
 await sleep(1);
 console.log(`after × : panel ${await page.$eval('#panel', el => el.hidden ? 'hidden' : 'open')}, padding`,
   await page.evaluate(() => JSON.stringify(window.__map.getPadding())));

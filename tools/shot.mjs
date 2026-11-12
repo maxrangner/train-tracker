@@ -11,7 +11,7 @@ const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filt
 const wait = Number(args.wait ?? 25);
 const out = args.out ?? 'shots/shot.png';
 const [width, height] = String(args.size ?? '900x1100').split('x').map(Number);
-const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+import { BROWSER_PATH as EDGE } from './lib/browser.mjs';
 
 const browser = await puppeteer.launch({
   executablePath: EDGE,
