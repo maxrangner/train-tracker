@@ -167,7 +167,8 @@ for (let T = start; T < end; T += STEP) {
     // without GPS: once a newer position is in, the train follows that (it may pass the stop with it). Counted apart
     // when the train's own data went back on itself within 5 minutes (two position sources taking turns 700 m apart
     // in the Nässjö yard, 2026-11-12: where the train really was isn't known, and a drawn train never goes back).
-    if (sim && sim.mode !== 'gps' && sim.pastLast > 0 && Number.isFinite(sim.stopAt)) {
+    // Since 2026-11-12 (Max): after a long silence a train may move on past a stop by its timetable; not counted.
+    if (sim && sim.mode !== 'gps' && sim.pastLast > 0 && Number.isFinite(sim.stopAt) && !sim.longSilent && !sim.assumed) {
       s.coastToStop++;
       if (sim.s > sim.stopAt + 200) {
         if (t - sim.bounced < 300000) { s.pastStopBounced++; } else
