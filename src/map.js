@@ -218,6 +218,11 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
       map.jumpTo({ center: [c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k] });
     },
+    // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
+    async goTo(place, minZoom) {
+      await ready;
+      map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true });
+    },
     // Take the room kept for the panel away again, without moving what is on screen.
     async unpad() {
       await ready;

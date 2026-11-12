@@ -35,12 +35,14 @@ export function createPanel(el, { stationName, onSelect, onFollow }) {
     onSelect?.(null);
   }
 
-  async function open(train) {
+  // follow: false for a train that isn't on the map (picked from the timetable search).
+  async function open(train, { follow = true } = {}) {
     openId = train.id;
-    following = true;   // opening a train starts following it (main.js)
+    following = follow;   // opening a train on the map starts following it (main.js)
     onSelect?.(train.id);
     el.hidden = false;
     el.innerHTML = head(train.label) + `<p class="panel-note">Loading the route…</p>`;
+    if (!follow) el.querySelector('.panel-follow').hidden = true;
     wireHead();
 
     let route;

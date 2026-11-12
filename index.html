@@ -51,6 +51,37 @@
     }
     #rail button[aria-pressed="true"], #tilt[aria-pressed="true"] { background: var(--accent); color: #fff; }
     #rail button:focus-visible, #tilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* The menu: the ☰ button opens a panel under the top bar. */
+    #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
+    #menu-button[aria-expanded="true"] { background: var(--accent); color: #fff; }
+    #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #menu {
+      position: fixed;
+      left: calc(var(--gap) + env(safe-area-inset-left, 0px));
+      top: calc(var(--gap) + 40px + env(safe-area-inset-top, 0px));
+      width: min(420px, calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+      max-height: calc(100% - 70px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      overflow: auto; background: #fff; padding: 10px 12px; box-sizing: border-box; z-index: 5;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .menu-head { display: flex; gap: 6px; align-items: center; }
+    #search { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+    #search:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+    .menu-close { font: inherit; font-size: 22px; line-height: 1; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+    #search-results { list-style: none; margin: 0; padding: 0; display: grid; }
+    #search-results:empty { display: none; }
+    #search-results button {
+      width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 9px 6px; border: 0; border-bottom: 1px solid var(--line);
+      background: transparent; color: var(--ink); cursor: pointer; display: flex; gap: 8px; align-items: baseline;
+    }
+    #search-results button span { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #search-results button:hover, #search-results button:focus-visible { background: #f0f4fa; outline: none; }
+    .menu-note { color: var(--muted); padding: 8px 6px; }
+    .menu-text { margin: 0; color: var(--ink); }
+    .menu-section { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+    .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    #rail { display: flex; flex-wrap: wrap; gap: 4px; }
+    #menu #rail button { font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); }
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
@@ -108,9 +139,27 @@
 <body>
   <div id="map"></div>
   <div id="top">
+    <button id="menu-button" class="card" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
     <div id="status" class="card">connecting…</div>
-    <div id="rail" class="card" role="group" aria-label="Rail lines"></div>
     <div class="card tilt-card"><button id="tilt" type="button" aria-pressed="false">Tilt</button></div>
+  </div>
+  <div id="menu" class="card" hidden>
+    <div class="menu-head">
+      <input id="search" type="search" placeholder="Train number or station" autocomplete="off" autocorrect="off"
+        spellcheck="false" enterkeyhint="search" aria-label="Search for a train number or a station">
+      <button class="menu-close" type="button" aria-label="Close the menu">×</button>
+    </div>
+    <ul id="search-results" aria-live="polite"></ul>
+    <div class="menu-section">
+      <div class="menu-label">Live data</div>
+      <p id="status-full" class="menu-text">connecting…</p>
+    </div>
+    <div class="menu-section">
+      <div class="menu-label">Rail lines</div>
+      <div id="rail" role="group" aria-label="Rail lines"></div>
+    </div>
   </div>
   <div id="panel" class="card" hidden></div>
   <script>

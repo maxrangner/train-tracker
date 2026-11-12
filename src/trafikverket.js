@@ -178,15 +178,40 @@ export async function fetchRoute(operationalNumber, departureDate) {
 
 // ---------- Stations ----------
 
-// Signature -> { name, lon, lat } for every station, e.g. "Cst" -> Stockholm C and its place.
+// Signature -> { sig, name, lon, lat, advertised } for every station, e.g. "Cst" -> Stockholm C and its place.
+// advertised: a station passengers use (720 of 1,757 on 2026-11-12; the rest are junctions, sidings and the like).
 export async function fetchStations() {
   const r = await ask(
     `<QUERY objecttype="TrainStation" namespace="rail.infrastructure" schemaversion="1.5">` +
-    `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedLocationName</INCLUDE><INCLUDE>Geometry.WGS84</INCLUDE></QUERY>`);
+    `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedLocationName</INCLUDE><INCLUDE>Geometry.WGS84</INCLUDE>` +
+    `<INCLUDE>Advertised</INCLUDE></QUERY>`);
   return new Map((r.TrainStation ?? []).map(s => {
     const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(s.Geometry?.WGS84 ?? '');
-    return [s.LocationSignature, { name: s.AdvertisedLocationName, lon: m ? Number(m[1]) : null, lat: m ? Number(m[2]) : null }];
+    return [s.LocationSignature, { sig: s.LocationSignature, name: s.AdvertisedLocationName,
+      lon: m ? Number(m[1]) : null, lat: m ? Number(m[2]) : null, advertised: s.Advertised === true }];
   }));
+}
+
+// ---------- A train number in today's timetable ----------
+
+// The trains with this public number running on this day (YYYY-MM-DD, Swedish time):
+// [{ key, operational, date, number, from, to, product }] (from/to are station signatures).
+export async function fetchTrainsByNumber(number, day) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" limit="200">` +
+    `<FILTER><EQ name="AdvertisedTrainIdent" value="${String(number).replace(/\D/g, '')}"/>` +
+    `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
+    `<INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
+    `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
+  const byKey = new Map();
+  for (const a of r.TrainAnnouncement ?? []) {
+    const key = trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime);
+    if (byKey.has(key)) continue;
+    byKey.set(key, { key, operational: a.OperationalTrainNumber, date: a.ScheduledDepartureDateTime.slice(0, 10),
+      number: a.AdvertisedTrainIdent, from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
+      product: a.ProductInformation?.[0]?.Description ?? null });
+  }
+  return [...byKey.values()];
 }
 
 // ---------- Planned routes ----------
