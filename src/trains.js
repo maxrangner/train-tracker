@@ -25,6 +25,16 @@ const AHEAD_M = 3000;                // the track ahead worked out for coasting 
 let NET = null;                      // the rail network, when given (createTrains({ net }))
 let ROUTES = null;                   // the planned routes (src/routes.js), when given
 const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop
+// A long silence: no new position for this long (Max, 2026-11-12, changing three earlier rules; measured on 18
+// running trains silent 11-29 min: missing from the map 27 % -> 0-1 %, 90 % within 8-9 km -> 4-9 km):
+//   - a train moves on past a planned stop by its timetable once the stop's expected time + 1 minute has passed
+//     (before: it waited before every unconfirmed stop, however long);
+//   - a train that stood still leaves at its planned departure (+ delay) from there (before: it stayed until new
+//     data);
+//   - a grey train keeps moving by its timetable, and stays on the map until its trip should be over (before:
+//     removed after MAX_AGE_MS).
+// 5 minutes was tried: late, crawling trains were sent past their station.
+const LONG_SILENCE_MS = 10 * 60 * 1000;
 const SILENT_MS = 10 * 60 * 1000;    // no position and no passing for this long: the train is shown as stale (grey)...
 const SILENT_NO_ROUTE_MS = 2 * 60 * 1000;   // ...or this long, for a train whose timetable is not known
 const FINISHED_MS = 2 * 60 * 1000;   // a train that arrived at the end of its trip is removed after this long quiet
@@ -87,9 +97,13 @@ function trackAhead(tr, now = 0) {
   if (!NET || !last.snap) return null;
   if (tr.ext?.last !== last || now - tr.ext.at > 10000) {
     const hd = coastHeading(h);
-    const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.reached) : null;
+    const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.assumed ? new Set([...(tr.reached ?? []), ...tr.assumed]) : tr.reached) : null;
     if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig) {
-      const poly = hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M, toward?.snap ?? null, PASSING_MAX_M);
+      // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
+      // straight distance (a far detour to a track that only happens to lie near the station is not the way).
+      const straight = toward?.snap ? metres(last, toward.snap) : 0;
+      const poly = hd === null || hd === undefined ? null
+        : NET.ahead(last.snap, hd, AHEAD_M, toward?.snaps ?? toward?.snap ?? null, Math.min(PASSING_MAX_M, 1.5 * straight + 2000));
       const reached = poly?.towardAt !== undefined;
       const stopAt = toward?.stop && reached ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
       // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).
@@ -139,7 +153,14 @@ function coastSpeed(h) {
   const last = h[h.length - 1], prev = h[h.length - 2];
   let v = 0;
   if (last.speed !== null && last.speed !== undefined) v = last.speed / 3.6;
-  else if (prev && !last.jump && last.time - prev.time < 60000) v = speedAround(h, h.length - 1, last.time);
+  else if (prev && !last.jump && last.time - prev.time < 60000) {
+    v = speedAround(h, h.length - 1, last.time);
+    // Not much faster than the speeds it reported just before: after a frozen position jumps on, the average over
+    // the jump is far too high (2556 at Stockholms södra 2026-11-12: 600 m "in 8 s" after standing; it left at
+    // 145 km/h). Trains that never report a speed keep the average.
+    const said = h.slice(-4, -1).map(e => e.speed).filter(x => x !== null && x !== undefined);
+    if (said.length) v = Math.min(v, Math.max(...said) / 3.6 + 5);
+  }
   return v < STAND_MS ? 0 : v;
 }
 
@@ -158,6 +179,7 @@ function targetAt(h, t, cap = Infinity, o = {}) {
   const last = h[h.length - 1];
   if (t >= last.time) {
     if (o.stood || o.frozen) return { s: last.s, v: 0, coasting: true, mode: o.stood ? 'stood' : 'stale' };
+    if (o.dwell) return { s: last.s, v: 0, coasting: true, mode: 'dwell' };
     const since = (t - last.time) / 1000, v = coastSpeed(h);
     const C = v > 0 ? COAST_MS / 1000 : 0;
     let s, sv, mode;
@@ -210,12 +232,36 @@ export function createTrains(options = {}) {
   const silentLimit = tr => (ROUTES?.knows(tr.latest.id) ? SILENT_MS : SILENT_NO_ROUTE_MS);
   const staleAt = (tr, t) => halted || t + DELAY_MS - tr.heard > silentLimit(tr);
   // What the target needs past the last report: whether it stood still, is stale, and its timetable (trackAhead).
+  // Dwell: a train whose last report is at a planned stop (within 300 m), and not moving fast there, stands until it
+  // is reported leaving, a new position shows it moved, or 2 minutes after its planned departure (+ delay) or its
+  // arrival, whichever is later (routes.dwellAt).
+  // Trains at platforms often send only exact repeats with no speed (taken as "no new position"), and were drawn
+  // driving through (bug hunt 2026-11-12: at Stockholms södra 16 of 26 that really stopped).
+  const dwellOf = (tr, t) => {
+    const last = tr.hist[tr.hist.length - 1];
+    if (!ROUTES || last.passing) return null;
+    if (tr.dwellFor !== last) {
+      tr.dwellFor = last;
+      tr.dwellInfo = last.speed !== null && last.speed !== undefined && last.speed > 10 ? null : ROUTES.dwellAt(tr.latest.id, last, last.time);
+    }
+    const dw = tr.dwellInfo;
+    return dw && t < dw.until && !ROUTES.departed(tr.latest.id, dw.sig) ? dw : null;
+  };
+  const longSilent = (tr, t) => t - tr.hist[tr.hist.length - 1].time > LONG_SILENCE_MS;
+  // A train that stood still, silent for long, leaves at its planned departure (+ delay) from where it stood.
+  const stoodReleased = (tr, t) => {
+    if (!ROUTES || !longSilent(tr, t)) return false;
+    const last = tr.hist[tr.hist.length - 1];
+    if (tr.depFor !== last) { tr.depFor = last; tr.depAt = ROUTES.departureNear(tr.latest.id, last); }
+    return tr.depAt !== null && t > tr.depAt + 30000;
+  };
   const aheadOf = (tr, t) => {
     const ext = trackAhead(tr, t);
     return { cap: ext?.stopAt ?? Infinity,
-      o: { stood: tr.stood, frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
+      o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dwellOf(tr, t)),
+        frozen: t + DELAY_MS - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, resent: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -262,7 +308,14 @@ export function createTrains(options = {}) {
     const repeat = tr.raw && tr.raw.lon === r.lon && tr.raw.lat === r.lat;
     tr.raw = r;
     if (!last) return append(tr, r);
-    if (repeat && !(r.speed !== null && r.speed !== undefined && r.speed < 2)) { counts.repeats++; return; }
+    // An exact repeat says nothing new (often a frozen GPS on a moving train), unless the train reports standing,
+    // or it is at a planned stop it hasn't been reported leaving: then it is standing at the platform (commuter
+    // trains send their dwell only as repeats with no speed; dropped, they were drawn driving through, 2026-11-12).
+    if (repeat && !(r.speed !== null && r.speed !== undefined && r.speed < 2)) {
+      const dw = ROUTES && !last.passing ? ROUTES.dwellAt(r.id, last, last.time) : null;
+      if (!dw || ROUTES.departed(r.id, dw.sig) || r.time > dw.until) { counts.repeats++; return; }
+      counts.dwellRepeats++;
+    }
     // An earlier position sent again (exactly the same coordinates as one this train sent within 10 minutes, but
     // not where it is now): an old fix re-sent, often with Speed 1 between new ones. Taken in, the drawn train
     // turned back to it (e.g. 2713 at Stockholms S, 2026-11-12 07:05: three re-sends of a place 400 m back; Max saw
@@ -273,11 +326,35 @@ export function createTrains(options = {}) {
     if (!repeat) tr.seen.set(key, r.time);
     if (tr.seen.size > 300) for (const [k, t] of tr.seen) if (r.time - t > 10 * 60000) tr.seen.delete(k);
     if (sentAt !== undefined && !repeat && r.time - sentAt < 10 * 60000 && metres(last, r) >= STILL_M) { counts.resent++; return; }
+    // A held leap (faster than any train over a shorter distance than a jump, see below): kept when this report
+    // carries on from it, dropped as a spike when this one comes back between.
+    if (tr.pending?.leap) {
+      const p = tr.pending;
+      tr.pending = null;
+      if (metres(last, r) >= metres(last, p) - 50 && !isJump(p, r)) { counts.leapsKept++; append(tr, p); }
+      else { counts.spikes++; tr.bounced = r.time; }
+      tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
+      return take(tr, r);
+    }
     if (tr.pending) {
       const p = tr.pending;
+      // A held jump that the next report comes back from (it lands between the last kept place and the jump) was a
+      // bad fix too (550 and 17614 at Nässjö, 2026-11-12: reports without a speed 2-5 km north, then back).
+      if (metres(last, r) < metres(last, p) - 50) { tr.pending = null; counts.jumpsDropped++; tr.bounced = r.time; tr.raw = null; tr.seen.delete(key); return take(tr, r); }
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
-      if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; }
+      if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; tr.bounced = r.time; }
       else { tr.pending = r; return; }
+    }
+    // A spike: the last kept report leapt ahead faster than any train (JUMP_KMH, but under JUMP_FAR_M, so it wasn't
+    // held), and this one comes back between the two. The leap was a bad fix: take it out and go on from here
+    // (e.g. 590, 2026-11-12 07:07:08: 900 m in 2 s, back 470 m 14 s later; the drawn train had chased it).
+    const prev = h[h.length - 2];
+    if (prev && !last.passing && !last.jump && metres(prev, last) > 300 && kmhBetween(prev, last) > JUMP_KMH &&
+        metres(prev, r) < metres(prev, last) - 50 && angle(headingOf(last, r), headingOf(prev, last)) > 120) {
+      h.pop();
+      counts.spikes++; tr.bounced = r.time;
+      tr.raw = null; tr.seen.delete(key);   // so this report isn't taken for a repeat of itself
+      return take(tr, r);
     }
     const d = metres(last, r);
     if (d < STILL_M) return append(tr, { ...r, lon: last.lon, lat: last.lat });
@@ -287,11 +364,19 @@ export function createTrains(options = {}) {
     const dir = (moving ? r.bearing : null) ?? coastHeading(h) ?? r.bearing;
     if (dir !== null && dir !== undefined && angle(headingOf(last, r), dir) > 120 && tr.against < 2) {
       tr.against++;
-      counts.against++;
+      counts.against++; tr.bounced = r.time;
       return;
     }
     tr.against = 0;
     if (isJump(last, r)) { tr.pending = r; counts.jumpsHeld++; return; }
+    // A leap: faster than any train (JUMP_KMH) but shorter than a jump, and over 500 m further than the train's own
+    // recent speed takes it (with 15 s to spare: report times are rough, 360 m "in 1 s" happens with good reports).
+    // Held until the next report says whether the train is really there; a drawn train fast-forwarding to a bad fix
+    // ran past stations (17614, 2026-11-12 15:47: 1.6 km ahead while crawling; 590 at 07:07: 900 m in 2 s).
+    // Kept, it is taken in as a normal report (no jump).
+    if (d > 300 && kmhBetween(last, r) > JUMP_KMH && d > coastSpeed(h) * ((r.time - last.time) / 1000 + 15) + 500) {
+      tr.pending = { ...r, leap: true }; counts.leapsHeld++; return;
+    }
     append(tr, r);
   }
   const isJump = (a, b) => metres(a, b) > JUMP_FAR_M && kmhBetween(a, b) > JUMP_KMH;
@@ -314,7 +399,16 @@ export function createTrains(options = {}) {
     const past = t >= last.time ? aheadOf(tr, t)
       : tr.sim && tr.sim.s > last.s ? { cap: aheadOf(tr, t).cap, o: {} } : { cap: Infinity, o: {} };
     const cap = past.cap;
-    const T = targetAt(h, t, cap, past.o);
+    let T = targetAt(h, t, cap, past.o);
+    // A train turning grey (stale) stops where it is drawn: its target is its last report, which a train moved on
+    // by its timetable has long passed, and going back there was a jump backwards (about 15 an hour, 2026-11-12).
+    if (T.mode === 'stale' && tr.sim && T.s < tr.sim.s) T = { ...T, s: tr.sim.s };
+    // Long silent and waiting before a planned stop past its expected time + 1 minute: take it as passed, and move
+    // on by the timetable towards the next one.
+    if (T.capped && tr.ext?.eta && tr.ext.sig && t > tr.ext.eta + 60000 && longSilent(tr, t)) {
+      (tr.assumed ??= new Set()).add(tr.ext.sig);
+      tr.ext.at = -Infinity;   // work out the way ahead again
+    }
     let sim = tr.sim;
     if (!sim) {
       tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(tr, T.s).heading ?? null, jumped: false };
@@ -342,9 +436,11 @@ export function createTrains(options = {}) {
     else if (e >= 0) want = Math.min(T.v + e / TAU_S, T.v * 1.3 + 5);   // catching up stays gentle; far behind syncs
     else {
       // Ahead of the target. Report times are rough, so a moving target lurches; slow down (to 40 % at most, 10 s
-      // ahead: half speed) rather than stop. Only when more than 30 s ahead, or the target stands, wait for it.
+      // ahead: half speed) rather than stop, however far ahead: the real train is moving, so the drawn one does too
+      // (2026-11-12: waiting for it, when more than 30 s ahead after moving by the timetable, was 70-75 % of all
+      // moving trains drawn standing). Only when the target stands, wait for it.
       const aheadS = -e / Math.max(T.v, 0.1);
-      want = T.v > 0 && aheadS < 30 ? T.v * Math.max(0.4, 1 - aheadS / 20) : Math.max(0, T.v + e / TAU_S);
+      want = T.v > 0 ? T.v * Math.max(0.4, 1 - aheadS / 20) : Math.max(0, T.v + e / TAU_S);
     }
     // Never faster than lets it slow to the target's speed by the time it gets there (with braking to spare), so
     // it doesn't shoot past: into a stop, or after a fast-forward.
@@ -460,7 +556,9 @@ export function createTrains(options = {}) {
         }
         tr.latest = r;
         tr.heard = Math.max(tr.heard, r.time);
+        const before = tr.hist.length;
         take(tr, r);
+        if (tr.hist.length !== before) tr.assumed = null;   // a new position: only confirmed stops count as passed
         if (tr.hist.length) tr.stood = stoodStill(tr);
         while (tr.hist.length > 2 && tr.hist[1].time < now - KEEP_MS) tr.hist.shift();
         if (r.time > lastReport) lastReport = r.time;
@@ -473,7 +571,9 @@ export function createTrains(options = {}) {
       let changed = false;
       for (const [id, t] of byId) {
         // Gone after MAX_AGE_MS with nothing from it; sooner (FINISHED_MS) when it has arrived at the end of its trip.
-        if (t.heard < now - MAX_AGE_MS || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; }
+        // A silent train still on its trip by the timetable stays (grey) until the trip should be over.
+        const onTrip = ROUTES && ROUTES.tripEnd(id) > now && !ROUTES.finished(id);
+        if ((t.heard < now - MAX_AGE_MS && !onTrip) || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; }
       }
       return changed;
     },
@@ -544,7 +644,8 @@ export function createTrains(options = {}) {
       const ext = tr.ext?.last === tr.hist[tr.hist.length - 1] ? tr.ext : null;
       const past = simTime >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simTime) : { cap: Infinity, o: {} };
       const T = targetAt(tr.hist, simTime, past.cap, past.o);
-      const out = { stopAt: ext?.stopAt ?? Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
+      // bounced: when this train's data last went back on itself (a report against its way, a spike, a dropped jump).
+      const out = { stopAt: ext?.stopAt ?? Infinity, assumed: tr.assumed?.size ?? 0, longSilent: longSilent(tr, simTime), bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
         mode: T.mode, stood: tr.stood,
         // for checks: the fading offset (m) and the direction the track ahead is laid in

@@ -33,6 +33,16 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     }
     return (e.locs = locs);
   }
+  // Every track within 150 m of a station (rail-net.js snapsNear), for the way to it; its nearest one if none.
+  const tracks = new Map();
+  function placesOf(sig) {
+    if (!tracks.has(sig)) {
+      const st = stations.get(sig), near = st && net ? net.snapsNear(st, 150) : [];
+      const one = placeOf(sig);
+      tracks.set(sig, near.length ? near : one ? [one] : null);
+    }
+    return tracks.get(sig);
+  }
   function placeOf(sig) {
     if (!snaps.has(sig)) {
       const st = stations.get(sig);
@@ -42,8 +52,8 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
   }
 
   return {
-    setStations(map) { stations = map; snaps.clear(); },
-    setNet(n) { net = n; snaps.clear(); },
+    setStations(map) { stations = map; snaps.clear(); tracks.clear(); },
+    setNet(n) { net = n; snaps.clear(); tracks.clear(); },
     // rows: [{ key (trainKey), sig, activity ('Ankomst' / 'Avgang'), planned (ms) }]
     add(rows) {
       for (const r of rows) {
@@ -57,11 +67,51 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     addPassings(list) {
       for (const p of list) {
         const e = entry(p.key);
+        if (p.activity === 'Avgang') (e.departed ??= new Set()).add(p.station);
         if (e.passed && e.passed.time > p.time) continue;
         e.passed = { sig: p.station, time: p.time, activity: p.activity ?? null };
         e.delay = p.minutes ?? e.delay;
       }
     },
+    // A planned stop (with an arrival and a departure) within 300 m of place (platforms are long: trains measured
+    // standing up to 300 m from the station's point) that the train hasn't been reported
+    // leaving: { sig, until }, or null. For the dwell rule in trains.js. until: 2 minutes after the later of its
+    // planned departure (+ latest delay) and `at` (when the train was there); the reported departure normally ends
+    // the dwell first, and the known delay lags (2556 at Stockholms södra 2026-11-12 was a minute later than it).
+    dwellAt(key, place, at = 0) {
+      const e = byKey.get(key);
+      if (!e || !place) return null;
+      let best = null, bestD = 300;
+      for (const l of locsOf(e)) {
+        const st = stations.get(l.sig);
+        if (!st || l.arr === null || l.dep === null) continue;
+        const d = metres(place, st);
+        if (d < bestD) { bestD = d; best = l; }
+      }
+      return best ? { sig: best.sig, until: Math.max(best.dep + e.delay * 60000, at) + 120000 } : null;
+    },
+    // The planned departure (+ latest delay) from the timetable location within 300 m of place, or null.
+    departureNear(key, place) {
+      const e = byKey.get(key);
+      if (!e || !place) return null;
+      let best = null, bestD = 300;
+      for (const l of locsOf(e)) {
+        const st = stations.get(l.sig);
+        if (!st || l.dep === null) continue;
+        const d = metres(place, st);
+        if (d < bestD) { bestD = d; best = l; }
+      }
+      return best ? best.dep + e.delay * 60000 : null;
+    },
+    // When the trip should end: its last planned time + latest delay (0: not known).
+    tripEnd(key) {
+      const e = byKey.get(key);
+      const locs = e ? locsOf(e) : [];
+      const l = locs[locs.length - 1];
+      return l ? (l.arr ?? l.dep) + e.delay * 60000 : 0;
+    },
+    // Has the train been reported leaving this location?
+    departed(key, sig) { return Boolean(byKey.get(key)?.departed?.has(sig)); },
     // The planned time of the train's last known location (0: nothing known yet), to know when to ask for more.
     until(key) { return byKey.get(key)?.until ?? 0; },
     // Has the train finished its trip? Its latest reported passing is its arrival where its timetable ends (a
@@ -77,7 +127,7 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     // Where it last passed: { sig, time, activity } or null.
     lastPassing(key) { return byKey.get(key)?.passed ?? null; },
     // A station's place on the track (snapped), or null.
-    placeOf,
+    placeOf, placesOf,
     get count() { return byKey.size; },
     // Where train `key`, at `place` going `heading`, is headed next: its next planned stop ahead, else the next
     // location ahead. { sig, stop, snap, eta (expected arrival, ms: planned + its latest delay; null if not planned) }
@@ -99,7 +149,7 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       const snap = placeOf(pick.sig);
       if (!snap) return null;
       const planned = pick.arr ?? pick.dep;
-      return { sig: pick.sig, stop: pick.stop, snap, eta: planned === null ? null : planned + e.delay * 60000 };
+      return { sig: pick.sig, stop: pick.stop, snap, snaps: placesOf(pick.sig), eta: planned === null ? null : planned + e.delay * 60000 };
     },
   };
 }
