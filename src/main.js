@@ -3,7 +3,8 @@ import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, RAIL_SOURCES } from './map.js';
 import { createPanel } from './panel.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, hasKey } from './trafikverket.js';
+import { createMenu } from './menu.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now } from './clock.js';
@@ -29,7 +30,7 @@ const routes = createRoutes();
 trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
-let stations = new Map();   // signature -> { name, lon, lat }
+let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
@@ -58,15 +59,55 @@ const map = createMap('map', {
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
   getTrains3d: () => frameTrains,
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it.
+  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it (a tap that only
+  // closed the menu does nothing more).
   onTrainTap(id) {
-    const r = id && trains.get(id);
-    if (r) {
-      panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
-      follow(id);
-    } else {
-      panel.close();
-    }
+    if (menu.justClosed) return;
+    if (!openTrain(id)) panel.close();
+  },
+});
+
+// Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
+function openTrain(id, { go = false } = {}) {
+  const r = id && trains.get(id);
+  if (!r) return false;
+  panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
+  const following = follow(id);
+  const p = go && placeNow(id);
+  if (p) following.then(() => map.goTo(p, 13));
+  return true;
+}
+
+// ---- The menu: search for a train number or a station ----
+const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
+const menu = createMenu({
+  button: document.getElementById('menu-button'),
+  el: document.getElementById('menu'),
+  findTrains: digits => trains.reports()
+    .filter(r => String(r.number).startsWith(digits))
+    .sort((a, b) => String(a.number).length - String(b.number).length || Number(a.number) - Number(b.number))
+    .map(r => ({ id: r.id, operational: r.operational, date: r.date, number: r.number, company: lateness.brand(r.id) })),
+  findStations(text) {
+    const q = fold(text);
+    return [...stations.values()]
+      .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
+      .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
+  },
+  async searchTimetable(number) {
+    const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+    return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to) }));
+  },
+  onPickTrain(t) {
+    if (t.onMap && openTrain(t.id, { go: true })) return;
+    // Not on the map (not started yet, or done): its stops in the panel.
+    map.unfollow();
+    panel.open({ id: t.id, operational: t.operational, date: t.date, label: String(t.number) }, { follow: false });
+  },
+  async onPickStation(st) {
+    if (panel.openId) panel.close();
+    map.unfollow();
+    await map.unpad();
+    map.goTo(st, 13);
   },
 });
 
@@ -196,6 +237,7 @@ if (hasKey && !replay) {
 const MODE_TEXT = { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped',
   replay: 'replay' };
 const statusEl = document.getElementById('status');
+const statusFullEl = document.getElementById('status-full');
 
 const clock = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
@@ -224,7 +266,11 @@ setInterval(() => {
   if (noData && !trains.halted) trains.setHalted(true);
   trains.prune(t);
   const ago = trains.lastReport ? Math.max(0, Math.round((t - trains.lastReport) / 1000)) : null;
-  statusEl.textContent =
+  // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
+  const mode = `${MODE_TEXT[status.positions] ?? status.positions}${replay ? ` ${new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  statusEl.textContent = `${trains.count} trains · ` +
+    (noData ? `no data since ${clock(lastDataAt)}` : status.error ? status.error : mode);
+  statusFullEl.textContent =
     `${trains.count} trains · ` +
     (noData ? `no data since ${clock(lastDataAt)}` : ago === null ? 'no report yet' : `last report ${ago} s ago`) +
     ` · ${MODE_TEXT[status.positions] ?? status.positions}` +
