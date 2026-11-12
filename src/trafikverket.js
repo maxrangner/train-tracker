@@ -156,7 +156,7 @@ export async function fetchRoute(operationalNumber, departureDate) {
     `<EQ name="ScheduledDepartureDateTime" value="${departureDate.slice(0, 10)}"/></FILTER>` +
     `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +
     `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE>` +
-    `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE>` +
+    `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>TrackAtLocation</INCLUDE>` +
     `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
     `</QUERY>`);
   const rows = r.TrainAnnouncement ?? [];
@@ -172,6 +172,7 @@ export async function fetchRoute(operationalNumber, departureDate) {
       estimated: a.EstimatedTimeAtLocation ? Date.parse(a.EstimatedTimeAtLocation) : null,
       actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null,
       canceled: a.Canceled === true,
+      track: a.TrackAtLocation ?? '',    // the platform track, e.g. "3" ('' when not given)
     })),
   };
 }
