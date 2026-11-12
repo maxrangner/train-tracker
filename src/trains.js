@@ -67,9 +67,13 @@ const ahead = (p, h, d) => ({
 
 // The direction of travel at the end of the path: the last real movement (along its route, when it has one),
 // else the train's own Bearing.
+// A movement must be over TURN_EVIDENCE_M to count: a standing train's GPS wobbles 5-10 m either way, and taken as its
+// direction it turned the track ahead round and the drawn train slid back 100 m or more (Max, 2026-11-12: U-turns on
+// the line; 2857 at Kallhäll).
+const TURN_EVIDENCE_M = 20;
 function coastHeading(h) {
   for (let i = h.length - 1; i > 0 && i >= h.length - 6; i--) {
-    if (h[i].jump || h[i].s - h[i - 1].s <= 5) continue;
+    if (h[i].jump || h[i].s - h[i - 1].s <= TURN_EVIDENCE_M) continue;
     return h[i].route ? polyAt(h[i].route, h[i].s - h[i - 1].s).heading : headingOf(h[i - 1], h[i]);
   }
   return h.at(-1).bearing;
@@ -543,6 +547,8 @@ export function createTrains(options = {}) {
       const out = { stopAt: ext?.stopAt ?? Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
         mode: T.mode, stood: tr.stood,
+        // for checks: the fading offset (m) and the direction the track ahead is laid in
+        offM: Math.hypot(sim.off.lon * Math.cos(tr.hist[0].lat * R), sim.off.lat) * 111195, ahead: coastHeading(tr.hist),
         target: T.inJump ? 'jump' : T.capped ? 'waiting before a stop' : T.coasting ? T.mode : T.v > 0 ? 'moving' : 'standing' };
       sim.jumped = false;
       return out;

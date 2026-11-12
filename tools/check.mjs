@@ -13,6 +13,8 @@ const CHECKS = [
   ['offTrack99M', v => v === null || v <= 1, '99 % of drawn trains further than 1 m from a track'],
   // U-turns drawn beyond the data's own (2026-11-12, after ignoring re-sent old positions: 216, 215 and 181 in the
   // hour-long rush recordings, from 220, 222 and 184): must not grow again.
+  // Drawn moving against the real train, both moving, 3 s or more (2026-11-12: 1, 5 and 1 in the rush recordings).
+  ['wrongWay', v => v <= 10, 'more than 10 times drawn against the real train'],
   ['extraTurnBacks', v => v <= 250, 'more than 250 U-turns drawn beyond the data’s own'],
 ];
 
@@ -33,7 +35,7 @@ for (const f of recordings) {
   const bad = CHECKS.filter(([k, ok]) => !ok(r[k]));
   console.log(`${bad.length ? 'FAIL' : 'ok  '} ${f} (${r.minutes} min${r.routes ? `, ${r.routes} routes` : ''}): ` +
     `frozen ${r.frozenPct} %, ${r.stopsPerMin} stops/min, 90 % within ${r.lag90S} s, track 99 % ${r.offTrack99M} m, ` +
-    `grey ${r.greyPct} %, turn-backs ${r.turnBacks} (data ${r.truthTurnBacks}), past stop ${r.pastStop}, moved after standing ${r.movedAfterStanding}`);
+    `grey ${r.greyPct} %, turn-backs ${r.turnBacks} (data ${r.truthTurnBacks}), wrong way ${r.wrongWay}, past stop ${r.pastStop}, moved after standing ${r.movedAfterStanding}`);
   for (const [k, , why] of bad) console.log(`     ${why}: ${k} = ${r[k]}`);
   failed += bad.length ? 1 : 0;
 }

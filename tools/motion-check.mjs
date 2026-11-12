@@ -89,10 +89,11 @@ const feed = (trains, upTo, i, skip) => {
   return i;
 };
 
-const s = { moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
+const s = { wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
   syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
+const truthTurnAt = new Map(), wrongRun = new Map();   // wrong-way episodes (below)
 function turnBack(dirs, id, p) {
   const a = dirs.get(id);
   if (!a) { dirs.set(id, { p, dir: null }); return 0; }
@@ -161,8 +162,28 @@ for (let T = start; T < end; T += STEP) {
     }
     // Turn-backs, judged over every 5 m moved (so a standing train's jitter doesn't count). The truth's own
     // (a train reversing at a terminus is real) for comparison.
-    s.truthBack += turnBack(truthDir, d.id, tru);
+    const truthTurned = turnBack(truthDir, d.id, tru);
+    s.truthBack += truthTurned;
+    if (truthTurned) truthTurnAt.set(d.id, t);
     const tb = turnBack(drawnDir, d.id, d);
+    // Wrong way (Max, 2026-11-12: "U-turns on the line"): the drawn train moving against the real one, both moving
+    // (over 3 m/s drawn, 10 km/h real), for 3 s or more; not within a minute of the real train's own turn (a train
+    // reversing at a terminus is drawn turning a few seconds later: that is lag, not a wrong way); only where the real
+    // place comes from reports at most 30 s apart (in a longer silence the truth is a straight line, its direction a
+    // guess).
+    {
+      const dd = drawnDir.get(d.id)?.dir, td = truthDir.get(d.id)?.dir, simW = PLAIN ? null : drawnTrains.simOf(d.id);
+      const against = dd != null && td != null && (simW ? simW.v > 3 : true) && tru.kmh > 10 && tru.gap <= 30 && angle(dd, td) > 120 &&
+        !(t - (truthTurnAt.get(d.id) ?? -Infinity) < 60000);
+      const run = wrongRun.get(d.id);
+      if (against) {
+        if (!run) wrongRun.set(d.id, { from: t, counted: false, lon: d.lon, lat: d.lat, mode: simW?.mode, pastLast: simW?.pastLast });
+        else if (!run.counted && t - run.from >= 3000) {
+          run.counted = true; s.wrongWay++;
+          if (argv.includes('--why') && s.wrongWay <= 12) console.log('wrong way', d.id, new Date(run.from).toISOString().slice(11, 21), `at ${run.lat.toFixed(5)},${run.lon.toFixed(5)}`, run.mode, `past last report ${Math.round(run.pastLast)} m`);
+        }
+      } else if (run) wrongRun.delete(d.id);
+    }
     s.back += tb;
     if (tb && argv.includes('--why') && s.back <= 12) console.log('turn-back', d.id, new Date(t).toISOString().slice(11, 21), JSON.stringify(sim), 'truth', Math.round(tru.kmh), 'km/h, off', Math.round(metres(d, tru)), 'm');
 
@@ -217,7 +238,7 @@ if (argv.includes('--json')) {
     frozenPct: r(100 * s.frozen / s.moving), stopsPerMin: r(s.freezes.length / minutes, 1),
     lagMedianS: r(q(s.lagS, 0.5)), lag90S: r(q(s.lagS, 0.9)), lag99S: r(q(s.lagS, 0.99)),
     offTrack99M: offTrack.length ? r(q(offTrack, 0.99)) : null,
-    turnBacks: s.back, truthTurnBacks: s.truthBack,
+    turnBacks: s.back, truthTurnBacks: s.truthBack, wrongWay: s.wrongWay,
     greyPct: r(100 * s.stale / s.all), timetableReturns: s.returnAheadM.length,
     returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
     pastStop: s.pastStop, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
@@ -233,6 +254,7 @@ if (!PLAIN) console.log('  why:', Object.entries(s.why).sort((a, b) => b[1] - a[
 console.log(`stops of 0.5 s or more while really moving: ${s.freezes.length} (${(s.freezes.length / minutes).toFixed(0)} a minute across the map); ` +
   `length median ${f1(q(s.freezes, 0.5))} s, 90 % ${f1(q(s.freezes, 0.9))} s`);
 console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}`);
+console.log(`wrong way (drawn against the real train, both moving, 3 s or more, not at its own turn): ${s.wrongWay}`);
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
