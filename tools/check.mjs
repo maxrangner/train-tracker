@@ -1,8 +1,9 @@
 // The check to run before merging a change: replays the chosen recordings (tools/recordings.json) through the
 // page's train code (tools/motion-check.mjs) and fails when a rule breaks or the movement gets worse than these limits.
 // Then the screens are checked (tools/ui-check.mjs), when the page is running (npm run dev).
-// Run: node tools/check.mjs [--full] [--library | --all]       exit code 0: all good; 1: something failed (it says what)
+// Run: node tools/check.mjs [--full] [--library | --all] [--rebaseline]   exit code 0: all good; 1: something failed
 //   --library  the library recordings too;  --all  every recording in data/, listed or not
+//   --rebaseline  replay and accept the numbers as they are now (tools/baseline.json)
 // The replay takes minutes, so it is skipped when nothing it depends on has changed since it last passed: the
 // movement code, this file's limits, the rail network and the recordings (see REPLAY_INPUTS). --full replays anyway.
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -25,6 +26,21 @@ const CHECKS = [
   ['wrongWay', v => v <= 10, 'more than 10 times drawn against the real train'],
   ['extraTurnBacks', v => v <= 250, 'more than 250 U-turns drawn beyond the data’s own'],
 ];
+// A recording with accepted numbers in tools/baseline.json is held to its own numbers instead (the limits above
+// are for hour-long weekday recordings; counts grow with length and traffic): it fails when one gets worse by more
+// than its margin. The must-be-0 rules and the track limit stay as above. node tools/check.mjs --rebaseline replays
+// and writes the numbers as they are now (only when a change is accepted; say why in docs/movement.md).
+const BASELINE = 'tools/baseline.json';
+const MARGINS = {
+  frozenPct: [b => b + 0.2, 'moving trains drawn standing'],
+  lag90S: [b => b + 1, '90 % of moments within (s of travel)'],
+  dwellThroughPct: [b => b + 2, 'real stops drawn driving through (%)'],
+  wrongWay: [b => b + 2, 'drawn against the real train'],
+  extraTurnBacks: [b => b + Math.max(5, Math.round(0.1 * b)), 'U-turns drawn beyond the data’s own'],
+};
+const ALWAYS = new Set(['pastStop', 'movedAfterStanding', 'offTrack99M']);
+const REBASE = process.argv.includes('--rebaseline');
+const base = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : { about: '', recordings: {} };
 
 // Which recordings: tools/recordings.json says each kept recording's role. The core is replayed every time;
 // --library adds the library; --all replays every recording in data/ (over 1 MB, so a minute's test is left out).
@@ -51,7 +67,7 @@ const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).si
   .filter(f => existsSync(`data/${f}`)).sort();
 // What the replay's result depends on: these files' contents, and the replayed recordings' names and sizes.
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
-  'tools/motion-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'public/rail-net.json', 'data/stations.json'];
+  'tools/motion-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
 const stamp = createHash('sha256')
   .update(MODE)
@@ -62,7 +78,7 @@ const stamp = createHash('sha256')
 // One stamp per set (core, library, all), so a --library run doesn't make the next everyday run replay again.
 const passedAll = existsSync(PASSED) ? JSON.parse(readFileSync(PASSED, 'utf8')) : {};
 const last = passedAll[MODE] ?? null;
-const skipReplay = !process.argv.includes('--full') && last?.stamp === stamp;
+const skipReplay = !process.argv.includes('--full') && !REBASE && last?.stamp === stamp;
 if (skipReplay) console.log(`replay skipped: the movement code, limits, rail network and ${MODE} recordings are as when all ${last.recordings} passed (${last.when}); --full replays anyway`);
 else console.log(`replaying the ${MODE} recordings (${recordings.length}): ${recordings.map(f => f.slice(10, 29)).join(', ')}`);
 const replayStart = Date.now();
@@ -78,18 +94,40 @@ for (const f of skipReplay ? [] : recordings) {
     continue;
   }
   r.extraTurnBacks = r.turnBacks - r.truthTurnBacks;
-  const bad = CHECKS.filter(([k, ok]) => !ok(r[k]));
-  console.log(`${bad.length ? 'FAIL' : 'ok  '} ${f} (${r.minutes} min${r.routes ? `, ${r.routes} routes` : ''}): ` +
-    `frozen ${r.frozenPct} %, ${r.stopsPerMin} stops/min, 90 % within ${r.lag90S} s, track 99 % ${r.offTrack99M} m, ` +
+  const name = f.slice('positions-'.length, -'.jsonl'.length), b = base.recordings[name];
+  // Own baseline: the must-be-0 rules and the track limit, then each number against its own accepted value.
+  const bad = b
+    ? [...CHECKS.filter(([k, ok]) => ALWAYS.has(k) && !ok(r[k])),
+       ...Object.entries(MARGINS).filter(([k, [lim]]) => r[k] !== null && b[k] !== null && b[k] !== undefined && r[k] > lim(b[k]))
+         .map(([k, [lim, what]]) => [k, null, `${what}: ${r[k]}, accepted ${b[k]} (limit ${Number(lim(b[k]).toFixed(2))})`])]
+    : CHECKS.filter(([k, ok]) => !ok(r[k]));
+  console.log(`${bad.length ? 'FAIL' : 'ok  '} ${f} (${r.minutes} min${r.routes ? `, ${r.routes} routes` : ''}${b ? ', own baseline' : ''}): ` +
+    `frozen ${r.frozenPct} %, ${r.stopsPerMin} stops/min, 90 % within ${r.lag90S} s, through stops ${r.dwellThroughPct} %, track 99 % ${r.offTrack99M} m, ` +
     `grey ${r.greyPct} %, turn-backs ${r.turnBacks} (data ${r.truthTurnBacks}), wrong way ${r.wrongWay}, past stop ${r.pastStop}, moved after standing ${r.movedAfterStanding}`);
-  for (const [k, , why] of bad) console.log(`     ${why}: ${k} = ${r[k]}`);
+  for (const [k, , why] of bad) console.log(`     ${why}${b ? '' : `: ${k} = ${r[k]}`}`);
+  if (REBASE) {
+    const zeroOk = CHECKS.filter(([k, ok]) => ALWAYS.has(k) && !ok(r[k])).length === 0;
+    if (!zeroOk) console.log(`     not rebaselined: a must-be-0 rule or the track limit fails`);
+    else {
+      const now = Object.fromEntries(Object.keys(MARGINS).map(k => [k, r[k]]));
+      if (b) console.log(`     baseline: ${Object.keys(MARGINS).filter(k => b[k] !== now[k]).map(k => `${k} ${b[k]} -> ${now[k]}`).join(', ') || 'unchanged'}`);
+      else console.log('     baseline: first numbers');
+      base.recordings[name] = { ...now, when: new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) };
+      continue;   // rebaselining accepts the numbers as they are
+    }
+  }
   failed += bad.length ? 1 : 0;
+}
+if (REBASE && !skipReplay) {
+  base.about = 'Accepted replay numbers per recording (tools/check.mjs holds each recording to its own, with a margin). Written by node tools/check.mjs --rebaseline when a change is accepted; why goes in docs/movement.md.';
+  writeFileSync(BASELINE, JSON.stringify(base, null, 2) + '\n');
+  console.log(`baseline written: ${BASELINE}`);
 }
 failed += missingCore;
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
     ` (replay ${Math.round((Date.now() - replayStart) / 1000)} s)`);
-  if (!failed) writeFileSync(PASSED, JSON.stringify({ ...(passedAll.stamp ? {} : passedAll),
+  if (!failed && !REBASE) writeFileSync(PASSED, JSON.stringify({ ...(passedAll.stamp ? {} : passedAll),
     [MODE]: { stamp, recordings: recordings.length, when: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC' } }));
 }
 
