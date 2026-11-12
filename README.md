@@ -40,7 +40,7 @@ While the map is private the key is built into the page; the public version will
 - **Top**: the status line (number of trains, seconds since the last report, `live` / `reconnecting` / `every 10 s`, red text when something is wrong) and the rail line switch (Trafikverket / OpenStreetMap / none).
 
 ## What is where
-- `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s), passings, a train's route, the planned routes of many trains, stations and their places.
+- `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s, and tries the stream again every 5 minutes), passings, a train's route, the planned routes of many trains, stations and their places.
 - `src/trains-source.js`: train positions, from that file.
 - `src/trains.js`: each train's reports, cleaned (repeats, noise against the train's direction, far jumps), and the simulation that is drawn.
 - `src/clock.js`: the page's clock (the recording's time in a replay).
