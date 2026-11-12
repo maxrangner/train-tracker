@@ -143,16 +143,13 @@ function showPath() {
 }
 setInterval(showPath, 2000);
 
-// ---- Help and the map credit ----
-// The credit shows when the app opens and folds away on the first touch of the map, or after 5 s; after that the
-// credits are in Help (OpenStreetMap's attribution guidelines allow this: shown at start, then findable in a menu).
-const creditEl = document.getElementById('credit');
-const foldCredit = () => creditEl.classList.add('gone');
-document.getElementById('map').addEventListener('pointerdown', foldCredit, { once: true });
-setTimeout(foldCredit, 5000);
+// ---- Help, with the map credits: the ? button next to Tilt ----
+// (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
+// attribution guidelines want the credit seen without a tap, so the public version needs it visible again: PLAN.md.)
 const helpEl = document.getElementById('help');
 function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
+document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') helpEl.hidden = true; });
 
 // ---- The menu: search for a train number or a station ----
@@ -176,7 +173,6 @@ const menu = createMenu({
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
-  onHelp: openHelp,
 });
 
 // ---- Drawing: one clock per frame ----

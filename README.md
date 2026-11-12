@@ -38,11 +38,11 @@ While the map is private the key is built into the page; the public version will
 - **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
 - **The brand sheet**: `/demo/brands.html` shows every brand's train with its colours and their sources (run `node tools/brands.mjs` first).
 - **Toy trains (test, branch `ui/look`)**: add `&train=toy` to the address (e.g. `http://localhost:5173/#view=12/59.33/18.06&train=toy`) to draw each company's usual train as a toy, at least 70 px long (`&toysize=100` to change) from zoom 11 (`&toyzoom=12`). The defaults are in `src/settings.js`. From that zoom a train's label is its company above number and lateness. The gallery is `/demo/trains.html`; `node tools/gallery.mjs --out <file>` packs it into one page that opens anywhere. Pictures: `node tools/shot.mjs --hash "train=toy" ...` (`--json trains.json` also saves the trains on screen: company, label, place; a `.jpg` picture is smaller).
-- **Top**: the ☰ menu button, a short status line (number of trains and `live` / `reconnecting` / `every 10 s`, red when something is wrong) and Tilt. The main screen stays clean (Max, 2026-11-12).
-- **The menu (☰)**: search for a train number (trains on the map, and today's timetable for the whole number) or a station (the 720 passenger stations; "goteborg" finds Göteborg C). Picking a train flies to it and follows it; a train not on the map opens its stops. Also the full status line and Help and credits. The rail lines are Trafikverket's, always shown (the switch to OpenStreetMap's lines or none was removed 2026-11-12).
+- **Top**: the ☰ menu button, a short status line (number of trains and `live` / `reconnecting` / `every 10 s`, red when something is wrong), Tilt and ? (Help). The main screen stays clean (Max, 2026-11-12).
+- **The menu (☰)**: search for a train number (trains on the map, and today's timetable for the whole number) or a station (the 720 passenger stations; "goteborg" finds Göteborg C). Picking a train flies to it and follows it; a train not on the map opens its stops. Also the full status line. The rail lines are Trafikverket's, always shown (the switch to OpenStreetMap's lines or none was removed 2026-11-12).
 - **Stations**: passenger stations show as small rings from zoom 9, their names from zoom 11. Tap one (or pick it in the search) for its board: the next departures or arrivals (`boardRows` in `src/settings.js`, 12), with new times in red, cancelled trains and tracks, refreshed every 30 s. Tap a row to open that train.
 - **A train's path**: an open train (tapped, searched or picked on a board) shows its whole path along the rails, start to finish: travelled grey, ahead blue, its stops as rings. A train not on the map (not started yet, or done) shows all of its path.
-- **Help and credits** (in the menu): how to read the map, what a tap does, and the credits and licences. The map credit also shows at the bottom when the page opens and folds away on the first touch of the map or after 5 s.
+- **? (next to Tilt)**: Help: how to read the map, what a tap does, and the credits and licences.
 
 ## What is where
 - `src/trafikverket.js`: everything that talks to Trafikverket: one query, following a live stream (falls back to asking every 10 s, and tries the stream again every 5 minutes), passings, a train's route, the planned routes of many trains, stations and their places.
@@ -53,7 +53,7 @@ While the map is private the key is built into the page; the public version will
 - `src/routes.js`: each train's planned route (timetable): where a coasting train heads at junctions, and the stop it must wait before.
 - `src/rail-net.js`: the rail network: the track under a place, the way along the tracks between two places (never reversing through a switch), the track ahead of a train.
 - `src/lateness.js`: minutes off timetable per train; the label text.
-- `src/menu.js`: the menu: search for trains and stations, the full status line, Help.
+- `src/menu.js`: the menu: search for trains and stations, the full status line.
 - `src/board.js`: a station's board (departures and arrivals).
 - `src/path.js`: a train's path along the rails from its timetable places; where along it the train is.
 - `src/panel.js`: the panel for a tapped train.
