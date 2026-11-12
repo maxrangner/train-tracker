@@ -11,6 +11,9 @@ const CHECKS = [
   ['frozenPct', v => v <= 1.5, 'moving trains drawn standing more than 1.5 % of the time'],
   ['lag90S', v => v <= 10, '90 % of moments further than 10 s of travel from the truth'],
   ['offTrack99M', v => v === null || v <= 1, '99 % of drawn trains further than 1 m from a track'],
+  // U-turns drawn beyond the data's own (2026-11-12, after ignoring re-sent old positions: 216, 215 and 181 in the
+  // hour-long rush recordings, from 220, 222 and 184): must not grow again.
+  ['extraTurnBacks', v => v <= 250, 'more than 250 U-turns drawn beyond the data’s own'],
 ];
 
 const recordings = readdirSync('data').filter(f => f.startsWith('positions-') && f.endsWith('.jsonl'))
@@ -26,6 +29,7 @@ for (const f of recordings) {
     failed++;
     continue;
   }
+  r.extraTurnBacks = r.turnBacks - r.truthTurnBacks;
   const bad = CHECKS.filter(([k, ok]) => !ok(r[k]));
   console.log(`${bad.length ? 'FAIL' : 'ok  '} ${f} (${r.minutes} min${r.routes ? `, ${r.routes} routes` : ''}): ` +
     `frozen ${r.frozenPct} %, ${r.stopsPerMin} stops/min, 90 % within ${r.lag90S} s, track 99 % ${r.offTrack99M} m, ` +

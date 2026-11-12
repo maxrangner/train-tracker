@@ -211,7 +211,7 @@ export function createTrains(options = {}) {
     return { cap: ext?.stopAt ?? Infinity,
       o: { stood: tr.stood, frozen: t + DELAY_MS - tr.heard > silentLimit(tr), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { repeats: 0, resent: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -259,6 +259,16 @@ export function createTrains(options = {}) {
     tr.raw = r;
     if (!last) return append(tr, r);
     if (repeat && !(r.speed !== null && r.speed !== undefined && r.speed < 2)) { counts.repeats++; return; }
+    // An earlier position sent again (exactly the same coordinates as one this train sent within 10 minutes, but
+    // not where it is now): an old fix re-sent, often with Speed 1 between new ones. Taken in, the drawn train
+    // turned back to it (e.g. 2713 at Stockholms S, 2026-11-12 07:05: three re-sends of a place 400 m back; Max saw
+    // U-turns). A new fix never lands on exactly the same coordinates.
+    const key = `${r.lon},${r.lat}`;
+    tr.seen ??= new Map();
+    const sentAt = tr.seen.get(key);
+    if (!repeat) tr.seen.set(key, r.time);
+    if (tr.seen.size > 300) for (const [k, t] of tr.seen) if (r.time - t > 10 * 60000) tr.seen.delete(k);
+    if (sentAt !== undefined && !repeat && r.time - sentAt < 10 * 60000 && metres(last, r) >= STILL_M) { counts.resent++; return; }
     if (tr.pending) {
       const p = tr.pending;
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
@@ -267,7 +277,10 @@ export function createTrains(options = {}) {
     }
     const d = metres(last, r);
     if (d < STILL_M) return append(tr, { ...r, lon: last.lon, lat: last.lat });
-    const dir = r.bearing ?? coastHeading(h);
+    // The train's direction: its own Bearing while it moves; standing or crawling (under 5 km/h) its Bearing swings
+    // about, so its last real movement says more (U-turns drawn from GPS wobble at stations, Max 2026-11-12).
+    const moving = r.speed !== null && r.speed !== undefined && r.speed >= 5;
+    const dir = (moving ? r.bearing : null) ?? coastHeading(h) ?? r.bearing;
     if (dir !== null && dir !== undefined && angle(headingOf(last, r), dir) > 120 && tr.against < 2) {
       tr.against++;
       counts.against++;
