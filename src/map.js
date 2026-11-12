@@ -242,6 +242,9 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       if (text !== selText) selLabel.textContent = selText = text;
       const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= MODEL_ZOOM ? ' model' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
+      // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
+      const ring = TOY && map.getZoom() >= MODEL_ZOOM ? `${settings.toySize + 16}px` : '';
+      if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }
     },
     // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
     drawNow() { if (isReady) map.redraw(); },
