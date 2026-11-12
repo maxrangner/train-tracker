@@ -8,22 +8,30 @@ const off = (planned, at) => {
   return m === 0 ? '' : `${m > 0 ? '+' : ''}${m}`;
 };
 
+// The favourite star (☆ / ★), used by the train panel and the station board.
+export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${on ? 'Remove from favourites' : 'Add to favourites'}">${on ? '★' : '☆'}</button>`;
+
 // onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): the Follow button was pressed.
 // onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
-export function createPanel(el, { stationName, onSelect, onFollow, onRoute }) {
+// isStarred(number) / onStar(number) -> starred now: the ☆ for favourites.
+export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isStarred, onStar }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
+  let number = null;      // the open train's public number (for the star)
 
   // The top line: the train's label, the Follow button (pressed while the camera follows the train) and ×.
   const head = label =>
     `<div class="panel-head"><strong>${label}</strong><span class="panel-buttons">` +
+    (number && isStarred ? star(isStarred(number)) : '') +
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${following ? 'Following' : 'Follow'}</button>` : '') +
     `<button class="panel-close" type="button" aria-label="Close">×</button></span></div>`;
   function wireHead() {
     el.querySelector('.panel-close').onclick = close;
     const f = el.querySelector('.panel-follow');
     if (f) f.onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
+    const s = el.querySelector('.panel-star');
+    if (s) s.onclick = () => { const on = onStar(number); s.outerHTML = star(on); wireHead(); };
   }
   function setFollowing(on) {
     following = on;
@@ -41,6 +49,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute }) {
   // follow: false for a train that isn't on the map (picked from the timetable search).
   async function open(train, { follow = true } = {}) {
     openId = train.id;
+    number = train.number ?? null;
     following = follow;   // opening a train on the map starts following it (main.js)
     canFollow = follow;
     onSelect?.(train.id);

@@ -77,6 +77,10 @@
     #search-results button span { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #search-results button:hover, #search-results button:focus-visible { background: #f0f4fa; outline: none; }
     .menu-note { color: var(--muted); padding: 8px 6px; }
+    .fav-label { padding: 2px 6px 0; }
+    .panel-star { font: inherit; font-size: 20px; line-height: 1; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px; }
+    .panel-star[aria-pressed="true"] { color: #d4a72c; }
+    .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .menu-text { margin: 0; color: var(--ink); }
     .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
     .set-row > span:first-child, .set-row > label { font-size: 14px; }
@@ -232,6 +236,7 @@
       <h3>The menu (☰)</h3>
       <ul>
         <li><b>Search</b> for a train number or a station. A number also finds today's trains that are not running right now.</li>
+        <li><b>Favourites</b>: tap ☆ on a train or a station; they show in the menu when the search field is empty. A starred train is kept by its number, so it works every day.</li>
         <li><b>Tilt</b> (top) tilts the map so the trains stand up; two fingers up or down do the same.</li>
         <li><b>?</b> (top) opens this help.</li>
       </ul>

@@ -6,6 +6,7 @@ import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, nearestIndex } from './path.js';
+import { favourites } from './favourites.js';
 import { settings, setSetting } from './settings.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
@@ -53,6 +54,8 @@ const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS)
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
+  isStarred: number => favourites.has('train', number),
+  onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
     if (!id) { map.unfollow(); map.unpad(); }
@@ -118,6 +121,8 @@ const board = createBoard(document.getElementById('board'), {
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   onClose: () => { if (!panel.openId) map.unpad(); },
+  isStarred: sig => favourites.has('station', sig),
+  onStar: sig => favourites.toggle('station', sig),
 });
 async function openStation(sig, { go = false } = {}) {
   const st = stations.get(sig);
@@ -134,7 +139,7 @@ function pickTrain(t) {
   board.close();
   if (t.onMap && openTrain(t.id, { go: true })) return;
   map.unfollow();
-  panel.open({ id: t.id, operational: t.operational, date: t.date, label: String(t.number) }, { follow: false });
+  panel.open({ id: t.id, operational: t.operational, date: t.date, number: t.number, label: String(t.number) }, { follow: false });
 }
 
 // Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
@@ -143,7 +148,7 @@ function openTrain(id, { go = false } = {}) {
   if (!r) return false;
   board.close();
   pickerEl.hidden = true;
-  panel.open({ id: r.id, operational: r.operational, date: r.date, label: labelFor(r) });
+  panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
   if (p) following.then(() => map.goTo(p, 13));
@@ -193,6 +198,22 @@ const menu = createMenu({
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
+  favourites: () => ({
+    trains: favourites.trains.map((number) => {
+      const r = trains.reports().find(x => String(x.number) === number);
+      return { number, company: r ? lateness.brand(r.id) : null, onMap: Boolean(r) };
+    }),
+    stations: favourites.stations.map(sig => stations.get(sig)).filter(Boolean),
+  }),
+  // A starred train: on the map, fly there; otherwise today's run of that number (the next one, or the latest).
+  async onPickFavouriteTrain(number) {
+    const r = trains.reports().find(x => String(x.number) === number);
+    if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
+    try {
+      const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+      if (found.length) { const t = found[0]; pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
+    } catch (e) { console.warn('favourite:', e.message); }
+  },
 });
 
 // ---- Drawing: one clock per frame ----
