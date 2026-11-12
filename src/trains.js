@@ -285,6 +285,9 @@ export function createTrains(options = {}) {
     }
     if (tr.pending) {
       const p = tr.pending;
+      // A held jump that the next report comes back from (it lands between the last kept place and the jump) was a
+      // bad fix too (550 and 17614 at Nässjö, 2026-11-12: reports without a speed 2-5 km north, then back).
+      if (metres(last, r) < metres(last, p) - 50) { tr.pending = null; counts.jumpsDropped++; tr.raw = null; tr.seen.delete(key); return take(tr, r); }
       if (!isJump(p, r)) { tr.pending = null; counts.jumpsKept++; append(tr, p, true); return take(tr, r); }
       if (!isJump(last, r)) { tr.pending = null; counts.jumpsDropped++; }
       else { tr.pending = r; return; }
