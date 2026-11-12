@@ -342,9 +342,11 @@ export function createTrains(options = {}) {
     else if (e >= 0) want = Math.min(T.v + e / TAU_S, T.v * 1.3 + 5);   // catching up stays gentle; far behind syncs
     else {
       // Ahead of the target. Report times are rough, so a moving target lurches; slow down (to 40 % at most, 10 s
-      // ahead: half speed) rather than stop. Only when more than 30 s ahead, or the target stands, wait for it.
+      // ahead: half speed) rather than stop, however far ahead: the real train is moving, so the drawn one does too
+      // (2026-11-12: waiting for it, when more than 30 s ahead after moving by the timetable, was 70-75 % of all
+      // moving trains drawn standing). Only when the target stands, wait for it.
       const aheadS = -e / Math.max(T.v, 0.1);
-      want = T.v > 0 && aheadS < 30 ? T.v * Math.max(0.4, 1 - aheadS / 20) : Math.max(0, T.v + e / TAU_S);
+      want = T.v > 0 ? T.v * Math.max(0.4, 1 - aheadS / 20) : Math.max(0, T.v + e / TAU_S);
     }
     // Never faster than lets it slow to the target's speed by the time it gets there (with braking to spare), so
     // it doesn't shoot past: into a stop, or after a fast-forward.
