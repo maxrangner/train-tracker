@@ -90,6 +90,26 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       }
       return best ? { sig: best.sig, until: Math.max(best.dep + e.delay * 60000, at) + 120000 } : null;
     },
+    // The planned departure (+ latest delay) from the timetable location within 300 m of place, or null.
+    departureNear(key, place) {
+      const e = byKey.get(key);
+      if (!e || !place) return null;
+      let best = null, bestD = 300;
+      for (const l of locsOf(e)) {
+        const st = stations.get(l.sig);
+        if (!st || l.dep === null) continue;
+        const d = metres(place, st);
+        if (d < bestD) { bestD = d; best = l; }
+      }
+      return best ? best.dep + e.delay * 60000 : null;
+    },
+    // When the trip should end: its last planned time + latest delay (0: not known).
+    tripEnd(key) {
+      const e = byKey.get(key);
+      const locs = e ? locsOf(e) : [];
+      const l = locs[locs.length - 1];
+      return l ? (l.arr ?? l.dep) + e.delay * 60000 : 0;
+    },
     // Has the train been reported leaving this location?
     departed(key, sig) { return Boolean(byKey.get(key)?.departed?.has(sig)); },
     // The planned time of the train's last known location (0: nothing known yet), to know when to ask for more.
