@@ -1,9 +1,9 @@
 ﻿// Open the running page in Edge (no window), wait in real time, save a picture and print the console.
 // Run (with `npm run dev` going):
-//   node tools/shot.mjs [--wait 25] [--out shots/shot.png] [--size 900x1100] [--view zoom/lat/lon] [--rail trv|osm|none] [--tap] [--hash a=b&c=d]
+//   node tools/shot.mjs [--wait 25] [--out shots/shot.png] [--size 900x1100] [--view zoom/lat/lon] [--rail trv|osm|none] [--tap] [--hash a=b&c=d] [--json trains.json]
 // --view opens that place; --tap taps the moving train nearest the middle of the screen before the picture.
 import puppeteer from 'puppeteer-core';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filter(Boolean)
@@ -87,8 +87,24 @@ if (args.tap) {
 }
 
 if (!args.page) console.log('status line:', await page.$eval('#status', el => el.textContent));
+// --json trains.json: also save the trains on screen (id, label, company, place in CSS pixels), e.g. to label a picture.
+if (args.json) {
+  const onScreen = await page.evaluate(() => {
+    const map = window.__map, { width, height } = map.getCanvas().getBoundingClientRect();
+    const data = map.getSource('trains')._data, feats = (data.geojson ?? data).features;
+    const brand = new Map((window.__last3d ?? []).map(t => [t.id, t.brand ?? null]));
+    return { zoom: map.getZoom(), pitch: map.getPitch(), lat: map.getCenter().lat, width, height,
+      trains: feats.map((f) => {
+        const p = map.project(f.geometry.coordinates);
+        return { id: f.properties.id, label: f.properties.label, brand: brand.get(f.properties.id) ?? null, x: Math.round(p.x), y: Math.round(p.y) };
+      }).filter(t => t.x >= 0 && t.y >= 0 && t.x <= width && t.y <= height) };
+  });
+  mkdirSync(dirname(args.json), { recursive: true });
+  writeFileSync(args.json, JSON.stringify(onScreen));
+}
 mkdirSync(dirname(out), { recursive: true });
-await page.screenshot({ path: out, fullPage: Boolean(args.full) });
+// .jpg / .webp pictures are smaller (quality 80).
+await page.screenshot({ path: out, fullPage: Boolean(args.full), ...(/\.(jpe?g|webp)$/i.test(out) ? { quality: 80 } : {}) });
 console.log('picture:', out);
 await browser.close();
 

@@ -11,6 +11,12 @@ export const TOYS = {
     photo: 'https://commons.wikimedia.org/wiki/File:20260529_X61_410_G%C3%B6teborg_C.jpg',
     note: 'X61 in the new blue livery (repainted 2025–26), Göteborg C, 2026-05-29.',
   },
+  'SL Pendeltåg': {
+    model: 'coradia',   // X60 Alstom Coradia Nordic, the whole fleet (~129 units)
+    colours: { body: '#e6e5e0', roof: '#d9d8d3', nose: '#e6e5e0', stripe: '#3d7fc5', frame: '#2b2e33' },
+    photo: 'https://commons.wikimedia.org/wiki/File:SL_X60,_Stockholms_Central_-_20260404_-_01.jpg',
+    note: 'X60: off-white with a blue sweep along the lower side, a black mask round the windscreen. Stockholm C, 2026-04-04.',
+  },
   'Mälartåg': {
     model: 'dosto',     // ER1 Stadler Dosto, 53 units; also 9 Regina
     colours: { body: '#ededed', roof: '#dcdcdc', nose: '#2f5fc8', stripe: '#2f5fc8' },
