@@ -89,7 +89,11 @@ function trackAhead(tr, now = 0) {
     const hd = coastHeading(h);
     const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.reached) : null;
     if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig) {
-      const poly = hd === null || hd === undefined ? null : NET.ahead(last.snap, hd, AHEAD_M, toward?.snap ?? null, PASSING_MAX_M);
+      // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
+      // straight distance (a far detour to a track that only happens to lie near the station is not the way).
+      const straight = toward?.snap ? metres(last, toward.snap) : 0;
+      const poly = hd === null || hd === undefined ? null
+        : NET.ahead(last.snap, hd, AHEAD_M, toward?.snaps ?? toward?.snap ?? null, Math.min(PASSING_MAX_M, 1.5 * straight + 2000));
       const reached = poly?.towardAt !== undefined;
       const stopAt = toward?.stop && reached ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
       // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).

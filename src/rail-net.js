@@ -21,22 +21,20 @@ export async function loadNet(url) {
 // Tiny line pieces in Trafikverket's data cut through tracks: on Södermalm between Stockholm C and Stockholms S a
 // 1 m piece points backwards, so passing it looked like a 166° turn and there was no way through (Max, 2026-11-12:
 // paths cut straight from Stockholm C). Pieces shorter than TINY_M are taken out and their two ends joined into one,
-// so the lines on either side meet. A trial round Stockholm C only (within TINY_AREA.radius metres); the rest of the
-// country may follow once it is seen to work.
-const TINY_M = 2;
-const TINY_AREA = { lon: 18.0573, lat: 59.33, radius: 3000 };
+// so the lines on either side meet. First a trial round Stockholm C (under 2 m); since 2026-11-12 everywhere and
+// under 5 m (the bug hunt: 399 of 31,588 lines; station pairs with no route between them 214 -> 188 of 2,856).
+const TINY_M = 5;
 function joinTinyPieces({ scale, n, d }) {
   const lines = [];
   let x = 0, y = 0, k = 0;
   for (const cnt of n) { const pts = []; for (let i = 0; i < cnt; i++) { x += d[2 * k]; y += d[2 * k + 1]; k++; pts.push([x, y]); } lines.push(pts); }
   const m = (a, b) => Math.hypot((b[0] - a[0]) / scale * Math.cos(a[1] / scale * R), (b[1] - a[1]) / scale) * R * 6371000;
   const length = l => { let s = 0; for (let i = 1; i < l.length; i++) s += m(l[i - 1], l[i]); return s; };
-  const inArea = p => m(p, [TINY_AREA.lon * scale, TINY_AREA.lat * scale]) <= TINY_AREA.radius;
   const same = (p, q) => p[0] === q[0] && p[1] === q[1];
   let removed = 0;
   for (let li = 0; li < lines.length; li++) {
     const l = lines[li];
-    if (!l || !inArea(l[0]) || length(l) >= TINY_M) continue;
+    if (!l || length(l) >= TINY_M) continue;
     const a = l[0], b = l[l.length - 1];
     // every line end at b moves to a: the lines on either side now meet at a
     if (!same(a, b)) for (const o of lines) {
@@ -140,6 +138,27 @@ export function netFromJSON(json) {
     return best;
   }
 
+  // ---- All tracks near a place ----
+  // The nearest point of every line within maxM of place, nearest first (a station's tracks: the train arrives on
+  // one of them, and the nearest can be a siding with no way there; 2026-11-12: with one track per station 13 % of
+  // the hops trains make between planned locations had no route, with all of them 3 %).
+  function snapsNear(place, maxM = 150) {
+    const cx = Math.floor(place.lon / CELL), cy = Math.floor(place.lat / CELL);
+    const kx = Math.cos(place.lat * R), m = R * 6371000, best = new Map();
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+      for (const i of grid.get(`${cx + dx}:${cy + dy}`) ?? []) {
+        const ax = (lon[i] - place.lon) * kx * m, ay = (lat[i] - place.lat) * m;
+        const vx = (lon[i + 1] - lon[i]) * kx * m, vy = (lat[i + 1] - lat[i]) * m, LL = vx * vx + vy * vy;
+        const t = LL ? Math.max(0, Math.min(1, -(ax * vx + ay * vy) / LL)) : 0;
+        const dist = Math.hypot(ax + vx * t, ay + vy * t);
+        if (dist > maxM || best.get(lineOf[i])?.dist <= dist) continue;
+        best.set(lineOf[i], { li: lineOf[i], i, t, dist, along: cum[i] + (cum[i + 1] - cum[i]) * t,
+          lon: lon[i] + (lon[i + 1] - lon[i]) * t, lat: lat[i] + (lat[i + 1] - lat[i]) * t, heading: headingIJ(i, i + 1) });
+      }
+    }
+    return [...best.values()].sort((a, b) => a.dist - b.dist);
+  }
+
   // ---- Polylines ----
   // The points of line li from metres `from` to metres `to` (either way), appended to poly.
   function addPiece(poly, li, from, to) {
@@ -170,11 +189,19 @@ export function netFromJSON(json) {
   // ---- A way along the tracks from snapped place a to snapped place b ----
   // dir: +1 / -1 to leave a only towards its line's end / start; 0 either. Null if none within maxM metres.
   // maxTurn: the sharpest turn allowed where lines meet (a drawn path may allow more where the data is odd).
+  // b: one snapped place, or several (e.g. a station's tracks, snapsNear): the way ends at the nearest one reached,
+  // and poly.target says which.
   function route(a, b, maxM, dir = 0, maxTurn = MAX_TURN) {
-    if (a.li === b.li && (dir === 0 || Math.sign(b.along - a.along) === dir || Math.abs(b.along - a.along) < 1)) {
-      const poly = newPoly();
-      addPiece(poly, a.li, a.along, b.along);
-      return poly;
+    const targets = Array.isArray(b) ? b : [b];
+    const onLine = new Map();
+    for (const t of targets) (onLine.get(t.li) ?? onLine.set(t.li, []).get(t.li)).push(t);
+    for (const t of onLine.get(a.li) ?? []) {
+      if (dir === 0 || Math.sign(t.along - a.along) === dir || Math.abs(t.along - a.along) < 1) {
+        const poly = newPoly();
+        addPiece(poly, a.li, a.along, t.along);
+        poly.target = t;
+        return poly;
+      }
     }
     // Dijkstra over "line li run in direction d, now at its far end".
     const best = new Map(), from = new Map();
@@ -216,9 +243,9 @@ export function netFromJSON(json) {
         if (m === li && e === (d > 0 ? 1 : 0)) continue;   // back the way it came
         if (angle(hin, leaveHeading(m, e)) > maxTurn) continue;
         const nd = e === 0 ? +1 : -1;
-        if (m === b.li) {
-          const c = cost + (nd > 0 ? b.along : len[m] - b.along);
-          if (c < doneCost) { doneCost = c; done = { li, d, last: m, lastDir: nd }; }
+        for (const t of onLine.get(m) ?? []) {
+          const c = cost + (nd > 0 ? t.along : len[m] - t.along);
+          if (c < doneCost) { doneCost = c; done = { li, d, last: m, lastDir: nd, t }; }
         }
         push(cost + len[m], m, nd, [li, d]);
       }
@@ -232,7 +259,8 @@ export function netFromJSON(json) {
       const enter = k === 0 ? a.along : (d > 0 ? 0 : len[li]);
       addPiece(poly, li, enter, d > 0 ? len[li] : 0);
     });
-    addPiece(poly, done.last, done.lastDir > 0 ? 0 : len[done.last], b.along);
+    addPiece(poly, done.last, done.lastDir > 0 ? 0 : len[done.last], done.t.along);
+    poly.target = done.t;
     return poly;
   }
 
@@ -250,6 +278,7 @@ export function netFromJSON(json) {
       want = poly.towardAt + metres;                    // and `metres` beyond it
       // Past the planned place: carry on from there, the way the train arrives.
       const h = poly.lon.length > 1 ? (Math.atan2((poly.lon.at(-1) - poly.lon.at(-2)) * Math.cos(poly.lat.at(-1) * R), poly.lat.at(-1) - poly.lat.at(-2)) / R + 360) % 360 : heading;
+      toward = poly.target;   // of several (a station's tracks), the one reached
       ({ li } = toward); d = angle(toward.heading, h) <= 90 ? +1 : -1; at = toward.along;
     } else {
       poly = newPoly();
@@ -274,7 +303,7 @@ export function netFromJSON(json) {
   }
 
   return {
-    snap, route, ahead,
+    snap, snapsNear, route, ahead,
     get lines() { return L; },
     // All lines as one GeoJSON feature, for drawing.
     toGeoJSON() {
