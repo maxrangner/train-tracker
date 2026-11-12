@@ -1,6 +1,6 @@
 # Train map
 
-A live map of Sweden's trains, from Trafikverket's open data. The plan and the decisions behind it: [PLAN.md](PLAN.md).
+A live map of Sweden's trains, from Trafikverket's open data. The plan and the decisions behind it: [PLAN.md](PLAN.md). What is open: [docs/TODO.md](docs/TODO.md). What we know about the data: [docs/data.md](docs/data.md). How to check and measure: [docs/measuring.md](docs/measuring.md). The history of the movement and of the look: [docs/movement.md](docs/movement.md), [docs/look-and-screens.md](docs/look-and-screens.md).
 
 ## Start it
 ```
@@ -39,7 +39,7 @@ While the map is private the key is built into the page; the public version will
 - **Tap a train**: a ring marks it, a panel lists its stops with planned and actual times, and the camera follows the train (the **Following** button). Zooming, turning and tilting keep following; dragging the map away stops it (the button turns to **Follow**: press it to go back). Tap the map or × to close.
 - **3D trains**: from zoom 13 in, each train is a simple 3D model at real size, in its brand's colours (generic grey without a brand). Tilt to see them: the Tilt button, two fingers up/down, or the compass.
 - **The brand sheet**: `/demo/brands.html` shows every brand's train with its colours and their sources (run `node tools/brands.mjs` first).
-- **Toy trains (test, branch `ui/look`)**: add `&train=toy` to the address (e.g. `http://localhost:5173/#view=12/59.33/18.06&train=toy`) to draw each company's usual train as a toy, at least 70 px long (`&toysize=100` to change) from zoom 11 (`&toyzoom=12`). The defaults are in `src/settings.js`. From that zoom a train's label is its company above number and lateness. The gallery is `/demo/trains.html`; `node tools/gallery.mjs --out <file>` packs it into one page that opens anywhere. Pictures: `node tools/shot.mjs --hash "train=toy" ...` (`--json trains.json` also saves the trains on screen: company, label, place; a `.jpg` picture is smaller).
+- **Compact trains** (called toy trains in the code; branch `ui/look`): Settings → Trains → Compact, or add `&train=toy` to the address (e.g. `http://localhost:5173/#view=12/59.33/18.06&train=toy`) to draw each company's usual train as a toy, at least 70 px long (`&toysize=100` to change) from zoom 11 (`&toyzoom=12`). The defaults are in `src/settings.js`. From that zoom a train's label is its company above number and lateness. The gallery is `/demo/trains.html`; `node tools/gallery.mjs --out <file>` packs it into one page that opens anywhere. Pictures: `node tools/shot.mjs --hash "train=toy" ...` (`--json trains.json` also saves the trains on screen: company, label, place; a `.jpg` picture is smaller).
 - **Top**: the ☰ menu button, a short status line (number of trains and `live` / `reconnecting` / `every 10 s`, red when something is wrong), Tilt and ? (Help). The main screen stays clean (Max, 2026-11-12).
 - **The menu (☰)**: search for a train number (trains on the map, and today's timetable for the whole number) or a station (the 720 passenger stations; "goteborg" finds Göteborg C). Picking a train flies to it and follows it; a train not on the map opens its stops. Also the full status line. The rail lines are Trafikverket's, always shown (the switch to OpenStreetMap's lines or none was removed 2026-11-12).
 - **Groups**: close in, trains standing close together (within 40 px) share one label, "3 trains"; tap it to pick one. A train on its own keeps its full label.
@@ -67,8 +67,11 @@ While the map is private the key is built into the page; the public version will
 - `src/i18n.js`: the page's own words in Swedish and English (`t('key')`); Help is in `index.html` twice (`data-lang`). Names from Trafikverket and the map stay Swedish.
 - `src/toy-trains.js`: the toy trains: one flexible shape set per train model (X61, Regina, X2000, Rc ...).
 - `src/toy-brands.js`: each company's toy: its usual train model, its paint and the photo it was read from.
-- `src/map.js`: the map (OpenFreeMap, Positron style), rail lines, dots, labels, ring.
-- `src/main.js`: ties them together; the status line; the rail switch.
+- `src/map.js`: the map (OpenFreeMap: Positron, or Dark in the dark look), rail lines, dots, labels, groups ("3 trains"), the selected train's ring, taps on trains, labels, groups and stations, the arrow keys; `applySettings()` redraws its own layers after a settings change.
+- `src/trains-3d.js`: the 3D trains (compact or realistic), each car set on the track; their outlines for taps.
+- `src/train-model.js`, `src/brands.js`: the realistic models and each brand's colours.
+- `src/favourites.js`: starred trains and stations (on that phone/browser).
+- `src/main.js`: ties them together; the status line; the settings page; Help.
 - `tools/`: helpers run with Node.
   - `rail-trv.mjs`, `rail-osm.mjs`: download the rail lines.
   - `rail-net.mjs`: builds the page's rail network from Trafikverket's lines: joined where a line touches another mid-way, simplified to within 0.5 m, saved compactly.
@@ -79,7 +82,7 @@ While the map is private the key is built into the page; the public version will
   - `shot.mjs`: a picture of the running page (`--view`, `--tap`, `--size`, `--hash`, `--json`), into `shots/`.
   - `soak.mjs [minutes]`: keeps the page open and logs the status line.
   - `glide-check.mjs`: drawn speed against reported speed.
-  - `check.mjs`: **run before merging a change.** Replays every recording in `data/` (through `motion-check.mjs`) and fails if a rule breaks (a train passing an unconfirmed stop, or moving on after standing still) or the movement gets worse (frozen over 1.5 %, 90 % further than 10 s from the truth, off the tracks).
+  - `check.mjs`: **run before merging a change.** Replays every recording in `data/` (through `motion-check.mjs`) and fails if a rule breaks (a train passing an unconfirmed stop, or moving on after standing still) or the movement gets worse (frozen over 1.5 %, 90 % further than 10 s from the truth, off the tracks, more than 10 times drawn against the real train, more than 250 U-turns beyond the data's own). The limits and how to look closer: [docs/measuring.md](docs/measuring.md).
   - `motion-check.mjs [--delay 25] [--coast 30] [--plain] [--cut 120] [--trace id] [--why]`: replays a recording through the page's train code and compares with the truth (the cleaned reports, in hindsight): how often moving trains are drawn standing or turning back, how far off they are, how often they fast-forward, and how far ahead or behind a train moved by its timetable is when its GPS comes back. `--plain` draws the reports directly (the old way); `--cut` drops the data for a while (a lost connection).
   - `follow-check.mjs [--fastest]`: taps a moving train and measures how well the camera follows it, through drags, a zoom and the Follow button.
   - `ping.mjs`, `peek.mjs`, `late-peek.mjs`, `route-peek.mjs`: small checks of the key, the raw stream, passings and a route.
