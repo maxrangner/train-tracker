@@ -16,6 +16,8 @@ It prints two addresses:
   - On Android, Chrome needs the **Nearby devices** permission (Settings → Apps → Chrome → Permissions) to reach anything at home; without it every home address fails with `ERR_TOO_MANY_RETRIES`, the router's too. Type the address in the Chrome app itself, not in a link opened inside another app.
   - Errors show in red in the top box, since a phone has no console. `node tools/hello.mjs` runs a tiny page on port 8099 that logs every visitor, to see whether a phone's request arrives at all.
 
+**For the phone: `npm run phone`** packs the app and serves it at `http://192.168.x.x:4173/` (and `http://localhost:4173/`). The phone then downloads about 1 MB from this PC instead of 13 MB with `npm run dev` (which sends the map and 3D code unpacked; measured 2026-11-12), so it starts much faster on a weak wifi. It shows the code as it was when packed: after a change, stop it and run it again. The packed folder `dist/` holds the Trafikverket key and is never committed.
+
 The map's place is kept in the address (`#view=zoom/lat/lon`), so a link opens the same view.
 
 **Replay**: add `&replay=<recording>` to play a recording from `data/` instead of the live data, at normal speed, e.g. `http://localhost:5173/#view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z` (the part after `positions-` in the file name). Recordings made with `tools/collect.mjs` from 2026-11-11 22:45 on also bring their timetable (lateness colours, planned routes). Only with `npm run dev`.

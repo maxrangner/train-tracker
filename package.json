@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build"
+    "build": "vite build",
+    "phone": "vite build && vite preview --host --port 4173 --strictPort"
   },
   "dependencies": {
     "maplibre-gl": "6.16.0",
