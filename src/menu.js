@@ -1,5 +1,5 @@
 // The menu: opens from the ☰ button, so the main screen stays clean (Max, 2026-11-12). Search for a train number or
-// a station; the rail lines switch (main.js fills #rail); help and credits.
+// a station; the full status line; help and credits.
 //
 // findTrains(digits) -> trains on the map whose number starts with them: [{ id, number, company }]
 // findStations(text) -> passenger stations whose name matches: [{ sig, name }]

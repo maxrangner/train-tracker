@@ -12,11 +12,11 @@ setWorkerUrl(workerUrl);
 // OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out.
 const STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
+// The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
+// 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
+// removed 2026-11-12 (Max: decided, no need for the option).
 export const RAIL_SOURCES = {
-  // Trafikverket's lines come from the rail network the trains follow (public/rail-net.json, 1.7 MB instead of
-  // the 11 MB rail-trv.geojson), handed over by main.js as railData.trv.
   trv: { name: 'Trafikverket', color: '#6e7781' },
-  osm: { name: 'OpenStreetMap', url: '/rail-osm.geojson', color: '#8250df' },
 };
 
 // A dot's opacity: grey trains faded; none from MODEL_ZOOM in (3D trains) or for the selected train (its marker).
@@ -35,7 +35,7 @@ export function createMap(container, { onTrainTap, onStationTap, getTrains3d, ra
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
     maxPitch: 70,
     // The map credits are our own (index.html #credit, and Help in the menu): shown when the app opens, folded away
-    // on the first touch or after 10 s, as OpenStreetMap's attribution guidelines allow; always in Help after that.
+    // on the first touch or after 5 s, as OpenStreetMap's attribution guidelines allow; always in Help after that.
     attributionControl: false,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.

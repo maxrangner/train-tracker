@@ -1,6 +1,6 @@
 ﻿// Open the running page in Edge (no window), wait in real time, save a picture and print the console.
 // Run (with `npm run dev` going):
-//   node tools/shot.mjs [--wait 25] [--out shots/shot.png] [--size 900x1100] [--view zoom/lat/lon] [--rail trv|osm|none] [--tap] [--hash a=b&c=d] [--json trains.json]
+//   node tools/shot.mjs [--wait 25] [--out shots/shot.png] [--size 900x1100] [--view zoom/lat/lon] [--tap] [--hash a=b&c=d] [--json trains.json]
 // --view opens that place; --tap taps the moving train nearest the middle of the screen before the picture.
 import puppeteer from 'puppeteer-core';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -25,7 +25,6 @@ page.on('pageerror', e => console.log(`[page error] ${e.message}`));
 page.on('response', r => { if (r.status() >= 400) console.log(`[http ${r.status()}] ${r.url().slice(0, 120)}`); });
 page.on('requestfailed', r => console.log(`[request failed] ${r.url().slice(0, 120)} ${r.failure()?.errorText}`));
 
-if (args.rail) await page.evaluateOnNewDocument(r => { try { localStorage.setItem('rail', r === 'none' ? 'null' : r); } catch {} }, args.rail);
 // --page demo/brands.html opens another page of the project (no status line there); --full takes the whole page.
 // --hash train=toy&toysize=70 adds more to the address after the view.
 const hash = [args.view && `view=${args.view}`, args.hash].filter(Boolean).join('&').replace(/^./, c => `#${c}`);
