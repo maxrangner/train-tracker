@@ -43,7 +43,7 @@ const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'path-stops', 'stati
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
 // onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
-export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, railData = {} } = {}) {
+export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
@@ -152,7 +152,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-opacity': dotOpacity(selected ?? ''),
       },
     });
-    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d }); map.addLayer(layer3d); }
+    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',

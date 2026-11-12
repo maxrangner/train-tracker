@@ -469,6 +469,15 @@ export function createTrains(options = {}) {
       const tr = byId.get(id);
       return tr?.sim ? drawn(tr) : null;
     },
+    // The place d metres along train id's path from where it is drawn now (+ ahead, - behind), with the same small
+    // offset as the train; null when the path doesn't reach that far back (a train that has only just appeared).
+    // For the 3D layer, so each car of a model sits on the track (Max, 2026-11-12: cars bend along the track).
+    along(id, d) {
+      const tr = byId.get(id), sim = tr?.sim;
+      if (!sim || !tr.hist.length || sim.s + d < tr.hist[0].s) return null;
+      const p = pointAt(tr, sim.s + d);
+      return { lon: p.lon + sim.off.lon, lat: p.lat + sim.off.lat };
+    },
     get count() { return byId.size; },
     get lastReport() { return lastReport; },
     get counts() { return counts; },
