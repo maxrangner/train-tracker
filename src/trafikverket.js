@@ -20,7 +20,7 @@ export async function ask(queryXml) {
 }
 
 // Keep a query live: ask once with a stream address, then follow the stream. If the stream breaks, ask again from
-// where it left off; if it keeps breaking, ask every 10 s instead.
+// where it left off; if it keeps breaking, ask every 10 s instead, and try the stream again every 5 minutes.
 // makeQuery({changeId, stream}) returns the <QUERY> xml; onResult(result) gets every answer and stream message.
 export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   let lastChangeId = null;
@@ -28,6 +28,8 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   let silentTimer = null;
   let failures = [];
   let stopped = false;
+  let pollingSince = null;   // when it started asking every 10 s (null: following the stream)
+  const RETRY_STREAM_MS = 5 * 60 * 1000;
 
   const closeStream = () => {
     clearTimeout(silentTimer);
@@ -40,6 +42,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
     failures = failures.filter(t => now - t < 120000).concat(now);
     if (failures.length >= 3) {
       onStatus({ mode: 'polling', error: `the live stream kept breaking (${why}); asking every 10 s instead` });
+      pollingSince = Date.now();
       poll();
     } else {
       onStatus({ mode: 'reconnecting', error: why });
@@ -87,6 +90,13 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
       onStatus({ mode: 'polling' });
     } catch (e) {
       onStatus({ mode: 'polling', error: e.message });
+    }
+    // Every 5 minutes, try the live stream again (if it breaks three more times, back to asking every 10 s).
+    if (Date.now() - pollingSince >= RETRY_STREAM_MS) {
+      pollingSince = null;
+      failures = [];
+      onStatus({ mode: 'reconnecting' });
+      return openStream();
     }
     setTimeout(poll, 10000);
   }
