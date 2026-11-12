@@ -433,7 +433,11 @@ export function createTrains(options = {}) {
     if (Number.isFinite(cap)) down = Math.max(down, Math.min(40, sim.v * sim.v / (2 * Math.max(0.5, cap - sim.s))));
     let want;
     if (sim.syncing) want = T.v + e / 2;
-    else if (e >= 0) want = Math.min(T.v + e / TAU_S, T.v * 1.3 + 5);   // catching up stays gentle; far behind syncs
+    // Catching up a moving target stays gentle (far behind syncs). A standing target (a stop, a train standing) is
+    // braked into like a real train: keep the speed and let the braking curve below bring it to a stop there. It was
+    // crept up to at 18 km/h at most, which ate a short stop (2556 at Stockholms södra, 2026-11-12: 170 m behind when
+    // the stop began, drawn standing 7 s of ~40; now 31 s).
+    else if (e >= 0) want = T.v > 0 ? Math.min(T.v + e / TAU_S, T.v * 1.3 + 5) : e < 2 ? e / TAU_S : Math.max(5, sim.v);
     else {
       // Ahead of the target. Report times are rough, so a moving target lurches; slow down (to 40 % at most, 10 s
       // ahead: half speed) rather than stop, however far ahead: the real train is moving, so the drawn one does too

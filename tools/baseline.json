@@ -2,51 +2,51 @@
   "about": "Accepted replay numbers per recording (tools/check.mjs holds each recording to its own, with a margin). Written by node tools/check.mjs --rebaseline when a change is accepted; why goes in docs/movement.md.",
   "recordings": {
     "2026-11-11T16-46-20-921Z": {
-      "frozenPct": 0.8,
-      "lag90S": 7.73,
+      "frozenPct": 0.86,
+      "lag90S": 7.67,
       "dwellThroughPct": null,
       "wrongWay": 0,
-      "extraTurnBacks": 6,
+      "extraTurnBacks": 7,
       "when": "2026-11-13"
     },
     "2026-11-11T21-45-41-004Z": {
-      "frozenPct": 0.81,
-      "lag90S": 8.81,
-      "dwellThroughPct": 15.5,
+      "frozenPct": 0.9,
+      "lag90S": 8.75,
+      "dwellThroughPct": 12.3,
       "wrongWay": 0,
       "extraTurnBacks": 21,
       "when": "2026-11-13"
     },
     "2026-11-12T06-00-00-005Z": {
-      "frozenPct": 0.77,
-      "lag90S": 7.48,
-      "dwellThroughPct": 17.1,
+      "frozenPct": 0.82,
+      "lag90S": 7.38,
+      "dwellThroughPct": 15,
       "wrongWay": 2,
-      "extraTurnBacks": 157,
+      "extraTurnBacks": 164,
       "when": "2026-11-13"
     },
     "2026-11-12T15-30-00-006Z": {
-      "frozenPct": 0.74,
-      "lag90S": 7.46,
-      "dwellThroughPct": 15.1,
+      "frozenPct": 0.81,
+      "lag90S": 7.36,
+      "dwellThroughPct": 13.1,
       "wrongWay": 6,
-      "extraTurnBacks": 130,
+      "extraTurnBacks": 131,
       "when": "2026-11-13"
     },
     "2026-11-12T17-01-59-418Z": {
-      "frozenPct": 0.7,
-      "lag90S": 7.59,
-      "dwellThroughPct": 16.5,
-      "wrongWay": 2,
-      "extraTurnBacks": 143,
+      "frozenPct": 0.77,
+      "lag90S": 7.53,
+      "dwellThroughPct": 14.1,
+      "wrongWay": 1,
+      "extraTurnBacks": 145,
       "when": "2026-11-13"
     },
     "2026-11-12T19-42-00-050Z": {
-      "frozenPct": 0.69,
-      "lag90S": 8.47,
-      "dwellThroughPct": 16.9,
+      "frozenPct": 0.77,
+      "lag90S": 8.35,
+      "dwellThroughPct": 13.4,
       "wrongWay": 0,
-      "extraTurnBacks": 48,
+      "extraTurnBacks": 49,
       "when": "2026-11-13"
     }
   }
