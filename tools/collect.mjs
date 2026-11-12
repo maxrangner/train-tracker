@@ -71,7 +71,9 @@ async function record(name, objectType, makeQuery) {
       const decoder = new TextDecoder();
       let buf = '';
       for await (const chunk of stream.body) {
-        buf += decoder.decode(chunk, { stream: true }).replace(/\r\n/g, '\n');   // Trafikverket sends \r\n
+        // Trafikverket sends \r\n. Replaced after joining: a \r\n split between two chunks, replaced per chunk, glued
+        // two messages into one (a JSON error and a lost stream about once an hour, 2026-11-12).
+        buf = (buf + decoder.decode(chunk, { stream: true })).replace(/\r\n/g, '\n');
         let i;
         while ((i = buf.indexOf('\n\n')) >= 0) {
           const event = buf.slice(0, i); buf = buf.slice(i + 2);
