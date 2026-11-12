@@ -192,6 +192,36 @@ export async function fetchStations() {
   }));
 }
 
+// ---------- A station's board ----------
+
+// The next trains at a station: departures ('Avgang') or arrivals ('Ankomst'), passenger stops only, at most n.
+// A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
+// [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
+export async function fetchBoard(sig, activity, at, n) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
+    `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
+    `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
+    `<GT name="AdvertisedTimeAtLocation" value="${new Date(at - 90 * 60000).toISOString()}"/></FILTER>` +
+    `<INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE>` +
+    `<INCLUDE>TrackAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
+    `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE></QUERY>`);
+  const rows = (r.TrainAnnouncement ?? []).map(a => ({
+    key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
+    operational: a.OperationalTrainNumber, date: a.ScheduledDepartureDateTime.slice(0, 10), number: a.AdvertisedTrainIdent,
+    planned: Date.parse(a.AdvertisedTimeAtLocation),
+    estimated: a.EstimatedTimeAtLocation ? Date.parse(a.EstimatedTimeAtLocation) : null,
+    actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null,
+    track: a.TrackAtLocation ?? '', canceled: a.Canceled === true,
+    product: a.ProductInformation?.[0]?.Description ?? null,
+    from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
+  }));
+  // Gone: left (or arrived) before now, or cancelled and planned more than 5 minutes ago. Then the next n.
+  return rows.filter(x => !(x.actual && x.actual < at) && !(x.canceled && x.planned < at - 5 * 60000)
+    && !(!x.actual && !x.estimated && x.planned < at - 30 * 60000)).slice(0, n);
+}
+
 // ---------- A train number in today's timetable ----------
 
 // The trains with this public number running on this day (YYYY-MM-DD, Swedish time):

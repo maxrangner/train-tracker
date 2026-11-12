@@ -25,7 +25,8 @@ const dotOpacity = sel => ['step', ['zoom'],
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
-export function createMap(container, { onTrainTap, getTrains3d, railData = {} } = {}) {
+// onStationTap(sig): a station was tapped (and no train).
+export function createMap(container, { onTrainTap, onStationTap, getTrains3d, railData = {} } = {}) {
   const map = new Map({
     container,
     style: STYLE,
@@ -55,6 +56,36 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
         },
       });
     }
+
+    // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
+    map.addSource('stations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({
+      id: 'station-dots',
+      type: 'circle',
+      source: 'stations',
+      minzoom: 9,
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2.5, 14, 6],
+        'circle-color': '#ffffff',
+        'circle-stroke-color': '#3d444d',
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2],
+      },
+    });
+    map.addLayer({
+      id: 'station-names',
+      type: 'symbol',
+      source: 'stations',
+      minzoom: 11,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 12,
+        'text-offset': [0, -1.1],
+        'text-anchor': 'bottom',
+        'text-optional': true,
+      },
+      paint: { 'text-color': '#3d444d', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
+    });
 
     map.addSource('trains', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({
@@ -108,6 +139,13 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
       const nearest = hits.reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
+      // No train there: a station?
+      if (!nearest && onStationTap && map.getZoom() >= 9) {
+        const sp = 14;
+        const st = map.queryRenderedFeatures([[e.point.x - sp, e.point.y - sp], [e.point.x + sp, e.point.y + sp]], { layers: ['station-dots', 'station-names'] })
+          .reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
+        if (st) return onStationTap(st.properties.sig);
+      }
       onTrainTap?.(nearest?.properties.id ?? null);
     });
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -218,10 +256,21 @@ export function createMap(container, { onTrainTap, getTrains3d, railData = {} } 
       const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
       map.jumpTo({ center: [c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k] });
     },
+    // The passenger stations: [{ sig, name, lon, lat }].
+    async setStations(list) {
+      await ready;
+      map.getSource('stations').setData({ type: 'FeatureCollection', features: list.map(st => ({
+        type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) });
+    },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
     async goTo(place, minZoom) {
       await ready;
       map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true });
+    },
+    // Keep room for the panel or board at the screen's bottom (45 %), without moving what is on screen.
+    async pad() {
+      await ready;
+      setPadding({ top: 0, bottom: Math.round(map.getContainer().clientHeight * 0.45) + 20, left: 0, right: 0 });
     },
     // Take the room kept for the panel away again, without moving what is on screen.
     async unpad() {
