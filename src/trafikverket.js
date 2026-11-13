@@ -215,6 +215,28 @@ export async function fetchCancelledToday(day) {
   return new Set((r.TrainAnnouncement ?? []).map(a => a.OperationalTrainNumber)).size;
 }
 
+// ---------- Today's arrivals (the stats page's graph) ----------
+
+// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual }],
+// id = train number + station (shorter than ActivityId, 36 characters). changedSince (ms): only rows changed after
+// it (ModifiedTime). Measured 2026-11-13 at 23:50: the whole day ~31,900 rows, 5.4 MB, ~285 kB as sent; changes over 10
+// minutes ~150 rows, 2.5 kB. Old rows are changed again too (an hour's changes reached back to 01:23).
+export async function fetchDayArrivals(since, changedSince = null) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
+    `<FILTER><GT name="TimeAtLocation" value="${new Date(since).toISOString()}"/>` +
+    `<EQ name="Advertised" value="true"/><EQ name="ActivityType" value="Ankomst"/>` +
+    (changedSince ? `<GT name="ModifiedTime" value="${new Date(changedSince).toISOString()}"/>` : '') + `</FILTER>` +
+    `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>LocationSignature</INCLUDE>` +
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE></QUERY>`);
+  const out = [];
+  for (const a of r.TrainAnnouncement ?? []) {
+    if (!a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
+    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation) });
+  }
+  return out;
+}
+
 // ---------- Stations ----------
 
 // Signature -> { sig, name, lon, lat, advertised } for every station, e.g. "Cst" -> Stockholm C and its place.

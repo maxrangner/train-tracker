@@ -152,6 +152,15 @@
     .st-n { text-align: right; }
     .st-stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
     .st-ontime { background: #1a7f37; } .st-some { background: #d4a72c; } .st-late { background: #d1242f; }
+    /* Today's graph (src/stats.js dayGraph): the same three colours as the dots. */
+    .st-day { width: 100%; height: auto; display: block; overflow: visible; }
+    .st-day .d-ontime { fill: #1a7f37; } .st-day .d-some { fill: #d4a72c; } .st-day .d-late { fill: #d1242f; }
+    .st-day .d-hit { fill: transparent; }
+    .st-day g:hover .d-hit { fill: var(--hover); }
+    .st-day line { stroke: var(--line); stroke-width: 1; }
+    .st-day text { fill: var(--muted); font-size: 8px; }
+    .st-legend { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+    .st-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }

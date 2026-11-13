@@ -15,6 +15,7 @@ import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
+import { createDayStats } from './day-stats.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -41,6 +42,8 @@ trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
 const stats = createStats();   // the stats page's running numbers (src/stats.js)
+// Today's arrivals for the stats page's graph: asked for only while that page is open (live, with a key).
+const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
 
@@ -295,7 +298,7 @@ const statsPage = document.getElementById('stats-page');
 const statsBody = document.getElementById('stats-body');
 function drawStats() {
   statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameTrains, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay) });
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null });
 }
 function openStats() {
   menu.close();
@@ -303,6 +306,7 @@ function openStats() {
   settingsPage.hidden = true;
   statsPage.hidden = false;
   if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(now())), now());
+  dayStats?.open();
   drawStats();
   statsPage.querySelector('.panel-close').focus();
 }
@@ -468,6 +472,7 @@ setInterval(() => {
   stats.tick(frameTrains, tNow, id => trains.get(id));
   if (!statsPage.hidden) {
     if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
+    dayStats?.tick();
     drawStats();
   }
 
