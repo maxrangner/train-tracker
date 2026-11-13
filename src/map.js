@@ -40,9 +40,12 @@ const MASK_URL = '/sweden-mask.json';
 const SWEDEN_BOUNDS = [[10.9, 55.2], [24.2, 69.1]];
 const MAX_ZOOM = 19;
 let swedenShape = null;   // Sweden, roughly (about 1 km), for the names
+let maskFailed = false;
 const maskReady = fetch(MASK_URL).then(r => r.json())
   .then((g) => { swedenShape = g.features.find(f => f.properties.kind === 'sweden')?.geometry ?? null; })
-  .catch(e => console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`));
+  .catch((e) => { maskFailed = true; console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`); });
+// The start screen (index.html) stays until the first view shows only Sweden, or at most this long.
+const FIRST_VIEW_MAX_MS = 8000;
 
 // The fastest a drawn train moves, in metres a second (250 km/h): for how often the dots are refreshed (trainsEvery).
 const FASTEST_MS = 70;
@@ -317,8 +320,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
 
   // The base map's names (towns, seas, roads) only inside Sweden: each of its label layers also asks "within Sweden".
+  let namesFiltered = false;
   function namesOnlyInSweden() {
     if (!swedenShape) return;
+    namesFiltered = true;
     for (const l of map.getStyle().layers) {
       if (l.type !== 'symbol' || OUR_LAYERS.includes(l.id)) continue;
       const f = map.getFilter(l.id);
@@ -535,8 +540,31 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
 
   let isReady = false;
   ready.then(() => { isReady = true; });
+
+  // The first view with only Sweden (Max, 2026-11-13: "the whole world shows first, then the Sweden mask kicks
+  // in"; the cover is its own file and came about 0.4 s after the base map). Resolves once the base map, the cover
+  // outside Sweden and the names left out abroad are all on screen; after FIRST_VIEW_MAX_MS whatever there is.
+  const shown = new Promise((resolve) => {
+    const giveUp = setTimeout(resolve, FIRST_VIEW_MAX_MS);
+    const check = () => {
+      let done = false;
+      try {
+        done = isReady && (namesFiltered || maskFailed) && map.isSourceLoaded('sweden-mask') && map.areTilesLoaded();
+      } catch { done = false; }   // the cover's source isn't there yet
+      if (!done) return;
+      map.off('render', check);
+      map.off('idle', check);
+      clearTimeout(giveUp);
+      map.once('render', () => resolve());   // one more frame, so what was just loaded has been drawn
+      map.triggerRepaint();
+    };
+    map.on('render', check);
+    map.on('idle', check);
+  });
+
   return {
     ready,
+    shown,
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
