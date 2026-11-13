@@ -128,15 +128,18 @@
       max-width: 560px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
       display: flex; flex-direction: column;
     }
-    /* Settings: its own page over the map, opened from ☰ → Settings (Max, 2026-11-12). */
+    /* Settings: its own card over the map, opened from ☰ → Settings (Max, 2026-11-12), in the middle of the screen
+       with the map dimmed behind it; a tap outside closes it (Max, 2026-11-13). */
     #settings-page {
-      position: fixed; z-index: 6;
+      position: fixed; z-index: 7;
       left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
-      top: calc(var(--gap) + env(safe-area-inset-top, 0px));
-      max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      top: calc(var(--gap) + env(safe-area-inset-top, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
+      height: fit-content; max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      max-width: 480px; margin: auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
       display: flex; flex-direction: column; gap: 6px;
     }
+    #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
+    #settings-page:not([hidden]) + #settings-backdrop { display: block; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
@@ -318,6 +321,7 @@
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
     </div>
   </div>
+  <div id="settings-backdrop"></div>
   <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>
       <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp">×</button></div>

@@ -267,6 +267,8 @@ document.getElementById('open-settings').onclick = () => {
   settingsPage.querySelector('.panel-close').focus();
 };
 settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
+// A tap outside the card (on the dimmed map behind it) closes it (Max, 2026-11-13).
+document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
