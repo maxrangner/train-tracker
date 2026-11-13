@@ -149,6 +149,13 @@
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
+    /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
+    .map-note { position: absolute; z-index: 3; top: calc(150px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+      max-width: min(300px, calc(100% - 20px)); padding: 8px 10px; background: var(--bg); color: var(--ink); font-size: 13px; }
+    /* In dark the map's button icons are turned light (above); My location's own blue and red states stay as they are. */
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon,
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-error .maplibregl-ctrl-icon { filter: none; }
     /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
     .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
       top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(50px + env(safe-area-inset-right, 0px));

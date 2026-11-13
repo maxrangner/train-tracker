@@ -21,6 +21,8 @@ const EN = {
   closeHelp: 'Close help',
   closeSettings: 'Close settings',
   close: 'Close',
+  myLocation: 'Show my location',
+  noLocation: 'My location needs a secure (https) address: it works on the computer itself (localhost) and in the app, not over the home wifi.',
   // Settings
   trains: 'Trains',
   toys: 'Compact',              // the enlarged trains (Max, 2026-11-12: "compact" and "realistic")
@@ -109,6 +111,8 @@ const SV = {
   closeHelp: 'Stäng hjälpen',
   closeSettings: 'Stäng inställningarna',
   close: 'Stäng',
+  myLocation: 'Visa min plats',
+  noLocation: 'Min plats kräver en säker (https) adress: den fungerar på själva datorn (localhost) och i appen, inte över hemmets wifi.',
   trains: 'Tåg',
   toys: 'Kompakt',
   realSize: 'Realistisk',
