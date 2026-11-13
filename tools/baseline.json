@@ -48,6 +48,14 @@
       "wrongWay": 0,
       "extraTurnBacks": 49,
       "when": "2026-11-13"
+    },
+    "2026-11-12T23-02-56-574Z": {
+      "frozenPct": 1.47,
+      "lag90S": 12.85,
+      "dwellThroughPct": 11,
+      "wrongWay": 0,
+      "extraTurnBacks": 42,
+      "when": "2026-11-13"
     }
   }
 }
