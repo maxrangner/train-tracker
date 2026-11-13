@@ -1,7 +1,7 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, Marker, NavigationControl, LngLat, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, GeolocateControl, LngLat, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
@@ -79,6 +79,35 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+
+  // My location (Max, 2026-11-13), under + and −: a tap flies the map to where this phone or computer is and shows
+  // a blue dot there; it stops following a train. Browsers give the place only on a secure address (https, or the
+  // computer itself), so over the home wifi (http://192.168.x.x) the button is grey, and a tap on it says why.
+  const geolocate = new GeolocateControl({ positionOptions: { enableHighAccuracy: true }, fitBoundsOptions: { maxZoom: 14 } });
+  map.addControl(geolocate, 'top-right');
+  const geoBox = geolocate._container;   // the control's own box (its button is inside)
+  geoBox?.addEventListener('click', () => { if (following) stopFollowing(); }, true);
+  const note = document.createElement('div');
+  note.className = 'map-note card';
+  note.hidden = true;
+  map.getContainer().appendChild(note);
+  let noteTimer = null;
+  function showNote(text) {
+    note.textContent = text;
+    note.hidden = false;
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => { note.hidden = true; }, 5000);
+  }
+  geoBox?.addEventListener('pointerdown', () => { if (!window.isSecureContext) showNote(t('noLocation')); }, true);
+  geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); });
+  // The button's words in the page's language (again after a change of language: applySettings).
+  function relabelControls() {
+    const b = geoBox?.querySelector('button');
+    if (!b) return;
+    const text = window.isSecureContext ? t('myLocation') : t('noLocation');
+    b.title = text;
+    b.setAttribute('aria-label', text);
+  }
 
   // Furthest out: all of Sweden on the screen (again when the screen changes size, e.g. a phone turned).
   function setZoomLimits() {
@@ -282,6 +311,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     });
 
     applySelectionFilters();
+    relabelControls();
   }
 
   // The base map's names (towns, seas, roads) only inside Sweden: each of its label layers also asks "within Sweden".
