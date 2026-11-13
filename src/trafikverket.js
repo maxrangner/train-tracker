@@ -7,16 +7,32 @@ const KEY = import.meta.env.VITE_TRV_KEY;
 export const hasKey = Boolean(KEY);
 
 // One query. `query` is the inside of <QUERY ...>...</QUERY>, written by the caller.
+// A request that gets no answer is given up: ANSWER_MS for the answer to start, then BODY_MS for all of it to
+// arrive (the first passings answer is big on a slow connection). Without a limit a request could hang for good,
+// and the page said "connecting" with nothing trying again (measured 2026-11-13: 3 minutes, then the test ended).
+const ANSWER_MS = 20 * 1000, BODY_MS = 60 * 1000;
 export async function ask(queryXml) {
-  const res = await fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/xml' },
-    body: `<REQUEST><LOGIN authenticationkey="${KEY}"/>${queryXml}</REQUEST>`,
-  });
-  if (!res.ok) throw new Error(`Trafikverket answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const result = (await res.json()).RESPONSE.RESULT[0];
-  if (result.ERROR) throw new Error(`Trafikverket: ${result.ERROR.MESSAGE}`);
-  return result;
+  const ctrl = new AbortController();
+  let timer = setTimeout(() => ctrl.abort(), ANSWER_MS);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml' },
+      body: `<REQUEST><LOGIN authenticationkey="${KEY}"/>${queryXml}</REQUEST>`,
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    timer = setTimeout(() => ctrl.abort(), BODY_MS);
+    if (!res.ok) throw new Error(`Trafikverket answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const result = (await res.json()).RESPONSE.RESULT[0];
+    if (result.ERROR) throw new Error(`Trafikverket: ${result.ERROR.MESSAGE}`);
+    return result;
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('no answer from Trafikverket');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // Keep a query live: ask once with a stream address, then follow the stream. If the stream breaks, ask again from
@@ -56,8 +72,9 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
     try {
       result = await ask(makeQuery({ changeId: lastChangeId, stream: true }));
     } catch (e) {
-      return streamFailed(e.message);
+      return stopped ? undefined : streamFailed(e.message);
     }
+    if (stopped) return;   // stopped while the answer was on its way: no new stream
     lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
     onResult(result);
     const url = result.INFO?.SSEURL;
@@ -85,6 +102,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
     if (stopped) return;
     try {
       const result = await ask(makeQuery({ changeId: lastChangeId, stream: false }));
+      if (stopped) return;
       lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
       onResult(result);
       onStatus({ mode: 'polling' });
