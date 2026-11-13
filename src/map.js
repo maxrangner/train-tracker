@@ -44,6 +44,8 @@ const maskReady = fetch(MASK_URL).then(r => r.json())
   .then((g) => { swedenShape = g.features.find(f => f.properties.kind === 'sweden')?.geometry ?? null; })
   .catch(e => console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`));
 
+// The fastest a drawn train moves, in metres a second (250 km/h): for how often the dots are refreshed (trainsEvery).
+const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 
@@ -535,6 +537,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   ready.then(() => { isReady = true; });
   return {
     ready,
+    // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
+    // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
+    // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
+    // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and from just before the models show.
+    trainsEvery() {
+      const z = map.getZoom();
+      if (map.isMoving() || z >= modelZoom() - 1) return 33;
+      const metresPerPx = 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** z);
+      return Math.max(33, Math.min(1000, 1000 * 0.25 * metresPerPx / FASTEST_MS));
+    },
     // Is a place in the view, or within half a view's width or height outside it? (lon, lat) -> true / false.
     // Only those trains are given to setTrains: the margin is far more than a train or the map moves between two
     // refreshes, and the groups (40 px) never reach across it.
