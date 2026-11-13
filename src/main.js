@@ -5,7 +5,7 @@ import { createMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
-import { pathOf } from './path.js';
+import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
@@ -63,7 +63,9 @@ const panel = createPanel(document.getElementById('panel'), {
     if (!id) { map.unfollow(); map.unpad(); }
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
   },
-  // The open train's whole path, start to finish (Max, 2026-11-12), in one colour (Max, 2026-11-13).
+  // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
+  // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
+  // travelled up to the last place it was reported at.
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
@@ -75,6 +77,11 @@ const panel = createPanel(document.getElementById('panel'), {
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };
+    const here = placeNow(id);
+    let done = 0;
+    if (here) done = progressAt(shownPath.path, here);
+    else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
+    map.setPathProgress(done);
     map.setPath(shownPath.path);
     if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
   },
@@ -244,6 +251,7 @@ function frame(ts) {
   const sel = panel.openId && frameById.get(panel.openId);
   const r = sel && trains.get(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
+  if (sel && shownPath?.id === sel.id) map.setPathProgress(progressAt(shownPath.path, sel));
   if (sel) map.drawNow();
   requestAnimationFrame(frame);
 }
