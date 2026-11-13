@@ -15,6 +15,8 @@ Data and services used by the program, each under its own terms:
 - Train positions, timetables and stations: Trafikverket's open data (CC0).
 - Map data: (c) OpenStreetMap contributors, Open Database License.
 - Map tiles: OpenFreeMap, built on (c) OpenMapTiles.
+- Sweden's border (public/sweden-mask.json, from OpenStreetMap): (c) OpenStreetMap contributors, Open Database
+  License.
 - Drawn with MapLibre GL JS (BSD 3-Clause) and three.js (MIT).
 
 Train companies' names and liveries belong to their owners. This project is not affiliated with any of them, nor
