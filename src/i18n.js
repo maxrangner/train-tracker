@@ -95,6 +95,8 @@ const EN = {
   waitingBefore: (q, st, p) => `${q} · waiting before ${st} until it is confirmed${p}`,
   byTimetable: (q, p) => `${q} · moving by its timetable${p}`,
   stoppedLastSeen: (q, p) => `${q} · stopped where it was last seen${p}`,
+  noteFrom: s => `from ${s}`,
+  noteUntil: s => `until ${s}`,
   // The stats page (src/stats.js)
   stats: 'Live statistics',
   closeStats: 'Close statistics',
@@ -203,6 +205,8 @@ const SV = {
   waitingBefore: (q, st, p) => `${q} · väntar före ${st} tills det är bekräftat${p}`,
   byTimetable: (q, p) => `${q} · rör sig enligt tidtabellen${p}`,
   stoppedLastSeen: (q, p) => `${q} · stannat där det sågs senast${p}`,
+  noteFrom: s => `från ${s}`,
+  noteUntil: s => `till ${s}`,
   stats: 'Statistik just nu',
   closeStats: 'Stäng statistiken',
   stMoving: (n, m, s, g) => `${n} tåg · ${m} i rörelse · ${s} står still · ${g} inget nytt`,

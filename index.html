@@ -222,6 +222,11 @@
     }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
     .panel-status { margin: 4px 0 0; color: var(--late); }
+    /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
+    .panel-tvnotes { margin: 0 0 6px; display: grid; gap: 2px; }
+    .panel-tvnote { margin: 0; }
+    .panel-tvnote.problem { color: var(--late); font-weight: 600; }
+    .panel-tvnote span { color: var(--muted); font-weight: 400; }
     .panel-table { overflow: auto; min-height: 0; position: relative; }
     table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
     th { text-align: left; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--bg); }
