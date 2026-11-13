@@ -59,8 +59,8 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'station-names', 'path-stops', 'train-dots',
-  'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels'];
+const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots',
+  'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -208,21 +208,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2],
       },
     });
-    map.addLayer({
-      id: 'station-names',
-      type: 'symbol',
-      source: 'stations',
-      minzoom: 11,
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': ['Noto Sans Regular'],
-        'text-size': 12,
-        'text-offset': [0, -1.1],
-        'text-anchor': 'bottom',
-        'text-optional': true,
-      },
-      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
-    });
+    // (The stations' names are added last, on top of everything: below.)
 
     // The open train's stops: a white circle with a ring in the path's colour (Max, 2026-11-13, like a map app's
     // line), above the stations' own grey rings, which hid them; a little larger than those.
@@ -313,6 +299,26 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-anchor': 'top',
       },
       paint: { 'text-color': C.group, 'text-halo-color': C.halo, 'text-halo-width': 2 },
+    });
+
+    // The stations' names, last so they lie on top of everything (Max, 2026-11-13: "a bit bigger and always on top
+    // of other labels"): over the trains, their labels and the base map's names. The top layer is also placed first,
+    // so where labels collide a station's name is kept and the other label is left out. (The selected train's label
+    // is above the map itself, so it stays on top.)
+    map.addLayer({
+      id: 'station-names',
+      type: 'symbol',
+      source: 'stations',
+      minzoom: 11,
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 14,
+        'text-offset': [0, -1.1],
+        'text-anchor': 'bottom',
+        'text-optional': true,
+      },
+      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
     });
 
     applySelectionFilters();
