@@ -44,7 +44,30 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     if (b) { b.setAttribute('aria-pressed', String(on)); b.textContent = t(on ? 'following' : 'follow'); }
   }
 
+  // While a card is open its times are asked for again every minute (Max, 2026-11-14: they came only once, when
+  // it opened, so new actual times never showed). The table keeps where it was scrolled to.
+  const REFRESH_MS = 60000;
+  let refreshTimer = null;
+  function refreshLater(train) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(async () => {
+      if (openId !== train.id) return;
+      try {
+        const route = await fetchRoute(train.operational, train.date);
+        if (openId !== train.id) return;
+        const first = !shown?.route;
+        shown = { train, route };
+        if (first) onRoute?.(train.id, route);   // the first try had failed: its path too
+        draw(train, route, { keepScroll: !first });
+      } catch (e) {
+        console.warn('route refresh:', e.message);
+      }
+      refreshLater(train);
+    }, REFRESH_MS);
+  }
+
   function close() {
+    clearTimeout(refreshTimer);
     openId = null;
     el.hidden = true;
     el.innerHTML = '';
@@ -67,17 +90,21 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     try {
       route = await fetchRoute(train.operational, train.date);
     } catch (e) {
-      if (openId === train.id) el.querySelector('.panel-note').textContent = t('routeFailed', e.message);
+      if (openId === train.id) { el.querySelector('.panel-note').textContent = t('routeFailed', e.message); refreshLater(train); }
       return;
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
     onRoute?.(train.id, route);
     shown = { train, route };
     draw(train, route);
+    refreshLater(train);
   }
 
   // The panel's table for a train whose route has loaded.
-  function draw(train, route) {
+  // keepScroll: a refresh; the table stays where it was scrolled to (otherwise it scrolls to the next stop).
+  function draw(train, route, { keepScroll = false } = {}) {
+    const scrolled = keepScroll ? el.querySelector('.panel-table')?.scrollTop : undefined;
+    const status = el.querySelector('.panel-status')?.textContent ?? '';
     // One line per passenger stop: arrival and departure at the same station merged (they can come in either
     // order when both have the same planned minute).
     const stops = [];
@@ -138,9 +165,11 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th><th class="trk">${t('track')}</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<p class="panel-note">${t('noStops')}</p>`);
     wireHead();
+    if (status) setStatus(status);   // the line on how its place is known stays (main.js updates it each second)
     // Scroll the table (only the table) so the next stop is in view.
     const box = el.querySelector('.panel-table'), next = el.querySelector('tr.next');
-    if (box && next) box.scrollTop = next.offsetTop - box.clientHeight / 2;
+    if (box && scrolled !== undefined) box.scrollTop = scrolled;
+    else if (box && next) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
 
   // Draw it again as it is (Settings → Language changed): no new request, the map stays as it is.
