@@ -88,6 +88,21 @@
       }
     },
     {
+      "name": "2026-11-13T04-00-00-000Z",
+      "role": "library",
+      "slot": "first trains",
+      "swedish": "Fri 13 Nov 2026 05:00-06:00",
+      "why": "First trains: the day starting up, 84 trains at once at 05:00 rising to 244 (median 179); 31 % never send a speed, 34 % of train time in GPS silences of 30 s or more, little lateness (6 % of trains 6 min or more late). Library, not core: the night already holds the quiet hours and the morning rush has more trains starting and ending (601 in all against 363 at once). Second live hour with the recorder fix: no stream break.",
+      "positions": {
+        "bytes": 35586847,
+        "sha256": "0a9338e09c1284f6773e85c2566951ee9c8ca1c794eaad755aa60e03a294d8dd"
+      },
+      "timetable": {
+        "bytes": 8324904,
+        "sha256": "c43e87a23d339524fe02613b53a7ab9d80e60596752c8b8184f323ef658ffb1a"
+      }
+    },
+    {
       "name": "2026-11-12T15-30-00-006Z",
       "role": "library",
       "slot": "weekday evening rush (second)",
