@@ -53,7 +53,8 @@ const propsFor = (r, sim) => ({
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
-const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
+// Dragged off the screen or behind the panel, the train is closed (map.js).
+const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false), () => panel.close());
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   isStarred: number => favourites.has('train', number),
