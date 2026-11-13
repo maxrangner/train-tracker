@@ -653,13 +653,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.triggerRepaint();
     return true;
   }
-  // Change the room kept free at the screen's edges, keeping the map still: the camera's new middle is the place
-  // already showing there.
-  function setPadding(padding) {
-    const { clientWidth: w, clientHeight: h } = box;
-    const at = map.unproject([(w + padding.left - padding.right) / 2, (h + padding.top - padding.bottom) / 2]);
-    map.jumpTo({ center: at, padding });
-  }
 
   const loaded = new Set();
 
@@ -800,21 +793,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
         { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
     },
-    // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
+    // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
+    // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
+    // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").
     async goTo(place, minZoom) {
       await ready;
       flying = true;   // the camera leaves the followed train alone until it lands
-      map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true });
-    },
-    // Keep room for the panel or board at the screen's bottom (45 %), without moving what is on screen.
-    async pad() {
-      await ready;
-      setPadding({ top: 0, bottom: Math.round(map.getContainer().clientHeight * 0.45) + 20, left: 0, right: 0 });
-    },
-    // Take the room kept for the panel away again, without moving what is on screen.
-    async unpad() {
-      await ready;
-      setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      const f = defaultFocus();
+      map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true,
+        offset: [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2] });
     },
     // Ring the train with this id (null: none). Its dot and label are then drawn by the selection marker.
     async select(id) {

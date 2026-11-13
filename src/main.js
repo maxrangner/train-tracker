@@ -61,7 +61,7 @@ const panel = createPanel(document.getElementById('panel'), {
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
-    if (!id) { map.unfollow(); map.unpad(); }
+    if (!id) map.unfollow();   // the map stays exactly as it is
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
   },
   // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
@@ -137,7 +137,6 @@ const board = createBoard(document.getElementById('board'), {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
-  onClose: () => { if (!panel.openId) map.unpad(); },
   isStarred: sig => favourites.has('station', sig),
   onStar: sig => favourites.toggle('station', sig),
 });
@@ -146,9 +145,8 @@ async function openStation(sig, { go = false } = {}) {
   if (!st) return;
   if (panel.openId) panel.close();
   map.unfollow();
-  await map.pad();   // the station shows above the board
   board.open(st);
-  if (go) map.goTo(st, 13);
+  if (go) map.goTo(st, 13);   // lands above the board
 }
 
 // A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
