@@ -137,7 +137,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
   return follow({
     makeQuery: (c) => {
       const since = new Date(Date.now() - sinceMinutes * 60000).toISOString();
-      return `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" ${changeAttrs(c)}>` +
+      return `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" ${changeAttrs(c)}>` +
         `<FILTER><GT name="TimeAtLocation" value="${since}"/></FILTER>` +
         `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
         `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedTimeAtLocation</INCLUDE>` +
@@ -169,7 +169,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
 // All stops of one train on its date, in order: [{station, activity, advertised, planned, estimated, actual, canceled}].
 export async function fetchRoute(operationalNumber, departureDate) {
   const r = await ask(
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
     `<FILTER><EQ name="OperationalTrainNumber" value="${operationalNumber}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${departureDate.slice(0, 10)}"/></FILTER>` +
     `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +
@@ -218,7 +218,7 @@ export async function fetchStations() {
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
 export async function fetchBoard(sig, activity, at, n) {
   const r = await ask(
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
     `<GT name="AdvertisedTimeAtLocation" value="${new Date(at - 90 * 60000).toISOString()}"/></FILTER>` +
@@ -247,7 +247,7 @@ export async function fetchBoard(sig, activity, at, n) {
 // [{ key, operational, date, number, from, to, product }] (from/to are station signatures).
 export async function fetchTrainsByNumber(number, day) {
   const r = await ask(
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" limit="200">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="200">` +
     `<FILTER><EQ name="AdvertisedTrainIdent" value="${String(number).replace(/\D/g, '')}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
     `<INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
@@ -272,7 +272,7 @@ export async function fetchPlannedRoutes(numbers, from, to) {
   const out = [];
   for (let i = 0; i < numbers.length; i += 100) {
     const r = await ask(
-      `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9">` +
+      `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
       `<FILTER><IN name="OperationalTrainNumber" value="${numbers.slice(i, i + 100).join(',')}"/>` +
       `<GT name="AdvertisedTimeAtLocation" value="${new Date(from).toISOString()}"/>` +
       `<LT name="AdvertisedTimeAtLocation" value="${new Date(to).toISOString()}"/></FILTER>` +
