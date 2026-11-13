@@ -27,6 +27,18 @@ export const RAIL_SOURCES = {
   trv: { name: 'Trafikverket' },
 };
 
+// Only Sweden shows (Max, 2026-11-13: "only Sweden visible", plain like the sea): everything outside Sweden's border
+// (OpenStreetMap's, with its territorial waters: public/sweden-mask.json, from tools/sweden-mask.mjs) is painted in
+// the base map's own sea colour, over the base map, under our rail lines and trains (trains abroad still show), and
+// the base map's names outside Sweden are left out. Panning stays round Sweden.
+const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
+const MAX_BOUNDS = [[-2, 52], [42, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+const MASK_URL = '/sweden-mask.json';
+let swedenShape = null;   // Sweden, roughly (about 1 km), for the names
+const maskReady = fetch(MASK_URL).then(r => r.json())
+  .then((g) => { swedenShape = g.features.find(f => f.properties.kind === 'sweden')?.geometry ?? null; })
+  .catch(e => console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`));
+
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 
@@ -37,7 +49,7 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'station-dots', 'station-names', 'path-stops', 'train-dots',
+const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'station-names', 'path-stops', 'train-dots',
   'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -54,6 +66,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     center: [16.5, 62.5],   // middle of Sweden
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
+    maxBounds: MAX_BOUNDS,
     maxPitch: 70,
     // The map credits are in Help (the ? button at the top, index.html); see main.js for the public version.
     attributionControl: false,
@@ -68,6 +81,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
+    add('sweden-mask', { data: MASK_URL });
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
     add('path');
     add('stations');
@@ -79,6 +93,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // Our layers, with the colours, model zoom and language as they are now.
   function addLayers() {
     const C = colours(dark), MODEL_ZOOM = modelZoom();
+    // Outside Sweden, the sea's colour: over the base map's land, roads and borders, under its names after them, so
+    // a Swedish name at the coast isn't cut (the names outside Sweden are left out, below). The dark map draws roads
+    // and borders after some names, so the place is after its last layer that isn't names.
+    let sea = SEA(dark);
+    try { const c = map.getPaintProperty('water', 'fill-color'); if (typeof c === 'string') sea = c; } catch { /* no water layer */ }
+    const base = map.getStyle().layers.filter(l => !OUR_LAYERS.includes(l.id));
+    const firstName = base[base.findLastIndex(l => l.type !== 'symbol') + 1]?.id;
+    map.addLayer({ id: 'sweden-mask', type: 'fill', source: 'sweden-mask', filter: ['==', ['get', 'kind'], 'mask'],
+      paint: { 'fill-color': sea, 'fill-antialias': false } }, firstName);
+    namesOnlyInSweden();
     // Rail lines first, so they sit under the trains.
     for (const id of Object.keys(RAIL_SOURCES)) {
       map.addLayer({
@@ -224,6 +248,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
 
     applySelectionFilters();
   }
+
+  // The base map's names (towns, seas, roads) only inside Sweden: each of its label layers also asks "within Sweden".
+  function namesOnlyInSweden() {
+    if (!swedenShape) return;
+    for (const l of map.getStyle().layers) {
+      if (l.type !== 'symbol' || OUR_LAYERS.includes(l.id)) continue;
+      const f = map.getFilter(l.id);
+      if (JSON.stringify(f ?? null).includes('"within"')) continue;   // done already (our layers added again)
+      map.setFilter(l.id, f ? ['all', f, ['within', swedenShape]] : ['within', swedenShape]);
+    }
+  }
+  maskReady.then(() => { if (isReady) namesOnlyInSweden(); });
 
   // The id of the model under screen point pt (or null): each drawn model's ground outline projected to the screen,
   // a margin of 8 px round it, and its roof's height taken into account by also testing a bit above it.
