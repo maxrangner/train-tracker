@@ -20,6 +20,7 @@ const EARTH = 40075016.686;   // metres round the equator
 // (measured 2026-11-13).
 const renderers = new WeakMap();   // the map's WebGL context -> its three.js renderer
 const built = new Map();           // 'toy|<key>' or 'real|<key>' -> a built train to clone
+const faded = new Map();           // a model's paint -> its see-through copy, for grey trains
 
 // getTrains() -> [{ id, lon, lat, bearing (compass degrees), brand, stale }] at the moment being drawn.
 // along(id, d) -> { lon, lat } d metres along the train's track from its drawn place (+ ahead), or null: each car
@@ -36,16 +37,20 @@ export function createTrainLayer({ getTrains, along = null }) {
   const templates = { has: key => built.has(`${TOY ? 'toy' : 'real'}|${key}`), get: key => built.get(`${TOY ? 'toy' : 'real'}|${key}`),
     set: (key, train) => built.set(`${TOY ? 'toy' : 'real'}|${key}`, train) };
 
-  // A stale train (silent for a while, or no data at all) is drawn plain grey and see-through: its own copies of the
-  // materials, so the shared ones in train-model.js stay as they are.
+  // A stale train (silent for a while, or no data at all) is drawn plain grey and see-through, in its own shape
+  // (Max, 2026-11-13; it used to turn into the plain three-car model, so an eight-car train shrank when it went
+  // grey): its company's model in the plain model's colours, with its own copies of the materials, so the shared
+  // ones in train-model.js stay as they are.
   const STALE = '\0stale';
-  const keyOf = t => (t.stale ? STALE : t.brand ?? '');
+  const keyOf = t => (t.stale ? STALE : '') + (t.brand ?? '');
   const templateFor = (key) => {
     if (!templates.has(key)) {
-      const brand = key === STALE ? null : key || null;
-      const train = TOY ? buildToy(toyFor(brand)) : buildTrain(styleFor(brand));
-      if (key === STALE) {
-        const faded = new Map();
+      const stale = key.startsWith(STALE), brand = (stale ? key.slice(STALE.length) : key) || null;
+      const style = TOY ? toyFor(brand) : styleFor(brand);
+      const plain = TOY ? toyFor(null) : styleFor(null);
+      const train = TOY ? buildToy(stale ? { ...style, colours: plain.colours } : style)
+        : buildTrain(stale ? { ...style, colours: plain.colours } : style);
+      if (stale) {
         train.traverse((o) => {
           if (!o.isMesh) return;
           if (!faded.has(o.material)) faded.set(o.material, Object.assign(o.material.clone(), { transparent: true, opacity: 0.4, depthWrite: false }));
