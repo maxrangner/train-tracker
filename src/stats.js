@@ -110,7 +110,7 @@ export function createStats() {
         `<span class="st-track"><span class="st-bar" style="width:${(100 * n / most).toFixed(1)}%;background:${b ? brandColour(b) : 'var(--muted)'}"></span></span>` +
         `<span class="st-n">${num(n)}</span>`).join('') + `</div>`);
 
-      // 2: punctuality, and the most late train
+      // 2: punctuality: the trains on the map now, and under it today's arrivals per hour (Max, 2026-11-13: together)
       const groups = { ontime: 0, some: 0, late: 0, unknown: 0 };
       let worst = null;
       for (const r of reports) {
@@ -120,12 +120,17 @@ export function createStats() {
       }
       const known = groups.ontime + groups.some + groups.late;
       const pct = n => (known ? Math.round(100 * n / known) : 0);
-      section(t('stPunctuality'), known
+      const today = d.replay || !d.day ? `<p>${t('stNotInReplay')}</p>`
+        : d.day.state === 'loading' ? `<p>${t('stLoadingDay')}</p>`
+        : d.day.state === 'failed' ? `<p>${t('stCouldNotAsk5')}</p>`
+        : dayGraph(d.day);
+      section(t('stPunctuality'), `<p class="st-part">${t('stNowOnMap')}</p>` + (known
         ? `<div class="st-stack">${['ontime', 'some', 'late'].map(g => `<span class="st-${g}" style="width:${(100 * groups[g] / known).toFixed(1)}%"></span>`).join('')}</div>` +
           `<p>${t('stOnTime', pct(groups.ontime))} · ${t('stSome', pct(groups.some))} · ${t('stLate', pct(groups.late))}` +
           (groups.unknown ? ` · ${t('stNotKnown', num(groups.unknown))}` : '') + `</p>` +
           (worst && worst.m > 0 ? `<p>${t('stMostLate')}: <b>${esc(label(worst.r.number, worst.m))}</b>${lateness.brand(worst.r.id) ? ` <span class="st-sub">${esc(lateness.brand(worst.r.id))}</span>` : ''}</p>` : '')
-        : `<p>${t('stNoneYet')}</p>`);
+        : `<p>${t('stNoneYet')}</p>`) +
+        `<p class="st-part">${t('stToday')}</p>` + today);
 
       // 3: fastest now, and since the page opened
       let fast = null;
@@ -169,11 +174,6 @@ export function createStats() {
         ? `<p>${t('stRate', num(arrivals.length / secs, 0), num(age / 1000))}</p>`
         : `<p>${t('stNoneYet')}</p>`);
 
-      // Today: arrivals per hour in the dots' three groups (day: src/day-stats.js view(); null in a replay)
-      section(t('stToday'), d.replay || !d.day ? `<p>${t('stNotInReplay')}</p>`
-        : d.day.state === 'loading' ? `<p>${t('stLoadingDay')}</p>`
-        : d.day.state === 'failed' ? `<p>${t('stCouldNotAsk5')}</p>`
-        : dayGraph(d.day));
 
       return out.join('');
     },
@@ -184,7 +184,7 @@ export function createStats() {
 // arrivals; a small gap between the parts; hour labels at 00, 06, 12, 18; each bar's numbers on hover (its title).
 // Under it the day's totals, with Trafikverket's own measure (up to 5 minutes late is on time).
 function dayGraph({ hours }) {
-  const W = 10, BAR = 7, H = 80, TOP = 4, GAP = 0.8;
+  const W = 10, BAR = 7, H = 45, TOP = 4, GAP = 0.6;   // low (Max, 2026-11-13: "the graph can be shorter")
   const totals = hours.map(c => c[0] + c[1] + c[2]);
   const most = Math.max(1, ...totals);
   const sum = [0, 1, 2].map(g => hours.reduce((s, c) => s + c[g], 0));
