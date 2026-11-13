@@ -54,6 +54,30 @@ const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 
+// A train further out is a circle, or (Settings → Train symbol, Max 2026-11-13) a triangle pointing the way it goes,
+// in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
+const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
+const TRIANGLE = [[32, 3], [49, 61], [15, 61]];   // in a 64 x 64 picture, pointing up (north), slim so the tip shows; middle (32, 32)
+const triangles = () => settings.trainSymbol === 'triangle';
+function addTriangles(map) {
+  for (const [name, colour] of Object.entries(DOT_COLOURS)) {
+    if (map.hasImage(`tri-${name}`)) continue;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.beginPath();
+    TRIANGLE.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.lineJoin = 'round';
+    g.lineWidth = 8;
+    g.strokeStyle = '#ffffff';
+    g.stroke();
+    g.fillStyle = colour;
+    g.fill();
+    map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
+  }
+}
+
 // A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
 const dotOpacity = sel => ['step', ['zoom'],
   ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], modelZoom(), 0];
@@ -61,7 +85,7 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots',
+const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -271,6 +295,26 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-opacity': dotOpacity(selected ?? ''),
       },
     });
+    // Triangles instead of circles (Settings → Train symbol): the circles stay, unseen, so taps still find the trains.
+    addTriangles(map);
+    map.addLayer({
+      id: 'train-triangles',
+      type: 'symbol',
+      source: 'trains',
+      layout: {
+        visibility: triangles() ? 'visible' : 'none',
+        'icon-image': ['case', ['get', 'stale'], 'tri-unknown',
+          ['match', ['get', 'late'], 'ontime', 'tri-ontime', 'some', 'tri-some', 'late', 'tri-late', 'tri-unknown']],
+        'icon-rotate': ['get', 'bearing'],
+        'icon-rotation-alignment': 'map',
+        'icon-pitch-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        // About as big as the circle: 9 px tall far out, 20 px from zoom 10.
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25],
+      },
+      paint: { 'icon-opacity': dotOpacity(selected ?? '') },
+    });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
@@ -413,8 +457,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // The selected train's own dot and label are drawn by its marker, so the layers leave it out.
   function applySelectionFilters() {
     const id = selected ?? '';
-    map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id));
-    map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id));
+    const dots = triangles() ? 0 : dotOpacity(id);   // with triangles the circles are only there for taps
+    map.setPaintProperty('train-dots', 'circle-opacity', dots);
+    map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
+    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id));
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
     map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id]]);
   }
@@ -510,7 +556,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // the camera (setSelectedPlace), so it can't lag.
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
-  selEl.innerHTML = '<div class="sel-dot"></div><div class="sel-label"></div>';
+  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 49,61 15,61" ' +
+    'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
   const selDot = selEl.firstChild, selLabel = selEl.lastChild;
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
@@ -746,8 +793,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!selShown) { selMarker.addTo(map); selShown = true; }
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
-      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}`;
+      const tri = triangles();
+      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}${tri ? ' tri' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
+      // The triangle turned the way the train goes, on the screen (the map may be turned).
+      const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
+      if (selDot.style.transform !== turn) selDot.style.transform = turn;
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
       const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
       if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }

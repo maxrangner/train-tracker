@@ -271,7 +271,7 @@ settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden
 document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol') map.applySettings();
   if (key === 'language') {
     translatePage();
     map.relabel();   // "3 trains" on the map
