@@ -131,14 +131,40 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
   // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
   // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
-  // out 1.5 s after. It only shows; it isn't dragged.
+  // out 1.5 s after. While it shows it can be grabbed (Max, 2026-11-13 evening): a press or drag on it sets the zoom,
+  // around the screen's middle (while following, the train), and it stays while held. An invisible grip round the
+  // thin bar makes it easy to hit with a finger.
   const zoomBar = document.createElement('div');
   zoomBar.className = 'zoom-bar';
   zoomBar.setAttribute('aria-hidden', 'true');
-  zoomBar.innerHTML = '<div class="zoom-knob"></div>';
+  zoomBar.innerHTML = '<div class="zoom-knob"></div><div class="zoom-grip"></div>';
   map.getContainer().appendChild(zoomBar);
-  const knob = zoomBar.firstChild;
+  const knob = zoomBar.firstChild, grip = zoomBar.lastChild;
   let zoomBarTimer = null;
+  let held = null;   // the finger or mouse holding the slider
+  function zoomFromY(clientY) {
+    const r = zoomBar.getBoundingClientRect();
+    const f = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+    const min = map.getMinZoom(), max = map.getMaxZoom();
+    map.jumpTo({ zoom: min + f * (max - min) });
+  }
+  grip.addEventListener('pointerdown', (e) => {
+    if (!zoomBar.classList.contains('shown')) return;
+    e.preventDefault();
+    held = e.pointerId;
+    grip.setPointerCapture(e.pointerId);
+    zoomBar.classList.add('held');
+    zoomFromY(e.clientY);
+  });
+  grip.addEventListener('pointermove', (e) => { if (e.pointerId === held) zoomFromY(e.clientY); });
+  const letGo = (e) => {
+    if (e.pointerId !== held) return;
+    held = null;
+    zoomBar.classList.remove('held');
+    showZoom();   // fades 1.5 s after letting go
+  };
+  grip.addEventListener('pointerup', letGo);
+  grip.addEventListener('pointercancel', letGo);
   function showZoom(reveal = true) {
     const min = map.getMinZoom(), max = map.getMaxZoom();
     const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
@@ -146,7 +172,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     if (!reveal) return;
     zoomBar.classList.add('shown');
     clearTimeout(zoomBarTimer);
-    zoomBarTimer = setTimeout(() => zoomBar.classList.remove('shown'), 1500);
+    zoomBarTimer = setTimeout(() => { if (held === null) zoomBar.classList.remove('shown'); }, 1500);
   }
   map.on('zoom', () => showZoom());
   map.on('resize', setZoomLimits);
