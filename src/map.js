@@ -601,7 +601,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // turns go round the screen's middle, not the focus; this puts the train back in the same frame.)
   // MapLibre's own hook for this (set only while following): it is handed each camera about to be drawn.
   const holding = () => following?.locked && following.place && !flying && !dragged && !map.dragPan.isActive();
-  const holdTrain = next => (holding() ? { center: centreHolding(following.place, following.focus, next) } : {});
+  // A flight to the followed train (a train picked in the search) aims, frame by frame, at where the train is now
+  // rather than where it was when it was picked: shifted by how far it has moved since (Max, 2026-11-13 evening: "it
+  // sort of misses the train a bit, then camera snaps to the correct view after a beat").
+  let chase = null;   // { lon, lat }: where the train was when the flight started
+  const holdTrain = (next) => {
+    if (flying && chase && following?.place) {
+      const c = next.center;
+      return { center: new LngLat(c.lng + following.place.lon - chase.lon, c.lat + following.place.lat - chase.lat) };
+    }
+    return holding() ? { center: centreHolding(following.place, following.focus, next) } : {};
+  };
+  const landed = () => { flying = false; chase = null; };
   // While following, a zoom (wheel or pinch) zooms around the train rather than around the fingers.
   function zoomAroundCenter(on) {
     // The wheel's enable() does nothing when it is already on (so the option was never taken): off first.
@@ -627,7 +638,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
-    if (flying && !map._camera?.isEasing?.()) flying = false;
+    if (flying && !map._camera?.isEasing?.()) landed();
     if (!dragged || pointers.size) return;
     dragged = false;
     const p = following?.getPlace();
@@ -641,6 +652,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     }
     following.focus = { x: Math.max(30, Math.min(w - 30, at.x)), y: Math.max(70, Math.min(panelTop() - 30, at.y)) };
     following.locked = false;   // locks again at once, or glides back inside the edges
+    following.gap = null;
   });
   // Put the camera's middle on a place without stopping a zoom or turn in progress: MapLibre's jumpTo stops every
   // gesture, so the camera used to keep still until a zoom had ended and then catch up (Max, 2026-11-13: "the
@@ -736,11 +748,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       const p = following.getPlace();
       if (!p) return stopFollowing();
       following.place = p;
-      if (flying && !map.isMoving()) flying = false;   // a flight that ended without a moveend
+      if (flying && !map.isMoving()) landed();   // a flight that ended without a moveend
       // A drag (one finger or the mouse moving the map), its fling and the page's own flights are left alone. A zoom
       // or turn in progress (a wheel, a pinch, the compass, the + and − buttons) isn't stopped: the camera keeps on
       // the train during it.
-      if (dragged || flying || (map.dragPan.isActive() && pointers.size < 2)) { following.locked = false; return; }
+      if (dragged || flying || (map.dragPan.isActive() && pointers.size < 2)) { following.locked = false; following.gap = null; return; }
       const busy = pointers.size > 0 || map.isMoving();
       const moveTo = (centre) => {
         if (!busy) map.jumpTo({ center: centre });
@@ -748,11 +760,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       };
       const off = offFocus(p), target = centreHolding(p, following.focus);
       if (following.locked && off < 30) return moveTo(target);
-      // Not on it yet (just tapped, a drag left it outside the edges, or the train jumped): glide over in about
-      // half a second, then stay locked on.
-      if (off < 1) { following.locked = true; return moveTo(target); }
-      const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
-      moveTo(new LngLat(c.lng + (target.lng - c.lng) * k, c.lat + (target.lat - c.lat) * k));
+      // Not on it yet (just tapped, a drag left it outside the edges, or the train jumped): the gap closes in about
+      // half a second, then it stays locked on. The gap is kept against the moving train, so a fast train is caught
+      // too (gliding towards where it was each frame, a train at 300 km/h stayed 8 px behind and never locked).
+      if (off < 1) { following.locked = true; following.gap = null; return moveTo(target); }
+      const k = 1 - Math.exp(-dt / 150);
+      if (!following.gap) { const c = map.getCenter(); following.gap = { lng: c.lng - target.lng, lat: c.lat - target.lat }; }
+      following.gap.lng *= 1 - k;
+      following.gap.lat *= 1 - k;
+      moveTo(new LngLat(target.lng + following.gap.lng, target.lat + following.gap.lat));
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     async setStations(list) {
@@ -796,9 +812,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
     // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").
-    async goTo(place, minZoom) {
+    // train: the place is the followed train's (the flight then keeps aiming at it, above).
+    async goTo(place, minZoom, train = false) {
       await ready;
       flying = true;   // the camera leaves the followed train alone until it lands
+      chase = train ? { lon: place.lon, lat: place.lat } : null;
       const f = defaultFocus();
       map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true,
         offset: [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2] });
