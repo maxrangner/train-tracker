@@ -122,6 +122,18 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       const loc = locsOf(e).find(l => l.sig === p.sig);
       return Boolean(loc && loc.arr !== null && loc.dep === null);
     },
+    // Forget the trains with nothing newer than `before` (ms): no planned time and no passing since then. Nothing was
+    // ever dropped, so a page left open kept every train of every day (about 12,800 rows after one rush hour).
+    // keep(key) -> true for a train to keep anyway (on the map, open in a panel). Returns how many were forgotten.
+    trim(before, keep = () => false) {
+      let n = 0;
+      for (const [key, e] of byKey) {
+        if (Math.max(e.until, e.passed?.time ?? 0) >= before || keep(key)) continue;
+        byKey.delete(key);
+        n++;
+      }
+      return n;
+    },
     // Whether anything of the train's timetable is known.
     knows(key) { return Boolean(byKey.get(key)?.rows.size); },
     // Where it last passed: { sig, time, activity } or null.

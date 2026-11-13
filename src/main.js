@@ -379,6 +379,16 @@ if (hasKey && !replay) {
   }
   setTimeout(askRoutes, 5000);
   setInterval(askRoutes, 30000);
+
+  // Every 10 minutes the lists let go of trains with nothing newer than 6 hours that are neither on the map nor open
+  // in the panel (timetable rows, lateness, company, when its route was asked for). They only ever grew.
+  const FORGET_MS = 6 * 3600000;
+  setInterval(() => {
+    const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
+    routes.trim(before, keep);
+    lateness.trim(before, keep);
+    for (const [key, at] of asked) if (at < before && !keep(key)) asked.delete(key);
+  }, 10 * 60000);
 }
 
 const modeText = m => t('mode')[m] ?? m;
