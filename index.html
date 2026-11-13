@@ -165,7 +165,10 @@
     .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
       top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(50px + env(safe-area-inset-right, 0px));
       width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
-    .zoom-bar.shown { opacity: 1; transition: opacity .15s; }
+    .zoom-bar.shown { opacity: 1; transition: opacity .15s; pointer-events: auto; }
+    /* The grip: an invisible area round the bar, wide enough for a finger, clear of the + and − buttons. */
+    .zoom-grip { position: absolute; left: -18px; right: -8px; top: -12px; bottom: -12px; cursor: ns-resize; touch-action: none; }
+    .zoom-bar.held .zoom-knob { transform: scale(1.25); }
     .zoom-bar::before, .zoom-bar::after { content: ''; position: absolute; left: -4px; width: 14px; height: 2px; border-radius: 1px; background: var(--muted); }
     .zoom-bar::before { top: 0; }
     .zoom-bar::after { bottom: 0; }
