@@ -31,7 +31,8 @@ export function createTrainLayer({ getTrains, along = null }) {
   const TOY = isToy();   // fixed for this layer
   const shown = new Map();        // id -> { object, brand }
   // Each drawn train's outline on the ground: id -> { lon, lat, bearing, length, width } in metres, the middle at
-  // lon/lat (map.js: a tap anywhere on the model opens the train).
+  // lon/lat (map.js: a tap anywhere on the model opens the train); cars: where each car lies when the train is bent
+  // along its track (bend below), else null.
   const outlines = new Map();
   // brand -> a built train to clone (clones share shapes and paint); kept in `built` for the layers after this one
   const templates = { has: key => built.has(`${TOY ? 'toy' : 'real'}|${key}`), get: key => built.get(`${TOY ? 'toy' : 'real'}|${key}`),
@@ -74,17 +75,19 @@ export function createTrainLayer({ getTrains, along = null }) {
 
   // Set each car of train t's model on the track: its middle where the track is at its place along the train, turned
   // to face from its back end to its front end along the track. k: the model's enlargement (compact models). The
-  // model itself isn't turned then; its cars carry the direction. False when the track isn't known far enough back.
+  // model itself isn't turned then; its cars carry the direction. False when the track isn't known far enough back;
+  // otherwise where each car lies on the ground, [back lon, back lat, front lon, front lat] (for taps, map.js).
   const R = Math.PI / 180, M = 111195;
   function bend(object, t, k) {
     if (!along) return false;
     const kx = Math.cos(t.lat * R);
-    const placed = [];
+    const placed = [], cars = [];
     for (const c of object.children) {
       const y0 = c.userData.p0[1], [b, f] = c.userData.span;
       const mid = along(t.id, y0 * k), back = along(t.id, b * k), front = along(t.id, f * k);
       if (!mid || !back || !front) return false;
       const dx = (front.lon - back.lon) * kx, dy = front.lat - back.lat;
+      cars.push([back.lon, back.lat, front.lon, front.lat]);
       placed.push([c, ((mid.lon - t.lon) * kx * M) / k, ((mid.lat - t.lat) * M) / k,
         dx || dy ? Math.atan2(dx, dy) : (t.bearing ?? 0) * R]);
     }
@@ -93,7 +96,7 @@ export function createTrainLayer({ getTrains, along = null }) {
       c.position.set(x, y, c.userData.p0[2]);
       c.rotation.z = -heading;
     }
-    return true;
+    return cars;
   }
 
   return {
@@ -156,12 +159,13 @@ export function createTrainLayer({ getTrains, along = null }) {
           entry.object.position.set((m.x - origin.x) / s, -(m.y - origin.y) / s, 0);
           const k = TOY ? Math.max(1, settings.toySize * metresPerPx / entry.object.userData.length) : 1;
           if (TOY) entry.object.scale.setScalar(k);
-          if (!bend(entry.object, t, k)) {
+          const cars = bend(entry.object, t, k);
+          if (!cars) {
             entry.object.rotation.z = -THREE.MathUtils.degToRad(t.bearing ?? 0);
             for (const c of entry.object.children) { c.position.fromArray(c.userData.p0); c.rotation.z = 0; }
           }
           outlines.set(t.id, { lon: t.lon, lat: t.lat, bearing: t.bearing ?? 0,
-            length: entry.object.userData.length * k, width: (templateFor(key).userData.width ?? 3) * k });
+            length: entry.object.userData.length * k, width: (templateFor(key).userData.width ?? 3) * k, cars: cars || null });
         }
 
         const toMap = new THREE.Matrix4()
