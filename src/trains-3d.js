@@ -2,6 +2,7 @@
 // Shown from modelZoom() in; further out the dots carry the map (groups and icons come in step 5).
 import * as THREE from 'three';
 import { MercatorCoordinate } from 'maplibre-gl';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildTrain } from './train-model.js';
 import { styleFor } from './brands.js';
 import { buildToy } from './toy-trains.js';
@@ -21,6 +22,40 @@ const EARTH = 40075016.686;   // metres round the equator
 const renderers = new WeakMap();   // the map's WebGL context -> its three.js renderer
 const built = new Map();           // 'toy|<key>' or 'real|<key>' -> a built train to clone
 const faded = new Map();           // a model's paint -> its see-through copy, for grey trains
+
+// Join each car's parts that share a paint into one part. A model is built from many small shapes (a realistic
+// SL Pendeltåg: 97, an SJ night train: 127), and every one was drawn by itself, every frame, for every train on
+// screen. The triangles and paints stay exactly the same, so the picture does too; the builders (train-model.js,
+// toy-trains.js) and tools/models-check.mjs, which looks at the parts one by one, are not touched.
+function joinParts(train) {
+  train.updateMatrixWorld(true);
+  for (const car of train.children) {
+    if (car.isMesh) continue;   // one part already (the piece between two cars)
+    const parts = [];
+    let odd = false;            // anything that isn't a plain part or a group of parts: leave the car as built
+    car.traverse((o) => { if (o.isMesh) parts.push(o); else if (o !== car && !o.isGroup) odd = true; });
+    if (odd || parts.length < 2) continue;
+    const toCar = car.matrixWorld.clone().invert(), byPaint = new Map();
+    for (const p of parts) {
+      const place = new THREE.Matrix4().multiplyMatrices(toCar, p.matrixWorld);
+      if (place.determinant() < 0) { odd = true; break; }   // a mirrored part would turn inside out
+      const g = p.geometry.index ? p.geometry.toNonIndexed() : p.geometry.clone();
+      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+      g.applyMatrix4(place);
+      (byPaint.get(p.material) ?? byPaint.set(p.material, []).get(p.material)).push(g);
+    }
+    if (odd) continue;
+    const joined = [];
+    for (const [paint, shapes] of byPaint) {
+      const g = shapes.length > 1 ? mergeGeometries(shapes) : shapes[0];
+      if (!g) { odd = true; break; }
+      joined.push(new THREE.Mesh(g, paint));
+    }
+    if (odd) continue;
+    car.clear();
+    car.add(...joined);
+  }
+}
 
 // getTrains() -> [{ id, lon, lat, bearing (compass degrees), brand, stale }] at the moment being drawn.
 // along(id, d) -> { lon, lat } d metres along the train's track from its drawn place (+ ahead), or null: each car
@@ -51,6 +86,7 @@ export function createTrainLayer({ getTrains, along = null }) {
       const plain = TOY ? toyFor(null) : styleFor(null);
       const train = TOY ? buildToy(stale ? { ...style, colours: plain.colours } : style)
         : buildTrain(stale ? { ...style, colours: plain.colours } : style);
+      joinParts(train);
       if (stale) {
         train.traverse((o) => {
           if (!o.isMesh) return;
