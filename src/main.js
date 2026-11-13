@@ -281,7 +281,9 @@ showSettings();
 map.showRail('trv');
 
 // ---- Live data ----
-const status = { positions: 'starting', passings: 'starting', error: null };
+// How each feed is doing, and its own problem if it has one (one feed's good news must not wipe the other's problem).
+const status = { positions: 'starting', passings: 'starting', errors: { positions: null, passings: null } };
+const statusError = () => [status.errors.positions, status.errors.passings].filter(Boolean).join(' · ') || null;
 // When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a
 // stop and turns grey, and the status line says since when; when data returns they fast-forward to their places.
 const NO_DATA_MS = 60 * 1000;
@@ -302,7 +304,7 @@ const positionHandlers = {
   },
   onStatus(s) {
     status.positions = s.mode;
-    status.error = s.error ?? null;
+    status.errors.positions = s.error ?? null;
     if (s.error) console.warn('positions:', s.error);
   },
 };
@@ -331,7 +333,8 @@ if (hasKey && !replay) {
     onPassings,
     onStatus(s) {
       status.passings = s.mode;
-      if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
+      status.errors.passings = s.error ?? null;
+      if (s.error) console.warn('timetable:', s.error);
     },
   });
   loadStations();
@@ -386,18 +389,19 @@ setInterval(() => {
   const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
   if (noData && !trains.halted) trains.setHalted(true);
   trains.prune(tNow);
+  const error = statusError();
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
   statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
-    (noData ? t('noDataSince', clock(lastDataAt)) : status.error ? status.error : mode);
+    (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${modeText(status.positions)}` +
     (replay ? t('replayOf', new Date(tNow).toLocaleTimeString('sv-SE')) : '') +
-    (status.error ? ` · ${status.error}` : '');
-  statusEl.classList.toggle('problem', Boolean(status.error) || noData);
+    (error ? ` · ${error}` : '');
+  statusEl.classList.toggle('problem', Boolean(error) || noData);
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
   if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DELAY_MS), noData));
