@@ -6,7 +6,7 @@ const key = readFileSync(new URL('../.env', import.meta.url), 'utf8').match(/VIT
 const since = new Date(Date.now() - 10 * 60000).toISOString();
 const res = await fetch('https://api.trafikinfo.trafikverket.se/v2/data.json', {
   method: 'POST', headers: { 'Content-Type': 'text/xml' },
-  body: `<REQUEST><LOGIN authenticationkey="${key}"/><QUERY objecttype="TrainAnnouncement" schemaversion="1.9" limit="600">` +
+  body: `<REQUEST><LOGIN authenticationkey="${key}"/><QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="600">` +
     `<FILTER><GT name="TimeAtLocation" value="${since}"/></FILTER></QUERY></REQUEST>`,
 });
 const rows = (await res.json()).RESPONSE.RESULT[0].TrainAnnouncement;

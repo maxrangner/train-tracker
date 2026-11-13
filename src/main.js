@@ -5,14 +5,14 @@ import { createMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
-import { pathOf, nearestIndex } from './path.js';
+import { pathOf } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
-import { now } from './clock.js';
+import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
@@ -63,7 +63,7 @@ const panel = createPanel(document.getElementById('panel'), {
     if (!id) { map.unfollow(); map.unpad(); }
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
   },
-  // The open train's whole path, start to finish (Max, 2026-11-12): travelled grey, ahead blue.
+  // The open train's whole path, start to finish (Max, 2026-11-12), in one colour (Max, 2026-11-13).
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
@@ -75,7 +75,7 @@ const panel = createPanel(document.getElementById('panel'), {
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };
-    showPath();
+    map.setPath(shownPath.path);
     if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
   },
   onFollow(id, on) {
@@ -88,10 +88,12 @@ const map = createMap('map', {
   getTrains3d: () => frameTrains,
   // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
   alongTrack: (id, d) => trains.along(id, d),
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it (a tap that only
-  // closed the menu does nothing more).
+  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere stops following first
+  // (Max, 2026-11-13: "a single click unfollows"), and then closes it (a tap that only closed the menu does nothing
+  // more).
   onTrainTap(id) {
     if (menu.justClosed) return;
+    if (!id && map.following) { map.unfollow(); panel.setFollowing(false); return; }
     if (!openTrain(id)) { panel.close(); board.close(); }
   },
   onStationTap(sig) {
@@ -159,18 +161,6 @@ function openTrain(id, { go = false } = {}) {
   return true;
 }
 
-// Where the open train is along its path: on the map, its drawn place; otherwise after the last place it was
-// reported at (or before the start).
-function showPath() {
-  if (!shownPath) return;
-  const { path, places } = shownPath;
-  const here = placeNow(shownPath.id);
-  let split = 0;
-  if (here) split = nearestIndex(path, here);
-  else places.forEach((p, i) => { if (p.actual) split = path.at[i]; });
-  map.setPath(path, split);
-}
-setInterval(showPath, 2000);
 
 // ---- Help, with the map credits: the ? button next to Tilt ----
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
@@ -197,7 +187,7 @@ const menu = createMenu({
       .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
   },
   async searchTimetable(number) {
-    const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+    const found = await fetchTrainsByNumber(number, swedishDay(now()));
     return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to) }));
   },
   onPickTrain: pickTrain,
@@ -214,7 +204,7 @@ const menu = createMenu({
     const r = trains.reports().find(x => String(x.number) === number);
     if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
     try {
-      const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+      const found = await fetchTrainsByNumber(number, swedishDay(now()));
       if (found.length) { const t = found[0]; pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
     } catch (e) { console.warn('favourite:', e.message); }
   },
@@ -225,7 +215,10 @@ const menu = createMenu({
 // 3D trains and the selected train's marker all use those same places, and while a train is selected the map is
 // drawn in this same frame, so nothing creeps against anything else (the 3D trains used to be placed at a slightly
 // later moment than the camera, a stutter on fast trains at close zoom). The dots and labels of the other trains go
-// through the map's background worker, 30 times a second.
+// through the map's background worker, as often as a movement can be seen at this zoom (map.trainsEvery: 30 times a
+// second close in, once a second far out): only the trains in or near the view (map.nearView), made
+// from the places this frame already worked out (every train in Sweden used to be worked through a second time and
+// sent, also when five of them were on screen).
 let lastDraw = 0;
 let frameTrains = [], frameById = new Map();
 function frame(ts) {
@@ -233,9 +226,15 @@ function frame(ts) {
   frameTrains = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
   frameById = new Map(frameTrains.map(x => [x.id, x]));
   if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
-  if (ts - lastDraw >= 33) {
+  if (ts - lastDraw >= map.trainsEvery()) {
     lastDraw = ts;
-    map.setTrains(trains.toGeoJSON(t, propsFor));
+    const near = map.nearView(), features = [];
+    for (const x of frameTrains) {
+      const r = near(x.lon, x.lat) && trains.get(x.id);
+      if (r) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
+        properties: { id: x.id, bearing: x.bearing, ...propsFor(r, x) } });
+    }
+    map.setTrains({ type: 'FeatureCollection', features });
   }
   map.tick(ts);
   const sel = panel.openId && frameById.get(panel.openId);
@@ -262,7 +261,7 @@ onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
   if (key === 'language') {
     translatePage();
-    map.applySettings();   // "3 trains" on the map
+    map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
     board.relabel();
@@ -290,15 +289,10 @@ showSettings();
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
 
-// ---- Tilt button ----
-const tiltEl = document.getElementById('tilt');
-const showTilt = () => tiltEl.setAttribute('aria-pressed', String(map.tilted));
-tiltEl.onclick = () => map.toggleTilt();
-map.onViewChange(showTilt);
-map.ready.then(showTilt);
-
 // ---- Live data ----
-const status = { positions: 'starting', passings: 'starting', error: null };
+// How each feed is doing, and its own problem if it has one (one feed's good news must not wipe the other's problem).
+const status = { positions: 'starting', passings: 'starting', errors: { positions: null, passings: null } };
+const statusError = () => [status.errors.positions, status.errors.passings].filter(Boolean).join(' · ') || null;
 // When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a
 // stop and turns grey, and the status line says since when; when data returns they fast-forward to their places.
 const NO_DATA_MS = 60 * 1000;
@@ -319,7 +313,7 @@ const positionHandlers = {
   },
   onStatus(s) {
     status.positions = s.mode;
-    status.error = s.error ?? null;
+    status.errors.positions = s.error ?? null;
     if (s.error) console.warn('positions:', s.error);
   },
 };
@@ -334,43 +328,74 @@ function gotStations(m) {
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
   map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null));
 }
-if (hasKey && replay) {
-  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
+// The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
+// left the page without station names, search, boards and planned routes until it was loaded again.)
+function loadStations(tries = 0) {
+  fetchStations().then(gotStations).catch((e) => {
+    console.warn('stations:', e.message);
+    setTimeout(() => loadStations(tries + 1), [5000, 15000][tries] ?? 60000);
+  });
 }
+if (hasKey && replay) loadStations();
 if (hasKey && !replay) {
   followPassings({
     onPassings,
     onStatus(s) {
       status.passings = s.mode;
-      if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
+      status.errors.passings = s.error ?? null;
+      if (s.error) console.warn('timetable:', s.error);
     },
   });
-  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
+  loadStations();
 
   // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
   // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.
+  // The first question about a train reaches further back: 90 minutes (as far as the passings go) plus its known
+  // delay. The arrival that ends its trip is then among the rows also when it runs late or had arrived before the
+  // page opened; without that row a finished train stayed on the map up to 15 minutes instead of 2 (14 trains in
+  // four recordings, 2026-11-13).
   const asked = new Map();   // train key -> when its route was last asked for
+  const BACK_MS = 30 * 60000, FIRST_BACK_MS = 90 * 60000, MAX_BACK_MS = 4 * 3600000, LATE_MIN = 15;
   async function askRoutes() {
     const t = now();
     const want = trains.reports().filter(r => routes.until(r.id) < t + 30 * 60000 && !(t - (asked.get(r.id) ?? 0) < 5 * 60000));
     if (!want.length) return;
+    const lateBy = r => lateness.get(r.id)?.minutes ?? 0;
+    const again = want.filter(r => asked.has(r.id)), first = want.filter(r => !asked.has(r.id));
+    const late = first.filter(r => lateBy(r) > LATE_MIN), onTime = first.filter(r => !(lateBy(r) > LATE_MIN));
     for (const r of want) asked.set(r.id, t);
-    try {
-      routes.add(await fetchPlannedRoutes([...new Set(want.map(r => r.operational))], t - 30 * 60000, t + 90 * 60000));
-    } catch (e) {
-      console.warn('planned routes:', e.message);
-      for (const r of want) asked.delete(r.id);
+    // Three questions at most: trains asked before, new ones, and new ones running late (few; as far back as the latest).
+    const groups = [[again, BACK_MS], [onTime, FIRST_BACK_MS],
+      [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(lateBy)) * 60000)]];
+    for (const [list, back] of groups) {
+      if (!list.length) continue;
+      try {
+        routes.add(await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * 60000));
+      } catch (e) {
+        console.warn('planned routes:', e.message);
+        for (const r of list) asked.delete(r.id);
+      }
     }
   }
   setTimeout(askRoutes, 5000);
   setInterval(askRoutes, 30000);
+
+  // Every 10 minutes the lists let go of trains with nothing newer than 6 hours that are neither on the map nor open
+  // in the panel (timetable rows, lateness, company, when its route was asked for). They only ever grew.
+  const FORGET_MS = 6 * 3600000;
+  setInterval(() => {
+    const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
+    routes.trim(before, keep);
+    lateness.trim(before, keep);
+    for (const [key, at] of asked) if (at < before && !keep(key)) asked.delete(key);
+  }, 10 * 60000);
 }
 
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusFullEl = document.getElementById('status-full');
 
-const clock = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
 const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
 
 // The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
@@ -397,18 +422,19 @@ setInterval(() => {
   const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
   if (noData && !trains.halted) trains.setHalted(true);
   trains.prune(tNow);
+  const error = statusError();
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
-  const mode = `${modeText(status.positions)}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
   statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
-    (noData ? t('noDataSince', clock(lastDataAt)) : status.error ? status.error : mode);
+    (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${modeText(status.positions)}` +
-    (replay ? t('replayOf', new Date(tNow).toLocaleTimeString('sv-SE')) : '') +
-    (status.error ? ` · ${status.error}` : '');
-  statusEl.classList.toggle('problem', Boolean(status.error) || noData);
+    (replay ? t('replayOf', hhmmss(tNow)) : '') +
+    (error ? ` · ${error}` : '');
+  statusEl.classList.toggle('problem', Boolean(error) || noData);
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
   if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DELAY_MS), noData));

@@ -67,18 +67,7 @@
     #top > * { pointer-events: auto; }
     #status { padding: 6px 10px; font-variant-numeric: tabular-nums; }
     #status.problem { color: var(--late); }
-    .tilt-card { display: flex; padding: 3px; gap: 2px; }
-    #tilt {
-      font: inherit;
-      border: 0;
-      border-radius: 6px;
-      padding: 4px 8px;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-    }
-    #tilt[aria-pressed="true"] { background: var(--accent); color: #fff; }
-    #tilt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .help-card { display: flex; padding: 3px; gap: 2px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
     #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
     #menu-button[aria-expanded="true"] { background: var(--accent); color: #fff; }
@@ -126,7 +115,7 @@
     .range input { width: 140px; accent-color: var(--accent); }
     .range output { font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; font-size: 14px; }
     #settings.real .toy-only { display: none; }
-    /* ? next to Tilt: Help, with the credits (Max, 2026-11-12: a permanent "?" instead of a credit line). */
+    /* ? at the top: Help, with the credits (Max, 2026-11-12: a permanent "?" instead of a credit line). */
     #help-button { font: inherit; font-weight: 700; border: 0; border-radius: 6px; padding: 4px 10px; background: transparent; color: var(--muted); cursor: pointer; }
     #help-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* Help: over the map, scrolls inside. */
@@ -159,6 +148,24 @@
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
+
+    /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
+    .map-note { position: absolute; z-index: 3; top: calc(150px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+      max-width: min(300px, calc(100% - 20px)); padding: 8px 10px; background: var(--bg); color: var(--ink); font-size: 13px; }
+    /* In dark the map's button icons are turned light (above); My location's own blue and red states stay as they are. */
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon,
+    :root[data-theme="dark"] .maplibregl-ctrl-geolocate-error .maplibregl-ctrl-icon { filter: none; }
+    /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
+    .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
+      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(50px + env(safe-area-inset-right, 0px));
+      width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
+    .zoom-bar.shown { opacity: 1; transition: opacity .15s; }
+    .zoom-bar::before, .zoom-bar::after { content: ''; position: absolute; left: -4px; width: 14px; height: 2px; border-radius: 1px; background: var(--muted); }
+    .zoom-bar::before { top: 0; }
+    .zoom-bar::after { bottom: 0; }
+    .zoom-knob { position: absolute; left: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; }
 
     /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
     .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
@@ -236,8 +243,7 @@
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
     </button>
     <div id="status" class="card" data-t="connecting">connecting…</div>
-    <div class="card tilt-card"><button id="tilt" type="button" aria-pressed="false" data-t="tilt">Tilt</button></div>
-    <div class="card tilt-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
+    <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
   </div>
   <div id="menu" class="card" hidden>
     <div class="menu-head">
@@ -283,19 +289,19 @@
         <li><b>The label</b> is the company, then the train number and the minutes off the timetable: <b>2311 (+3)</b> is 3 minutes late, <b>2057 (-2)</b> 2 minutes early.</li>
         <li><b>Dot colours</b>: green on time (up to 2 minutes late), yellow 3–5 minutes late, red 6 or more, grey not known. A faded grey train has sent nothing for a while; it is shown where it was last known.</li>
         <li><b>Stations</b> are small rings; their names show when you zoom in. The grey lines are Trafikverket's tracks.</li>
+        <li><b>Tilt</b> the map so the trains stand up: two fingers up or down, the right or middle mouse button, or the ↑ ↓ keys. The compass (top right) turns north up and lays the map flat again.</li>
       </ul>
       <h3>Tap</h3>
       <ul>
-        <li><b>A train</b>: its stops, planned and actual, and its whole path (grey behind it, blue ahead). The map follows it; drag the map away to stop, <b>Follow</b> to go back.</li>
+        <li><b>A train</b>: its stops, planned and actual, and its whole path in blue, its stops as circles. The map follows it: drag to place the train where you want it on the screen (it stays there), tap the map to stop following, <b>Follow</b> to follow again.</li>
         <li><b>"3 trains"</b>: trains standing close together share one label; tap it to pick one.</li>
         <li><b>A station</b>: its next departures and arrivals, with new times in red and the track. Tap a row to see that train.</li>
-        <li><b>The map</b> anywhere else closes what is open.</li>
+        <li><b>The map</b> anywhere else closes what is open (while a train is followed, the first tap only stops following).</li>
       </ul>
       <h3>The menu (☰)</h3>
       <ul>
         <li><b>Search</b> for a train number or a station. A number also finds today's trains that are not running right now.</li>
         <li><b>Favourites</b>: tap ☆ on a train or a station; they show in the menu when the search field is empty. A starred train is kept by its number, so it works every day.</li>
-        <li><b>Tilt</b> (top) tilts the map so the trains stand up; two fingers up or down do the same.</li>
         <li><b>?</b> (top) opens this help.</li>
       </ul>
       <h3>Credits and licences</h3>
@@ -314,19 +320,19 @@
         <li><b>Etiketten</b> är bolaget, sedan tågnumret och minuter från tidtabellen: <b>2311 (+3)</b> är 3 minuter sent, <b>2057 (-2)</b> 2 minuter tidigt.</li>
         <li><b>Prickarnas färger</b>: grön i tid (upp till 2 minuter sent), gul 3–5 minuter sent, röd 6 eller mer, grå okänt. Ett blekt grått tåg har inte skickat något på en stund; det visas där det sågs senast.</li>
         <li><b>Stationer</b> är små ringar; namnen syns när du zoomar in. De grå linjerna är Trafikverkets spår.</li>
+        <li><b>Luta</b> kartan så att tågen står upp: två fingrar upp eller ner, höger eller mittersta musknappen, eller tangenterna ↑ ↓. Kompassen (uppe till höger) vrider norr uppåt och lägger kartan platt igen.</li>
       </ul>
       <h3>Tryck</h3>
       <ul>
-        <li><b>Ett tåg</b>: dess uppehåll, planerade och verkliga tider, och hela sträckan (grå bakom, blå framför). Kartan följer tåget; dra bort kartan för att sluta, <b>Följ</b> för att följa igen.</li>
+        <li><b>Ett tåg</b>: dess uppehåll, planerade och verkliga tider, och hela sträckan i blått, med uppehållen som ringar. Kartan följer tåget: dra för att placera tåget där du vill ha det på skärmen (där stannar det), tryck på kartan för att sluta följa, <b>Följ</b> för att följa igen.</li>
         <li><b>”3 tåg”</b>: tåg som står nära varandra delar en etikett; tryck på den för att välja ett.</li>
         <li><b>En station</b>: nästa avgångar och ankomster, med nya tider i rött och spåret. Tryck på en rad för att se det tåget.</li>
-        <li><b>Kartan</b> någon annanstans stänger det som är öppet.</li>
+        <li><b>Kartan</b> någon annanstans stänger det som är öppet (när ett tåg följs slutar första trycket bara att följa).</li>
       </ul>
       <h3>Menyn (☰)</h3>
       <ul>
         <li><b>Sök</b> efter ett tågnummer eller en station. Ett nummer hittar också dagens tåg som inte går just nu.</li>
         <li><b>Favoriter</b>: tryck på ☆ vid ett tåg eller en station; de visas i menyn när sökfältet är tomt. Ett stjärnmärkt tåg sparas med sitt nummer, så det fungerar varje dag.</li>
-        <li><b>Luta</b> (överst) lutar kartan så att tågen står upp; två fingrar upp eller ner gör samma sak.</li>
         <li><b>?</b> (överst) öppnar den här hjälpen.</li>
       </ul>
       <h3>Källor och licenser</h3>

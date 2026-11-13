@@ -1,6 +1,7 @@
 // Does the camera follow a tapped train? Taps the moving train nearest the middle, then measures (in screen pixels)
-// how far the train sits from the point the camera keeps it at; then drags the map a little (it should keep
-// following) and far (it should stop), and presses Follow again.
+// how far the train sits from the point the camera keeps it at; then drags the map a little and far (since
+// 2026-11-13 a drag keeps following and moves the point the train is kept at: the px after a drag are from the new
+// point, so 0), and presses Follow again (back to the usual point).
 // Run (with `npm run dev` going): node tools/follow-check.mjs [--view 12/59.33/18.06] [--size 400x800] [--wait 25] [--fastest]
 // --fastest taps the fastest-moving train on screen instead of the one nearest the middle.
 import puppeteer from 'puppeteer-core';
@@ -115,7 +116,7 @@ await watch('after a small drag (25 px)', 4);
 await page.mouse.wheel({ deltaY: -300 });
 await watch('after a wheel zoom in', 4);
 await drag(-(width * 0.45), -(height * 0.25));
-await watch('after a long drag', 4);
+await watch('after a long drag (re-framed)', 4);
 await page.screenshot({ path: 'shots/follow-2.png' });
 await page.click('.panel-follow');
 await watch('after pressing Follow', 4);

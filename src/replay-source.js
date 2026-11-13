@@ -4,7 +4,7 @@
 // address; the dev server serves data/ (it is not part of a build).
 import { toRecord } from './trains-source.js';
 import { trainKey } from './trafikverket.js';
-import { now, setClock } from './clock.js';
+import { now, setClock, hhmmss } from './clock.js';
 
 const SKIP_MS = 60 * 1000;   // start a minute in, so the first batch (the last 10 minutes) has been taken in
 
@@ -61,7 +61,7 @@ export async function startReplaySource(name, { onRecords, onStatus, onPlanned, 
     if (late.length) onPassings?.(late);
     if (i >= events.length) {
       clearInterval(timer);
-      onStatus({ mode: 'stopped', error: `the replay ended (${new Date(last).toLocaleTimeString('sv-SE')})` });
+      onStatus({ mode: 'stopped', error: `the replay ended (${hhmmss(last)})` });
     }
   }, 250);
 }

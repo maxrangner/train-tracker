@@ -16,6 +16,11 @@ export function createLateness() {
       }
       return changed;
     },
+    // Forget the trains whose latest passing is older than `before` (ms), unless keep(key) says to keep one.
+    trim(before, keep = () => false) {
+      for (const [key, p] of byKey) if (p.time < before && !keep(key)) { byKey.delete(key); brands.delete(key); }
+      for (const key of brands.keys()) if (!byKey.has(key) && !keep(key)) brands.delete(key);
+    },
     get(key) { return byKey.get(key) ?? null; },
     brand(key) { return brands.get(key) ?? null; },
     get count() { return byKey.size; },

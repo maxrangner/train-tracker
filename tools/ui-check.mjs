@@ -19,13 +19,13 @@ const expect = (ok, what) => { if (!ok) problems.push(what); };
 const browser = await launch();
 try {
   // ---- Both languages and looks start clean ----
-  for (const [lang, theme, tilt] of [['en', 'light', 'Tilt'], ['sv', 'dark', 'Luta']]) {
+  for (const [lang, theme, word] of [['en', 'light', 'Settings'], ['sv', 'dark', 'Inställningar']]) {
     const page = await openMap(browser, { ...base, lang, theme });
     const s = await page.evaluate(() => ({ title: document.title, lang: document.documentElement.lang, theme: document.documentElement.dataset.theme,
-      tilt: document.getElementById('tilt').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
+      word: document.querySelector('#open-settings b').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
     expect(s.trains > 0, `${lang}/${theme}: no trains on the map (${s.status})`);
     expect(s.title === 'Spårad', `${lang}/${theme}: the title is "${s.title}"`);
-    expect(s.lang === lang && s.theme === theme && s.tilt === tilt, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, button "${s.tilt}"`);
+    expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
     expect(!page.errors.length, `${lang}/${theme}: page errors: ${page.errors.slice(0, 2).join(' | ')}`);
     await page.close();
   }

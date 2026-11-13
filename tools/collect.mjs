@@ -98,14 +98,16 @@ async function record(name, objectType, makeQuery) {
 const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 // Timetable rows planned from an hour before the start to two hours after the end: the stops ahead of every train
 // on the map, and every passing (TimeAtLocation) as it happens.
+// Both streams are asked for deleted objects too (includedeletedobjects): Trafikverket leaves them out otherwise, so
+// a recording could not show a row or a position being taken away. The tools skip rows marked Deleted.
 const from = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 const to = new Date(end + 2 * 60 * 60 * 1000).toISOString();
 await Promise.all([
   record('positions', 'TrainPosition', (changeId) =>
-    `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" sseurl="true" changeid="${changeId ?? 0}">` +
+    `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" sseurl="true" includedeletedobjects="true" changeid="${changeId ?? 0}">` +
     `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER></QUERY>`),
   record('timetable', 'TrainAnnouncement', (changeId) =>
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" sseurl="true" changeid="${changeId ?? 0}">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" sseurl="true" includedeletedobjects="true" changeid="${changeId ?? 0}">` +
     `<FILTER><GT name="AdvertisedTimeAtLocation" value="${from}"/><LT name="AdvertisedTimeAtLocation" value="${to}"/></FILTER>` +
     `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
     `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +

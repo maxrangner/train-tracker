@@ -1,6 +1,9 @@
 // How smoothly and how truly are the trains drawn? Replays a recording (tools/collect.mjs) through the page's own
 // src/trains.js: each report goes in when it arrived, and the drawing clock steps like the page's.
-// The truth to compare with: the same cleaned reports, known two minutes ahead (hindsight), joined by straight lines.
+// The truth to compare with: the same cleaned reports, known two minutes ahead (hindsight), joined along the rail
+// network. It is given the planned routes too, on purpose: a platform stop that a train sends only as repeats then
+// counts as standing in the truth as well. (Until 2026-11-13 it had them by accident, through settings shared by
+// every simulator; without them: frozen 0.07-0.11 points lower by day and 1.47 -> 0.84 % at night.)
 // Run: node tools/motion-check.mjs [recording.jsonl] [--delay 25] [--coast 30] [--plain] [--cut 120] [--trace id] [--why]
 //   --plain   draw the cleaned reports directly (no simulation): the old way, for comparison
 //   --cut N   no data arrives for N seconds from the middle of the replay (a lost connection)
@@ -90,7 +93,7 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
       activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
 }
 const drawnTrains = createTrains({ net, routes, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
-const truth = createTrains({ net });
+const truth = createTrains({ net, routes });   // with the routes, on purpose: the truth then knows a platform stop sent only as repeats
 // How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
 const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
 const offTrack = [];
