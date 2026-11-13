@@ -280,13 +280,6 @@ showSettings();
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
 
-// ---- Tilt button ----
-const tiltEl = document.getElementById('tilt');
-const showTilt = () => tiltEl.setAttribute('aria-pressed', String(map.tilted));
-tiltEl.onclick = () => map.toggleTilt();
-map.onViewChange(showTilt);
-map.ready.then(showTilt);
-
 // ---- Live data ----
 const status = { positions: 'starting', passings: 'starting', error: null };
 // When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a

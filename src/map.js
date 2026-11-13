@@ -55,7 +55,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
     maxPitch: 70,
-    // The map credits are in Help (the ? button next to Tilt, index.html); see main.js for the public version.
+    // The map credits are in Help (the ? button at the top, index.html); see main.js for the public version.
     attributionControl: false,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
@@ -440,12 +440,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         map.getSource('train-groups').setData(data['train-groups']);
       }
     },
-    // Tilt the view (55°) or lay it flat again.
-    toggleTilt() {
-      map.easeTo({ pitch: map.getPitch() > 5 ? 0 : 55, duration: 700 });
-    },
-    get tilted() { return map.getPitch() > 5; },
-    onViewChange(fn) { map.on('pitchend', fn); },
     // Follow a train: keep it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
     // Zoom, turn and tilt stay the user's; a drag moves the point the train is kept at (above). onEnd() is called
