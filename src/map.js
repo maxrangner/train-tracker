@@ -325,6 +325,24 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         map.easeTo({ bearing: map.getBearing() + (e.key === 'ArrowLeft' ? -15 : 15), duration: 150 });
       }
     }, true);
+    // The middle mouse button turns and tilts the map, as the right button does (Max, 2026-11-13): sideways turns,
+    // up and down tilts, at MapLibre's own speeds (0.8° and 0.5° a pixel). The browser's own middle-click scrolling
+    // is kept off the map. Round the camera's middle, so a followed train stays put.
+    let middle = null;
+    map.getCanvasContainer().addEventListener('mousedown', (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      middle = { x: e.clientX, y: e.clientY };
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!middle) return;
+      if (!(e.buttons & 4)) { middle = null; return; }   // let go outside the window
+      const dx = e.clientX - middle.x, dy = e.clientY - middle.y;
+      middle = { x: e.clientX, y: e.clientY };
+      map.jumpTo({ bearing: map.getBearing() + dx * 0.8,
+        pitch: Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - dy * 0.5)) });
+    });
+    window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
     resolve();
