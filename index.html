@@ -176,6 +176,11 @@
     .sel-train.late-some .sel-dot { background: #d4a72c; }
     .sel-train.late-late .sel-dot { background: #d1242f; }
     .sel-train.late-stale { opacity: 0.45; }
+    /* Zoomed out (a dot, not a model) the ring has the dot's colour (Max, 2026-11-13); round a model it stays as the text. */
+    .sel-train:not(.model) { border-color: #8c959f; }
+    .sel-train.late-ontime:not(.model) { border-color: #1a7f37; }
+    .sel-train.late-some:not(.model) { border-color: #d4a72c; }
+    .sel-train.late-late:not(.model) { border-color: #d1242f; }
     .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: pre; text-align: center;
       font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label);
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
