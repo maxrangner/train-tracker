@@ -195,6 +195,19 @@ export async function fetchRoute(operationalNumber, departureDate) {
   };
 }
 
+// ---------- Cancelled trains today (the stats page) ----------
+
+// How many trains have at least one cancelled passenger stop on day (Swedish date, "2026-11-13"). A whole
+// cancelled trip and a part of one look the same in the data. Measured 2026-11-13 at 13:00: 144 trains, 46 kB, 0.5 s.
+export async function fetchCancelledToday(day) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
+    `<FILTER><EQ name="Canceled" value="true"/><EQ name="Advertised" value="true"/>` +
+    `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
+    `<INCLUDE>OperationalTrainNumber</INCLUDE></QUERY>`);
+  return new Set((r.TrainAnnouncement ?? []).map(a => a.OperationalTrainNumber)).size;
+}
+
 // ---------- Stations ----------
 
 // Signature -> { sig, name, lon, lat, advertised } for every station, e.g. "Cst" -> Stockholm C and its place.
