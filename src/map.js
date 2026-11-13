@@ -16,9 +16,9 @@ const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' :
 // Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
 const colours = dark => (dark
   ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
-      rail: '#7d8590', casing: '#000000', done: '#6e7781', ahead: '#388bfd', stopFill: '#161b22' }
+      rail: '#7d8590', casing: '#000000', route: '#388bfd', stopFill: '#161b22' }
   : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#6e7781', casing: '#ffffff', done: '#9aa3ad', ahead: '#1f6feb', stopFill: '#ffffff' });
+      rail: '#6e7781', casing: '#ffffff', route: '#1f6feb', stopFill: '#ffffff' });
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
@@ -37,7 +37,7 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'path-stops', 'station-dots', 'station-names', 'train-dots',
+const OUR_LAYERS = ['rail-trv', 'path-casing', 'path-line', 'station-dots', 'station-names', 'path-stops', 'train-dots',
   'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -93,18 +93,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       });
     }
 
-    // The open train's path (setPath): the part still ahead in blue, the part travelled grey, its stops as rings.
+    // The open train's whole path (setPath), start to finish in one colour (Max, 2026-11-13: the travelled part was
+    // grey, which in the dark look was the rail lines' grey, so it looked missing). Its stops: path-stops, below.
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
     map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': ['match', ['get', 'part'], 'ahead', C.ahead, C.done],
+      paint: { 'line-color': C.route,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
-    map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
-      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6], 'circle-color': C.stopFill,
-        'circle-stroke-color': ['match', ['get', 'part'], 'ahead', C.ahead, C.done],
-        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
       id: 'station-dots',
@@ -133,6 +130,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       },
       paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
     });
+
+    // The open train's stops: a white circle with a ring in the path's colour (Max, 2026-11-13, like a map app's
+    // line), above the stations' own grey rings, which hid them; a little larger than those.
+    map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
+        'circle-stroke-color': C.route,
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
 
     map.addLayer({
       id: 'train-dots',
@@ -446,16 +450,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
     },
-    // Draw a train's path (path.js) split at point index `split` (travelled before it, ahead after it); null: none.
-    async setPath(path, split = 0) {
+    // Draw a train's whole path (path.js) and its stops; null: none.
+    async setPath(path) {
       const features = [];
       if (path && path.coords.length > 1) {
-        const k = Math.max(0, Math.min(split, path.coords.length - 1));
-        const line = (coords, part) => coords.length > 1 && features.push({ type: 'Feature', properties: { part }, geometry: { type: 'LineString', coordinates: coords } });
-        line(path.coords.slice(0, k + 1), 'done');
-        line(path.coords.slice(k), 'ahead');
-        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { part: path.stopAt[i] <= k ? 'done' : 'ahead' },
-          geometry: { type: 'Point', coordinates: c } }));
+        features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path.coords } });
+        for (const c of path.stops) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } });
       }
       data.path = { type: 'FeatureCollection', features };
       await ready;
