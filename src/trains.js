@@ -666,21 +666,6 @@ export function createTrains(options = {}) {
       }
       return out;
     },
-    // All trains as map features at time t. propsFor(latestReport, { syncing }) adds the label and colour.
-    toGeoJSON(t, propsFor) {
-      advance(t);
-      const features = [];
-      for (const tr of byId.values()) {
-        if (!tr.sim) continue;
-        const p = drawn(tr);
-        features.push({
-          type: 'Feature',
-          geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-          properties: { id: tr.latest.id, bearing: p.heading, ...propsFor(tr.latest, { syncing: tr.sim.syncing, stale: staleAt(tr, t) }) },
-        });
-      }
-      return { type: 'FeatureCollection', features };
-    },
     // Where the cleaned reports put train id at time t (no simulation): { lon, lat, kmh }, for checks.
     reportedAt(id, t) {
       const h = byId.get(id)?.hist;
