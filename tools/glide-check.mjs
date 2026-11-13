@@ -2,7 +2,7 @@
 // the drawn speed with the speed the train itself reported.
 // Run (with `npm run dev` going): node tools/glide-check.mjs [wait seconds=40]
 import puppeteer from 'puppeteer-core';
-import { BROWSER_PATH } from './lib/browser.mjs';
+import { BROWSER_PATH, PAGE } from './lib/browser.mjs';
 
 const wait = Number(process.argv[2] ?? 40);
 const browser = await puppeteer.launch({
@@ -12,7 +12,7 @@ const browser = await puppeteer.launch({
 });
 const page = await browser.newPage();
 page.on('pageerror', e => console.log(`[page error] ${e.message}`));
-await page.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
+await page.goto(PAGE, { waitUntil: 'domcontentloaded' });
 await new Promise(r => setTimeout(r, wait * 1000));
 
 const read = () => page.evaluate(() => {

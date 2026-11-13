@@ -3,7 +3,7 @@
 import puppeteer from 'puppeteer-core';
 
 const [minutes = '60', every = '5'] = process.argv.slice(2);
-import { BROWSER_PATH as EDGE } from './lib/browser.mjs';
+import { BROWSER_PATH as EDGE, PAGE } from './lib/browser.mjs';
 
 const browser = await puppeteer.launch({
   executablePath: EDGE,
@@ -15,7 +15,7 @@ await page.setViewport({ width: 900, height: 1100 });
 page.on('pageerror', e => console.log(`${new Date().toTimeString().slice(0, 8)} [page error] ${e.message}`));
 page.on('console', m => { if (m.type() === 'warn' || m.type() === 'error') console.log(`${new Date().toTimeString().slice(0, 8)} [console.${m.type()}] ${m.text()}`); });
 
-await page.goto('http://localhost:5173/', { waitUntil: 'domcontentloaded' });
+await page.goto(PAGE, { waitUntil: 'domcontentloaded' });
 const end = Date.now() + Number(minutes) * 60000;
 const line = async () => console.log(`${new Date().toTimeString().slice(0, 8)} ${await page.$eval('#status', el => el.textContent)}`);
 await new Promise(r => setTimeout(r, 20000));
