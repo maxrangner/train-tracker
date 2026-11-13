@@ -5,7 +5,7 @@ import { createMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
-import { pathOf, nearestIndex } from './path.js';
+import { pathOf } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
@@ -63,7 +63,7 @@ const panel = createPanel(document.getElementById('panel'), {
     if (!id) { map.unfollow(); map.unpad(); }
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
   },
-  // The open train's whole path, start to finish (Max, 2026-11-12): travelled grey, ahead blue.
+  // The open train's whole path, start to finish (Max, 2026-11-12), in one colour (Max, 2026-11-13).
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
@@ -75,7 +75,7 @@ const panel = createPanel(document.getElementById('panel'), {
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };
-    showPath();
+    map.setPath(shownPath.path);
     if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
   },
   onFollow(id, on) {
@@ -159,18 +159,6 @@ function openTrain(id, { go = false } = {}) {
   return true;
 }
 
-// Where the open train is along its path: on the map, its drawn place; otherwise after the last place it was
-// reported at (or before the start).
-function showPath() {
-  if (!shownPath) return;
-  const { path, places } = shownPath;
-  const here = placeNow(shownPath.id);
-  let split = 0;
-  if (here) split = nearestIndex(path, here);
-  else places.forEach((p, i) => { if (p.actual) split = path.at[i]; });
-  map.setPath(path, split);
-}
-setInterval(showPath, 2000);
 
 // ---- Help, with the map credits: the ? button next to Tilt ----
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's

@@ -92,14 +92,3 @@ function choose(places, net, C) {
   for (let i = places.length - 1; i >= 0; i--) { chosen[i] = { j, poly: best[i][j].poly }; j = best[i][j].prev; }
   return chosen;
 }
-
-// The index of the point of the path nearest to a place ({ lon, lat }).
-export function nearestIndex(path, place) {
-  const k = Math.cos(place.lat * R);
-  let best = 0, bestD = Infinity;
-  path.coords.forEach(([lon, lat], i) => {
-    const d = ((lon - place.lon) * k) ** 2 + (lat - place.lat) ** 2;
-    if (d < bestD) { bestD = d; best = i; }
-  });
-  return best;
-}
