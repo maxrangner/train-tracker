@@ -5,6 +5,7 @@ import { Map, Marker, NavigationControl, GeolocateControl, LngLat, setWorkerUrl 
 import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
+import { progressAlong } from './path.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -14,11 +15,12 @@ setWorkerUrl(workerUrl);
 // style (Max, 2026-11-12: B, near black, of Dark and Fiord).
 const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
 // Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
+// The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
 const colours = dark => (dark
   ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
-      rail: '#7d8590', casing: '#000000', route: '#388bfd', stopFill: '#161b22' }
+      rail: '#7d8590', casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
   : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#6e7781', casing: '#ffffff', route: '#1f6feb', stopFill: '#ffffff' });
+      rail: '#6e7781', casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
@@ -70,6 +72,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
   let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
+  let pathProgress = 0;   // how far along the shown path the train is (setPathProgress)
+  // The path's colours now: the line by its line progress, its stops by their share of the way (f).
+  const pathColours = () => {
+    const C = colours(dark);
+    return { line: ['step', ['line-progress'], C.routeDone, pathProgress, C.route],
+      stops: ['case', ['<=', ['get', 'f'], pathProgress], C.routeDone, C.route] };
+  };
   const map = new Map({
     container,
     style: styleUrl(dark),
@@ -152,7 +161,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
     add('sweden-mask', { data: MASK_URL });
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
-    add('path');
+    add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
     add('stations');
     add('trains');
     // Close in, trains standing close together share one label (see train-group-labels).
@@ -186,14 +195,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       });
     }
 
-    // The open train's whole path (setPath), start to finish in one colour (Max, 2026-11-13: the travelled part was
-    // grey, which in the dark look was the rail lines' grey, so it looked missing). Its stops: path-stops, below.
+    // The open train's whole path (setPath), start to finish: green ahead of the train, darker green behind it (Max,
+    // 2026-11-13; the travelled part was once grey, which in the dark look was the rail lines' grey, so it looked
+    // missing). Its stops: path-stops, below.
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
     map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': C.route,
+      paint: { 'line-gradient': pathColours().line,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
@@ -214,7 +224,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // line), above the stations' own grey rings, which hid them; a little larger than those.
     map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
-        'circle-stroke-color': C.route,
+        'circle-stroke-color': pathColours().stops,
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
 
     map.addLayer({
@@ -651,11 +661,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       const features = [];
       if (path && path.coords.length > 1) {
         features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path.coords } });
-        for (const c of path.stops) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } });
+        const along = progressAlong(path);
+        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { f: along[path.stopAt[i]] },
+          geometry: { type: 'Point', coordinates: c } }));
       }
       data.path = { type: 'FeatureCollection', features };
       await ready;
       if (isReady) map.getSource('path').setData(data.path);
+    },
+    // How far along the shown path the train is (0 to 1, as path.js progressAt): the darker green ends there.
+    setPathProgress(f) {
+      if (Math.abs(f - pathProgress) < 1e-6) return;
+      pathProgress = f;
+      if (!isReady || !map.getLayer('path-line')) return;
+      const c = pathColours();
+      map.setPaintProperty('path-line', 'line-gradient', c.line);
+      map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
     },
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {

@@ -92,3 +92,37 @@ function choose(places, net, C) {
   for (let i = places.length - 1; i >= 0; i--) { chosen[i] = { j, poly: best[i][j].poly }; j = best[i][j].prev; }
   return chosen;
 }
+
+// ---- How far along its path a train is, as the map measures it ----
+// The map colours the travelled part of a line by "line progress": the share of the line's length up to a point,
+// measured on the flat (Web Mercator) map, not in metres. These work in the same units, so the colour changes
+// exactly at the train.
+const mercX = lon => lon * R;
+const mercY = lat => Math.log(Math.tan(Math.PI / 4 + (lat * R) / 2));
+
+// The share of the path's length (0 to 1, map units) at each of its points; worked out once per path.
+export function progressAlong(path) {
+  if (path.progress) return path.progress;
+  const c = path.coords, cum = new Float64Array(c.length);
+  for (let i = 1; i < c.length; i++)
+    cum[i] = cum[i - 1] + Math.hypot(mercX(c[i][0]) - mercX(c[i - 1][0]), mercY(c[i][1]) - mercY(c[i - 1][1]));
+  const total = cum[c.length - 1] || 1;
+  for (let i = 0; i < c.length; i++) cum[i] /= total;
+  path.progress = cum;
+  return cum;
+}
+
+// The share of the path's length at the point of the path nearest to a place ({ lon, lat }), 0 to 1.
+export function progressAt(path, place) {
+  const c = path.coords, cum = progressAlong(path);
+  const px = mercX(place.lon), py = mercY(place.lat);
+  let best = 0, bestD = Infinity;
+  for (let i = 1; i < c.length; i++) {
+    const ax = mercX(c[i - 1][0]), ay = mercY(c[i - 1][1]), vx = mercX(c[i][0]) - ax, vy = mercY(c[i][1]) - ay;
+    const L2 = vx * vx + vy * vy;
+    const f = L2 ? Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / L2)) : 0;
+    const d = (px - ax - vx * f) ** 2 + (py - ay - vy * f) ** 2;
+    if (d < bestD) { bestD = d; best = cum[i - 1] + (cum[i] - cum[i - 1]) * f; }
+  }
+  return best;
+}
