@@ -169,7 +169,42 @@ export function createStats() {
         ? `<p>${t('stRate', num(arrivals.length / secs, 0), num(age / 1000))}</p>`
         : `<p>${t('stNoneYet')}</p>`);
 
+      // Today: arrivals per hour in the dots' three groups (day: src/day-stats.js view(); null in a replay)
+      section(t('stToday'), d.replay || !d.day ? `<p>${t('stNotInReplay')}</p>`
+        : d.day.state === 'loading' ? `<p>${t('stLoadingDay')}</p>`
+        : d.day.state === 'failed' ? `<p>${t('stCouldNotAsk5')}</p>`
+        : dayGraph(d.day));
+
       return out.join('');
     },
   };
+}
+
+// The day's graph: one stacked bar per hour (on time, +3-5, +6 or more, from the bottom), its height the hour's
+// arrivals; a small gap between the parts; hour labels at 00, 06, 12, 18; each bar's numbers on hover (its title).
+// Under it the day's totals, with Trafikverket's own measure (up to 5 minutes late is on time).
+function dayGraph({ hours }) {
+  const W = 10, BAR = 7, H = 80, TOP = 4, GAP = 0.8;
+  const totals = hours.map(c => c[0] + c[1] + c[2]);
+  const most = Math.max(1, ...totals);
+  const sum = [0, 1, 2].map(g => hours.reduce((s, c) => s + c[g], 0));
+  const all = sum[0] + sum[1] + sum[2];
+  const pct = n => (all ? Math.round(100 * n / all) : 0);
+  const bars = hours.map((c, h) => {
+    let y = TOP + H;
+    const parts = ['ontime', 'some', 'late'].map((cls, g) => {
+      const len = c[g] / most * H;
+      if (len <= 0) return '';
+      y -= len;
+      const shown = Math.max(0.6, len - GAP);   // the gap shows the surface between the parts
+      return `<rect class="d-${cls}" x="${h * W + 1.5}" y="${(y + (len - shown)).toFixed(2)}" width="${BAR}" height="${shown.toFixed(2)}" rx="1"/>`;
+    }).join('');
+    const tip = `${String(h).padStart(2, '0')}–${String(h + 1).padStart(2, '0')}: ${t('stDayTip', num(totals[h]), totals[h] ? Math.round(100 * c[0] / totals[h]) : 0)}`;
+    return `<g><title>${esc(tip)}</title><rect class="d-hit" x="${h * W}" y="0" width="${W}" height="${TOP + H}"/>${parts}</g>`;
+  }).join('');
+  const labels = [0, 6, 12, 18].map(h => `<text x="${h * W + 1.5}" y="${TOP + H + 11}">${String(h).padStart(2, '0')}</text>`).join('');
+  return `<svg class="st-day" viewBox="0 0 ${24 * W} ${TOP + H + 14}" role="img" aria-label="${esc(t('stToday'))}">` +
+    `<line x1="0" x2="${24 * W}" y1="${TOP + H + 0.5}" y2="${TOP + H + 0.5}"/>${bars}${labels}</svg>` +
+    `<p class="st-legend"><span class="st-key st-ontime"></span>${t('stKeyOnTime')} <span class="st-key st-some"></span>+3–5 <span class="st-key st-late"></span>${t('stKeyLate')}</p>` +
+    `<p>${t('stDayTotal', num(all), pct(sum[0]), pct(sum[0] + sum[1]))}</p>`;
 }

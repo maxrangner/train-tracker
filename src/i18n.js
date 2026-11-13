@@ -122,6 +122,13 @@ const EN = {
   stData: 'The data',
   stRate: (r, a) => `${r} positions a second, about ${a} s old when they arrive`,
   stNoneYet: 'Not known yet.',
+  stToday: 'Today, arrivals per hour',
+  stLoadingDay: 'Loading today…',
+  stCouldNotAsk5: 'Couldn\'t ask Trafikverket; trying again in 5 minutes.',
+  stDayTip: (n, p) => `${n} arrivals, on time ${p} %`,
+  stKeyOnTime: 'on time',
+  stKeyLate: '+6 or more',
+  stDayTotal: (n, p, p5) => `${n} arrivals today · on time ${p} % · Trafikverket's own measure (up to 5 min late): ${p5} %`,
 };
 
 const SV = {
@@ -231,6 +238,13 @@ const SV = {
   stData: 'Datan',
   stRate: (r, a) => `${r} positioner i sekunden, cirka ${a} s gamla när de kommer fram`,
   stNoneYet: 'Inte känt än.',
+  stToday: 'I dag, ankomster per timme',
+  stLoadingDay: 'Laddar dagen…',
+  stCouldNotAsk5: 'Kunde inte fråga Trafikverket; försöker igen om 5 minuter.',
+  stDayTip: (n, p) => `${n} ankomster, i tid ${p} %`,
+  stKeyOnTime: 'i tid',
+  stKeyLate: '+6 eller mer',
+  stDayTotal: (n, p, p5) => `${n} ankomster i dag · i tid ${p} % · Trafikverkets eget mått (högst 5 min sent): ${p5} %`,
 };
 
 export function t(key, ...values) {
