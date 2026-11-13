@@ -34,6 +34,11 @@ export const RAIL_SOURCES = {
 const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
 const MAX_BOUNDS = [[-2, 52], [42, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
 const MASK_URL = '/sweden-mask.json';
+// The zoom's limits (Max, 2026-11-13: the zoom slider shows the absolute minimum and maximum): furthest out, all of
+// Sweden on the screen (worked out for the screen's size); closest in, 19 (a street; the map's tiles end at 14 and
+// are only enlarged after that, the default limit 22 was empty enlargement).
+const SWEDEN_BOUNDS = [[10.9, 55.2], [24.2, 69.1]];
+const MAX_ZOOM = 19;
 let swedenShape = null;   // Sweden, roughly (about 1 km), for the names
 const maskReady = fetch(MASK_URL).then(r => r.json())
   .then((g) => { swedenShape = g.features.find(f => f.properties.kind === 'sweden')?.geometry ?? null; })
@@ -67,12 +72,42 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
     maxBounds: MAX_BOUNDS,
+    maxZoom: MAX_ZOOM,
     maxPitch: 70,
     // The map credits are in Help (the ? button at the top, index.html); see main.js for the public version.
     attributionControl: false,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+
+  // Furthest out: all of Sweden on the screen (again when the screen changes size, e.g. a phone turned).
+  function setZoomLimits() {
+    const cam = map.cameraForBounds(SWEDEN_BOUNDS, { padding: 20, bearing: 0 });
+    if (cam && Number.isFinite(cam.zoom)) map.setMinZoom(Math.max(0, Math.min(MAX_ZOOM - 1, cam.zoom)));
+    showZoom(false);
+  }
+  // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
+  // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
+  // out 1.5 s after. It only shows; it isn't dragged.
+  const zoomBar = document.createElement('div');
+  zoomBar.className = 'zoom-bar';
+  zoomBar.setAttribute('aria-hidden', 'true');
+  zoomBar.innerHTML = '<div class="zoom-knob"></div>';
+  map.getContainer().appendChild(zoomBar);
+  const knob = zoomBar.firstChild;
+  let zoomBarTimer = null;
+  function showZoom(reveal = true) {
+    const min = map.getMinZoom(), max = map.getMaxZoom();
+    const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
+    knob.style.top = `${(1 - f) * 100}%`;
+    if (!reveal) return;
+    zoomBar.classList.add('shown');
+    clearTimeout(zoomBarTimer);
+    zoomBarTimer = setTimeout(() => zoomBar.classList.remove('shown'), 1500);
+  }
+  map.on('zoom', () => showZoom());
+  map.on('resize', setZoomLimits);
+  setZoomLimits();
 
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
