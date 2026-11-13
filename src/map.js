@@ -370,16 +370,20 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     zoomAroundCenter(false);
     end?.();
   }
-  // After the user has moved the map: if the train is now far from the middle, they went to look elsewhere.
-  let userMoved = false;
-  map.on('movestart', (e) => { if (e.originalEvent) userMoved = true; });
+  // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes the
+  // point the camera keeps it at (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new
+  // center for the follow ... so that you can reframe how you want it stuck"). Dragging no longer stops following;
+  // a single tap on the map does (main.js). Kept on the screen and above the panel.
+  let dragged = false;
+  map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
-    if (!userMoved) return;
-    userMoved = false;
+    if (!dragged || pointers.size) return;
+    dragged = false;
     const p = following?.getPlace();
     if (!p) return;
-    const { clientWidth: w, clientHeight: h } = box;
-    if (offFocus(p) > 0.25 * Math.min(w, h * 0.55)) stopFollowing();
+    const { clientWidth: w, clientHeight: h } = box, at = map.project([p.lon, p.lat]);
+    const x = Math.max(30, Math.min(w - 30, at.x)), y = Math.max(70, Math.min(h - following.bottom - 30, at.y));
+    setPadding({ left: Math.max(0, 2 * x - w), right: Math.max(0, w - 2 * x), top: Math.max(0, 2 * y - h), bottom: Math.max(0, h - 2 * y) });
   });
   // Put the camera's middle on a place without stopping a zoom or turn in progress: MapLibre's jumpTo stops every
   // gesture, so the camera used to keep still until a zoom had ended and then catch up (Max, 2026-11-13: "the
@@ -426,13 +430,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     onViewChange(fn) { map.on('pitchend', fn); },
     // Follow a train: keep it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
-    // Zoom, turn and tilt stay the user's. Dragging the map far from the train stops following; a small nudge or a
-    // pinch doesn't. onEnd() is called when following stops by itself (dragged away, or the train is gone).
+    // Zoom, turn and tilt stay the user's; a drag moves the point the train is kept at (above). onEnd() is called
+    // when following stops by itself (the train is gone).
     async follow(getPlace, onEnd) {
       await ready;
-      const h = map.getContainer().clientHeight;
-      setPadding({ top: 0, bottom: Math.round(h * 0.45) + 20, left: 0, right: 0 });
-      following = { getPlace, onEnd, locked: false };
+      const h = map.getContainer().clientHeight, bottom = Math.round(h * 0.45) + 20;
+      setPadding({ top: 0, bottom, left: 0, right: 0 });
+      dragged = false;
+      following = { getPlace, onEnd, locked: false, bottom };
       zoomAroundCenter(true);
     },
     unfollow() { following = null; zoomAroundCenter(false); },
