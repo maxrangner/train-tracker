@@ -4,9 +4,12 @@
 // - Each line is simplified, keeping every point within SIMPLIFY_M of the original.
 // - Saved as whole numbers (1e-5 degrees, about 1 m), each the difference from the point before, plus each line's
 //   number of points. Line ends meet on exactly equal numbers; src/rail-net.js finds them again on loading.
+// - Pieces under 5 m are taken out and their ends joined (joinTinyPieces in src/rail-net.js; it was done by the page
+//   at every start).
 // Run: node tools/rail-net.mjs
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
+import { joinTinyPieces } from '../src/rail-net.js';
 
 const JOIN_M = 2;
 const SIMPLIFY_M = 0.5;
@@ -113,7 +116,10 @@ for (const c of simple) {
   n.push(c.length);
   for (const [x, y] of c) { d.push(x - px, y - py); px = x; py = y; }
 }
-const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, n, d });
+// Tiny pieces (under 5 m) are taken out and their ends joined here, with the page's own code (src/rail-net.js), so
+// the page loads a network that is ready (`joined`).
+const ready = joinTinyPieces({ scale: 1e5, n, d });
+const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: ready.n, d: ready.d });
 writeFileSync(out, json);
 
 const before = statSync(src).size;

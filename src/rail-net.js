@@ -23,8 +23,10 @@ export async function loadNet(url) {
 // paths cut straight from Stockholm C). Pieces shorter than TINY_M are taken out and their two ends joined into one,
 // so the lines on either side meet. First a trial round Stockholm C (under 2 m); since 2026-11-12 everywhere and
 // under 5 m (the bug hunt: 399 of 31,588 lines; station pairs with no route between them 214 -> 188 of 2,856).
+// Done when the network file is built (tools/rail-net.mjs, which marks the file `joined`), so the page doesn't do it
+// at every start (about 100 ms on a fast PC); a file from before that is still joined here on loading.
 const TINY_M = 5;
-function joinTinyPieces({ scale, n, d }) {
+export function joinTinyPieces({ scale, n, d }) {
   const lines = [];
   let x = 0, y = 0, k = 0;
   for (const cnt of n) { const pts = []; for (let i = 0; i < cnt; i++) { x += d[2 * k]; y += d[2 * k + 1]; k++; pts.push([x, y]); } lines.push(pts); }
@@ -62,7 +64,7 @@ function joinTinyPieces({ scale, n, d }) {
 }
 
 export function netFromJSON(json) {
-  const { scale, n, d } = joinTinyPieces(json);
+  const { scale, n, d } = json.joined ? json : joinTinyPieces(json);
   // ---- Points and lines ----
   const P = d.length / 2, L = n.length;
   const lon = new Float64Array(P), lat = new Float64Array(P), cum = new Float64Array(P);
