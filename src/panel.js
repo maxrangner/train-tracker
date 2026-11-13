@@ -1,10 +1,11 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 import { fetchRoute } from './trafikverket.js';
 import { t } from './i18n.js';
+import { hhmm } from './clock.js';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const time = t => (t ? new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '');
+const time = t => (t ? hhmm(t) : '');
 const off = (planned, at) => {
   if (!at) return '';
   const m = Math.round((at - planned) / 60000);
