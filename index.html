@@ -18,6 +18,8 @@
       --late: #a40e26;
       --label: #1b1f24;       /* the selected train's label, as the map's labels */
       --label-halo: #ffffff;
+      --group: #1f6feb;       /* the "3 trains" labels close in */
+      --station: #3d444d;     /* the stations' names (the map's own further out: src/map.js) */
       --gap: 10px;
     }
     /* Dark (Settings → Look; Auto follows the phone): src/settings.js sets data-theme. Labels white with a black
@@ -33,6 +35,8 @@
       --late: #ff7b72;
       --label: #ffffff;
       --label-halo: #000000;
+      --group: #58a6ff;
+      --station: #ffffff;
     }
     :root[data-theme="dark"] body { background: #0d1117; }
     /* The map's zoom buttons and compass in dark: dark buttons, light icons. */
@@ -233,6 +237,21 @@
     .sel-train.late-late:not(.model) { border-color: #d1242f; }
     .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: pre; text-align: center;
       font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label);
+      text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
+
+    /* Close in, the trains' labels (src/map.js: placeNearLabels): page elements placed every frame, like the
+       selected train's; company above number (lateness), "3 trains" for trains standing close together. */
+    .near-labels { position: absolute; left: 0; top: 0; pointer-events: none; }
+    .near-label { position: absolute; left: 0; top: 0; white-space: pre; text-align: center; line-height: 1.2;
+      font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label); will-change: transform;
+      text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
+    .near-label .co { font-size: 0.85em; }
+    .near-label.stale { opacity: 0.45; }
+    .near-label.group { font-size: 13px; color: var(--group); }
+    /* Close in, the stations' names, above the trains' labels (src/map.js: placeStationNames). */
+    .station-names { position: absolute; left: 0; top: 0; pointer-events: none; }
+    .station-name { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 14px 'Noto Sans', system-ui, sans-serif;
+      color: var(--station); will-change: transform;
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
 
     #panel, #board, #picker {

@@ -52,7 +52,13 @@ try {
   const tapped = await page.evaluate(() => {
     const m = window.__map, c = m.project(m.getCenter());
     const d = f => { const q = m.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
-    const lone = new Set(m.queryRenderedFeatures({ layers: ['train-labels-near', 'train-labels'] }).map(f => f.properties.id));
+    // trains with a label of their own: further out the map's, close in page elements (src/map.js placeNearLabels)
+    const lone = new Set(m.queryRenderedFeatures({ layers: ['train-labels'] }).map(f => f.properties.id));
+    const own = [...document.querySelectorAll('.near-label:not(.group)')].map(e => e.getBoundingClientRect());
+    for (const f of m.queryRenderedFeatures({ layers: ['train-dots'] })) {
+      const q = m.project(f.geometry.coordinates);
+      if (own.some(r => Math.abs((r.left + r.right) / 2 - q.x) < 2 && Math.abs(r.top - q.y - 12) < 3)) lone.add(f.properties.id);
+    }
     const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id)).sort((a, b) => d(a) - d(b))[0];
     if (!f) return null;
     const q = m.project(f.geometry.coordinates);
@@ -70,10 +76,9 @@ try {
   for (const zoom of [11, 12, 13]) {
     await page.evaluate(z => window.__map.jumpTo({ center: [18.06, 59.33], zoom: z }), zoom);
     await sleep(1200);
-    const labels = await page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-group-labels'] }).map((g) => {
-      const q = window.__map.project(g.geometry.coordinates);
-      return { x: q.x, y: q.y + 12, n: g.properties.point_count };
-    }).filter(q => q.x > 20 && q.x < innerWidth - 20 && q.y > 70 && q.y < innerHeight - 30));
+    const labels = await page.evaluate(() => [...document.querySelectorAll('.near-label.group')].map((e) => { const r = e.getBoundingClientRect();
+      return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, n: parseInt(e.textContent, 10) }; })
+      .filter(q => q.x > 20 && q.x < innerWidth - 20 && q.y > 70 && q.y < innerHeight - 30));
     for (const g of labels) {
       await page.evaluate(() => { document.getElementById('picker').hidden = true; });
       await page.mouse.click(g.x, g.y);

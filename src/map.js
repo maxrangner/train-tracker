@@ -86,7 +86,7 @@ const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
 const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
-  'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels', 'station-names'];
+  'trains-3d', 'train-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -205,7 +205,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), 'train-groups': empty() };
+  const data = { path: empty(), stations: empty(), trains: empty() };
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
@@ -214,8 +214,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
     add('stations');
     add('trains');
-    // Close in, trains standing close together share one label (see train-group-labels).
-    add('train-groups', { cluster: true, clusterRadius: GROUP_PX, clusterMaxZoom: 19 });
   }
 
   // Our layers, with the colours, model zoom and language as they are now.
@@ -342,54 +340,20 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
 
-    // Close in, where the models show: trains standing close together share one label, "3 trains" (Max, 2026-11-12:
-    // labels stacked on each other at Stockholm C). The map groups them by distance on the screen; a tap on the group
-    // lists them (onGroupTap). A train on its own keeps its full label: company above number (lateness).
-    map.addLayer({
-      id: 'train-labels-near',
-      type: 'symbol',
-      source: 'train-groups',
-      minzoom: MODEL_ZOOM,
-      filter: ['!', ['has', 'point_count']],
-      layout: {
-        'text-field': ['case', ['!=', ['get', 'company'], ''],
-          ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
-          ['get', 'label']],
-        'text-font': ['Noto Sans Bold'],
-        'text-size': 11,
-        'text-overlap': 'always',   // every train shows its label (option A)
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
-      },
-      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
-        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
-    });
-    map.addLayer({
-      id: 'train-group-labels',
-      type: 'symbol',
-      source: 'train-groups',
-      minzoom: MODEL_ZOOM,
-      filter: ['has', 'point_count'],
-      layout: {
-        'text-field': ['concat', ['to-string', ['get', 'point_count']], t('nTrains')],
-        'text-font': ['Noto Sans Bold'],
-        'text-size': 13,
-        'text-overlap': 'always',
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
-      },
-      paint: { 'text-color': C.group, 'text-halo-color': C.halo, 'text-halo-width': 2 },
-    });
+    // Close in, where the models show, the labels are page elements placed every frame (placeNearLabels, below).
 
     // The stations' names, last so they lie on top of everything (Max, 2026-11-13: "a bit bigger and always on top
     // of other labels"): over the trains, their labels and the base map's names. The top layer is also placed first,
     // so where labels collide a station's name is kept and the other label is left out. (The selected train's label
     // is above the map itself, so it stays on top.)
+    // From the zoom where the trains' labels are page elements (placeNearLabels) the names are page elements too,
+    // above those labels; this layer draws them further out.
     map.addLayer({
       id: 'station-names',
       type: 'symbol',
       source: 'stations',
       minzoom: 11,
+      maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
         'text-field': ['get', 'name'],
         'text-font': ['Noto Sans Regular'],
@@ -462,7 +426,6 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
     map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id));
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
-    map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id]]);
   }
 
   const ready = new Promise(resolve => map.on('load', () => {
@@ -472,27 +435,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
     // are small on a phone). The nearest wins.
     map.on('click', (e) => {
-      // A "3 trains" label: list them.
-      const gp = 12;
-      const group = onGroupTap && map.queryRenderedFeatures([[e.point.x - gp, e.point.y - gp], [e.point.x + gp, e.point.y + gp]],
-        { layers: ['train-group-labels'] })[0];
-      if (group) {
-        // The trains round the group's place, within the grouping distance (asking the map for the group's members
-        // fails when the trains have moved and the groups were redone meanwhile, 30 times a second).
-        // Exactly as many as the label says: the nearest to its point, which is the middle of its trains (the area
-        // searched can reach into the next group: "2 trains" listed 3, Max 2026-11-12). The open train is in no group.
-        const c = map.project(group.geometry.coordinates), r = GROUP_PX * 1.2;
-        const near = map.queryRenderedFeatures([[c.x - r, c.y - r], [c.x + r, c.y + r]], { layers: ['train-dots'] });
-        const byId = new globalThis.Map(near.filter(f => f.properties.id !== selected).map(f => [f.properties.id, f]));
-        const fromMiddle = f => { const q = map.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
-        const members = [...byId.values()].sort((a, b) => fromMiddle(a) - fromMiddle(b)).slice(0, group.properties.point_count);
-        if (members.length) return onGroupTap(members.map(f => f.properties));
-      }
+      // Close in, a station's name is drawn on top of everything, so a tap on it opens the station.
+      const named = onStationTap && stationNameAt(e.point);
+      if (named) return onStationTap(named);
+      // Close in, a label: a "3 trains" label lists exactly the trains it was drawn for (the open train is in no
+      // group); a train's own label opens it.
+      const near = nearLabelAt(e.point);
+      if (near && near.ids.length > 1 && onGroupTap) return onGroupTap(near.ids.map(id => nearProps.get(id)).filter(Boolean));
+      if (near) return onTrainTap?.(near.ids[0]);
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
-      // A train's label (Max, 2026-11-12: "it should be the entire train model, and the label").
+      // A train's label further out (Max, 2026-11-12: "it should be the entire train model, and the label").
       const lp = 3;
       const label = map.queryRenderedFeatures([[e.point.x - lp, e.point.y - lp], [e.point.x + lp, e.point.y + lp]],
-        { layers: ['train-labels', 'train-labels-near'] }).find(f => f.properties.id);
+        { layers: ['train-labels'] }).find(f => f.properties.id);
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
       const onModel = map.getZoom() >= modelZoom() ? modelAt(e.point) : null;
@@ -557,6 +512,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       map.jumpTo({ bearing, pitch, center: centreHolding(middle.anchor, middle.point, tr) });
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
+    map.on('render', placeNearLabels);
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
     resolve();
@@ -575,6 +531,118 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
+
+  // ---- Close in, the trains' labels ----
+  // From the zoom where the models show, each train's label (company above number and lateness) and the "3 trains"
+  // label of trains standing close together (Max, 2026-11-12: labels stacked at Stockholm C) are page elements,
+  // placed after every frame the map draws, from the same places as the 3D trains (Max, 2026-11-14, from his note
+  // "train labels flicker when zoomed in close": drawn by the map they were redone about 10 times a second through
+  // its background worker and sawed up to 3 px, at most 10, behind their trains). The selected train has its own
+  // label (its marker, above these). Further out the map draws the labels (train-labels), leaving out overlaps.
+  const nearBox = document.createElement('div');
+  nearBox.className = 'near-labels';
+  map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
+  // The stations' names close in, above the trains' labels (Max, 2026-11-13: station names "always on top of other
+  // labels"; the map's own names can't be above page elements). A name that would overlap one already placed is
+  // left out, as the map does, in the same order every frame so names don't swap.
+  const namesBox = document.createElement('div');
+  namesBox.className = 'station-names';
+  map.getCanvasContainer().appendChild(namesBox);
+  const nameEls = new globalThis.Map();   // station signature -> its element
+  const NAME_DY = 15.4;   // the name's bottom above the station's point (as the map's: 1.1 em of 14 px)
+  function placeStationNames(W, H) {
+    if (map.getZoom() < Math.max(11, modelZoom())) {
+      if (nameEls.size) { namesBox.replaceChildren(); nameEls.clear(); }
+      return;
+    }
+    const placed = [], keep = new Set();
+    for (const f of data.stations.features) {
+      const q = map.project(f.geometry.coordinates);
+      if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
+      const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
+      if (placed.some(o => o.l < b.r && b.l < o.r && o.t < b.bt && b.t < o.bt)) continue;
+      placed.push(b);
+      keep.add(sig);
+      let el = nameEls.get(sig);
+      if (!el) {
+        el = Object.assign(document.createElement('div'), { className: 'station-name', textContent: name });
+        el.dataset.sig = sig;
+        namesBox.appendChild(el);
+        nameEls.set(sig, el);
+      }
+      el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
+    }
+    for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
+  }
+  // The station whose name (close in) is under a point of the map, or null.
+  function stationNameAt(pt) {
+    if (!nameEls.size) return null;
+    const c = box.getBoundingClientRect(), x = pt.x + c.left, y = pt.y + c.top;
+    for (const [sig, el] of nameEls) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left - 3 && x <= r.right + 3 && y >= r.top - 3 && y <= r.bottom + 3) return sig;
+    }
+    return null;
+  }
+  let nearProps = new globalThis.Map();   // id -> the properties setTrains got for each train near the view
+  const nearEls = new globalThis.Map();   // key -> { el, text, ids }
+  const LABEL_DY = 12;   // the label's top below the train's point (the map's labels: 1.1 em of 11 px)
+  function placeNearLabels() {
+    if (!isReady) return;
+    const { clientWidth: W, clientHeight: H } = box, pts = [];
+    placeStationNames(W, H);
+    if (map.getZoom() < modelZoom()) {
+      if (nearEls.size) { nearBox.replaceChildren(); nearEls.clear(); }
+      return;
+    }
+    for (const x of getTrains3d?.() ?? []) {
+      const pr = x.id !== selected && nearProps.get(x.id);
+      if (!pr) continue;
+      const q = map.project([x.lon, x.lat]);
+      if (q.x > -80 && q.y > -80 && q.x < W + 80 && q.y < H + 80) pts.push({ id: x.id, x: q.x, y: q.y, pr });
+    }
+    // Groups: the trains within GROUP_PX of the first one not yet in a group, in a fixed order (so groups don't swap).
+    pts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const used = new Set(), keep = new Set();
+    for (const p of pts) {
+      if (used.has(p.id)) continue;
+      const g = pts.filter(o => !used.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= GROUP_PX);
+      for (const o of g) used.add(o.id);
+      const one = g.length === 1, key = one ? g[0].id : `g:${g.map(o => o.id).join('|')}`;
+      let n = nearEls.get(key);
+      if (!n) {
+        n = { el: document.createElement('div'), text: null, ids: g.map(o => o.id) };
+        nearBox.appendChild(n.el);
+        nearEls.set(key, n);
+      }
+      keep.add(key);
+      const text = one ? `${g[0].pr.company ?? ''}|${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
+      if (text !== n.text) {
+        n.text = text;
+        if (one) {
+          const { company, label, stale } = g[0].pr;
+          n.el.className = `near-label${stale ? ' stale' : ''}`;
+          n.el.replaceChildren(...(company ? [Object.assign(document.createElement('span'), { className: 'co', textContent: company }), '\n'] : []), String(label));
+        } else {
+          n.el.className = 'near-label group';
+          n.el.textContent = text;
+        }
+      }
+      const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
+      n.el.style.transform = `translate(${x.toFixed(1)}px, ${(y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+    }
+    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
+  }
+  // The close-in label under a point of the map (screen pixels), with 3 px to spare, or null.
+  function nearLabelAt(pt) {
+    if (!nearEls.size) return null;
+    const c = box.getBoundingClientRect();
+    for (const n of nearEls.values()) {
+      const r = n.el.getBoundingClientRect(), x = pt.x + c.left, y = pt.y + c.top;
+      if (x >= r.left - 3 && x <= r.right + 3 && y >= r.top - 3 && y <= r.bottom + 3) return n;
+    }
+    return null;
+  }
 
   // ---- Following a train ----
   // The followed train is held at a point on the screen, its focus: at first the middle of the map above the panel,
@@ -736,14 +804,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Called 30 times a second with the trains in and near the view, where they are now.
     setTrains(geojson) {
       data.trains = geojson;
+      nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
       map.getSource('trains').setData(geojson);
-      // Grouped labels close in; the selected train has its own label (the marker), so it isn't counted in a group.
-      if (map.getZoom() >= modelZoom() - 1) {
-        data['train-groups'] = selected
-          ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
-        map.getSource('train-groups').setData(data['train-groups']);
-      }
     },
     // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
@@ -884,13 +947,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       }
     },
     get shownRail() { return shownRail; },
-    // After a change of language: only the words on the map change (the "3 trains" labels, the buttons' names).
-    // The layers stay (they used to be taken away and added again, the 3D trains with them).
+    // After a change of language: only the words on the map change (the buttons' names; the "3 trains" labels take
+    // the new words on the next frame). The layers stay (they used to be taken away and added again).
     async relabel() {
       await ready;
       relabelControls();
-      if (isReady && map.getLayer('train-group-labels'))
-        map.setLayoutProperty('train-group-labels', 'text-field', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')]);
+      map.triggerRepaint();
     },
     // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map
     // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.

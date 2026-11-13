@@ -31,12 +31,8 @@ for (const step of steps) {
     const pt = await page.evaluate((lon, lat) => window.__map.project([lon, lat]), lon, lat);
     await page.mouse.click(pt.x, pt.y);
   } else if (kind === 'tapgroup') {
-    const pt = await page.evaluate(() => {
-      const m = window.__map, f = m.queryRenderedFeatures({ layers: ['train-group-labels'] })[0];
-      if (!f) return null;
-      const q = m.project(f.geometry.coordinates);
-      return { x: q.x, y: q.y + 12, n: f.properties.point_count };
-    });
+    const pt = await page.evaluate(() => ([...document.querySelectorAll('.near-label.group')].map((e) => { const r = e.getBoundingClientRect();
+      return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2, n: parseInt(e.textContent, 10) }; }))[0] ?? null);   // close in, the labels are page elements
     console.log('group', JSON.stringify(pt));
     if (pt) await page.mouse.click(pt.x, pt.y);
   } else if (kind === 'taptrain') {
