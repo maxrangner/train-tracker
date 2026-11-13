@@ -166,7 +166,10 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
 
 // ---------- A train's route for today ----------
 
-// All stops of one train on its date, in order: [{station, activity, advertised, planned, estimated, actual, canceled}].
+// All stops of one train on its date, in order: [{station, activity, advertised, planned, estimated, actual, canceled,
+// problems, notes}]. problems: Trafikverket's problem notes at that stop ("Spårändrat", "Kort tåg"); notes: the other
+// notes (a bus instead, booking, a bistro, the carriage order). Their texts, in Swedish. In 600 rows (2026-11-13):
+// problem notes on 71, other notes on 26, booking 29, bistro or kiosk 11, carriage order 14.
 export async function fetchRoute(operationalNumber, departureDate) {
   const r = await ask(
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
@@ -176,7 +179,9 @@ export async function fetchRoute(operationalNumber, departureDate) {
     `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE>` +
     `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>TrackAtLocation</INCLUDE>` +
     `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
-    `</QUERY>`);
+    `<INCLUDE>Deviation</INCLUDE><INCLUDE>OtherInformation</INCLUDE><INCLUDE>Booking</INCLUDE><INCLUDE>Service</INCLUDE>` +
+    `<INCLUDE>TrainComposition</INCLUDE></QUERY>`);
+  const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
   const rows = r.TrainAnnouncement ?? [];
   return {
     from: rows[0]?.FromLocation?.[0]?.LocationName ?? null,
@@ -191,8 +196,45 @@ export async function fetchRoute(operationalNumber, departureDate) {
       actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null,
       canceled: a.Canceled === true,
       track: a.TrackAtLocation ?? '',    // the platform track, e.g. "3" ('' when not given)
+      problems: texts(a.Deviation),
+      notes: [...texts(a.OtherInformation), ...texts(a.Booking), ...texts(a.Service), ...texts(a.TrainComposition)],
     })),
   };
+}
+
+// ---------- Cancelled trains today (the stats page) ----------
+
+// How many trains have at least one cancelled passenger stop on day (Swedish date, "2026-11-13"). A whole
+// cancelled trip and a part of one look the same in the data. Measured 2026-11-13: 144 trains, 46 kB, 0.5 s.
+export async function fetchCancelledToday(day) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
+    `<FILTER><EQ name="Canceled" value="true"/><EQ name="Advertised" value="true"/>` +
+    `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
+    `<INCLUDE>OperationalTrainNumber</INCLUDE></QUERY>`);
+  return new Set((r.TrainAnnouncement ?? []).map(a => a.OperationalTrainNumber)).size;
+}
+
+// ---------- Today's arrivals (the stats page's graph) ----------
+
+// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual }],
+// id = train number + station (shorter than ActivityId, 36 characters). changedSince (ms): only rows changed after
+// it (ModifiedTime). Measured 2026-11-13 at 23:50: the whole day ~31,900 rows, 5.4 MB, ~285 kB as sent; changes over 10
+// minutes ~150 rows, 2.5 kB. Old rows are changed again too (an hour's changes reached back to 01:23).
+export async function fetchDayArrivals(since, changedSince = null) {
+  const r = await ask(
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
+    `<FILTER><GT name="TimeAtLocation" value="${new Date(since).toISOString()}"/>` +
+    `<EQ name="Advertised" value="true"/><EQ name="ActivityType" value="Ankomst"/>` +
+    (changedSince ? `<GT name="ModifiedTime" value="${new Date(changedSince).toISOString()}"/>` : '') + `</FILTER>` +
+    `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>LocationSignature</INCLUDE>` +
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE></QUERY>`);
+  const out = [];
+  for (const a of r.TrainAnnouncement ?? []) {
+    if (!a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
+    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation) });
+  }
+  return out;
 }
 
 // ---------- Stations ----------
@@ -268,7 +310,9 @@ export async function fetchTrainsByNumber(number, day) {
 // The timetable rows of these trains (internal numbers) planned between from and to (ms): every location they pass
 // or stop at. [{ key (trainKey), sig, activity ('Ankomst' arrival / 'Avgang' departure), planned (ms) }].
 // Asked in groups of 100 numbers.
-export async function fetchPlannedRoutes(numbers, from, to) {
+// withBrand: also each row's company (brand). It makes the answer about 29 % bigger (100 trains, 2026-11-13), so it is
+// asked only the first time about a train: a company doesn't change.
+export async function fetchPlannedRoutes(numbers, from, to, { withBrand = false } = {}) {
   const out = [];
   for (let i = 0; i < numbers.length; i += 100) {
     const r = await ask(
@@ -278,11 +322,12 @@ export async function fetchPlannedRoutes(numbers, from, to) {
       `<LT name="AdvertisedTimeAtLocation" value="${new Date(to).toISOString()}"/></FILTER>` +
       `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
       `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>AdvertisedTimeAtLocation</INCLUDE>` +
-      `<INCLUDE>Deleted</INCLUDE></QUERY>`);
+      `<INCLUDE>Deleted</INCLUDE>${withBrand ? '<INCLUDE>ProductInformation</INCLUDE>' : ''}</QUERY>`);
     for (const a of r.TrainAnnouncement ?? []) {
       if (a.Deleted || !a.AdvertisedTimeAtLocation) continue;
       out.push({ key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime), sig: a.LocationSignature,
-        activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) });
+        activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation),
+        brand: a.ProductInformation?.[0]?.Description ?? null });
     }
   }
   return out;

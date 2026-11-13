@@ -65,7 +65,9 @@
       pointer-events: none;
     }
     #top > * { pointer-events: auto; }
-    #status { padding: 6px 10px; font-variant-numeric: tabular-nums; }
+    /* The banner: a button that opens the stats page (Max, 2026-11-13). */
+    #status { padding: 6px 10px; font: inherit; font-variant-numeric: tabular-nums; border: 0; color: var(--ink); text-align: left; cursor: pointer; }
+    #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     #status.problem { color: var(--late); }
     .help-card { display: flex; padding: 3px; gap: 2px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
@@ -138,9 +140,42 @@
       max-width: 480px; margin: auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
       display: flex; flex-direction: column; gap: 6px;
     }
+    /* The stats page (opened from the status line): its own page over the map, at the top, as Settings was before. */
+    #stats-page {
+      position: fixed; z-index: 6;
+      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
+      top: calc(var(--gap) + env(safe-area-inset-top, 0px));
+      max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 6px;
+    }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
     #settings-page:not([hidden]) + #settings-backdrop { display: block; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
+    /* The stats page (src/stats.js): sections, company bars, the punctuality bar in the dots' colours. */
+    #stats-body { overflow: auto; min-height: 0; display: grid; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; padding-top: 4px; }
+    #stats-body p { margin: 0; }
+    .st-sec { display: grid; gap: 4px; }
+    .st-big { font-size: 15px; font-weight: 600; }
+    .st-sub { color: var(--muted); font-size: 13px; }
+    .st-part { font-weight: 600; margin-top: 4px !important; }
+    .st-bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr auto; gap: 4px 8px; align-items: center; }
+    .st-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-name i { color: var(--muted); }
+    .st-track { height: 10px; }
+    .st-bar { display: block; height: 100%; min-width: 2px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
+    .st-n { text-align: right; }
+    .st-stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
+    .st-ontime { background: #1a7f37; } .st-some { background: #d4a72c; } .st-late { background: #d1242f; }
+    /* Today's graph (src/stats.js dayGraph): the same three colours as the dots. */
+    .st-day { width: 100%; height: auto; display: block; overflow: visible; }
+    .st-day .d-ontime { fill: #1a7f37; } .st-day .d-some { fill: #d4a72c; } .st-day .d-late { fill: #d1242f; }
+    .st-day .d-hit { fill: transparent; }
+    .st-day g:hover .d-hit { fill: var(--hover); }
+    .st-day line { stroke: var(--line); stroke-width: 1; }
+    .st-day text { fill: var(--muted); font-size: 8px; }
+    .st-legend { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+    .st-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
@@ -226,6 +261,11 @@
     }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
     .panel-status { margin: 4px 0 0; color: var(--late); }
+    /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
+    .panel-tvnotes { margin: 0 0 6px; display: grid; gap: 2px; }
+    .panel-tvnote { margin: 0; }
+    .panel-tvnote.problem { color: var(--late); font-weight: 600; }
+    .panel-tvnote span { color: var(--muted); font-weight: 400; }
     .panel-table { overflow: auto; min-height: 0; position: relative; }
     table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
     th { text-align: left; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--bg); }
@@ -294,7 +334,7 @@
     <button id="menu-button" class="card" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search" data-t-aria="menu">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
     </button>
-    <div id="status" class="card" data-t="connecting">connecting…</div>
+    <button id="status" class="card" type="button" aria-controls="stats-page" data-t="connecting">connecting…</button>
     <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
   </div>
   <div id="menu" class="card" hidden>
@@ -334,6 +374,11 @@
     </div>
   </div>
   <div id="settings-backdrop"></div>
+  <div id="stats-page" class="card" role="dialog" aria-modal="true" aria-labelledby="stats-title" hidden>
+    <div class="panel-head"><strong id="stats-title" data-t="stats">Live statistics</strong>
+      <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats">×</button></div>
+    <div id="stats-body"></div>
+  </div>
   <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>
       <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp">×</button></div>
