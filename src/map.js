@@ -1,7 +1,7 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, Marker, NavigationControl, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, LngLat, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
@@ -381,6 +381,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     const { clientWidth: w, clientHeight: h } = box;
     if (offFocus(p) > 0.25 * Math.min(w, h * 0.55)) stopFollowing();
   });
+  // Put the camera's middle on a place without stopping a zoom or turn in progress: MapLibre's jumpTo stops every
+  // gesture, so the camera used to keep still until a zoom had ended and then catch up (Max, 2026-11-13: "the
+  // camera stops for a beat, then recenters"). This uses MapLibre 6's own camera (not a public call; maplibre-gl is
+  // pinned): false when it isn't there, and the camera then waits as before.
+  function centerDuringGesture(lng, lat) {
+    const camera = map._camera;
+    if (typeof camera?.applyTransformChange !== 'function') return false;
+    camera.applyTransformChange(tr => tr.setCenter(new LngLat(lng, lat)));
+    map.triggerRepaint();
+    return true;
+  }
   // Change the room kept free at the screen's edges, keeping the map still: the camera's new middle is the place
   // already showing there.
   function setPadding(padding) {
@@ -431,17 +442,23 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       const dt = Math.min(now - lastTick, 200);
       lastTick = now;
       if (!following || !isReady) return;
-      // Moving the camera cancels any gesture just starting, so keep still while a finger or the mouse is down,
-      // and during the map's own animations (the Tilt button, the compass, a wheel zoom, a fling).
-      if (pointers.size || map.isMoving()) { following.locked = false; return; }
       const p = following.getPlace();
       if (!p) return stopFollowing();
+      // A finger or the mouse is down, or the map is zooming or turning (a wheel zoom, a pinch, the compass): the
+      // camera keeps on the train without stopping what the user does. Only a drag (one finger or the mouse moving
+      // the map) and the map's own animations (a fling, a fly-to) are left alone.
+      const busy = pointers.size > 0 || map.isMoving();
+      if (busy && ((map.dragPan.isActive() && pointers.size < 2) || map._camera?.isEasing?.())) { following.locked = false; return; }
+      const moveTo = (lng, lat) => {
+        if (!busy) map.jumpTo({ center: [lng, lat] });
+        else if (!centerDuringGesture(lng, lat)) following.locked = false;
+      };
       const off = offFocus(p);
-      if (following.locked && off < 30) { map.jumpTo({ center: [p.lon, p.lat] }); return; }
+      if (following.locked && off < 30) return moveTo(p.lon, p.lat);
       // Not on it yet (just tapped, or the train jumped): glide over in about half a second, then stay locked on.
-      if (off < 1) { following.locked = true; map.jumpTo({ center: [p.lon, p.lat] }); return; }
+      if (off < 1) { following.locked = true; return moveTo(p.lon, p.lat); }
       const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
-      map.jumpTo({ center: [c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k] });
+      moveTo(c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k);
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     async setStations(list) {
