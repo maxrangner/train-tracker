@@ -87,7 +87,9 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       if (last && last.station === s.station && !last[slot]) { last[slot] = s; continue; }
       stops.push({ station: s.station, [slot]: s });
     }
-    const nextIdx = stops.findIndex(s => !(s.dep ?? s.arr).actual);
+    // The next stop: the first with no actual time that isn't cancelled (a cancelled stop never gets one, so every
+    // stop after it stayed "not passed": 1141 on 13 Nov, Ronneby cancelled, Max's note).
+    const nextIdx = stops.findIndex(s => { const m = s.dep ?? s.arr; return !m.actual && !m.canceled; });
 
     const rows = stops.map((s, i) => {
       const a = s.arr, d = s.dep;
