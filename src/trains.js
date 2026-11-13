@@ -487,6 +487,44 @@ export function createTrains(options = {}) {
     }
   }
 
+  // Whether the way behind train tr doubles back toward its front, so its cars behind would be laid over its cars ahead
+  // (a train that turned round at the end of its line, or GPS wobble while standing: 976 at Stockholm C folded up,
+  // Max 2026-11-13; 6 trains in 3 minutes of the rush-hour replay, mostly standing at line ends). Tested once per
+  // drawing moment: 20 to 80 m behind, the place is less than 60 % of that away, or lies on the front's side.
+  function foldsBack(tr) {
+    if (tr.foldAt === simTime) return tr.folded;
+    const s = tr.sim.s, m = pointAt(tr, s), k = Math.cos(m.lat * R);
+    let folded = false;
+    for (const d of [20, 40, 60, 80]) {
+      if (s - d < tr.hist[0].s) break;
+      const b = pointAt(tr, s - d), f = pointAt(tr, s + d);
+      const toBack = [(b.lon - m.lon) * k, b.lat - m.lat], toFront = [(f.lon - m.lon) * k, f.lat - m.lat];
+      if (metres(m, b) < 0.6 * d || toBack[0] * toFront[0] + toBack[1] * toFront[1] > 0) { folded = true; break; }
+    }
+    tr.foldAt = simTime;
+    tr.folded = folded;
+    return folded;
+  }
+
+  // How far ahead of train tr the known track runs, in metres (Infinity: further than 400 m), and the place and
+  // direction where it ends: past its end every place is the end itself (a buffer stop). Once per drawing moment.
+  function trackEnd(tr) {
+    if (tr.endAt === simTime) return tr.end;
+    const s = tr.sim.s;
+    let end = { at: Infinity };
+    for (let e = 10; e <= 400; e += 10) {
+      if (metres(pointAt(tr, s + e), pointAt(tr, s + e - 1)) > 0.3) continue;
+      let lo = e - 10, hi = e;   // the end lies between: halve down to 0.5 m
+      while (hi - lo > 0.5) { const mid = (lo + hi) / 2; if (metres(pointAt(tr, s + mid), pointAt(tr, s + mid - 0.25)) > 0.1) lo = mid; else hi = mid; }
+      const p = pointAt(tr, s + lo), q = pointAt(tr, s + Math.max(0, lo - 10));
+      end = { at: lo, place: p, heading: metres(p, q) > 2 ? headingOf(q, p) : tr.sim.heading ?? tr.latest.bearing ?? 0 };
+      break;
+    }
+    tr.endAt = simTime;
+    tr.end = end;
+    return end;
+  }
+
   // Where train tr is drawn now, with its heading.
   function drawn(tr) {
     const sim = tr.sim, p = pointAt(tr, sim.s);
@@ -593,10 +631,24 @@ export function createTrains(options = {}) {
     // The place d metres along train id's path from where it is drawn now (+ ahead, - behind), with the same small
     // offset as the train; null when the path doesn't reach that far back (a train that has only just appeared).
     // For the 3D layer, so each car of a model sits on the track (Max, 2026-11-12: cars bend along the track).
+    // Two cases where the track gives no room, both seen with the compact models (up to a few hundred metres long
+    // on the screen; Max, 2026-11-13: 976 folded up at Stockholm C): where the known track ahead ends (a buffer stop
+    // at the end of the line: 3177 at Kungsbacka, 57 m ahead), the cars further on go straight on in the train's
+    // direction instead of piling up at the end; where the way behind doubles back (foldsBack), the cars behind go
+    // straight on from the front, through the middle.
     along(id, d) {
       const tr = byId.get(id), sim = tr?.sim;
-      if (!sim || !tr.hist.length || sim.s + d < tr.hist[0].s) return null;
-      const p = pointAt(tr, sim.s + d);
+      if (!sim || !tr.hist.length) return null;
+      const m = pointAt(tr, sim.s);
+      const front = (dd) => {
+        const end = dd > 0 ? trackEnd(tr) : { at: Infinity };
+        return dd <= end.at ? pointAt(tr, sim.s + dd) : ahead(end.place, end.heading, dd - end.at);
+      };
+      let p;
+      if (d >= 0) p = front(d);
+      else if (foldsBack(tr)) { const f = front(-d); p = { lon: 2 * m.lon - f.lon, lat: 2 * m.lat - f.lat }; }
+      else if (sim.s + d < tr.hist[0].s) return null;
+      else p = pointAt(tr, sim.s + d);
       return { lon: p.lon + sim.off.lon, lat: p.lat + sim.off.lat };
     },
     get count() { return byId.size; },
