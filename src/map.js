@@ -328,6 +328,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
 
   // The id of the model under screen point pt (or null): each drawn model's ground outline projected to the screen,
   // a margin of 8 px round it, and its roof's height taken into account by also testing a bit above it.
+  // A train bent along its track is tested car by car (one straight box missed the last car on a curve: 13-14 px
+  // off with a box 10.6 px to each side, measured 2026-11-13).
   function modelAt(pt) {
     const R = Math.PI / 180, M = 111195;
     let best = null, bestD = Infinity;
@@ -337,12 +339,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       const a = end(-1), b = end(1), c = map.project([o.lon, o.lat]);
       const side = map.project([o.lon + (o.width / 2) * Math.cos(o.bearing * R) / (M * kx), o.lat - (o.width / 2) * Math.sin(o.bearing * R) / M]);
       const halfW = Math.hypot(side.x - c.x, side.y - c.y) + 8;
-      const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy || 1;
+      const pieces = o.cars ? o.cars.map(([lon0, lat0, lon1, lat1]) => [map.project([lon0, lat0]), map.project([lon1, lat1])]) : [[a, b]];
       // Tested at the ground and lifted by about a model's height (in a tilted view the model stands up).
       for (const lift of [0, halfW * 1.5]) {
-        const px = pt.x - a.x, py = pt.y + lift - a.y;
-        const f = Math.max(0, Math.min(1, (px * vx + py * vy) / L2));
-        const d = Math.hypot(px - vx * f, py - vy * f);
+        let d = Infinity;   // to the nearest piece's middle line
+        for (const [p, q] of pieces) {
+          const vx = q.x - p.x, vy = q.y - p.y, L2 = vx * vx + vy * vy || 1;
+          const px = pt.x - p.x, py = pt.y + lift - p.y;
+          const f = Math.max(0, Math.min(1, (px * vx + py * vy) / L2));
+          d = Math.min(d, Math.hypot(px - vx * f, py - vy * f));
+        }
         const extra = Math.hypot(pt.x - c.x, pt.y + lift - c.y) / 1e4;   // equal hits: the nearer middle wins
         if (d <= halfW && d + extra < bestD) { bestD = d + extra; best = id; }
         if (map.getPitch() < 5) break;
