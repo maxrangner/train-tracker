@@ -149,6 +149,17 @@
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
 
+    /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
+    .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
+      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(50px + env(safe-area-inset-right, 0px));
+      width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
+    .zoom-bar.shown { opacity: 1; transition: opacity .15s; }
+    .zoom-bar::before, .zoom-bar::after { content: ''; position: absolute; left: -4px; width: 14px; height: 2px; border-radius: 1px; background: var(--muted); }
+    .zoom-bar::before { top: 0; }
+    .zoom-bar::after { bottom: 0; }
+    .zoom-knob { position: absolute; left: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; }
+
     /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
     .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
       display: grid; place-items: center; pointer-events: none; }
