@@ -15,7 +15,7 @@
     },
     {
       "slot": "weekday midday",
-      "core": null
+      "core": "2026-11-13T10-30-00-013Z"
     },
     {
       "slot": "saturday daytime",
@@ -85,6 +85,21 @@
       "timetable": {
         "bytes": 3195041,
         "sha256": "a57fa4fd35bf764c91f6a196a67c0ed1c893dc5afdc96a7fa05d2de40cf1f3b3"
+      }
+    },
+    {
+      "name": "2026-11-13T10-30-00-013Z",
+      "role": "core",
+      "slot": "weekday midday",
+      "swedish": "Fri 13 Nov 2026 11:30-12:30",
+      "why": "Weekday midday: 273 trains at once (most 302), and unlike the rush hours 57 % of trains never send a speed (rush hours 33 %) and 52 % of train time is in GPS silences of 30 s or more (rush hours 40-41 %): many trains moving on silence and the timetable at normal traffic. Lateness low (11 % of trains 6 min or more late). Third live hour with the recorder fix: no stream break.",
+      "positions": {
+        "bytes": 44256655,
+        "sha256": "688d58bdc99958ad7455e9f449e8762fd3a1d9cbd0836b907690bf1fe85d2ccd"
+      },
+      "timetable": {
+        "bytes": 10891474,
+        "sha256": "e84f63636a4b5170324d6fa19d78fd60d2e39002533d9c04a4e94f2ddce2d179"
       }
     },
     {
