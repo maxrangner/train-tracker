@@ -37,6 +37,9 @@ const EN = {
   debug: 'Debug',                // the settings for trying things out (Max, 2026-11-13)
   boardRows: 'Station board',
   boardRowsAria: 'Trains on a station board',
+  trainSymbol: 'Train symbol',
+  circle: 'Circle',
+  triangle: 'Triangle',
   // Map and picker
   nTrains: ' trains',
   trainsHere: n => `${n} trains here`,
@@ -127,6 +130,9 @@ const SV = {
   debug: 'Felsökning',
   boardRows: 'Stationstavla',
   boardRowsAria: 'Antal tåg på en stationstavla',
+  trainSymbol: 'Tågsymbol',
+  circle: 'Cirkel',
+  triangle: 'Triangel',
   nTrains: ' tåg',
   trainsHere: n => `${n} tåg här`,
   train: 'Tåg',

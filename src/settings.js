@@ -1,4 +1,4 @@
-// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&boardrows=20&theme=dark&lang=en),
+// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&boardrows=20&symbol=triangle&theme=dark&lang=en),
 // else from what was chosen in the menu's Settings (remembered on this phone/browser), else these defaults.
 // Read them where they are used, each time, so a change takes effect without a reload where the code allows it.
 // The phone's language at first start: Swedish if it is Swedish, otherwise English (Max, 2026-11-12).
@@ -10,6 +10,7 @@ const DEFAULTS = {
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
   toyZoom: 11,          // toys from this zoom in (further out: dots)
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
+  trainSymbol: 'circle', // a train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting)
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -20,6 +21,7 @@ const KEYS = {
   toySize: { param: 'toysize' },
   toyZoom: { param: 'toyzoom' },
   boardRows: { param: 'boardrows' },
+  trainSymbol: { param: 'symbol' },
 };
 const STORE = 'settings';
 
@@ -33,6 +35,7 @@ const valid = {
   toySize: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(30, Math.min(150, Number(v))) : undefined),
   toyZoom: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(8, Math.min(16, Number(v))) : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
+  trainSymbol: v => (['circle', 'triangle'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
