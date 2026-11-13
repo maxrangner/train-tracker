@@ -34,6 +34,7 @@ const EN = {
   language: 'Language',
   toySize: 'Compact size',
   toyZoom: 'Compact from zoom',
+  debug: 'Debug',                // the settings for trying things out (Max, 2026-11-13)
   boardRows: 'Station board',
   boardRowsAria: 'Trains on a station board',
   // Map and picker
@@ -123,6 +124,7 @@ const SV = {
   language: 'Språk',
   toySize: 'Storlek, kompakt',
   toyZoom: 'Kompakt från zoom',
+  debug: 'Felsökning',
   boardRows: 'Stationstavla',
   boardRowsAria: 'Antal tåg på en stationstavla',
   nTrains: ' tåg',
