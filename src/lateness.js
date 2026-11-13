@@ -21,6 +21,9 @@ export function createLateness() {
       for (const [key, p] of byKey) if (p.time < before && !keep(key)) { byKey.delete(key); brands.delete(key); }
       for (const key of brands.keys()) if (!byKey.has(key) && !keep(key)) brands.delete(key);
     },
+    // A train's company from elsewhere (its planned route): kept when no passing has named it. A train that has passed
+    // no station in the last 90 minutes (VR Snabbtåg 2052, Skövde to Flemingsberg, 2026-11-13) was "not known".
+    setBrand(key, brand) { if (brand && !brands.has(key)) brands.set(key, brand); },
     get(key) { return byKey.get(key) ?? null; },
     brand(key) { return brands.get(key) ?? null; },
     get count() { return byKey.size; },

@@ -390,12 +390,15 @@ if (hasKey && !replay) {
     const late = first.filter(r => lateBy(r) > LATE_MIN), onTime = first.filter(r => !(lateBy(r) > LATE_MIN));
     for (const r of want) asked.set(r.id, t);
     // Three questions at most: trains asked before, new ones, and new ones running late (few; as far back as the latest).
-    const groups = [[again, BACK_MS], [onTime, FIRST_BACK_MS],
-      [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(lateBy)) * 60000)]];
-    for (const [list, back] of groups) {
+    // The first question about a train also asks for its company (withBrand).
+    const groups = [[again, BACK_MS, false], [onTime, FIRST_BACK_MS, true],
+      [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(lateBy)) * 60000), true]];
+    for (const [list, back, withBrand] of groups) {
       if (!list.length) continue;
       try {
-        routes.add(await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * 60000));
+        const rows = await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * 60000, { withBrand });
+        routes.add(rows);
+        for (const row of rows) lateness.setBrand(row.key, row.brand);   // the company, also with no passing lately
       } catch (e) {
         console.warn('planned routes:', e.message);
         for (const r of list) asked.delete(r.id);

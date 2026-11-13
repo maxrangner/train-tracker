@@ -288,7 +288,9 @@ export async function fetchTrainsByNumber(number, day) {
 // The timetable rows of these trains (internal numbers) planned between from and to (ms): every location they pass
 // or stop at. [{ key (trainKey), sig, activity ('Ankomst' arrival / 'Avgang' departure), planned (ms) }].
 // Asked in groups of 100 numbers.
-export async function fetchPlannedRoutes(numbers, from, to) {
+// withBrand: also each row's company (brand). It makes the answer about 29 % bigger (100 trains, 2026-11-13), so it is
+// asked only the first time about a train: a company doesn't change.
+export async function fetchPlannedRoutes(numbers, from, to, { withBrand = false } = {}) {
   const out = [];
   for (let i = 0; i < numbers.length; i += 100) {
     const r = await ask(
@@ -298,11 +300,12 @@ export async function fetchPlannedRoutes(numbers, from, to) {
       `<LT name="AdvertisedTimeAtLocation" value="${new Date(to).toISOString()}"/></FILTER>` +
       `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
       `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>AdvertisedTimeAtLocation</INCLUDE>` +
-      `<INCLUDE>Deleted</INCLUDE></QUERY>`);
+      `<INCLUDE>Deleted</INCLUDE>${withBrand ? '<INCLUDE>ProductInformation</INCLUDE>' : ''}</QUERY>`);
     for (const a of r.TrainAnnouncement ?? []) {
       if (a.Deleted || !a.AdvertisedTimeAtLocation) continue;
       out.push({ key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime), sig: a.LocationSignature,
-        activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) });
+        activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation),
+        brand: a.ProductInformation?.[0]?.Description ?? null });
     }
   }
   return out;
