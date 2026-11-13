@@ -73,7 +73,7 @@ function run(c) {
   const passings = rows.filter(a => a.TimeAtLocation).map(a => ({ got: Date.parse(a.got), p: { key, station: a.LocationSignature,
     time: Date.parse(a.TimeAtLocation), activity: a.ActivityType,
     minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000) } })).sort((x, y) => x.got - y.got);
-  const drawn = createTrains({ net, routes }), truth = createTrains({ net });
+  const drawn = createTrains({ net, routes }), truth = createTrains({ net, routes });   // the truth knows the routes too, on purpose (as in motion-check)
   const gots = rec.recs.map(r => r.got);   // every report's arrival: "no data at all" for 60 s halts every train
   const feed = (trains, upTo, i) => {
     const batch = [];
