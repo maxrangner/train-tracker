@@ -166,7 +166,10 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
 
 // ---------- A train's route for today ----------
 
-// All stops of one train on its date, in order: [{station, activity, advertised, planned, estimated, actual, canceled}].
+// All stops of one train on its date, in order: [{station, activity, advertised, planned, estimated, actual, canceled,
+// problems, notes}]. problems: Trafikverket's problem notes at that stop ("Spårändrat", "Kort tåg"); notes: the other
+// notes (a bus instead, booking, a bistro, the carriage order). Their texts, in Swedish. In 600 rows (2026-11-13):
+// problem notes on 71, other notes on 26, booking 29, bistro or kiosk 11, carriage order 14.
 export async function fetchRoute(operationalNumber, departureDate) {
   const r = await ask(
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
@@ -176,7 +179,9 @@ export async function fetchRoute(operationalNumber, departureDate) {
     `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE>` +
     `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>TrackAtLocation</INCLUDE>` +
     `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
-    `</QUERY>`);
+    `<INCLUDE>Deviation</INCLUDE><INCLUDE>OtherInformation</INCLUDE><INCLUDE>Booking</INCLUDE><INCLUDE>Service</INCLUDE>` +
+    `<INCLUDE>TrainComposition</INCLUDE></QUERY>`);
+  const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
   const rows = r.TrainAnnouncement ?? [];
   return {
     from: rows[0]?.FromLocation?.[0]?.LocationName ?? null,
@@ -191,6 +196,8 @@ export async function fetchRoute(operationalNumber, departureDate) {
       actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null,
       canceled: a.Canceled === true,
       track: a.TrackAtLocation ?? '',    // the platform track, e.g. "3" ('' when not given)
+      problems: texts(a.Deviation),
+      notes: [...texts(a.OtherInformation), ...texts(a.Booking), ...texts(a.Service), ...texts(a.TrainComposition)],
     })),
   };
 }
@@ -198,7 +205,7 @@ export async function fetchRoute(operationalNumber, departureDate) {
 // ---------- Cancelled trains today (the stats page) ----------
 
 // How many trains have at least one cancelled passenger stop on day (Swedish date, "2026-11-13"). A whole
-// cancelled trip and a part of one look the same in the data. Measured 2026-11-13 at 13:00: 144 trains, 46 kB, 0.5 s.
+// cancelled trip and a part of one look the same in the data. Measured 2026-11-13: 144 trains, 46 kB, 0.5 s.
 export async function fetchCancelledToday(day) {
   const r = await ask(
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +

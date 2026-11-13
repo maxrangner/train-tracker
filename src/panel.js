@@ -103,11 +103,35 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         `<td class="trk">${esc(d?.track || a?.track || '')}</td></tr>`;
     }).join('');
 
+    // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
+    // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)".
+    const noteLines = [];
+    for (const kind of ['problems', 'notes']) {
+      const at = new Map();   // text -> indices of the stops it is given at
+      stops.forEach((s, i) => {
+        for (const x of [s.arr, s.dep]) for (const text of x?.[kind] ?? []) {
+          if (!at.has(text)) at.set(text, new Set());
+          at.get(text).add(i);
+        }
+      });
+      for (const [text, set] of at) {
+        const idx = [...set].sort((a, b) => a - b);
+        const run = idx.at(-1) - idx[0] === idx.length - 1;   // one stretch of stops in a row
+        const name = i => stationName(stops[i].station);
+        const where = idx.length === stops.length ? ''
+          : run && idx.length >= 3 && idx.at(-1) === stops.length - 1 ? t('noteFrom', name(idx[0]))
+          : run && idx.length >= 3 && idx[0] === 0 ? t('noteUntil', name(idx.at(-1)))
+          : idx.slice(0, 2).map(name).join(', ') + (idx.length > 2 ? ` +${idx.length - 2}` : '');
+        noteLines.push(`<p class="panel-tvnote${kind === 'problems' ? ' problem' : ''}">${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
+      }
+    }
+
     const from = route.from ? stationName(route.from) : '';
     const to = route.to ? stationName(route.to) : '';
     el.innerHTML =
       head(train.label) +
       `<p class="panel-note">${[route.product, from && to ? `${from} → ${to}` : ''].filter(Boolean).join(' · ')}</p>` +
+      (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
       (stops.length
         ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th><th class="trk">${t('track')}</th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<p class="panel-note">${t('noStops')}</p>`);
