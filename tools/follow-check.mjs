@@ -26,12 +26,13 @@ page.on('console', m => { if (m.type() === 'error' || m.type() === 'warn') conso
 await page.goto(`${PAGE}#view=${view}`, { waitUntil: 'domcontentloaded' });
 await sleep(Number(args.wait ?? 25));
 
-// Where the train is drawn, against the camera's follow point (the middle of the padded view).
+// Where the train is drawn, against the point the camera holds it at (src/map.js: its focus; before 2026-11-13
+// evening the middle of the padded view).
 const measure = id => page.evaluate((id) => {
   const map = window.__map, src = map.getSource('trains');
   const f = (src._data?.geojson ?? src._data).features.find(x => x.properties.id === id);
   if (!f) return null;
-  const at = map.project(f.geometry.coordinates), c = map.project(map.getCenter());
+  const at = map.project(f.geometry.coordinates), c = window.__followFocus?.() ?? map.project(map.getCenter());
   return { off: Math.round(Math.hypot(at.x - c.x, at.y - c.y)), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
 }, id);
 const button = () => page.$eval('.panel-follow', b => b.textContent).catch(() => '(no panel)');
@@ -52,6 +53,9 @@ const pick = moving.map(t => b.get(t.id)).sort(args.fastest
   : (x, y) => Math.hypot(x.p.x - width / 2, x.p.y - height / 2) - Math.hypot(y.p.x - width / 2, y.p.y - height / 2))[0];
 console.log(`tapping ${pick.label} at ${Math.round(pick.p.x)},${Math.round(pick.p.y)} (${moving.length} moving trains on screen)`);
 await page.mouse.click(pick.p.x, pick.p.y);
+await sleep(0.5);
+const opened = await page.$eval('#panel .panel-head strong', el => el.textContent).catch(() => '(nothing)');
+if (!opened.startsWith(String(pick.label).split(' ')[0])) console.log(`the tap opened ${opened}, not ${pick.label}: the numbers below are for ${pick.label}`);
 
 const watch = async (what, seconds) => {
   const offs = [];
@@ -78,7 +82,7 @@ const frames = (zoom) => page.evaluate((id, zoom) => new Promise((done) => {
   const onRender = () => {
     const now = performance.now();
     stopAt ??= now + 5000;
-    const c = map.project(map.getCenter());
+    const c = window.__followFocus?.() ?? map.project(map.getCenter());
     const t = (window.__last3d ?? []).find(x => x.id === id);
     const at = p => { const q = map.project(p); return [q.x - c.x, q.y - c.y]; };
     // The ring: the selection marker on top of the map (its middle, in the map's own pixels).

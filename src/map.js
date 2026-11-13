@@ -1,7 +1,7 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, Marker, NavigationControl, GeolocateControl, LngLat, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
@@ -565,7 +565,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   let selShown = false, selText = '', selClass = '';
 
   // ---- Following a train ----
-  let following = null;       // { getPlace, onEnd, locked }
+  // The followed train is held at a point on the screen, its focus: at first the middle of the map above the panel,
+  // after a drag wherever the drag left it. The room kept free for the panel (the camera's padding) is no longer
+  // changed for this: in a tilted view a change of it changes the perspective, so the whole map jumped when a drag
+  // was let go (Max, 2026-11-13 evening: "snaps into a slightly different position after letting go", "snaps and
+  // turns"; measured at 55° tilt: the size round the train jumped 29 % in one frame; flat, nothing moved).
+  let following = null;       // { getPlace, onEnd, locked, focus: { x, y }, place }
+  if (import.meta.env.DEV) window.__followFocus = () => following?.focus ?? null;   // for tools/follow-check.mjs
   let lastTick = 0;
   const pointers = new Set(); // fingers (or the mouse button) down on the map
   const box = map.getContainer();
@@ -573,11 +579,29 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   for (const type of ['pointerup', 'pointercancel'])
     window.addEventListener(type, e => pointers.delete(e.pointerId), true);
   window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
-  // How far (in screen pixels) a place is from the point the camera keeps the train at.
+  // The panel covers up to 45 % of the screen's bottom (index.html); its top edge, with a margin.
+  const panelTop = () => box.clientHeight - (Math.round(box.clientHeight * 0.45) + 20);
+  const defaultFocus = () => ({ x: box.clientWidth / 2, y: panelTop() / 2 });
+  // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
-    const at = map.project([p.lon, p.lat]), c = map.project(map.getCenter());
-    return Math.hypot(at.x - c.x, at.y - c.y);
+    const at = map.project([p.lon, p.lat]);
+    return Math.hypot(at.x - following.focus.x, at.y - following.focus.y);
   };
+  // The camera's middle that puts a place ({ lon, lat }) at a screen point, for a camera (MapLibre 6's own camera
+  // state, not a public call; maplibre-gl is pinned).
+  function centreHolding(place, point, tr = map._camera.transform) {
+    const t = tr.clone();
+    t.setLocationAtPoint(new LngLat(place.lon, place.lat), new Point(point.x, point.y));
+    return t.center;
+  }
+  // Flights the page starts itself (to a station, a whole route): left alone, like a drag and its fling.
+  let flying = false;
+  // Holding on: every change of the camera (a wheel or pinch zoom, a turn, the + and − buttons, the zoom slider,
+  // the arrow keys) is corrected before it is drawn so the followed train stays exactly on its focus. (Zooms and
+  // turns go round the screen's middle, not the focus; this puts the train back in the same frame.)
+  // MapLibre's own hook for this (set only while following): it is handed each camera about to be drawn.
+  const holding = () => following?.locked && following.place && !flying && !dragged && !map.dragPan.isActive();
+  const holdTrain = next => (holding() ? { center: centreHolding(following.place, following.focus, next) } : {});
   // While following, a zoom (wheel or pinch) zooms around the train rather than around the fingers.
   function zoomAroundCenter(on) {
     // The wheel's enable() does nothing when it is already on (so the option was never taken): off first.
@@ -589,31 +613,33 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     const end = following?.onEnd;
     following = null;
     zoomAroundCenter(false);
+    map.setTransformCameraUpdate(null);
     end?.();
   }
-  // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes the
-  // point the camera keeps it at (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new
-  // center for the follow ... so that you can reframe how you want it stuck"). Dragging no longer stops following;
-  // a single tap on the map closes the train (main.js). Kept on the screen and above the panel.
+  // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes its
+  // focus (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new center for the follow
+  // ... so that you can reframe how you want it stuck"). Dragging doesn't stop following; a single tap on the map
+  // closes the train (main.js). Kept on the screen and above the panel. Nothing else moves when it is let go.
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
+    if (flying && !map._camera?.isEasing?.()) flying = false;
     if (!dragged || pointers.size) return;
     dragged = false;
     const p = following?.getPlace();
     if (!p) return;
-    const { clientWidth: w, clientHeight: h } = box, at = map.project([p.lon, p.lat]);
-    const x = Math.max(30, Math.min(w - 30, at.x)), y = Math.max(70, Math.min(h - following.bottom - 30, at.y));
-    setPadding({ left: Math.max(0, 2 * x - w), right: Math.max(0, w - 2 * x), top: Math.max(0, 2 * y - h), bottom: Math.max(0, h - 2 * y) });
+    const { clientWidth: w } = box, at = map.project([p.lon, p.lat]);
+    following.focus = { x: Math.max(30, Math.min(w - 30, at.x)), y: Math.max(70, Math.min(panelTop() - 30, at.y)) };
+    following.locked = false;   // locks again at once, or glides back inside the edges
   });
   // Put the camera's middle on a place without stopping a zoom or turn in progress: MapLibre's jumpTo stops every
   // gesture, so the camera used to keep still until a zoom had ended and then catch up (Max, 2026-11-13: "the
   // camera stops for a beat, then recenters"). This uses MapLibre 6's own camera (not a public call; maplibre-gl is
   // pinned): false when it isn't there, and the camera then waits as before.
-  function centerDuringGesture(lng, lat) {
+  function centerDuringGesture(centre) {
     const camera = map._camera;
     if (typeof camera?.applyTransformChange !== 'function') return false;
-    camera.applyTransformChange(tr => tr.setCenter(new LngLat(lng, lat)));
+    camera.applyTransformChange(tr => tr.setCenter(centre));
     map.triggerRepaint();
     return true;
   }
@@ -685,19 +711,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         map.getSource('train-groups').setData(data['train-groups']);
       }
     },
-    // Follow a train: keep it in the middle of the view above the train panel (which covers up to 45 % of the
+    // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
-    // Zoom, turn and tilt stay the user's; a drag moves the point the train is kept at (above). onEnd() is called
+    // Zoom, turn and tilt stay the user's; a drag moves the point the train is held at (above). onEnd() is called
     // when following stops by itself (the train is gone).
     async follow(getPlace, onEnd) {
       await ready;
-      const h = map.getContainer().clientHeight, bottom = Math.round(h * 0.45) + 20;
-      setPadding({ top: 0, bottom, left: 0, right: 0 });
       dragged = false;
-      following = { getPlace, onEnd, locked: false, bottom };
+      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), place: null };
       zoomAroundCenter(true);
+      map.setTransformCameraUpdate(holdTrain);
     },
-    unfollow() { following = null; zoomAroundCenter(false); },
+    unfollow() { following = null; zoomAroundCenter(false); map.setTransformCameraUpdate(null); },
     get following() { return Boolean(following); },
     // Called every drawing frame: move the camera along with the followed train.
     tick(now) {
@@ -706,21 +731,24 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!following || !isReady) return;
       const p = following.getPlace();
       if (!p) return stopFollowing();
-      // A finger or the mouse is down, or the map is zooming or turning (a wheel zoom, a pinch, the compass): the
-      // camera keeps on the train without stopping what the user does. Only a drag (one finger or the mouse moving
-      // the map) and the map's own animations (a fling, a fly-to) are left alone.
+      following.place = p;
+      if (flying && !map.isMoving()) flying = false;   // a flight that ended without a moveend
+      // A drag (one finger or the mouse moving the map), its fling and the page's own flights are left alone. A zoom
+      // or turn in progress (a wheel, a pinch, the compass, the + and − buttons) isn't stopped: the camera keeps on
+      // the train during it.
+      if (dragged || flying || (map.dragPan.isActive() && pointers.size < 2)) { following.locked = false; return; }
       const busy = pointers.size > 0 || map.isMoving();
-      if (busy && ((map.dragPan.isActive() && pointers.size < 2) || map._camera?.isEasing?.())) { following.locked = false; return; }
-      const moveTo = (lng, lat) => {
-        if (!busy) map.jumpTo({ center: [lng, lat] });
-        else if (!centerDuringGesture(lng, lat)) following.locked = false;
+      const moveTo = (centre) => {
+        if (!busy) map.jumpTo({ center: centre });
+        else if (!centerDuringGesture(centre)) following.locked = false;
       };
-      const off = offFocus(p);
-      if (following.locked && off < 30) return moveTo(p.lon, p.lat);
-      // Not on it yet (just tapped, or the train jumped): glide over in about half a second, then stay locked on.
-      if (off < 1) { following.locked = true; return moveTo(p.lon, p.lat); }
+      const off = offFocus(p), target = centreHolding(p, following.focus);
+      if (following.locked && off < 30) return moveTo(target);
+      // Not on it yet (just tapped, a drag left it outside the edges, or the train jumped): glide over in about
+      // half a second, then stay locked on.
+      if (off < 1) { following.locked = true; return moveTo(target); }
       const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
-      moveTo(c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k);
+      moveTo(new LngLat(c.lng + (target.lng - c.lng) * k, c.lat + (target.lat - c.lat) * k));
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     async setStations(list) {
@@ -757,12 +785,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!path || path.coords.length < 2) return;
       const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
       const h = map.getContainer().clientHeight;
+      flying = true;
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
         { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
     },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
     async goTo(place, minZoom) {
       await ready;
+      flying = true;   // the camera leaves the followed train alone until it lands
       map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true });
     },
     // Keep room for the panel or board at the screen's bottom (45 %), without moving what is on screen.
