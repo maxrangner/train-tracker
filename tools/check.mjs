@@ -50,14 +50,20 @@ const MODE = process.argv.includes('--all') ? 'all' : process.argv.includes('--l
 const inData = readdirSync('data').filter(f => f.startsWith('positions-') && f.endsWith('.jsonl'));
 const listed = new Set(LIST.recordings.map(x => `positions-${x.name}.jsonl`));
 let missingCore = 0;
+const sums = new Map();   // file -> its SHA-256 now (also what the "nothing changed" stamp below is made of)
 for (const x of LIST.recordings) for (const kind of ['positions', 'timetable']) {
   const want = x[kind], f = `data/${kind}-${x.name}.jsonl`;
   if (!want) continue;
   if (!existsSync(f)) {
     console.log(`${x.role === 'core' ? 'FAIL' : 'note'} ${f} is listed (${x.role}) but missing`);
     if (x.role === 'core') missingCore++;
-  } else if (statSync(f).size !== want.bytes || createHash('sha256').update(readFileSync(f)).digest('hex') !== want.sha256) {
-    console.log(`note ${f} differs from tools/recordings.json (size or SHA-256): not the recording that was chosen`);
+  } else {
+    const sum = createHash('sha256').update(readFileSync(f)).digest('hex');
+    sums.set(f, sum);
+    if (statSync(f).size === want.bytes && sum === want.sha256) continue;
+    // A core recording that isn't the chosen one fails the check (it was only a note): its numbers mean nothing then.
+    console.log(`${x.role === 'core' ? 'FAIL' : 'note'} ${f} differs from tools/recordings.json (size or SHA-256): not the recording that was chosen`);
+    if (x.role === 'core') missingCore++;
   }
 }
 const unsorted = inData.filter(f => !listed.has(f) && statSync(`data/${f}`).size > 1e6);
@@ -65,7 +71,8 @@ if (unsorted.length) console.log(`note unsorted, not replayed (add to tools/reco
 const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).size > 1e6)
   : LIST.recordings.filter(x => x.role === 'core' || (MODE === 'library' && x.role === 'library')).map(x => `positions-${x.name}.jsonl`))
   .filter(f => existsSync(`data/${f}`)).sort();
-// What the replay's result depends on: these files' contents, and the replayed recordings' names and sizes.
+// What the replay's result depends on: these files' contents, and the replayed recordings' names and contents
+// (their SHA-256; names and sizes before, so a changed recording of the same size passed as unchanged).
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
   'tools/motion-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
@@ -73,7 +80,7 @@ const stamp = createHash('sha256')
   .update(MODE)
   .update(REPLAY_INPUTS.map(p => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : 'none')).join())
   .update(recordings.flatMap(f => [f, f.replace('positions-', 'timetable-')]).filter(f => existsSync(`data/${f}`))
-    .map(f => `${f}:${statSync(`data/${f}`).size}`).join())
+    .map(f => `${f}:${sums.get(`data/${f}`) ?? createHash('sha256').update(readFileSync(`data/${f}`)).digest('hex')}`).join())
   .digest('hex');
 // One stamp per set (core, library, all), so a --library run doesn't make the next everyday run replay again.
 const passedAll = existsSync(PASSED) ? JSON.parse(readFileSync(PASSED, 'utf8')) : {};
