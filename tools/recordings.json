@@ -23,7 +23,7 @@
     },
     {
       "slot": "night or first trains",
-      "core": null
+      "core": "2026-11-12T23-02-56-574Z"
     }
   ],
   "recordings": [
@@ -70,6 +70,21 @@
       "timetable": {
         "bytes": 4439857,
         "sha256": "f12f3b1ff5e5379e2e9883e0a23900d23351108218dcbfc69ce8a64e1ec88798"
+      }
+    },
+    {
+      "name": "2026-11-12T23-02-56-574Z",
+      "role": "core",
+      "slot": "night or first trains",
+      "swedish": "Fri 13 Nov 2026 00:03-01:03",
+      "why": "Night: unlike every other recording. 78 trains at once, 62 % never send a speed (mostly freight), 59 % of train time in GPS silences of 30 s or more, 22 % of trains 6 min or more late. Also the first hour with the recorder fix: no stream break.",
+      "positions": {
+        "bytes": 10470748,
+        "sha256": "1c63f2fe131cda8bd6cecd08d536797dae82afb6e627fc9ad412cf204fead859"
+      },
+      "timetable": {
+        "bytes": 3195041,
+        "sha256": "a57fa4fd35bf764c91f6a196a67c0ed1c893dc5afdc96a7fa05d2de40cf1f3b3"
       }
     },
     {
