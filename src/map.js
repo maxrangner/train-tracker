@@ -535,7 +535,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   ready.then(() => { isReady = true; });
   return {
     ready,
-    // Called every animation frame with the trains where they are now.
+    // Is a place in the view, or within half a view's width or height outside it? (lon, lat) -> true / false.
+    // Only those trains are given to setTrains: the margin is far more than a train or the map moves between two
+    // refreshes, and the groups (40 px) never reach across it.
+    nearView() {
+      const b = map.getBounds();
+      const padLon = (b.getEast() - b.getWest()) * 0.5, padLat = (b.getNorth() - b.getSouth()) * 0.5;
+      const w = b.getWest() - padLon, e = b.getEast() + padLon, s = b.getSouth() - padLat, n = b.getNorth() + padLat;
+      return (lon, lat) => lon >= w && lon <= e && lat >= s && lat <= n;
+    },
+    // Called 30 times a second with the trains in and near the view, where they are now.
     setTrains(geojson) {
       data.trains = geojson;
       if (!isReady) return;

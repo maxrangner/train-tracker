@@ -215,7 +215,9 @@ const menu = createMenu({
 // 3D trains and the selected train's marker all use those same places, and while a train is selected the map is
 // drawn in this same frame, so nothing creeps against anything else (the 3D trains used to be placed at a slightly
 // later moment than the camera, a stutter on fast trains at close zoom). The dots and labels of the other trains go
-// through the map's background worker, 30 times a second.
+// through the map's background worker, 30 times a second: only the trains in or near the view (map.nearView), made
+// from the places this frame already worked out (every train in Sweden used to be worked through a second time and
+// sent, also when five of them were on screen).
 let lastDraw = 0;
 let frameTrains = [], frameById = new Map();
 function frame(ts) {
@@ -225,7 +227,13 @@ function frame(ts) {
   if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
   if (ts - lastDraw >= 33) {
     lastDraw = ts;
-    map.setTrains(trains.toGeoJSON(t, propsFor));
+    const near = map.nearView(), features = [];
+    for (const x of frameTrains) {
+      const r = near(x.lon, x.lat) && trains.get(x.id);
+      if (r) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
+        properties: { id: x.id, bearing: x.bearing, ...propsFor(r, x) } });
+    }
+    map.setTrains({ type: 'FeatureCollection', features });
   }
   map.tick(ts);
   const sel = panel.openId && frameById.get(panel.openId);
