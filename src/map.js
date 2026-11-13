@@ -527,22 +527,34 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         map.easeTo({ bearing: map.getBearing() + (e.key === 'ArrowLeft' ? -15 : 15), duration: 150 });
       }
     }, true);
-    // The middle mouse button turns and tilts the map, as the right button does (Max, 2026-11-13): sideways turns,
-    // up and down tilts, at MapLibre's own speeds (0.8° and 0.5° a pixel). The browser's own middle-click scrolling
-    // is kept off the map. Round the camera's middle, so a followed train stays put.
+    // The right and middle mouse buttons turn and tilt the map round the point under the pointer where the drag
+    // starts, which stays under it (Max, 2026-11-13 evening: "should pivot the view at the mouse pointer, not center
+    // of frame"); while a train is followed, round the train, which stays where it is (followRotation). The right
+    // button is MapLibre's own (around: 'pointer'; tilting also brings the camera closer, as it keeps its distance);
+    // the middle one is ours (Max, 2026-11-13): sideways turns, up and down tilts, at MapLibre's speeds (0.8° and
+    // 0.5° a pixel), the point kept under the pointer. The browser's own middle-click scrolling is kept off the map.
+    followRotation(false);
     let middle = null;
     map.getCanvasContainer().addEventListener('mousedown', (e) => {
       if (e.button !== 1) return;
       e.preventDefault();
-      middle = { x: e.clientX, y: e.clientY };
+      const r = map.getCanvasContainer().getBoundingClientRect(), point = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const at = map.unproject([point.x, point.y]);
+      // The point to turn round: under the pointer (not when following: the camera holds the train, above).
+      middle = { x: e.clientX, y: e.clientY, point, anchor: following ? null : { lon: at.lng, lat: at.lat } };
     });
     window.addEventListener('mousemove', (e) => {
       if (!middle) return;
       if (!(e.buttons & 4)) { middle = null; return; }   // let go outside the window
       const dx = e.clientX - middle.x, dy = e.clientY - middle.y;
-      middle = { x: e.clientX, y: e.clientY };
-      map.jumpTo({ bearing: map.getBearing() + dx * 0.8,
-        pitch: Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - dy * 0.5)) });
+      middle.x = e.clientX;
+      middle.y = e.clientY;
+      const bearing = map.getBearing() + dx * 0.8, pitch = Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - dy * 0.5));
+      if (!middle.anchor) return map.jumpTo({ bearing, pitch });
+      const tr = map._camera.transform.clone();
+      tr.setBearing(bearing);
+      tr.setPitch(pitch);
+      map.jumpTo({ bearing, pitch, center: centreHolding(middle.anchor, middle.point, tr) });
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -620,10 +632,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.scrollZoom.enable(on ? { around: 'center' } : undefined);
     map.touchZoomRotate.enable(on ? { around: 'center' } : undefined);
   }
+  // The right mouse button's turning: round the pointer, or while following round the screen's middle (the camera
+  // update hook keeps the train on its focus, so it turns round the train).
+  function followRotation(on) {
+    map.dragRotate.disable();
+    map.dragRotate.enable(on ? { around: 'center' } : { around: 'pointer' });
+  }
   function stopFollowing(tell = true) {
     const end = following?.onEnd;
     following = null;
     zoomAroundCenter(false);
+    followRotation(false);
     map.setTransformCameraUpdate(null);
     if (tell) end?.();
   }
@@ -736,9 +755,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       dragged = false;
       following = { getPlace, onEnd, onAway, locked: false, focus: defaultFocus(), place: null };
       zoomAroundCenter(true);
+      followRotation(true);
       map.setTransformCameraUpdate(holdTrain);
     },
-    unfollow() { following = null; zoomAroundCenter(false); map.setTransformCameraUpdate(null); },
+    unfollow() { following = null; zoomAroundCenter(false); followRotation(false); map.setTransformCameraUpdate(null); },
     get following() { return Boolean(following); },
     // Called every drawing frame: move the camera along with the followed train.
     tick(now) {
