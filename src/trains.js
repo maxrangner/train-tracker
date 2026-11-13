@@ -41,7 +41,7 @@ const STOOD_M = 30, STOOD_MS = 60000; // positions this close over this long bef
 const PASSING_MAX_M = 80000;         // a reported passing is used when its station is this close ahead on the tracks...
 const PASSING_QUIET_MS = 60 * 1000;  // ...and the train's GPS had been quiet this long (passing times are whole minutes)
 const GPS_OVER_PASSING_MS = 120 * 1000;   // a position replaces passings used up to this long before it
-const STAND_MS = 0.5;                // m/s: slower than this counts as standing
+export const STAND_MS = 0.5;         // m/s: slower than this counts as standing (also on the stats page)
 
 // The chase. Gaps are measured along the path, in metres.
 const TAU_S = 8;          // close a gap over about this many seconds
@@ -660,14 +660,15 @@ export function createTrains(options = {}) {
     get count() { return byId.size; },
     get lastReport() { return lastReport; },
     get counts() { return counts; },
-    // All trains as drawn at time t: { id, lon, lat, bearing (compass degrees: the path's direction), syncing }.
+    // All trains as drawn at time t: { id, lon, lat, bearing (compass degrees: the path's direction), syncing, stale,
+    // v (the drawn speed, m/s: for the stats page) }.
     placedAt(t) {
       advance(t);
       const out = [];
       for (const tr of byId.values()) {
         if (!tr.sim) continue;
         const p = drawn(tr);
-        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t) });
+        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t), v: tr.sim.v });
       }
       return out;
     },

@@ -65,7 +65,9 @@
       pointer-events: none;
     }
     #top > * { pointer-events: auto; }
-    #status { padding: 6px 10px; font-variant-numeric: tabular-nums; }
+    /* The banner: a button that opens the stats page (Max, 2026-11-13). */
+    #status { padding: 6px 10px; font: inherit; font-variant-numeric: tabular-nums; border: 0; color: var(--ink); text-align: left; cursor: pointer; }
+    #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     #status.problem { color: var(--late); }
     .help-card { display: flex; padding: 3px; gap: 2px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
@@ -127,7 +129,7 @@
       display: flex; flex-direction: column;
     }
     /* Settings: its own page over the map, opened from ☰ → Settings (Max, 2026-11-12). */
-    #settings-page {
+    #settings-page, #stats-page {
       position: fixed; z-index: 6;
       left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
       top: calc(var(--gap) + env(safe-area-inset-top, 0px));
@@ -136,6 +138,20 @@
       display: flex; flex-direction: column; gap: 6px;
     }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
+    /* The stats page (src/stats.js): sections, company bars, the punctuality bar in the dots' colours. */
+    #stats-body { overflow: auto; min-height: 0; display: grid; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; padding-top: 4px; }
+    #stats-body p { margin: 0; }
+    .st-sec { display: grid; gap: 4px; }
+    .st-big { font-size: 15px; font-weight: 600; }
+    .st-sub { color: var(--muted); font-size: 13px; }
+    .st-bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr auto; gap: 4px 8px; align-items: center; }
+    .st-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-name i { color: var(--muted); }
+    .st-track { height: 10px; }
+    .st-bar { display: block; height: 100%; min-width: 2px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
+    .st-n { text-align: right; }
+    .st-stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
+    .st-ontime { background: #1a7f37; } .st-some { background: #d4a72c; } .st-late { background: #d1242f; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
@@ -242,7 +258,7 @@
     <button id="menu-button" class="card" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search" data-t-aria="menu">
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
     </button>
-    <div id="status" class="card" data-t="connecting">connecting…</div>
+    <button id="status" class="card" type="button" aria-controls="stats-page" data-t="connecting">connecting…</button>
     <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
   </div>
   <div id="menu" class="card" hidden>
@@ -277,6 +293,11 @@
       <div class="set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
     </div>
+  </div>
+  <div id="stats-page" class="card" role="dialog" aria-modal="true" aria-labelledby="stats-title" hidden>
+    <div class="panel-head"><strong id="stats-title" data-t="stats">Live statistics</strong>
+      <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats">×</button></div>
+    <div id="stats-body"></div>
   </div>
   <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>

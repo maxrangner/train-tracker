@@ -3,7 +3,8 @@
 // Needs `npm run dev` going. Exit code 0: all good; 1: something failed (it says what); 2: the page isn't running.
 // Checked: the page starts without errors in English/light and Swedish/dark; a tap opens a train's card; every
 // "N trains" label lists exactly N; a search lists every matching train and scrolls; a setting changes without the
-// page reloading; no model has surfaces on top of each other (tools/models-check.mjs).
+// page reloading; no model has surfaces on top of each other (tools/models-check.mjs); a tap on the banner opens the
+// stats page in each language, filled in, and × closes it.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -14,18 +15,32 @@ try { await fetch(PAGE); } catch { console.log(`UI check skipped: nothing answer
 const replay = existsSync(`data/positions-${RUSH_HOUR}.jsonl`) ? RUSH_HOUR : null;
 const base = { ...(replay ? { replay } : {}), view: '12/59.33/18.06', train: 'toy' };
 const problems = [];
+let stats = 0;   // sections on the stats page
 const expect = (ok, what) => { if (!ok) problems.push(what); };
 
 const browser = await launch();
 try {
   // ---- Both languages and looks start clean ----
-  for (const [lang, theme, word] of [['en', 'light', 'Settings'], ['sv', 'dark', 'Inställningar']]) {
+  for (const [lang, theme, word, statsWord] of [['en', 'light', 'Settings', 'Live statistics'], ['sv', 'dark', 'Inställningar', 'Statistik just nu']]) {
     const page = await openMap(browser, { ...base, lang, theme });
     const s = await page.evaluate(() => ({ title: document.title, lang: document.documentElement.lang, theme: document.documentElement.dataset.theme,
       word: document.querySelector('#open-settings b').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
     expect(s.trains > 0, `${lang}/${theme}: no trains on the map (${s.status})`);
     expect(s.title === 'Spårad', `${lang}/${theme}: the title is "${s.title}"`);
     expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
+    // ---- The banner opens the stats page; × closes it ----
+    await page.click('#status');
+    await sleep(1200);
+    const st = await page.evaluate(() => ({ open: !document.getElementById('stats-page').hidden, title: document.getElementById('stats-title').textContent,
+      first: document.querySelector('#stats-body .st-big')?.textContent ?? '', bars: document.querySelectorAll('#stats-body .st-bar').length,
+      sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count }));
+    expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
+    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 7,
+      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 7 sections`);
+    await page.click('#stats-page .panel-close');
+    await sleep(300);
+    expect(await page.evaluate(() => document.getElementById('stats-page').hidden), `${lang}/${theme}: × did not close the stats page`);
+    stats = st.sections;
     expect(!page.errors.length, `${lang}/${theme}: page errors: ${page.errors.slice(0, 2).join(' | ')}`);
     await page.close();
   }
@@ -103,7 +118,7 @@ try {
 
   console.log(problems.length ? `UI check FAILED (${replay ? 'rush-hour replay' : 'live'}):` : `UI check ok (${replay ? 'rush-hour replay' : 'live'}): ` +
     `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists, ` +
-    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, model surfaces 0`);
+    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), model surfaces 0`);
   for (const p of problems) console.log('  -', p);
 } finally {
   await browser.close();

@@ -9,11 +9,12 @@ import { pathOf } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
+import { createStats } from './stats.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -39,6 +40,7 @@ const routes = createRoutes();
 trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
+const stats = createStats();   // the stats page's running numbers (src/stats.js)
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
 
@@ -166,10 +168,10 @@ function openTrain(id, { go = false } = {}) {
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-function openHelp() { helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
+function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; } });
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -252,6 +254,7 @@ const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
   menu.close();
   helpEl.hidden = true;
+  statsPage.hidden = true;
   settingsPage.hidden = false;
   settingsPage.querySelector('.panel-close').focus();
 };
@@ -264,6 +267,7 @@ onSettingChange((key) => {
     map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
+    if (!statsPage.hidden) drawStats();
     board.relabel();
     pickerEl.hidden = true;
   }
@@ -286,6 +290,25 @@ const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getEle
 sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
 showSettings();
 
+// ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----
+const statsPage = document.getElementById('stats-page');
+const statsBody = document.getElementById('stats-body');
+function drawStats() {
+  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameTrains, lateness, stations,
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay) });
+}
+function openStats() {
+  menu.close();
+  helpEl.hidden = true;
+  settingsPage.hidden = true;
+  statsPage.hidden = false;
+  if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(now())), now());
+  drawStats();
+  statsPage.querySelector('.panel-close').focus();
+}
+document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
+statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
+
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
 
@@ -301,6 +324,7 @@ let lastDataAt = null;
 // Station passings: the lateness label, each train's delay and last passing, and a train whose GPS is quiet moves
 // on to a station it is reported passing.
 function onPassings(list) {
+  stats.onPassings(list, now());
   lateness.update(list);
   routes.addPassings(list);
   trains.addPassings(list);
@@ -308,6 +332,7 @@ function onPassings(list) {
 const positionHandlers = {
   onRecords(records) {
     lastDataAt = now();
+    stats.onRecords(records, now());
     if (trains.halted) trains.setHalted(false);
     trains.update(records, now());
   },
@@ -435,6 +460,13 @@ setInterval(() => {
     (replay ? t('replayOf', hhmmss(tNow)) : '') +
     (error ? ` · ${error}` : '');
   statusEl.classList.toggle('problem', Boolean(error) || noData);
+
+  // The stats: the running numbers every second; the page itself only while it is open.
+  stats.tick(frameTrains, tNow, id => trains.get(id));
+  if (!statsPage.hidden) {
+    if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
+    drawStats();
+  }
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
   if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DELAY_MS), noData));
