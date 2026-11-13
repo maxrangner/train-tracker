@@ -1,7 +1,8 @@
 // The headless browser the tools use, in one place.
 // The browser is Edge at its usual Windows place; set BROWSER_PATH to use another Chromium-based browser, e.g.
 //   BROWSER_PATH="/usr/bin/chromium" node tools/shot.mjs
-// The page must be running: `npm run dev` (http://localhost:5173/), or set PAGE to another address.
+// The page must be running: `npm run dev` (http://localhost:5173/), or set PAGE to another address (every tool
+// reads it, e.g. a second working folder's page: PAGE=http://localhost:5180/).
 import puppeteer from 'puppeteer-core';
 
 export const BROWSER_PATH = process.env.BROWSER_PATH ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';

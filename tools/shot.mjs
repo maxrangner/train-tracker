@@ -11,7 +11,7 @@ const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filt
 const wait = Number(args.wait ?? 25);
 const out = args.out ?? 'shots/shot.png';
 const [width, height] = String(args.size ?? '900x1100').split('x').map(Number);
-import { BROWSER_PATH as EDGE } from './lib/browser.mjs';
+import { BROWSER_PATH as EDGE, PAGE } from './lib/browser.mjs';
 
 const browser = await puppeteer.launch({
   executablePath: EDGE,
@@ -28,7 +28,7 @@ page.on('requestfailed', r => console.log(`[request failed] ${r.url().slice(0, 1
 // --page demo/brands.html opens another page of the project (no status line there); --full takes the whole page.
 // --hash train=toy&toysize=70 adds more to the address after the view.
 const hash = [args.view && `view=${args.view}`, args.hash].filter(Boolean).join('&').replace(/^./, c => `#${c}`);
-await page.goto(`${args.host ? `http://${args.host}/` : 'http://localhost:5173/'}${args.page ?? ''}${hash}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${args.host ? `http://${args.host}/` : PAGE}${args.page ?? ''}${hash}`, { waitUntil: 'domcontentloaded' });
 await new Promise(r => setTimeout(r, wait * 1000));
 
 // --closeup zoom[/pitch[/angle]]: jump to the train nearest the middle and look at it from the side

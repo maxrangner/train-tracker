@@ -1,10 +1,11 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, Marker, NavigationControl, GeolocateControl, LngLat, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
 import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
+import { progressAlong } from './path.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -14,11 +15,12 @@ setWorkerUrl(workerUrl);
 // style (Max, 2026-11-12: B, near black, of Dark and Fiord).
 const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
 // Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
+// The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
 const colours = dark => (dark
   ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
-      rail: '#7d8590', casing: '#000000', route: '#388bfd', stopFill: '#161b22' }
+      rail: '#7d8590', casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
   : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#6e7781', casing: '#ffffff', route: '#1f6feb', stopFill: '#ffffff' });
+      rail: '#6e7781', casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
@@ -40,14 +42,41 @@ const MASK_URL = '/sweden-mask.json';
 const SWEDEN_BOUNDS = [[10.9, 55.2], [24.2, 69.1]];
 const MAX_ZOOM = 19;
 let swedenShape = null;   // Sweden, roughly (about 1 km), for the names
+let maskFailed = false;
 const maskReady = fetch(MASK_URL).then(r => r.json())
   .then((g) => { swedenShape = g.features.find(f => f.properties.kind === 'sweden')?.geometry ?? null; })
-  .catch(e => console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`));
+  .catch((e) => { maskFailed = true; console.warn(`only Sweden: ${e.message} (run node tools/sweden-mask.mjs)`); });
+// The start screen (index.html) stays until the first view shows only Sweden, or at most this long.
+const FIRST_VIEW_MAX_MS = 8000;
 
 // The fastest a drawn train moves, in metres a second (250 km/h): for how often the dots are refreshed (trainsEvery).
 const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
+
+// A train further out is a circle, or (Settings → Train symbol, Max 2026-11-13) a triangle pointing the way it goes,
+// in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
+const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
+const TRIANGLE = [[32, 3], [49, 61], [15, 61]];   // in a 64 x 64 picture, pointing up (north), slim so the tip shows; middle (32, 32)
+const triangles = () => settings.trainSymbol === 'triangle';
+function addTriangles(map) {
+  for (const [name, colour] of Object.entries(DOT_COLOURS)) {
+    if (map.hasImage(`tri-${name}`)) continue;
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    g.beginPath();
+    TRIANGLE.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.lineJoin = 'round';
+    g.lineWidth = 8;
+    g.strokeStyle = '#ffffff';
+    g.stroke();
+    g.fillStyle = colour;
+    g.fill();
+    map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
+  }
+}
 
 // A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
 const dotOpacity = sel => ['step', ['zoom'],
@@ -56,8 +85,8 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'station-names', 'path-stops', 'train-dots',
-  'trains-3d', 'train-labels', 'train-labels-near', 'train-group-labels'];
+const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
+  'trains-3d', 'train-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -67,6 +96,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
   let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
+  let pathProgress = 0;   // how far along the shown path the train is (setPathProgress)
+  // The path's colours now: the line by its line progress, its stops by their share of the way (f).
+  const pathColours = () => {
+    const C = colours(dark);
+    return { line: ['step', ['line-progress'], C.routeDone, pathProgress, C.route],
+      stops: ['case', ['<=', ['get', 'f'], pathProgress], C.routeDone, C.route] };
+  };
   const map = new Map({
     container,
     style: styleUrl(dark),
@@ -119,14 +155,40 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
   // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
   // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
-  // out 1.5 s after. It only shows; it isn't dragged.
+  // out 1.5 s after. While it shows it can be grabbed (Max, 2026-11-13 evening): a press or drag on it sets the zoom,
+  // around the screen's middle (while following, the train), and it stays while held. An invisible grip round the
+  // thin bar makes it easy to hit with a finger.
   const zoomBar = document.createElement('div');
   zoomBar.className = 'zoom-bar';
   zoomBar.setAttribute('aria-hidden', 'true');
-  zoomBar.innerHTML = '<div class="zoom-knob"></div>';
+  zoomBar.innerHTML = '<div class="zoom-knob"></div><div class="zoom-grip"></div>';
   map.getContainer().appendChild(zoomBar);
-  const knob = zoomBar.firstChild;
+  const knob = zoomBar.firstChild, grip = zoomBar.lastChild;
   let zoomBarTimer = null;
+  let held = null;   // the finger or mouse holding the slider
+  function zoomFromY(clientY) {
+    const r = zoomBar.getBoundingClientRect();
+    const f = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+    const min = map.getMinZoom(), max = map.getMaxZoom();
+    map.jumpTo({ zoom: min + f * (max - min) });
+  }
+  grip.addEventListener('pointerdown', (e) => {
+    if (!zoomBar.classList.contains('shown')) return;
+    e.preventDefault();
+    held = e.pointerId;
+    grip.setPointerCapture(e.pointerId);
+    zoomBar.classList.add('held');
+    zoomFromY(e.clientY);
+  });
+  grip.addEventListener('pointermove', (e) => { if (e.pointerId === held) zoomFromY(e.clientY); });
+  const letGo = (e) => {
+    if (e.pointerId !== held) return;
+    held = null;
+    zoomBar.classList.remove('held');
+    showZoom();   // fades 1.5 s after letting go
+  };
+  grip.addEventListener('pointerup', letGo);
+  grip.addEventListener('pointercancel', letGo);
   function showZoom(reveal = true) {
     const min = map.getMinZoom(), max = map.getMaxZoom();
     const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
@@ -134,7 +196,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     if (!reveal) return;
     zoomBar.classList.add('shown');
     clearTimeout(zoomBarTimer);
-    zoomBarTimer = setTimeout(() => zoomBar.classList.remove('shown'), 1500);
+    zoomBarTimer = setTimeout(() => { if (held === null) zoomBar.classList.remove('shown'); }, 1500);
   }
   map.on('zoom', () => showZoom());
   map.on('resize', setZoomLimits);
@@ -143,17 +205,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), 'train-groups': empty() };
+  const data = { path: empty(), stations: empty(), trains: empty() };
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
     add('sweden-mask', { data: MASK_URL });
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
-    add('path');
+    add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
     add('stations');
     add('trains');
-    // Close in, trains standing close together share one label (see train-group-labels).
-    add('train-groups', { cluster: true, clusterRadius: GROUP_PX, clusterMaxZoom: 19 });
   }
 
   // Our layers, with the colours, model zoom and language as they are now.
@@ -183,14 +243,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       });
     }
 
-    // The open train's whole path (setPath), start to finish in one colour (Max, 2026-11-13: the travelled part was
-    // grey, which in the dark look was the rail lines' grey, so it looked missing). Its stops: path-stops, below.
+    // The open train's whole path (setPath), start to finish: green ahead of the train, darker green behind it (Max,
+    // 2026-11-13; the travelled part was once grey, which in the dark look was the rail lines' grey, so it looked
+    // missing). Its stops: path-stops, below.
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
     map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': C.route,
+      paint: { 'line-gradient': pathColours().line,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
@@ -205,27 +266,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 9, 1, 14, 2],
       },
     });
-    map.addLayer({
-      id: 'station-names',
-      type: 'symbol',
-      source: 'stations',
-      minzoom: 11,
-      layout: {
-        'text-field': ['get', 'name'],
-        'text-font': ['Noto Sans Regular'],
-        'text-size': 12,
-        'text-offset': [0, -1.1],
-        'text-anchor': 'bottom',
-        'text-optional': true,
-      },
-      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
-    });
+    // (The stations' names are added last, on top of everything: below.)
 
     // The open train's stops: a white circle with a ring in the path's colour (Max, 2026-11-13, like a map app's
     // line), above the stations' own grey rings, which hid them; a little larger than those.
     map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
-        'circle-stroke-color': C.route,
+        'circle-stroke-color': pathColours().stops,
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
 
     map.addLayer({
@@ -245,6 +292,26 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'circle-opacity': dotOpacity(selected ?? ''),
         'circle-stroke-opacity': dotOpacity(selected ?? ''),
       },
+    });
+    // Triangles instead of circles (Settings → Train symbol): the circles stay, unseen, so taps still find the trains.
+    addTriangles(map);
+    map.addLayer({
+      id: 'train-triangles',
+      type: 'symbol',
+      source: 'trains',
+      layout: {
+        visibility: triangles() ? 'visible' : 'none',
+        'icon-image': ['case', ['get', 'stale'], 'tri-unknown',
+          ['match', ['get', 'late'], 'ontime', 'tri-ontime', 'some', 'tri-some', 'late', 'tri-late', 'tri-unknown']],
+        'icon-rotate': ['get', 'bearing'],
+        'icon-rotation-alignment': 'map',
+        'icon-pitch-alignment': 'map',
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+        // About as big as the circle: 9 px tall far out, 20 px from zoom 10.
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25],
+      },
+      paint: { 'icon-opacity': dotOpacity(selected ?? '') },
     });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
@@ -273,43 +340,29 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
     });
 
-    // Close in, where the models show: trains standing close together share one label, "3 trains" (Max, 2026-11-12:
-    // labels stacked on each other at Stockholm C). The map groups them by distance on the screen; a tap on the group
-    // lists them (onGroupTap). A train on its own keeps its full label: company above number (lateness).
+    // Close in, where the models show, the labels are page elements placed every frame (placeNearLabels, below).
+
+    // The stations' names, last so they lie on top of everything (Max, 2026-11-13: "a bit bigger and always on top
+    // of other labels"): over the trains, their labels and the base map's names. The top layer is also placed first,
+    // so where labels collide a station's name is kept and the other label is left out. (The selected train's label
+    // is above the map itself, so it stays on top.)
+    // From the zoom where the trains' labels are page elements (placeNearLabels) the names are page elements too,
+    // above those labels; this layer draws them further out.
     map.addLayer({
-      id: 'train-labels-near',
+      id: 'station-names',
       type: 'symbol',
-      source: 'train-groups',
-      minzoom: MODEL_ZOOM,
-      filter: ['!', ['has', 'point_count']],
+      source: 'stations',
+      minzoom: 11,
+      maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
-        'text-field': ['case', ['!=', ['get', 'company'], ''],
-          ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
-          ['get', 'label']],
-        'text-font': ['Noto Sans Bold'],
-        'text-size': 11,
-        'text-overlap': 'always',   // every train shows its label (option A)
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 14,
+        'text-offset': [0, -1.1],
+        'text-anchor': 'bottom',
+        'text-optional': true,
       },
-      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
-        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
-    });
-    map.addLayer({
-      id: 'train-group-labels',
-      type: 'symbol',
-      source: 'train-groups',
-      minzoom: MODEL_ZOOM,
-      filter: ['has', 'point_count'],
-      layout: {
-        'text-field': ['concat', ['to-string', ['get', 'point_count']], t('nTrains')],
-        'text-font': ['Noto Sans Bold'],
-        'text-size': 13,
-        'text-overlap': 'always',
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
-      },
-      paint: { 'text-color': C.group, 'text-halo-color': C.halo, 'text-halo-width': 2 },
+      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
     });
 
     applySelectionFilters();
@@ -317,8 +370,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
 
   // The base map's names (towns, seas, roads) only inside Sweden: each of its label layers also asks "within Sweden".
+  let namesFiltered = false;
   function namesOnlyInSweden() {
     if (!swedenShape) return;
+    namesFiltered = true;
     for (const l of map.getStyle().layers) {
       if (l.type !== 'symbol' || OUR_LAYERS.includes(l.id)) continue;
       const f = map.getFilter(l.id);
@@ -366,10 +421,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // The selected train's own dot and label are drawn by its marker, so the layers leave it out.
   function applySelectionFilters() {
     const id = selected ?? '';
-    map.setPaintProperty('train-dots', 'circle-opacity', dotOpacity(id));
-    map.setPaintProperty('train-dots', 'circle-stroke-opacity', dotOpacity(id));
+    const dots = triangles() ? 0 : dotOpacity(id);   // with triangles the circles are only there for taps
+    map.setPaintProperty('train-dots', 'circle-opacity', dots);
+    map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
+    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id));
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
-    map.setFilter('train-labels-near', ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'id'], id]]);
   }
 
   const ready = new Promise(resolve => map.on('load', () => {
@@ -379,27 +435,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
     // are small on a phone). The nearest wins.
     map.on('click', (e) => {
-      // A "3 trains" label: list them.
-      const gp = 12;
-      const group = onGroupTap && map.queryRenderedFeatures([[e.point.x - gp, e.point.y - gp], [e.point.x + gp, e.point.y + gp]],
-        { layers: ['train-group-labels'] })[0];
-      if (group) {
-        // The trains round the group's place, within the grouping distance (asking the map for the group's members
-        // fails when the trains have moved and the groups were redone meanwhile, 30 times a second).
-        // Exactly as many as the label says: the nearest to its point, which is the middle of its trains (the area
-        // searched can reach into the next group: "2 trains" listed 3, Max 2026-11-12). The open train is in no group.
-        const c = map.project(group.geometry.coordinates), r = GROUP_PX * 1.2;
-        const near = map.queryRenderedFeatures([[c.x - r, c.y - r], [c.x + r, c.y + r]], { layers: ['train-dots'] });
-        const byId = new globalThis.Map(near.filter(f => f.properties.id !== selected).map(f => [f.properties.id, f]));
-        const fromMiddle = f => { const q = map.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
-        const members = [...byId.values()].sort((a, b) => fromMiddle(a) - fromMiddle(b)).slice(0, group.properties.point_count);
-        if (members.length) return onGroupTap(members.map(f => f.properties));
-      }
+      // Close in, a station's name is drawn on top of everything, so a tap on it opens the station.
+      const named = onStationTap && stationNameAt(e.point);
+      if (named) return onStationTap(named);
+      // Close in, a label: a "3 trains" label lists exactly the trains it was drawn for (the open train is in no
+      // group); a train's own label opens it.
+      const near = nearLabelAt(e.point);
+      if (near && near.ids.length > 1 && onGroupTap) return onGroupTap(near.ids.map(id => nearProps.get(id)).filter(Boolean));
+      if (near) return onTrainTap?.(near.ids[0]);
       const dist = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - e.point.x, p.y - e.point.y); };
-      // A train's label (Max, 2026-11-12: "it should be the entire train model, and the label").
+      // A train's label further out (Max, 2026-11-12: "it should be the entire train model, and the label").
       const lp = 3;
       const label = map.queryRenderedFeatures([[e.point.x - lp, e.point.y - lp], [e.point.x + lp, e.point.y + lp]],
-        { layers: ['train-labels', 'train-labels-near'] }).find(f => f.properties.id);
+        { layers: ['train-labels'] }).find(f => f.properties.id);
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
       const onModel = map.getZoom() >= modelZoom() ? modelAt(e.point) : null;
@@ -434,24 +482,37 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         map.easeTo({ bearing: map.getBearing() + (e.key === 'ArrowLeft' ? -15 : 15), duration: 150 });
       }
     }, true);
-    // The middle mouse button turns and tilts the map, as the right button does (Max, 2026-11-13): sideways turns,
-    // up and down tilts, at MapLibre's own speeds (0.8° and 0.5° a pixel). The browser's own middle-click scrolling
-    // is kept off the map. Round the camera's middle, so a followed train stays put.
+    // The right and middle mouse buttons turn and tilt the map round the point under the pointer where the drag
+    // starts, which stays under it (Max, 2026-11-13 evening: "should pivot the view at the mouse pointer, not center
+    // of frame"); while a train is followed, round the train, which stays where it is (followRotation). The right
+    // button is MapLibre's own (around: 'pointer'; tilting also brings the camera closer, as it keeps its distance);
+    // the middle one is ours (Max, 2026-11-13): sideways turns, up and down tilts, at MapLibre's speeds (0.8° and
+    // 0.5° a pixel), the point kept under the pointer. The browser's own middle-click scrolling is kept off the map.
+    followRotation(false);
     let middle = null;
     map.getCanvasContainer().addEventListener('mousedown', (e) => {
       if (e.button !== 1) return;
       e.preventDefault();
-      middle = { x: e.clientX, y: e.clientY };
+      const r = map.getCanvasContainer().getBoundingClientRect(), point = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const at = map.unproject([point.x, point.y]);
+      // The point to turn round: under the pointer (not when following: the camera holds the train, above).
+      middle = { x: e.clientX, y: e.clientY, point, anchor: following ? null : { lon: at.lng, lat: at.lat } };
     });
     window.addEventListener('mousemove', (e) => {
       if (!middle) return;
       if (!(e.buttons & 4)) { middle = null; return; }   // let go outside the window
       const dx = e.clientX - middle.x, dy = e.clientY - middle.y;
-      middle = { x: e.clientX, y: e.clientY };
-      map.jumpTo({ bearing: map.getBearing() + dx * 0.8,
-        pitch: Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - dy * 0.5)) });
+      middle.x = e.clientX;
+      middle.y = e.clientY;
+      const bearing = map.getBearing() + dx * 0.8, pitch = Math.max(0, Math.min(map.getMaxPitch(), map.getPitch() - dy * 0.5));
+      if (!middle.anchor) return map.jumpTo({ bearing, pitch });
+      const tr = map._camera.transform.clone();
+      tr.setBearing(bearing);
+      tr.setPitch(pitch);
+      map.jumpTo({ bearing, pitch, center: centreHolding(middle.anchor, middle.point, tr) });
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
+    map.on('render', placeNearLabels);
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
     resolve();
@@ -463,15 +524,134 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // the camera (setSelectedPlace), so it can't lag.
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
-  selEl.innerHTML = '<div class="sel-dot"></div><div class="sel-label"></div>';
+  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 49,61 15,61" ' +
+    'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
   const selDot = selEl.firstChild, selLabel = selEl.lastChild;
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
 
+  // ---- Close in, the trains' labels ----
+  // From the zoom where the models show, each train's label (company above number and lateness) and the "3 trains"
+  // label of trains standing close together (Max, 2026-11-12: labels stacked at Stockholm C) are page elements,
+  // placed after every frame the map draws, from the same places as the 3D trains (Max, 2026-11-14, from his note
+  // "train labels flicker when zoomed in close": drawn by the map they were redone about 10 times a second through
+  // its background worker and sawed up to 3 px, at most 10, behind their trains). The selected train has its own
+  // label (its marker, above these). Further out the map draws the labels (train-labels), leaving out overlaps.
+  const nearBox = document.createElement('div');
+  nearBox.className = 'near-labels';
+  map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
+  // The stations' names close in, above the trains' labels (Max, 2026-11-13: station names "always on top of other
+  // labels"; the map's own names can't be above page elements). A name that would overlap one already placed is
+  // left out, as the map does, in the same order every frame so names don't swap.
+  const namesBox = document.createElement('div');
+  namesBox.className = 'station-names';
+  map.getCanvasContainer().appendChild(namesBox);
+  const nameEls = new globalThis.Map();   // station signature -> its element
+  const NAME_DY = 15.4;   // the name's bottom above the station's point (as the map's: 1.1 em of 14 px)
+  function placeStationNames(W, H) {
+    if (map.getZoom() < Math.max(11, modelZoom())) {
+      if (nameEls.size) { namesBox.replaceChildren(); nameEls.clear(); }
+      return;
+    }
+    const placed = [], keep = new Set();
+    for (const f of data.stations.features) {
+      const q = map.project(f.geometry.coordinates);
+      if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
+      const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
+      if (placed.some(o => o.l < b.r && b.l < o.r && o.t < b.bt && b.t < o.bt)) continue;
+      placed.push(b);
+      keep.add(sig);
+      let el = nameEls.get(sig);
+      if (!el) {
+        el = Object.assign(document.createElement('div'), { className: 'station-name', textContent: name });
+        el.dataset.sig = sig;
+        namesBox.appendChild(el);
+        nameEls.set(sig, el);
+      }
+      el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
+    }
+    for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
+  }
+  // The station whose name (close in) is under a point of the map, or null.
+  function stationNameAt(pt) {
+    if (!nameEls.size) return null;
+    const c = box.getBoundingClientRect(), x = pt.x + c.left, y = pt.y + c.top;
+    for (const [sig, el] of nameEls) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left - 3 && x <= r.right + 3 && y >= r.top - 3 && y <= r.bottom + 3) return sig;
+    }
+    return null;
+  }
+  let nearProps = new globalThis.Map();   // id -> the properties setTrains got for each train near the view
+  const nearEls = new globalThis.Map();   // key -> { el, text, ids }
+  const LABEL_DY = 12;   // the label's top below the train's point (the map's labels: 1.1 em of 11 px)
+  function placeNearLabels() {
+    if (!isReady) return;
+    const { clientWidth: W, clientHeight: H } = box, pts = [];
+    placeStationNames(W, H);
+    if (map.getZoom() < modelZoom()) {
+      if (nearEls.size) { nearBox.replaceChildren(); nearEls.clear(); }
+      return;
+    }
+    for (const x of getTrains3d?.() ?? []) {
+      const pr = x.id !== selected && nearProps.get(x.id);
+      if (!pr) continue;
+      const q = map.project([x.lon, x.lat]);
+      if (q.x > -80 && q.y > -80 && q.x < W + 80 && q.y < H + 80) pts.push({ id: x.id, x: q.x, y: q.y, pr });
+    }
+    // Groups: the trains within GROUP_PX of the first one not yet in a group, in a fixed order (so groups don't swap).
+    pts.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const used = new Set(), keep = new Set();
+    for (const p of pts) {
+      if (used.has(p.id)) continue;
+      const g = pts.filter(o => !used.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= GROUP_PX);
+      for (const o of g) used.add(o.id);
+      const one = g.length === 1, key = one ? g[0].id : `g:${g.map(o => o.id).join('|')}`;
+      let n = nearEls.get(key);
+      if (!n) {
+        n = { el: document.createElement('div'), text: null, ids: g.map(o => o.id) };
+        nearBox.appendChild(n.el);
+        nearEls.set(key, n);
+      }
+      keep.add(key);
+      const text = one ? `${g[0].pr.company ?? ''}|${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
+      if (text !== n.text) {
+        n.text = text;
+        if (one) {
+          const { company, label, stale } = g[0].pr;
+          n.el.className = `near-label${stale ? ' stale' : ''}`;
+          n.el.replaceChildren(...(company ? [Object.assign(document.createElement('span'), { className: 'co', textContent: company }), '\n'] : []), String(label));
+        } else {
+          n.el.className = 'near-label group';
+          n.el.textContent = text;
+        }
+      }
+      const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
+      n.el.style.transform = `translate(${x.toFixed(1)}px, ${(y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+    }
+    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
+  }
+  // The close-in label under a point of the map (screen pixels), with 3 px to spare, or null.
+  function nearLabelAt(pt) {
+    if (!nearEls.size) return null;
+    const c = box.getBoundingClientRect();
+    for (const n of nearEls.values()) {
+      const r = n.el.getBoundingClientRect(), x = pt.x + c.left, y = pt.y + c.top;
+      if (x >= r.left - 3 && x <= r.right + 3 && y >= r.top - 3 && y <= r.bottom + 3) return n;
+    }
+    return null;
+  }
+
   // ---- Following a train ----
-  let following = null;       // { getPlace, onEnd, locked }
+  // The followed train is held at a point on the screen, its focus: at first the middle of the map above the panel,
+  // after a drag wherever the drag left it. The room kept free for the panel (the camera's padding) is no longer
+  // changed for this: in a tilted view a change of it changes the perspective, so the whole map jumped when a drag
+  // was let go (Max, 2026-11-13 evening: "snaps into a slightly different position after letting go", "snaps and
+  // turns"; measured at 55° tilt: the size round the train jumped 29 % in one frame; flat, nothing moved).
+  let following = null;       // { getPlace, onEnd, locked, focus: { x, y }, place }
+  if (import.meta.env.DEV) window.__followFocus = () => following?.focus ?? null;   // for tools/follow-check.mjs
   let lastTick = 0;
   const pointers = new Set(); // fingers (or the mouse button) down on the map
   const box = map.getContainer();
@@ -479,11 +659,40 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   for (const type of ['pointerup', 'pointercancel'])
     window.addEventListener(type, e => pointers.delete(e.pointerId), true);
   window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
-  // How far (in screen pixels) a place is from the point the camera keeps the train at.
+  // The panel covers up to 45 % of the screen's bottom (index.html); its top edge, with a margin.
+  const panelTop = () => box.clientHeight - (Math.round(box.clientHeight * 0.45) + 20);
+  const defaultFocus = () => ({ x: box.clientWidth / 2, y: panelTop() / 2 });
+  // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
-    const at = map.project([p.lon, p.lat]), c = map.project(map.getCenter());
-    return Math.hypot(at.x - c.x, at.y - c.y);
+    const at = map.project([p.lon, p.lat]);
+    return Math.hypot(at.x - following.focus.x, at.y - following.focus.y);
   };
+  // The camera's middle that puts a place ({ lon, lat }) at a screen point, for a camera (MapLibre 6's own camera
+  // state, not a public call; maplibre-gl is pinned).
+  function centreHolding(place, point, tr = map._camera.transform) {
+    const t = tr.clone();
+    t.setLocationAtPoint(new LngLat(place.lon, place.lat), new Point(point.x, point.y));
+    return t.center;
+  }
+  // Flights the page starts itself (to a station, a whole route): left alone, like a drag and its fling.
+  let flying = false;
+  // Holding on: every change of the camera (a wheel or pinch zoom, a turn, the + and − buttons, the zoom slider,
+  // the arrow keys) is corrected before it is drawn so the followed train stays exactly on its focus. (Zooms and
+  // turns go round the screen's middle, not the focus; this puts the train back in the same frame.)
+  // MapLibre's own hook for this (set only while following): it is handed each camera about to be drawn.
+  const holding = () => following?.locked && following.place && !flying && !dragged && !map.dragPan.isActive();
+  // A flight to the followed train (a train picked in the search) aims, frame by frame, at where the train is now
+  // rather than where it was when it was picked: shifted by how far it has moved since (Max, 2026-11-13 evening: "it
+  // sort of misses the train a bit, then camera snaps to the correct view after a beat").
+  let chase = null;   // { lon, lat }: where the train was when the flight started
+  const holdTrain = (next) => {
+    if (flying && chase && following?.place) {
+      const c = next.center;
+      return { center: new LngLat(c.lng + following.place.lon - chase.lon, c.lat + following.place.lat - chase.lat) };
+    }
+    return holding() ? { center: centreHolding(following.place, following.focus, next) } : {};
+  };
+  const landed = () => { flying = false; chase = null; };
   // While following, a zoom (wheel or pinch) zooms around the train rather than around the fingers.
   function zoomAroundCenter(on) {
     // The wheel's enable() does nothing when it is already on (so the option was never taken): off first.
@@ -491,52 +700,88 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.scrollZoom.enable(on ? { around: 'center' } : undefined);
     map.touchZoomRotate.enable(on ? { around: 'center' } : undefined);
   }
-  function stopFollowing() {
+  // The right mouse button's turning: round the pointer, or while following round the screen's middle (the camera
+  // update hook keeps the train on its focus, so it turns round the train).
+  function followRotation(on) {
+    map.dragRotate.disable();
+    map.dragRotate.enable(on ? { around: 'center' } : { around: 'pointer' });
+  }
+  function stopFollowing(tell = true) {
     const end = following?.onEnd;
     following = null;
     zoomAroundCenter(false);
-    end?.();
+    followRotation(false);
+    map.setTransformCameraUpdate(null);
+    if (tell) end?.();
   }
-  // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes the
-  // point the camera keeps it at (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new
-  // center for the follow ... so that you can reframe how you want it stuck"). Dragging no longer stops following;
-  // a single tap on the map does (main.js). Kept on the screen and above the panel.
+  // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes its
+  // focus (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new center for the follow
+  // ... so that you can reframe how you want it stuck"). Dragging doesn't stop following; a single tap on the map
+  // closes the train (main.js). Kept on the screen and above the panel. Nothing else moves when it is let go.
+  // Dragged away, off the screen or behind the panel, the train is let go: it is closed, as by a tap on the map
+  // (Max, 2026-11-13 evening: "if you drag too far from the train it should let it go. Especially if it is off
+  // screen"). LET_GO_PX: how far past the edge its middle must be (0: just past it).
+  const LET_GO_PX = 0;
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
+    if (flying && !map._camera?.isEasing?.()) landed();
     if (!dragged || pointers.size) return;
     dragged = false;
     const p = following?.getPlace();
     if (!p) return;
     const { clientWidth: w, clientHeight: h } = box, at = map.project([p.lon, p.lat]);
-    const x = Math.max(30, Math.min(w - 30, at.x)), y = Math.max(70, Math.min(h - following.bottom - 30, at.y));
-    setPadding({ left: Math.max(0, 2 * x - w), right: Math.max(0, w - 2 * x), top: Math.max(0, 2 * y - h), bottom: Math.max(0, h - 2 * y) });
+    const panelEdge = h - Math.round(h * 0.45) - 10;   // the panel's top (index.html: 45 % high, 10 px from the bottom)
+    if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > panelEdge + LET_GO_PX) {
+      const away = following.onAway;
+      stopFollowing(false);
+      return away?.();
+    }
+    following.focus = { x: Math.max(30, Math.min(w - 30, at.x)), y: Math.max(70, Math.min(panelTop() - 30, at.y)) };
+    following.locked = false;   // locks again at once, or glides back inside the edges
+    following.gap = null;
   });
   // Put the camera's middle on a place without stopping a zoom or turn in progress: MapLibre's jumpTo stops every
   // gesture, so the camera used to keep still until a zoom had ended and then catch up (Max, 2026-11-13: "the
   // camera stops for a beat, then recenters"). This uses MapLibre 6's own camera (not a public call; maplibre-gl is
   // pinned): false when it isn't there, and the camera then waits as before.
-  function centerDuringGesture(lng, lat) {
+  function centerDuringGesture(centre) {
     const camera = map._camera;
     if (typeof camera?.applyTransformChange !== 'function') return false;
-    camera.applyTransformChange(tr => tr.setCenter(new LngLat(lng, lat)));
+    camera.applyTransformChange(tr => tr.setCenter(centre));
     map.triggerRepaint();
     return true;
-  }
-  // Change the room kept free at the screen's edges, keeping the map still: the camera's new middle is the place
-  // already showing there.
-  function setPadding(padding) {
-    const { clientWidth: w, clientHeight: h } = box;
-    const at = map.unproject([(w + padding.left - padding.right) / 2, (h + padding.top - padding.bottom) / 2]);
-    map.jumpTo({ center: at, padding });
   }
 
   const loaded = new Set();
 
   let isReady = false;
   ready.then(() => { isReady = true; });
+
+  // The first view with only Sweden (Max, 2026-11-13: "the whole world shows first, then the Sweden mask kicks
+  // in"; the cover is its own file and came about 0.4 s after the base map). Resolves once the base map, the cover
+  // outside Sweden and the names left out abroad are all on screen; after FIRST_VIEW_MAX_MS whatever there is.
+  const shown = new Promise((resolve) => {
+    const giveUp = setTimeout(resolve, FIRST_VIEW_MAX_MS);
+    const check = () => {
+      let done = false;
+      try {
+        done = isReady && (namesFiltered || maskFailed) && map.isSourceLoaded('sweden-mask') && map.areTilesLoaded();
+      } catch { done = false; }   // the cover's source isn't there yet
+      if (!done) return;
+      map.off('render', check);
+      map.off('idle', check);
+      clearTimeout(giveUp);
+      map.once('render', () => resolve());   // one more frame, so what was just loaded has been drawn
+      map.triggerRepaint();
+    };
+    map.on('render', check);
+    map.on('idle', check);
+  });
+
   return {
     ready,
+    shown,
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
@@ -559,28 +804,24 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     // Called 30 times a second with the trains in and near the view, where they are now.
     setTrains(geojson) {
       data.trains = geojson;
+      nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
       map.getSource('trains').setData(geojson);
-      // Grouped labels close in; the selected train has its own label (the marker), so it isn't counted in a group.
-      if (map.getZoom() >= modelZoom() - 1) {
-        data['train-groups'] = selected
-          ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
-        map.getSource('train-groups').setData(data['train-groups']);
-      }
     },
-    // Follow a train: keep it in the middle of the view above the train panel (which covers up to 45 % of the
+    // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
-    // Zoom, turn and tilt stay the user's; a drag moves the point the train is kept at (above). onEnd() is called
-    // when following stops by itself (the train is gone).
-    async follow(getPlace, onEnd) {
+    // Zoom, turn and tilt stay the user's; a drag moves the point the train is held at (above). onEnd() is called
+    // when following stops by itself (the train is gone); onAway() when a drag took the train off the screen or
+    // behind the panel (above).
+    async follow(getPlace, onEnd, onAway) {
       await ready;
-      const h = map.getContainer().clientHeight, bottom = Math.round(h * 0.45) + 20;
-      setPadding({ top: 0, bottom, left: 0, right: 0 });
       dragged = false;
-      following = { getPlace, onEnd, locked: false, bottom };
+      following = { getPlace, onEnd, onAway, locked: false, focus: defaultFocus(), place: null };
       zoomAroundCenter(true);
+      followRotation(true);
+      map.setTransformCameraUpdate(holdTrain);
     },
-    unfollow() { following = null; zoomAroundCenter(false); },
+    unfollow() { following = null; zoomAroundCenter(false); followRotation(false); map.setTransformCameraUpdate(null); },
     get following() { return Boolean(following); },
     // Called every drawing frame: move the camera along with the followed train.
     tick(now) {
@@ -589,21 +830,28 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!following || !isReady) return;
       const p = following.getPlace();
       if (!p) return stopFollowing();
-      // A finger or the mouse is down, or the map is zooming or turning (a wheel zoom, a pinch, the compass): the
-      // camera keeps on the train without stopping what the user does. Only a drag (one finger or the mouse moving
-      // the map) and the map's own animations (a fling, a fly-to) are left alone.
+      following.place = p;
+      if (flying && !map.isMoving()) landed();   // a flight that ended without a moveend
+      // A drag (one finger or the mouse moving the map), its fling and the page's own flights are left alone. A zoom
+      // or turn in progress (a wheel, a pinch, the compass, the + and − buttons) isn't stopped: the camera keeps on
+      // the train during it.
+      if (dragged || flying || (map.dragPan.isActive() && pointers.size < 2)) { following.locked = false; following.gap = null; return; }
       const busy = pointers.size > 0 || map.isMoving();
-      if (busy && ((map.dragPan.isActive() && pointers.size < 2) || map._camera?.isEasing?.())) { following.locked = false; return; }
-      const moveTo = (lng, lat) => {
-        if (!busy) map.jumpTo({ center: [lng, lat] });
-        else if (!centerDuringGesture(lng, lat)) following.locked = false;
+      const moveTo = (centre) => {
+        if (!busy) map.jumpTo({ center: centre });
+        else if (!centerDuringGesture(centre)) following.locked = false;
       };
-      const off = offFocus(p);
-      if (following.locked && off < 30) return moveTo(p.lon, p.lat);
-      // Not on it yet (just tapped, or the train jumped): glide over in about half a second, then stay locked on.
-      if (off < 1) { following.locked = true; return moveTo(p.lon, p.lat); }
-      const c = map.getCenter(), k = 1 - Math.exp(-dt / 150);
-      moveTo(c.lng + (p.lon - c.lng) * k, c.lat + (p.lat - c.lat) * k);
+      const off = offFocus(p), target = centreHolding(p, following.focus);
+      if (following.locked && off < 30) return moveTo(target);
+      // Not on it yet (just tapped, a drag left it outside the edges, or the train jumped): the gap closes in about
+      // half a second, then it stays locked on. The gap is kept against the moving train, so a fast train is caught
+      // too (gliding towards where it was each frame, a train at 300 km/h stayed 8 px behind and never locked).
+      if (off < 1) { following.locked = true; following.gap = null; return moveTo(target); }
+      const k = 1 - Math.exp(-dt / 150);
+      if (!following.gap) { const c = map.getCenter(); following.gap = { lng: c.lng - target.lng, lat: c.lat - target.lat }; }
+      following.gap.lng *= 1 - k;
+      following.gap.lat *= 1 - k;
+      moveTo(new LngLat(target.lng + following.gap.lng, target.lat + following.gap.lat));
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     async setStations(list) {
@@ -617,11 +865,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       const features = [];
       if (path && path.coords.length > 1) {
         features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path.coords } });
-        for (const c of path.stops) features.push({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: c } });
+        const along = progressAlong(path);
+        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { f: along[path.stopAt[i]] },
+          geometry: { type: 'Point', coordinates: c } }));
       }
       data.path = { type: 'FeatureCollection', features };
       await ready;
       if (isReady) map.getSource('path').setData(data.path);
+    },
+    // How far along the shown path the train is (0 to 1, as path.js progressAt): the darker green ends there.
+    setPathProgress(f) {
+      if (Math.abs(f - pathProgress) < 1e-6) return;
+      pathProgress = f;
+      if (!isReady || !map.getLayer('path-line')) return;
+      const c = pathColours();
+      map.setPaintProperty('path-line', 'line-gradient', c.line);
+      map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
     },
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
@@ -629,23 +888,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!path || path.coords.length < 2) return;
       const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
       const h = map.getContainer().clientHeight;
+      flying = true;
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
         { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
     },
-    // Fly to a place ({ lon, lat }), zooming in to at least minZoom.
-    async goTo(place, minZoom) {
+    // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
+    // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
+    // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").
+    // train: the place is the followed train's (the flight then keeps aiming at it, above).
+    async goTo(place, minZoom, train = false) {
       await ready;
-      map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true });
-    },
-    // Keep room for the panel or board at the screen's bottom (45 %), without moving what is on screen.
-    async pad() {
-      await ready;
-      setPadding({ top: 0, bottom: Math.round(map.getContainer().clientHeight * 0.45) + 20, left: 0, right: 0 });
-    },
-    // Take the room kept for the panel away again, without moving what is on screen.
-    async unpad() {
-      await ready;
-      setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      flying = true;   // the camera leaves the followed train alone until it lands
+      chase = train ? { lon: place.lon, lat: place.lat } : null;
+      const f = defaultFocus();
+      map.flyTo({ center: [place.lon, place.lat], zoom: Math.max(map.getZoom(), minZoom), duration: 1200, essential: true,
+        offset: [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2] });
     },
     // Ring the train with this id (null: none). Its dot and label are then drawn by the selection marker.
     async select(id) {
@@ -665,8 +922,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       if (!selShown) { selMarker.addTo(map); selShown = true; }
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
-      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}`;
+      const tri = triangles();
+      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}${tri ? ' tri' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
+      // The triangle turned the way the train goes, on the screen (the map may be turned).
+      const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
+      if (selDot.style.transform !== turn) selDot.style.transform = turn;
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
       const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
       if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }
@@ -686,13 +947,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       }
     },
     get shownRail() { return shownRail; },
-    // After a change of language: only the words on the map change (the "3 trains" labels, the buttons' names).
-    // The layers stay (they used to be taken away and added again, the 3D trains with them).
+    // After a change of language: only the words on the map change (the buttons' names; the "3 trains" labels take
+    // the new words on the next frame). The layers stay (they used to be taken away and added again).
     async relabel() {
       await ready;
       relabelControls();
-      if (isReady && map.getLayer('train-group-labels'))
-        map.setLayoutProperty('train-group-labels', 'text-field', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')]);
+      map.triggerRepaint();
     },
     // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map
     // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.

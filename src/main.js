@@ -5,7 +5,7 @@ import { createMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
-import { pathOf } from './path.js';
+import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
@@ -58,17 +58,20 @@ const propsFor = (r, sim) => ({
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
-const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
+// Dragged off the screen or behind the panel, the train is closed (map.js).
+const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false), () => panel.close());
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   isStarred: number => favourites.has('train', number),
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
-    if (!id) { map.unfollow(); map.unpad(); }
+    if (!id) map.unfollow();   // the map stays exactly as it is
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
   },
-  // The open train's whole path, start to finish (Max, 2026-11-12), in one colour (Max, 2026-11-13).
+  // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
+  // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
+  // travelled up to the last place it was reported at.
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
@@ -80,6 +83,11 @@ const panel = createPanel(document.getElementById('panel'), {
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };
+    const here = placeNow(id);
+    let done = 0;
+    if (here) done = progressAt(shownPath.path, here);
+    else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
+    map.setPathProgress(done);
     map.setPath(shownPath.path);
     if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
   },
@@ -93,12 +101,11 @@ const map = createMap('map', {
   getTrains3d: () => frameTrains,
   // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
   alongTrack: (id, d) => trains.along(id, d),
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere stops following first
-  // (Max, 2026-11-13: "a single click unfollows"), and then closes it (a tap that only closed the menu does nothing
-  // more).
+  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it, also while it
+  // is followed (Max, 2026-11-13 evening: "single click while following should deselect train, not just stop
+  // following"). A tap that only closed the menu does nothing more.
   onTrainTap(id) {
     if (menu.justClosed) return;
-    if (!id && map.following) { map.unfollow(); panel.setFollowing(false); return; }
     if (!openTrain(id)) { panel.close(); board.close(); }
   },
   onStationTap(sig) {
@@ -110,6 +117,10 @@ const map = createMap('map', {
     showPicker(list);
   },
 });
+
+// The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
+const splash = document.getElementById('splash');
+map.shown.then(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); });
 
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
@@ -131,7 +142,6 @@ const board = createBoard(document.getElementById('board'), {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
-  onClose: () => { if (!panel.openId) map.unpad(); },
   isStarred: sig => favourites.has('station', sig),
   onStar: sig => favourites.toggle('station', sig),
 });
@@ -140,9 +150,8 @@ async function openStation(sig, { go = false } = {}) {
   if (!st) return;
   if (panel.openId) panel.close();
   map.unfollow();
-  await map.pad();   // the station shows above the board
   board.open(st);
-  if (go) map.goTo(st, 13);
+  if (go) map.goTo(st, 13);   // lands above the board
 }
 
 // A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
@@ -162,7 +171,7 @@ function openTrain(id, { go = false } = {}) {
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
-  if (p) following.then(() => map.goTo(p, 13));
+  if (p) following.then(() => map.goTo(p, 13, true));
   return true;
 }
 
@@ -245,6 +254,7 @@ function frame(ts) {
   const sel = panel.openId && frameById.get(panel.openId);
   const r = sel && trains.get(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
+  if (sel && shownPath?.id === sel.id) map.setPathProgress(progressAt(shownPath.path, sel));
   if (sel) map.drawNow();
   requestAnimationFrame(frame);
 }
@@ -262,9 +272,11 @@ document.getElementById('open-settings').onclick = () => {
   settingsPage.querySelector('.panel-close').focus();
 };
 settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
+// A tap outside the card (on the dimmed map behind it) closes it (Max, 2026-11-13).
+document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol') map.applySettings();
   if (key === 'language') {
     translatePage();
     map.relabel();   // "3 trains" on the map
