@@ -341,17 +341,31 @@ if (hasKey && !replay) {
 
   // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
   // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.
+  // The first question about a train reaches further back: 90 minutes (as far as the passings go) plus its known
+  // delay. The arrival that ends its trip is then among the rows also when it runs late or had arrived before the
+  // page opened; without that row a finished train stayed on the map up to 15 minutes instead of 2 (14 trains in
+  // four recordings, 2026-11-13).
   const asked = new Map();   // train key -> when its route was last asked for
+  const BACK_MS = 30 * 60000, FIRST_BACK_MS = 90 * 60000, MAX_BACK_MS = 4 * 3600000, LATE_MIN = 15;
   async function askRoutes() {
     const t = now();
     const want = trains.reports().filter(r => routes.until(r.id) < t + 30 * 60000 && !(t - (asked.get(r.id) ?? 0) < 5 * 60000));
     if (!want.length) return;
+    const lateBy = r => lateness.get(r.id)?.minutes ?? 0;
+    const again = want.filter(r => asked.has(r.id)), first = want.filter(r => !asked.has(r.id));
+    const late = first.filter(r => lateBy(r) > LATE_MIN), onTime = first.filter(r => !(lateBy(r) > LATE_MIN));
     for (const r of want) asked.set(r.id, t);
-    try {
-      routes.add(await fetchPlannedRoutes([...new Set(want.map(r => r.operational))], t - 30 * 60000, t + 90 * 60000));
-    } catch (e) {
-      console.warn('planned routes:', e.message);
-      for (const r of want) asked.delete(r.id);
+    // Three questions at most: trains asked before, new ones, and new ones running late (few; as far back as the latest).
+    const groups = [[again, BACK_MS], [onTime, FIRST_BACK_MS],
+      [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(lateBy)) * 60000)]];
+    for (const [list, back] of groups) {
+      if (!list.length) continue;
+      try {
+        routes.add(await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * 60000));
+      } catch (e) {
+        console.warn('planned routes:', e.message);
+        for (const r of list) asked.delete(r.id);
+      }
     }
   }
   setTimeout(askRoutes, 5000);
