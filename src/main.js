@@ -106,6 +106,10 @@ const map = createMap('map', {
   },
 });
 
+// The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
+const splash = document.getElementById('splash');
+map.shown.then(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); });
+
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
 const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
