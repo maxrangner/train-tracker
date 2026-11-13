@@ -14,6 +14,13 @@ export const isToy = () => settings.trainStyle === 'toy';
 export const modelZoom = () => (isToy() ? settings.toyZoom : 13);
 const EARTH = 40075016.686;   // metres round the equator
 
+// Kept for as long as the page lives, shared by every layer made (a settings change makes a new layer, map.js):
+// one three.js renderer per map canvas, and each model built once per look. A new renderer and new models per
+// layer were never given back: 50 settings changes left 13,736 graphics buffers where there had been 786
+// (measured 2026-11-13).
+const renderers = new WeakMap();   // the map's WebGL context -> its three.js renderer
+const built = new Map();           // 'toy|<key>' or 'real|<key>' -> a built train to clone
+
 // getTrains() -> [{ id, lon, lat, bearing (compass degrees), brand, stale }] at the moment being drawn.
 // along(id, d) -> { lon, lat } d metres along the train's track from its drawn place (+ ahead), or null: each car
 // is set on the track there, so a train bends round a curve (without it, or where it gives null, the train is
@@ -25,7 +32,9 @@ export function createTrainLayer({ getTrains, along = null }) {
   // Each drawn train's outline on the ground: id -> { lon, lat, bearing, length, width } in metres, the middle at
   // lon/lat (map.js: a tap anywhere on the model opens the train).
   const outlines = new Map();
-  const templates = new Map();    // brand -> a built train to clone (clones share shapes and paint)
+  // brand -> a built train to clone (clones share shapes and paint); kept in `built` for the layers after this one
+  const templates = { has: key => built.has(`${TOY ? 'toy' : 'real'}|${key}`), get: key => built.get(`${TOY ? 'toy' : 'real'}|${key}`),
+    set: (key, train) => built.set(`${TOY ? 'toy' : 'real'}|${key}`, train) };
 
   // A stale train (silent for a while, or no data at all) is drawn plain grey and see-through: its own copies of the
   // materials, so the shared ones in train-model.js stay as they are.
@@ -96,8 +105,22 @@ export function createTrainLayer({ getTrains, along = null }) {
       const sun = new THREE.DirectionalLight(0xffffff, 2.2);
       sun.position.set(-0.6, -0.8, 1.2);
       scene.add(sun, new THREE.HemisphereLight(0xffffff, 0x8a8f96, 1.3));
-      renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
-      renderer.autoClear = false;
+      renderer = renderers.get(gl);
+      if (!renderer) {
+        renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
+        renderer.autoClear = false;
+        renderers.set(gl, renderer);
+      }
+      // For checks (tools, dev mode only): how many separate parts and triangles the last frame drew.
+      if (import.meta.env.DEV) window.__3d = { calls: () => renderer.info.render.calls, triangles: () => renderer.info.render.triangles };
+    },
+
+    // The layer is taken off the map (a settings change): its trains leave the scene. The renderer and the built
+    // models stay for the next layer.
+    onRemove() {
+      for (const entry of shown.values()) scene.remove(entry.object);
+      shown.clear();
+      outlines.clear();
     },
 
     render(gl, args) {
