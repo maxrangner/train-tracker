@@ -5,7 +5,7 @@
 // Run (with `npm run dev` going): node tools/follow-check.mjs [--view 12/59.33/18.06] [--size 400x800] [--wait 25] [--fastest]
 // --fastest taps the fastest-moving train on screen instead of the one nearest the middle.
 import puppeteer from 'puppeteer-core';
-import { BROWSER_PATH } from './lib/browser.mjs';
+import { BROWSER_PATH, PAGE } from './lib/browser.mjs';
 import { mkdirSync } from 'node:fs';
 
 const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filter(Boolean)
@@ -23,7 +23,7 @@ const page = await browser.newPage();
 await page.setViewport({ width, height, deviceScaleFactor: 1 });
 page.on('pageerror', e => console.log(`[page error] ${e.message}`));
 page.on('console', m => { if (m.type() === 'error' || m.type() === 'warn') console.log(`[console.${m.type()}] ${m.text()}`); });
-await page.goto(`http://localhost:5173/#view=${view}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${PAGE}#view=${view}`, { waitUntil: 'domcontentloaded' });
 await sleep(Number(args.wait ?? 25));
 
 // Where the train is drawn, against the camera's follow point (the middle of the padded view).
