@@ -100,7 +100,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
   geoBox?.addEventListener('pointerdown', () => { if (!window.isSecureContext) showNote(t('noLocation')); }, true);
   geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); });
-  // The button's words in the page's language (again after a change of language: applySettings).
+  // The button's words in the page's language (again after a change of language: relabel).
   function relabelControls() {
     const b = geoBox?.querySelector('button');
     if (!b) return;
@@ -665,7 +665,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       }
     },
     get shownRail() { return shownRail; },
-    // After a settings change (look, language, toys, zoom): our layers again, and for light/dark the other base map
+    // After a change of language: only the words on the map change (the "3 trains" labels, the buttons' names).
+    // The layers stay (they used to be taken away and added again, the 3D trains with them).
+    async relabel() {
+      await ready;
+      relabelControls();
+      if (isReady && map.getLayer('train-group-labels'))
+        map.setLayoutProperty('train-group-labels', 'text-field', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')]);
+    },
+    // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map
     // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.
     async applySettings() {
       await ready;
