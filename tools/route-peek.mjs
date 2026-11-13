@@ -26,7 +26,7 @@ const st = await ask(`<QUERY objecttype="TrainStation" namespace="rail.infrastru
 const names = new Map(st.TrainStation.map(s => [s.LocationSignature, s.AdvertisedLocationName]));
 console.log(`${names.size} stations, e.g. Cst = ${names.get('Cst')}`);
 
-const r = await ask(`<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
+const r = await ask(`<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
   `<FILTER><EQ name="OperationalTrainNumber" value="${num}"/><EQ name="ScheduledDepartureDateTime" value="${date}"/></FILTER>` +
   `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +
   `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE>` +

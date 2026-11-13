@@ -46,7 +46,7 @@ const today = new Date().toISOString().slice(0, 10);
 for (const p of picks) {
   const num = p.Train.AdvertisedTrainNumber;
   const ann = await query(
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" orderby="TimeAtLocation desc" limit="1">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="TimeAtLocation desc" limit="1">` +
     `<FILTER><EQ name="AdvertisedTrainIdent" value="${num}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${today}"/>` +
     `<EXISTS name="TimeAtLocation" value="true"/></FILTER>` +

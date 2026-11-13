@@ -8,7 +8,7 @@ const env = Object.fromEntries(
 
 const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 const body = `<REQUEST><LOGIN authenticationkey="${env.VITE_TRV_KEY}"/>
-<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" sseurl="true">
+<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" sseurl="true">
   <FILTER><GT name="TimeAtLocation" value="${since}"/></FILTER>
   <INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE>
   <INCLUDE>ScheduledDepartureDateTime</INCLUDE><INCLUDE>LocationSignature</INCLUDE>

@@ -7,7 +7,7 @@ const today = new Date().toISOString().slice(0, 10);
 const res = await fetch('https://api.trafikinfo.trafikverket.se/v2/data.json', {
   method: 'POST', headers: { 'Content-Type': 'text/xml' },
   body: `<REQUEST><LOGIN authenticationkey="${key}"/>` +
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
     `<FILTER><EQ name="ScheduledDepartureDateTime" value="${today}"/><EQ name="ActivityType" value="Avgang"/></FILTER>` +
     `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
     `<INCLUDE>InformationOwner</INCLUDE><INCLUDE>Operator</INCLUDE><INCLUDE>TypeOfTraffic</INCLUDE>` +

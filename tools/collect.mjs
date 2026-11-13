@@ -105,7 +105,7 @@ await Promise.all([
     `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" sseurl="true" changeid="${changeId ?? 0}">` +
     `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER></QUERY>`),
   record('timetable', 'TrainAnnouncement', (changeId) =>
-    `<QUERY objecttype="TrainAnnouncement" schemaversion="1.9" sseurl="true" changeid="${changeId ?? 0}">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" sseurl="true" changeid="${changeId ?? 0}">` +
     `<FILTER><GT name="AdvertisedTimeAtLocation" value="${from}"/><LT name="AdvertisedTimeAtLocation" value="${to}"/></FILTER>` +
     `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
     `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +
