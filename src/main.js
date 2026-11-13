@@ -317,9 +317,15 @@ function gotStations(m) {
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
   map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null));
 }
-if (hasKey && replay) {
-  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
+// The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
+// left the page without station names, search, boards and planned routes until it was loaded again.)
+function loadStations(tries = 0) {
+  fetchStations().then(gotStations).catch((e) => {
+    console.warn('stations:', e.message);
+    setTimeout(() => loadStations(tries + 1), [5000, 15000][tries] ?? 60000);
+  });
 }
+if (hasKey && replay) loadStations();
 if (hasKey && !replay) {
   followPassings({
     onPassings,
@@ -328,7 +334,7 @@ if (hasKey && !replay) {
       if (s.error) { status.error = s.error; console.warn('timetable:', s.error); }
     },
   });
-  fetchStations().then(gotStations).catch(e => console.warn('stations:', e.message));
+  loadStations();
 
   // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
   // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.
