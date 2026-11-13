@@ -166,7 +166,7 @@ function openTrain(id, { go = false } = {}) {
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
-  if (p) following.then(() => map.goTo(p, 13));
+  if (p) following.then(() => map.goTo(p, 13, true));
   return true;
 }
 
