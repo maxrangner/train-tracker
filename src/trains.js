@@ -307,6 +307,7 @@ export function createTrains(options = {}) {
   function take(tr, r) {
     const h = tr.hist, last = h[h.length - 1];
     const repeat = tr.raw && tr.raw.lon === r.lon && tr.raw.lat === r.lat;
+    const rawBefore = tr.raw;
     tr.raw = r;
     if (!last) return append(tr, r);
     // An exact repeat says nothing new (often a frozen GPS on a moving train), unless the train reports standing,
@@ -326,7 +327,11 @@ export function createTrains(options = {}) {
     const sentAt = tr.seen.get(key);
     if (!repeat) tr.seen.set(key, r.time);
     if (tr.seen.size > 300) for (const [k, t] of tr.seen) if (r.time - t > 10 * 60000) tr.seen.delete(k);
-    if (sentAt !== undefined && !repeat && r.time - sentAt < 10 * 60000 && metres(last, r) >= STILL_M) { counts.resent++; return; }
+    if (sentAt !== undefined && !repeat && r.time - sentAt < 10 * 60000 && metres(last, r) >= STILL_M) {
+      // Its speed is as old as its place (often 1 km/h on a train at full speed): it says nothing about standing now, so
+      // the report before it stays the latest word (stoodStill reads tr.raw). Tried 2026-11-13; see docs/movement.md.
+      counts.resent++; tr.raw = rawBefore; return;
+    }
     // A held leap (faster than any train over a shorter distance than a jump, see below): kept when this report
     // carries on from it, dropped as a spike when this one comes back between.
     if (tr.pending?.leap) {
