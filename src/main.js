@@ -252,7 +252,7 @@ onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom') map.applySettings();
   if (key === 'language') {
     translatePage();
-    map.applySettings();   // "3 trains" on the map
+    map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
     board.relabel();
