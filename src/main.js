@@ -95,12 +95,11 @@ const map = createMap('map', {
   getTrains3d: () => frameTrains,
   // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
   alongTrack: (id, d) => trains.along(id, d),
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere stops following first
-  // (Max, 2026-11-13: "a single click unfollows"), and then closes it (a tap that only closed the menu does nothing
-  // more).
+  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it, also while it
+  // is followed (Max, 2026-11-13 evening: "single click while following should deselect train, not just stop
+  // following"). A tap that only closed the menu does nothing more.
   onTrainTap(id) {
     if (menu.justClosed) return;
-    if (!id && map.following) { map.unfollow(); panel.setFollowing(false); return; }
     if (!openTrain(id)) { panel.close(); board.close(); }
   },
   onStationTap(sig) {

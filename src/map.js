@@ -521,7 +521,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   // A drag while following re-frames it: where the train is on the screen when the map comes to rest becomes the
   // point the camera keeps it at (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new
   // center for the follow ... so that you can reframe how you want it stuck"). Dragging no longer stops following;
-  // a single tap on the map does (main.js). Kept on the screen and above the panel.
+  // a single tap on the map closes the train (main.js). Kept on the screen and above the panel.
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
