@@ -2,11 +2,12 @@
 // the map or picking it in the search. It sits where the train panel does; tapping a row opens that train.
 // load(sig, activity) -> Promise of rows (trafikverket.js fetchBoard); stationName(sig) -> name.
 // onPickTrain({ id, operational, date, number }); onClose(). isStarred(sig) / onStar(sig) -> starred now: the ☆.
-const time = t => (t ? new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : '');
+const time = t => (t ? hhmm(t) : '');
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const REFRESH_MS = 30000;
 
 import { star } from './panel.js';
+import { hhmm } from './clock.js';
 import { t } from './i18n.js';
 
 export function createBoard(el, { load, stationName, onPickTrain, onClose, isStarred, onStar }) {

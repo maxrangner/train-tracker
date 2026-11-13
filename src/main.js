@@ -12,7 +12,7 @@ import { t, translatePage } from './i18n.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, hasKey } from './trafikverket.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
-import { now } from './clock.js';
+import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
@@ -187,7 +187,7 @@ const menu = createMenu({
       .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
   },
   async searchTimetable(number) {
-    const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+    const found = await fetchTrainsByNumber(number, swedishDay(now()));
     return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to) }));
   },
   onPickTrain: pickTrain,
@@ -204,7 +204,7 @@ const menu = createMenu({
     const r = trains.reports().find(x => String(x.number) === number);
     if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
     try {
-      const found = await fetchTrainsByNumber(number, new Date(now()).toLocaleDateString('sv-SE'));
+      const found = await fetchTrainsByNumber(number, swedishDay(now()));
       if (found.length) { const t = found[0]; pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
     } catch (e) { console.warn('favourite:', e.message); }
   },
@@ -362,7 +362,7 @@ const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusFullEl = document.getElementById('status-full');
 
-const clock = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
 const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
 
 // The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
@@ -392,14 +392,14 @@ setInterval(() => {
   const error = statusError();
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
-  const mode = `${modeText(status.positions)}${replay ? ` ${new Date(tNow).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })}` : ''}`;
+  const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
   statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${modeText(status.positions)}` +
-    (replay ? t('replayOf', new Date(tNow).toLocaleTimeString('sv-SE')) : '') +
+    (replay ? t('replayOf', hhmmss(tNow)) : '') +
     (error ? ` · ${error}` : '');
   statusEl.classList.toggle('problem', Boolean(error) || noData);
 
