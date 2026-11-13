@@ -2,6 +2,11 @@
 import { follow, hasKey, trainKey } from './trafikverket.js';
 
 const RECENT_MS = 10 * 60 * 1000;
+// Only the fields toRecord reads are asked for. The stream is not compressed, and a whole position object is
+// 517 bytes against 316 with these (measured live 2026-11-13: the same 1,083 reports in a minute, 39 % fewer
+// bytes; about 62 -> 38 MB an hour at rush hour). The recorder (tools/collect.mjs) still saves everything.
+const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDepartureDate', 'Train.AdvertisedTrainNumber',
+  'Position.WGS84', 'TimeStamp', 'Status.Active', 'Bearing', 'Speed', 'Deleted'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 
 // Trafikverket's position object -> our plain record. Null if it has no usable position.
 export function toRecord(p) {
@@ -32,7 +37,7 @@ export function startTrainSource({ onRecords, onStatus }) {
       const since = new Date(Date.now() - RECENT_MS).toISOString();
       return `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" ` +
         `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
-        `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER></QUERY>`;
+        `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER>${FIELDS}</QUERY>`;
     },
     onResult: (r) => {
       const records = (r.TrainPosition ?? []).map(toRecord).filter(Boolean);
