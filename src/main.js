@@ -17,6 +17,7 @@ import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
 import { createDayStats } from './day-stats.js';
+import { createFilter } from './filter.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -43,6 +44,8 @@ trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
 const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
+// Which trains the map shows (src/filter.js): chosen by tapping companies and kinds on the stats page.
+const filter = createFilter();
 // Today's arrivals for the stats page's graph: asked for only while that page is open (live, with a key).
 const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
@@ -253,11 +256,14 @@ const menu = createMenu({
 // from the places this frame already worked out (every train in Sweden used to be worked through a second time and
 // sent, also when five of them were on screen).
 let lastDraw = 0;
-let frameTrains = [], frameById = new Map();
+// frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
+// dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
+let frameAll = [], frameTrains = [], frameById = new Map();
 function frame(ts) {
   const t = now() - DELAY_MS;
-  frameTrains = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
-  frameById = new Map(frameTrains.map(x => [x.id, x]));
+  frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+  frameTrains = filter.active ? frameAll.filter(x => x.id === panel.openId || filter.shows(x.brand)) : frameAll;
+  frameById = new Map(frameAll.map(x => [x.id, x]));
   if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
   if (ts - lastDraw >= map.trainsEvery()) {
     lastDraw = ts;
@@ -302,6 +308,7 @@ onSettingChange((key) => {
     menu.refresh();
     panel.relabel();
     if (!statsPage.hidden) drawStats();
+    showFilter();
     board.relabel();
     pickerEl.hidden = true;
     if (!disruptionsPage.hidden) drawDisruptions();
@@ -330,7 +337,7 @@ showSettings();
 const statsPage = document.getElementById('stats-page');
 const statsBody = document.getElementById('stats-body');
 function drawStats() {
-  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameTrains, lateness, stations,
+  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameAll, filter, lateness, stations,
     trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null });
 }
 function openStats() {
@@ -345,8 +352,28 @@ function openStats() {
 }
 document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
-// Taps on the page (its toggles): one listener, as the page is drawn anew every second.
-statsBody.addEventListener('click', (e) => { if (stats.click(e.target)) drawStats(); });
+// Taps on the page: one listener, as the page is drawn anew every second. Its toggles, and a company or kind of train,
+// which shows only those trains on the map (taps stack; tapped again, taken off). While a finger is down on it the
+// page is not drawn anew: a new drawing between finger down and up lost the tap (no click).
+let statsHeld = false;
+statsBody.addEventListener('pointerdown', () => { statsHeld = true; });
+addEventListener('pointerup', () => { statsHeld = false; });
+addEventListener('pointercancel', () => { statsHeld = false; });
+statsBody.addEventListener('click', (e) => {
+  const row = e.target.closest?.('[data-filter]');
+  if (row) filter.toggle(row.dataset.filter, row.dataset.v);
+  if (row || stats.click(e.target)) drawStats();
+});
+// The bar under the status line while a filter is on: what is shown, and × to show every train again.
+const filterBar = document.getElementById('filter-bar'), filterText = document.getElementById('filter-text');
+function showFilter() {
+  lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
+  filterBar.hidden = !filter.active;
+  filterText.textContent = filter.active
+    ? t('filterShowing', filter.list().map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')) : '';
+}
+filter.onChange(showFilter);
+document.getElementById('filter-clear').onclick = () => { filter.clear(); if (!statsPage.hidden) drawStats(); };
 
 // ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
 const disruptionEl = document.getElementById('disruption');
@@ -582,11 +609,11 @@ setInterval(() => {
   statusEl.classList.toggle('problem', Boolean(error) || noData);
 
   // The stats: the running numbers every second; the page itself only while it is open.
-  stats.tick(frameTrains, tNow, id => trains.get(id));
+  stats.tick(frameAll, tNow, id => trains.get(id));
   if (!statsPage.hidden) {
     if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
     dayStats?.tick();
-    drawStats();
+    if (!statsHeld) drawStats();
   }
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.

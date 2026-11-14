@@ -73,6 +73,11 @@
     #status { padding: 6px 10px; font: inherit; font-variant-numeric: tabular-nums; border: 0; color: var(--ink); text-align: left; cursor: pointer; }
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     #status.problem { color: var(--late); }
+    /* While the map shows only some trains (src/filter.js): what it shows, on its own line, and × for all again. */
+    #filter-bar { flex-basis: 100%; max-width: max-content; display: flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; font-size: 14px; }
+    #filter-bar[hidden] { display: none; }
+    #filter-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    #filter-clear { font: inherit; font-size: 18px; line-height: 1; border: 0; background: transparent; color: var(--muted); padding: 4px 8px; cursor: pointer; border-radius: 6px; }
     .help-card { display: flex; padding: 3px; gap: 2px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
     #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
@@ -165,6 +170,14 @@
     .st-part { font-weight: 600; margin-top: 4px !important; }
     .st-bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr auto; gap: 4px 8px; align-items: center; }
     .st-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* A company or kind of train is one button across the three columns: a tap shows only those trains on the map. */
+    .st-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; gap: 4px 8px;
+      font: inherit; color: inherit; text-align: left; border: 0; background: transparent; padding: 1px 4px; margin: 0 -4px; border-radius: 6px; cursor: pointer; }
+    .st-row:hover { background: var(--hover); }
+    .st-row[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+    .st-row[aria-pressed="true"] .st-name { font-weight: 600; }
+    .st-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .st-hint { color: var(--muted); font-size: 13px; }
     .st-name i { color: var(--muted); }
     .st-track { height: 10px; }
     .st-bar { display: block; height: 100%; min-width: 2px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
@@ -383,6 +396,8 @@
     </button>
     <button id="status" class="card" type="button" aria-controls="stats-page" data-t="connecting">connecting…</button>
     <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
+    <div id="filter-bar" class="card" hidden><span id="filter-text"></span>
+      <button id="filter-clear" type="button" aria-label="Show every train" data-t-aria="filterClear">×</button></div>
   </div>
   <div id="menu" class="card" hidden>
     <div class="menu-head">
