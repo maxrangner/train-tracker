@@ -38,6 +38,7 @@ const STOP_BEFORE_M = 200;           // a coasting train waits this far before i
 // removable if it results in a better experience". Trains with GPS keep the 200 m: their own reports show where they
 // stand. STOP_SIDE_M: how far beside the track ahead the stopping place may lie (another platform track) to count.
 const STOP_SIDE_M = 30;
+const DWELL_UP_S = 15;               // ...and, held at its stop short of that place, drives up when it gets there this soon
 // A long silence: no new position for this long (Max, 2026-11-12, changing three earlier rules; measured on 18
 // running trains silent 11-29 min: missing from the map 27 % -> 0-1 %, 90 % within 8-9 km -> 4-9 km):
 //   - a train moves on past a planned stop by its timetable once the stop's expected time + 1 minute has passed
@@ -239,7 +240,10 @@ export function createTrains(options = {}) {
     const last = h[h.length - 1];
     if (t >= last.time) {
       if (o.stood || o.frozen) return { s: last.s, v: 0, coasting: true, mode: o.stood ? 'stood' : 'stale' };
-      if (o.dwell) return { s: last.s, v: 0, coasting: true, mode: 'dwell' };
+      // A train seen only at fixed places, held at its stop from a report short of the platform, stands at the stop's
+      // stopping place instead (o.dwellS; Max, 2026-11-14, point 5 B question 1: 53 of 229 such stops in the morning
+      // rush were held about 100 m short of where trains stand).
+      if (o.dwell) return { s: Math.max(last.s, o.dwellS ?? last.s), v: 0, coasting: true, mode: 'dwell' };
       const since = (t - last.time) / 1000, v = coastSpeed(h);
       const C = v > 0 ? COAST_MS / 1000 : 0;
       let s, sv, mode;
@@ -296,9 +300,19 @@ export function createTrains(options = {}) {
     return tr.depAt !== null && t > tr.depAt + 30000;
   };
   const aheadOf = (tr, t) => {
-    const ext = trackAhead(tr, t);
+    const ext = trackAhead(tr, t), dw = dwellOf(tr, t);
+    // Up to the stopping place only when the drawn train is still rolling in as the dwell begins and gets there within
+    // DWELL_UP_S at that speed: one already drawn standing stays, and so does one far from it (driving up then used up
+    // the stop: 2581 at Årstaberg, 12 Nov 23:12, standing, crept 87 m at 18 km/h; 2583 at Jakobsberg, rolling in at
+    // 19 km/h 165 m short; both left without standing; 14 stops in the night and Saturday hours, measured 2026-11-14).
+    // (Decided when the drawn train reaches the dwell's report, not when the report arrives, some 25 s earlier.)
+    if (dw && tr.dwellUp?.dw !== dw && t >= tr.hist[tr.hist.length - 1].time) {
+      const v = tr.sim?.v ?? 0;
+      tr.dwellUp = { dw, up: v >= 0.8 && ext?.atPlace && ext.stopAt - (tr.sim?.s ?? 0) <= DWELL_UP_S * v };
+    }
+    const dwellS = dw && tr.dwellUp?.dw === dw && tr.dwellUp.up && ext?.atPlace && dw.sig === ext.sig ? ext.stopAt : null;
     return { cap: ext?.stopAt ?? Infinity,
-      o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dwellOf(tr, t)),
+      o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
         frozen: t + DELAY_MS - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
   const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };

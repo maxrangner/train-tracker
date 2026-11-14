@@ -11,7 +11,7 @@
     },
     "2026-11-11T21-45-41-004Z": {
       "frozenPct": 0.53,
-      "lag90S": 5.71,
+      "lag90S": 5.7,
       "dwellThroughPct": 12.3,
       "wrongWay": 0,
       "wrongBranch": 1,
@@ -26,7 +26,7 @@
       "wrongWay": 2,
       "wrongBranch": 4,
       "extraTurnBacks": 115,
-      "standNoGpsMedM": 23,
+      "standNoGpsMedM": 18,
       "when": "2026-11-14"
     },
     "2026-11-12T15-30-00-006Z": {
@@ -40,11 +40,11 @@
     "2026-11-12T17-01-59-418Z": {
       "frozenPct": 0.45,
       "lag90S": 5.7,
-      "dwellThroughPct": 13.5,
+      "dwellThroughPct": 13.7,
       "wrongWay": 1,
       "wrongBranch": 3,
       "extraTurnBacks": 119,
-      "standNoGpsMedM": 21,
+      "standNoGpsMedM": 19,
       "when": "2026-11-14"
     },
     "2026-11-12T19-42-00-050Z": {
@@ -57,12 +57,12 @@
     },
     "2026-11-12T23-02-56-574Z": {
       "frozenPct": 0.65,
-      "lag90S": 7.9,
+      "lag90S": 7.91,
       "dwellThroughPct": 10.9,
       "wrongWay": 0,
       "wrongBranch": 2,
       "extraTurnBacks": 33,
-      "standNoGpsMedM": 14,
+      "standNoGpsMedM": 12,
       "when": "2026-11-14"
     },
     "2026-11-13T04-00-00-000Z": {
@@ -88,7 +88,7 @@
       "wrongWay": 0,
       "wrongBranch": 2,
       "extraTurnBacks": 78,
-      "standNoGpsMedM": 15,
+      "standNoGpsMedM": 12,
       "when": "2026-11-14"
     }
   }
