@@ -149,6 +149,9 @@ export function createTrains(options = {}) {
   let NET = options.net ?? null;         // the rail network, when given (or later: useNet)
   let ROUTES = options.routes ?? null;   // the planned routes (src/routes.js), when given (or later: useRoutes)
   const COAST_MS = options.coastMs ?? COAST_DEFAULT_MS;
+  // For the checks (tools/lib/branch.mjs): keepMs, a longer history (the "real way" keeps all of it); onWayChange(c),
+  // called when a new report changes the way under a train drawn past its last report.
+  const KEEP = options.keepMs ?? KEEP_MS;
 
   // The track ahead of train tr's last report: { poly, stopAt (s where coasting must stop: before the next planned
   // stop) }, or null without a network. Worked out again when the last report changes, and every 10 s (the planned
@@ -279,6 +282,7 @@ export function createTrains(options = {}) {
   function append(tr, r, jump = false, given = null) {
     const h = tr.hist, last = h[h.length - 1];
     const before = tr.sim && h.length ? pointAt(tr, tr.sim.s) : null;
+    const oldAhead = before && options.onWayChange && tr.ext?.last === last ? tr.ext.poly : null, pastBefore = before ? tr.sim.s - last.s : 0;
     const e = { time: r.time, lon: r.lon, lat: r.lat, speed: r.speed, bearing: r.bearing, s: 0, jump, route: null, snap: null,
       passing: given?.passing ?? null };
     // On the network: the report moved onto its track (they sit within 1 m of it), and the way there from the last
@@ -302,6 +306,7 @@ export function createTrains(options = {}) {
       const after = pointAt(tr, tr.sim.s);
       tr.sim.off.lon += before.lon - after.lon;
       tr.sim.off.lat += before.lat - after.lat;
+      if (oldAhead && pastBefore > 0.01) options.onWayChange({ id: tr.latest.id, e, last, d: metres(before, after), passing: Boolean(given), jump, before, after, poly: oldAhead });
     }
   }
 
@@ -584,7 +589,9 @@ export function createTrains(options = {}) {
         const hd = coastHeading(h);
         const dir = hd === null || hd === undefined ? 0 : angle(last.snap.heading, hd) <= 90 ? +1 : -1;
         const way = NET.route(last.snap, at, PASSING_MAX_M, dir);
-        if (!way) continue;   // behind the train, or not on its way
+        // Not reached only the long way round (night of 2026-11-14: 24 of 1,009 passings, e.g. Triangeln 21.8 km round
+        // Malmö for 77 m, fast-forwarded at about 1,000 km/h): at most the track ahead's own limit.
+        if (!way || way.cum[way.cum.length - 1] > 1.5 * metres(last, at) + 2000) continue;   // behind the train, not on its way, or the long way round
         append(tr, { time: p.time, lon: at.lon, lat: at.lat, speed: null, bearing: null }, false,
           { snap: at, route: way, passing: p.station });
         counts.passingsUsed++;
@@ -634,7 +641,7 @@ export function createTrains(options = {}) {
         take(tr, r);
         if (tr.hist.length !== before) tr.assumed = null;   // a new position: only confirmed stops count as passed
         if (tr.hist.length) tr.stood = stoodStill(tr);
-        while (tr.hist.length > 2 && tr.hist[1].time < now - KEEP_MS) tr.hist.shift();
+        while (tr.hist.length > 2 && tr.hist[1].time < now - KEEP) tr.hist.shift();
         if (r.time > lastReport) lastReport = r.time;
         changed = true;
       }
@@ -652,6 +659,8 @@ export function createTrains(options = {}) {
       return changed;
     },
     get(id) { return byId.get(id)?.latest ?? null; },
+    // A train's kept history (for the checks' "real way", tools/lib/branch.mjs).
+    historyOf(id) { return byId.get(id)?.hist ?? null; },
     // Every train's latest report.
     reports() { return [...byId.values()].map(tr => tr.latest); },
     // Where train id is drawn at time t.

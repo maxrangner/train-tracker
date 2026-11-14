@@ -5,8 +5,16 @@
 // A line runs between two line ends ("nodes"); where lines meet is a switch or a join. A train only turns from one
 // line onto another that leaves within MAX_TURN of the way it came, so it never reverses through a switch.
 // Paths come back as polylines: { lon: [], lat: [], cum: [] } (cum = metres from the start).
+//
+// Main tracks first (night of 2026-11-14, docs: night-1114/yard.md and branch.md): with the network's per-line digit
+// (`c`, tools/rail-net.mjs), a way can be "costed": a metre of slow (40 km/h or less) or not public track counts SLOW_W
+// metres, and a metre of a one-way track run against its direction counts AGAINST_W. Only the green route of an opened
+// train (src/path.js) and the track ahead of a train towards its next planned place (ahead) ask for it; the way between
+// two reports stays the plain shortest one. Measured: positions on their train's green-route track 59 -> 83 %; trains
+// drawn onto a wrong branch before their next report 70 -> 27 in five hours (with the passing limit, src/trains.js).
 
 const MAX_TURN = 60;       // degrees
+const SLOW_W = 3, AGAINST_W = 1.5;   // what a metre of slow or private track, and of a one-way track run against its direction, counts
 const CELL = 0.005;        // grid cells, in degrees (about 280 x 550 m in Sweden)
 const R = Math.PI / 180;
 
@@ -56,11 +64,12 @@ export function joinTinyPieces({ scale, n, d }) {
     lines[li] = null;
     removed++;
   }
-  if (!removed) return { scale, n, d };
+  if (!removed) return { scale, n, d, kept: lines.map((_, i) => i) };
   const n2 = [], d2 = [];
   let px = 0, py = 0;
-  for (const l of lines) { if (!l) continue; n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } }
-  return { scale, n: n2, d: d2 };
+  const kept = [];
+  lines.forEach((l, i) => { if (!l) return; kept.push(i); n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } });
+  return { scale, n: n2, d: d2, kept };
 }
 
 export function netFromJSON(json) {
@@ -88,6 +97,17 @@ export function netFromJSON(json) {
     return Math.hypot((lon[j] - lon[i]) * kx, lat[j] - lat[i]) * R * 6371000;
   }
   const headingIJ = (i, j) => (Math.atan2((lon[j] - lon[i]) * Math.cos(lat[i] * R), lat[j] - lat[i]) / R + 360) % 360;
+
+  // ---- Each line's cost per metre, run along (+1) or against (-1) its points (1 without the digits) ----
+  const costs = typeof json.c === 'string' && json.c.length === L && json.joined;
+  const wAlong = new Float32Array(L).fill(1), wBack = new Float32Array(L).fill(1), fast = new Uint8Array(L).fill(1);
+  if (costs) for (let li = 0; li < L; li++) {
+    const v = json.c.charCodeAt(li) - 48, slow = v >= 3, flow = v % 3;
+    fast[li] = slow ? 0 : 1;
+    wAlong[li] = (slow ? SLOW_W : 1) * (flow === 2 ? AGAINST_W : 1);
+    wBack[li] = (slow ? SLOW_W : 1) * (flow === 1 ? AGAINST_W : 1);
+  }
+  const W = (li, d) => (d > 0 ? wAlong[li] : wBack[li]);
 
   // ---- Nodes: line ends meeting at the same point ----
   const nodeOf = new Int32Array(2 * L);   // line end (li*2 + 0 start / 1 end) -> node
@@ -202,26 +222,36 @@ export function netFromJSON(json) {
   // maxTurn: the sharpest turn allowed where lines meet (a drawn path may allow more where the data is odd).
   // b: one snapped place, or several (e.g. a station's tracks, snapsNear): the way ends at the nearest one reached,
   // and poly.target says which.
-  function route(a, b, maxM, dir = 0, maxTurn = MAX_TURN) {
+  // costed: the cheapest way by the lines' costs (above) instead of the shortest, still at most maxM real metres; when
+  // none is found that way, the shortest. poly.cost: the way's cost (its metres, each times its line's cost).
+  function route(a, b, maxM, dir = 0, maxTurn = MAX_TURN, costed = false) {
+    const F = costed && costs ? W : () => 1;
     const targets = Array.isArray(b) ? b : [b];
     const onLine = new Map();
     for (const t of targets) (onLine.get(t.li) ?? onLine.set(t.li, []).get(t.li)).push(t);
+    // On the train's own line: the nearest target that way.
+    let own = null, ownCost = Infinity;
     for (const t of onLine.get(a.li) ?? []) {
       if (dir === 0 || Math.sign(t.along - a.along) === dir || Math.abs(t.along - a.along) < 1) {
-        const poly = newPoly();
-        addPiece(poly, a.li, a.along, t.along);
-        poly.target = t;
-        return poly;
+        const c = Math.abs(t.along - a.along);
+        if (c < ownCost) { ownCost = c; own = t; }
       }
     }
-    // Dijkstra over "line li run in direction d, now at its far end".
+    if (own) {
+      const poly = newPoly();
+      addPiece(poly, a.li, a.along, own.along);
+      poly.target = own;
+      poly.cost = ownCost * W(a.li, own.along >= a.along ? 1 : -1);
+      return poly;
+    }
+    // Dijkstra over "line li run in direction d, now at its far end", by cost; `real` counts the real metres.
     const best = new Map(), from = new Map();
     const heap = [];
-    const push = (cost, li, d, prev) => {
+    const push = (cost, li, d, prev, real) => {
       const k = li * 2 + (d > 0 ? 1 : 0);
-      if (cost > maxM || (best.has(k) && best.get(k) <= cost)) return;
+      if (real > maxM || (best.has(k) && best.get(k) <= cost)) return;
       best.set(k, cost); from.set(k, prev);
-      heap.push([cost, li, d]);
+      heap.push([cost, li, d, real]);
       let i = heap.length - 1;
       while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; }
     };
@@ -241,11 +271,11 @@ export function netFromJSON(json) {
       }
       return top;
     };
-    if (dir >= 0) push(len[a.li] - a.along, a.li, +1, null);
-    if (dir <= 0) push(a.along, a.li, -1, null);
+    if (dir >= 0) push((len[a.li] - a.along) * F(a.li, +1), a.li, +1, null, len[a.li] - a.along);
+    if (dir <= 0) push(a.along * F(a.li, -1), a.li, -1, null, a.along);
     let done = null, doneCost = Infinity;
     while (heap.length) {
-      const [cost, li, d] = pop();
+      const [cost, li, d, real] = pop();
       if (cost >= doneCost) break;
       if (best.get(li * 2 + (d > 0 ? 1 : 0)) < cost) continue;
       const node = nodeOf[2 * li + (d > 0 ? 1 : 0)], hin = arriveHeading(li, d);
@@ -255,23 +285,27 @@ export function netFromJSON(json) {
         if (angle(hin, leaveHeading(m, e)) > maxTurn) continue;
         const nd = e === 0 ? +1 : -1;
         for (const t of onLine.get(m) ?? []) {
-          const c = cost + (nd > 0 ? t.along : len[m] - t.along);
+          const c = cost + (nd > 0 ? t.along : len[m] - t.along) * F(m, nd);
           if (c < doneCost) { doneCost = c; done = { li, d, last: m, lastDir: nd, t }; }
         }
-        push(cost + len[m], m, nd, [li, d]);
+        push(cost + len[m] * F(m, nd), m, nd, [li, d], real + len[m]);
       }
     }
-    if (!done) return null;
+    if (!done) return costed && costs ? route(a, b, maxM, dir, maxTurn, false) : null;
     // Back from the end to the start: the lines in order.
     const chain = [];
     for (let s = [done.li, done.d]; s; s = from.get(s[0] * 2 + (s[1] > 0 ? 1 : 0))) chain.unshift(s);
     const poly = newPoly();
+    let cost = 0;   // by the lines' costs, whether or not the way was chosen by them
     chain.forEach(([li, d], k) => {
       const enter = k === 0 ? a.along : (d > 0 ? 0 : len[li]);
       addPiece(poly, li, enter, d > 0 ? len[li] : 0);
+      cost += Math.abs((d > 0 ? len[li] : 0) - enter) * W(li, d);
     });
     addPiece(poly, done.last, done.lastDir > 0 ? 0 : len[done.last], done.t.along);
+    cost += (done.lastDir > 0 ? done.t.along : len[done.last] - done.t.along) * W(done.last, done.lastDir);
     poly.target = done.t;
+    poly.cost = cost;
     return poly;
   }
 
@@ -282,7 +316,7 @@ export function netFromJSON(json) {
   // it is). Elsewhere, the straightest line.
   function ahead(a, heading, metres, toward = null, maxM = 80000) {
     const dir = angle(a.heading, heading) <= 90 ? +1 : -1;
-    let poly = toward ? route(a, toward, maxM, dir) : null;
+    let poly = toward ? route(a, toward, maxM, dir, MAX_TURN, true) : null;   // main tracks first
     let li, d, at, want = metres;
     if (poly) {
       poly.towardAt = poly.cum[poly.cum.length - 1];   // metres to the planned place
@@ -316,6 +350,8 @@ export function netFromJSON(json) {
   return {
     snap, snapsNear, route, ahead,
     get lines() { return L; },
+    // Whether the lines carry costs; the largest cost a metre can have; whether line li is a fast public track.
+    costed: costs, maxWeight: costs ? SLOW_W * AGAINST_W : 1, isFast: li => fast[li] === 1,
     // All lines as one GeoJSON feature, for drawing.
     toGeoJSON() {
       const coordinates = [];

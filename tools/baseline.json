@@ -10,19 +10,21 @@
       "when": "2026-11-13"
     },
     "2026-11-11T21-45-41-004Z": {
-      "frozenPct": 0.63,
+      "frozenPct": 0.65,
       "lag90S": 5.76,
-      "dwellThroughPct": 12.3,
+      "dwellThroughPct": 11.7,
       "wrongWay": 0,
-      "extraTurnBacks": 17,
+      "wrongBranch": 1,
+      "extraTurnBacks": 15,
       "when": "2026-11-14"
     },
     "2026-11-12T06-00-00-005Z": {
       "frozenPct": 0.52,
       "lag90S": 5.58,
-      "dwellThroughPct": 14.5,
+      "dwellThroughPct": 13.6,
       "wrongWay": 2,
-      "extraTurnBacks": 132,
+      "wrongBranch": 4,
+      "extraTurnBacks": 115,
       "when": "2026-11-14"
     },
     "2026-11-12T15-30-00-006Z": {
@@ -36,9 +38,10 @@
     "2026-11-12T17-01-59-418Z": {
       "frozenPct": 0.49,
       "lag90S": 5.69,
-      "dwellThroughPct": 14.2,
+      "dwellThroughPct": 13.1,
       "wrongWay": 1,
-      "extraTurnBacks": 122,
+      "wrongBranch": 3,
+      "extraTurnBacks": 121,
       "when": "2026-11-14"
     },
     "2026-11-12T19-42-00-050Z": {
@@ -50,11 +53,12 @@
       "when": "2026-11-13"
     },
     "2026-11-12T23-02-56-574Z": {
-      "frozenPct": 1.16,
+      "frozenPct": 1.19,
       "lag90S": 7.61,
-      "dwellThroughPct": 11.2,
+      "dwellThroughPct": 10.2,
       "wrongWay": 0,
-      "extraTurnBacks": 40,
+      "wrongBranch": 2,
+      "extraTurnBacks": 35,
       "when": "2026-11-14"
     },
     "2026-11-13T04-00-00-000Z": {
@@ -75,10 +79,11 @@
     },
     "2026-11-14T09-00-00-018Z": {
       "frozenPct": 0.55,
-      "lag90S": 6.3,
-      "dwellThroughPct": 19.9,
+      "lag90S": 6.29,
+      "dwellThroughPct": 18,
       "wrongWay": 0,
-      "extraTurnBacks": 88,
+      "wrongBranch": 2,
+      "extraTurnBacks": 76,
       "when": "2026-11-14"
     }
   }

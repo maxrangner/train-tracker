@@ -16,6 +16,7 @@ import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
 import { createRoutes } from '../src/routes.js';
 import { readPositions } from './lib/records.mjs';
+import { branchCounter } from './lib/branch.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
@@ -81,7 +82,11 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
     .map(a => ({ key: `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}`, sig: a.LocationSignature,
       activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
 }
-const drawnTrains = createTrains({ net, routes, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
+// Wrong branches (tools/lib/branch.mjs): judged against an oracle that knows the whole recording.
+const oracle = createTrains({ net, keepMs: Infinity });
+const branches = branchCounter(oracle);
+if (net && !PLAIN) { let ko = 0; for (let T = recs[0].got; ko < recs.length; T += 1000) { const batch = []; while (ko < recs.length && recs[ko].got <= T) batch.push(recs[ko++]); if (batch.length) oracle.update(batch, T); } }
+const drawnTrains = createTrains({ net, routes, onWayChange: branches.onWayChange, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
 const truth = createTrains({ net, routes });   // with the routes, on purpose: the truth then knows a platform stop sent only as repeats
 // How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
 const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
@@ -256,6 +261,9 @@ const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
+// Wrong branches inside the replayed time.
+const wrongIn = branches.events.filter(e => e.time >= start - DELAY && e.time < end);
+if (argv.includes('--why')) for (const e of wrongIn.slice(0, 12)) console.log('wrong branch', e.id, new Date(e.time).toISOString().slice(11, 19), `slid ${e.slide} m, ${e.side} m sideways, at ${e.lat.toFixed(5)},${e.lon.toFixed(5)}`);
 // --json: the main numbers as one JSON line (tools/check.mjs reads it), instead of the text below.
 if (argv.includes('--json')) {
   const r = (v, d = 2) => (Number.isFinite(v) ? Number(v.toFixed(d)) : null);
@@ -269,6 +277,7 @@ if (argv.includes('--json')) {
     returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
     dwellStops: dwells.length, dwellThroughPct: dwells.length ? r(100 * dwellThrough / dwells.length, 1) : null,
     pastStop: s.pastStop, pastStopBounced: s.pastStopBounced, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
+    wrongBranch: wrongIn.length, wrongBranch300: wrongIn.filter(e => e.slide >= 300).length,
   }));
   process.exit(0);
 }
@@ -282,6 +291,7 @@ console.log(`stops of 0.5 s or more while really moving: ${s.freezes.length} (${
   `length median ${f1(q(s.freezes, 0.5))} s, 90 % ${f1(q(s.freezes, 0.9))} s`);
 console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}`);
 console.log(`wrong way (drawn against the real train, both moving, 3 s or more, not at its own turn): ${s.wrongWay}`);
+console.log(`wrong branch (drawn onto another track before its next report, slid ${30} m or more sideways): ${wrongIn.length}, of them 300 m or more ${wrongIn.filter(e => e.slide >= 300).length}`);
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
