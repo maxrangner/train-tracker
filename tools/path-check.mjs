@@ -1,7 +1,8 @@
 // How many pieces of the trains' paths are drawn straight (no way found along the tracks)?
 // Builds, with the page's own code (src/path.js), the path of every train in a recording's timetable: its places in
 // order, as far as the recording holds them. A piece between two places over 300 m apart with no track points in
-// between is "straight". Works offline (no key).
+// between is "straight", unless the line between them lies on a track all the way (a dead-straight track has no
+// points in between: Arlanda S - Arlanda N; until 2026-11-14 those were counted, 186 of 367). Works offline (no key).
 // Run: node tools/path-check.mjs [data/timetable-<name>.jsonl] [--train 2003] [--list] [--json]
 //   --train N  only this train (its board number or its operational number), with its straight pieces named
 //   --list     name every straight piece
@@ -33,6 +34,12 @@ for (const line of readFileSync(file, 'utf8').split('\n')) {
   trains.get(key).rows.set(`${a.LocationSignature}|${a.ActivityType}|${a.AdvertisedTimeAtLocation}`, a);
 }
 
+// A piece drawn as one straight line is really straight (off the rails) when a point a quarter, half or three
+// quarters along it is more than 2 m from every track (tested over eight recordings: 0 wrong, 0 missed).
+const offTrack = (path, i) => {
+  const a = path.coords[path.at[i - 1]], b = path.coords[path.at[i]];
+  return [0.25, 0.5, 0.75].some(t => !net.snap({ lon: a[0] + (b[0] - a[0]) * t, lat: a[1] + (b[1] - a[1]) * t }, null, 2));
+};
 let pieces = 0, straight = 0, count = 0;
 const named = [], times = [];
 for (const [key, tr] of trains) {
@@ -54,7 +61,7 @@ for (const [key, tr] of trains) {
   times.push(performance.now() - t0);
   for (let i = 1; i < places.length; i++) {
     pieces++;
-    if (path.at[i] - path.at[i - 1] <= 1 && metres(places[i - 1], places[i]) > 300) {
+    if (path.at[i] - path.at[i - 1] <= 1 && metres(places[i - 1], places[i]) > 300 && offTrack(path, i)) {
       straight++;
       named.push(`${key}: ${places[i - 1].name} → ${places[i].name}`);
     }
