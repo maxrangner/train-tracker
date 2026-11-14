@@ -2,7 +2,7 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
-import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
+import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
@@ -61,8 +61,8 @@ const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 
-// A train further out is a circle, or (Settings → Train symbol, Max 2026-11-13) a triangle pointing the way it goes,
-// in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
+// A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
+// (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
 const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
 const TRIANGLE = [[32, 3], [49, 61], [15, 61]];   // in a 64 x 64 picture, pointing up (north), slim so the tip shows; middle (32, 32)
 const triangles = () => settings.trainSymbol === 'triangle';
@@ -86,8 +86,11 @@ function addTriangles(map) {
 }
 
 // A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
-const dotOpacity = sel => ['step', ['zoom'],
-  ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1], modelZoom(), 0];
+// With Settings → Trains → Symbol there are no models: the dots show at every zoom.
+const dotOpacity = sel => {
+  const seen = ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1];
+  return symbolOnly() ? seen : ['step', ['zoom'], seen, modelZoom(), 0];
+};
 
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
@@ -480,7 +483,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         { layers: ['train-labels'] }).find(f => f.properties.id);
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
-      const onModel = map.getZoom() >= modelZoom() ? modelAt(e.point) : null;
+      const onModel = modelsAt(map.getZoom()) ? modelAt(e.point) : null;
       if (onModel) return onTrainTap?.(onModel);
       const pad = isToy() && map.getZoom() >= modelZoom() ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
@@ -966,7 +969,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
       const tri = triangles();
-      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${map.getZoom() >= modelZoom() ? ' model' : ''}${tri ? ' tri' : ''}`;
+      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
       const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';

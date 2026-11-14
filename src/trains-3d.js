@@ -12,7 +12,13 @@ import { settings } from './settings.js';
 // Toy or real-size trains, the toy size and from which zoom: src/settings.js, read when used. A change of toy or real
 // makes the map add a new layer (map.js), whose trains are then built the new way.
 export const isToy = () => settings.trainStyle === 'toy';
+// 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14: "Add toggle to never show 3d model.
+// Only dot/triangle"). modelZoom() stays 13 then: the close-in labels and station names change over there as with
+// real-size trains.
+export const symbolOnly = () => settings.trainStyle === 'symbol';
 export const modelZoom = () => (isToy() ? settings.toyZoom : 13);
+// Whether trains are drawn as models at this zoom.
+export const modelsAt = zoom => !symbolOnly() && zoom >= modelZoom();
 const EARTH = 40075016.686;   // metres round the equator
 
 // Kept for as long as the page lives, shared by every layer made (a settings change makes a new layer, map.js):
@@ -170,7 +176,7 @@ export function createTrainLayer({ getTrains, along = null }) {
     render(gl, args) {
       const zoom = map.getZoom();
       const wanted = new Set();
-      if (zoom >= modelZoom()) {
+      if (modelsAt(zoom)) {
         // Everything is placed relative to the middle of the view, in metres: x east, y north, z up.
         const origin = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
         const s = origin.meterInMercatorCoordinateUnits();
