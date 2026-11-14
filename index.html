@@ -180,6 +180,10 @@
     .st-day text { fill: var(--muted); font-size: 8px; }
     .st-legend { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
     .st-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+    .st-legend .st-key:not(:first-child) { margin-left: 6px; }
+    /* A section's title with its toggle (now / today) on the right. */
+    .st-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+    .st-seg button { font-size: 13px; padding: 3px 9px; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }

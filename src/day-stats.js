@@ -33,17 +33,19 @@ export function createDayStats({ now }) {
   let day = null, midnight = 0;
   let rows = new Map();               // "2042|Cst" -> packed
   let counts = [];                    // per hour: [on time, +3-5, +6 or more]
+  let perStation = new Map();         // station signature -> arrivals today (the stats page's busiest stations, today)
   let asOf = null;                    // when the last good ask was sent
   let lastTry = 0, asking = false, failed = false, loaded = false;
 
   function reset(d) {
-    day = d; midnight = swedishMidnight(now()); rows = new Map(); asOf = null;
+    day = d; midnight = swedishMidnight(now()); rows = new Map(); asOf = null; perStation = new Map();
     counts = Array.from({ length: HOURS }, () => [0, 0, 0]);
   }
   function put(id, v) {
     const old = rows.get(id);
     if (old === v) return;
     if (old !== undefined) counts[hourOf(old)][groupOf(old)]--;
+    else { const sig = id.slice(id.indexOf('|') + 1); perStation.set(sig, (perStation.get(sig) ?? 0) + 1); }
     rows.set(id, v);
     counts[hourOf(v)][groupOf(v)]++;
   }
@@ -102,11 +104,12 @@ export function createDayStats({ now }) {
     },
     // Once a second while the page is open: again every 5 minutes.
     tick() { if (now() - lastTry >= EVERY_MS) ask(); },
-    // For drawing: { state: 'loading' | 'failed' | 'ok', hours: counts up to this hour, now: the hour now }.
+    // For drawing: { state: 'loading' | 'failed' | 'ok', hours: counts up to this hour, now: the hour now,
+    // stations: Map signature -> arrivals today }.
     view() {
       const hourNow = Math.min(HOURS - 1, Math.floor((now() - midnight) / 3600000));
       const state = asOf !== null ? 'ok' : failed ? 'failed' : 'loading';
-      return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow };
+      return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow, stations: perStation };
     },
   };
 }
