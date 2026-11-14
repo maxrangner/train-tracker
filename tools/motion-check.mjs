@@ -138,7 +138,8 @@ for (let T = start; T < end; T += STEP) {
     if (sim) console.log(new Date(t).toISOString().slice(11, 19), `sim s ${Math.round(sim.s)} v ${(sim.v * 3.6).toFixed(0)} km/h, target ${sim.target} ${Math.round(sim.gap)} m ahead of it, silent ${Math.round(sim.silentFor)} s${sim.syncing ? ' SYNC' : ''}; truth ${Math.round(tru?.kmh)} km/h`);
   }
   for (const d of drawn) {
-    const tru = truth.reportedAt(d.id, t);
+    // (a train drawn further behind, src/trains.js NO_GPS_EXTRA_MS, is compared at the moment it is drawn for)
+    const tru = truth.reportedAt(d.id, t - (d.extra ?? 0));
     if (!tru) continue;
     s.all++;
     if (d.stale) s.stale++;
