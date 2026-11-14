@@ -15,6 +15,14 @@
 import { polyAt } from './rail-net.js';
 
 export const DELAY_MS = 25 * 1000;
+// A train seen only at fixed places along the track (its last NO_GPS_RUN reports without a speed) is drawn NO_GPS_EXTRA_MS
+// further behind: the next place (a median 25 s on) has then usually come in, so the drawing knows where the train went
+// instead of guessing, waiting or fast-forwarding (Max, 2026-11-14, changing his "20-30 s behind" for these trains;
+// night of 2026-11-14, docs: night-1114/night.md: with the clock and speed-0 fixes, 90 % within 6.1 -> 5.6 s in the
+// rush hours, the night 11.0 -> 7.6 s). It slides there and back at NO_GPS_SLIDE (0.5 s per second).
+const NO_GPS_RUN = 3;
+const NO_GPS_EXTRA_MS = 15 * 1000;
+const NO_GPS_SLIDE = 0.5;
 const MAX_AGE_MS = 15 * 60 * 1000;   // a report older than this is not shown; a train silent this long is removed
 const KEEP_MS = 3 * 60 * 1000;       // history kept per train
 const JUMP_KMH = 300;                // a position jump: faster than this between two reports...
@@ -231,7 +239,8 @@ export function createTrains(options = {}) {
   // Stale: shown grey. The connection is lost, or this train has sent nothing for SILENT_MS (a repeat of its last
   // position counts as something: it is still talking). t is the drawing moment (DELAY_MS behind).
   const silentLimit = tr => (ROUTES?.knows(tr.latest.id) ? SILENT_MS : SILENT_NO_ROUTE_MS);
-  const staleAt = (tr, t) => halted || t + DELAY_MS - tr.heard > silentLimit(tr);
+  // (t is the common drawing moment; a train drawn further behind is judged at its own moment, t - tr.extra.)
+  const staleAt = (tr, t) => halted || t - (tr.extra ?? 0) + DELAY_MS - tr.heard > silentLimit(tr);
   // What the target needs past the last report: whether it stood still, is stale, and its timetable (trackAhead).
   // Dwell: a train whose last report is at a planned stop (within 300 m), and not moving fast there, stands until it
   // is reported leaving, a new position shows it moved, or 2 minutes after its planned departure (+ delay) or its
@@ -487,9 +496,13 @@ export function createTrains(options = {}) {
     const dt = (t - from) / 1000, n = Math.max(1, Math.ceil(dt / 0.1));
     for (const tr of byId.values()) {
       if (!tr.hist.length) continue;
-      if (!tr.sim || dt > 5) { step(tr, t, dt); continue; }
+      // A train seen only at fixed places is drawn further behind (NO_GPS_EXTRA_MS), sliding there and back.
+      const goal = tr.nullRun >= NO_GPS_RUN ? NO_GPS_EXTRA_MS : 0;
+      tr.extra = tr.extra === undefined || dt > 5 ? goal : tr.extra + Math.max(-1000 * NO_GPS_SLIDE * dt, Math.min(1000 * NO_GPS_SLIDE * dt, goal - tr.extra));
+      const ex = tr.extra;
+      if (!tr.sim || dt > 5) { step(tr, t - ex, dt); continue; }
       if (dt === 0) continue;
-      for (let i = 1; i <= n; i++) step(tr, from + (t - from) * i / n, dt / n);
+      for (let i = 1; i <= n; i++) step(tr, from + (t - from) * i / n - ex, dt / n);
     }
   }
 
@@ -551,8 +564,9 @@ export function createTrains(options = {}) {
     stateOf(id, t) {
       const tr = byId.get(id);
       if (!tr?.hist.length) return null;
-      const h = tr.hist, past = t >= h[h.length - 1].time ? aheadOf(tr, t) : { cap: Infinity, o: {} };
-      const T = targetAt(h, t, past.cap, past.o);
+      const own = t - (tr.extra ?? 0);   // the moment this train is drawn for
+      const h = tr.hist, past = own >= h[h.length - 1].time ? aheadOf(tr, own) : { cap: Infinity, o: {} };
+      const T = targetAt(h, own, past.cap, past.o);
       return { stale: staleAt(tr, t), silentFor: (t + DELAY_MS - tr.heard) / 1000,
         gpsSilentFor: (t + DELAY_MS - tr.latest.time) / 1000, syncing: tr.sim?.syncing ?? false, mode: T.mode,
         waitingFor: T.mode === 'waiting' ? tr.ext?.sig ?? null : null, lastPassing: ROUTES?.lastPassing(id) ?? null };
@@ -614,6 +628,7 @@ export function createTrains(options = {}) {
           byId.set(r.id, tr);
         }
         tr.latest = r;
+        tr.nullRun = r.speed === null || r.speed === undefined ? (tr.nullRun ?? 0) + 1 : 0;   // reports in a row without a speed
         tr.heard = Math.max(tr.heard, r.time);
         const before = tr.hist.length;
         take(tr, r);
@@ -679,7 +694,8 @@ export function createTrains(options = {}) {
       for (const tr of byId.values()) {
         if (!tr.sim) continue;
         const p = drawn(tr);
-        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t), v: tr.sim.v });
+        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t), v: tr.sim.v,
+          extra: tr.extra ?? 0 });
       }
       return out;
     },
@@ -699,12 +715,13 @@ export function createTrains(options = {}) {
     simOf(id) {
       const tr = byId.get(id), sim = tr?.sim;
       if (!sim) return null;
-      const silentFor = simTime === null ? 0 : (simTime - tr.hist[tr.hist.length - 1].time) / 1000;
+      const simT = simTime === null ? null : simTime - (tr.extra ?? 0);   // the moment this train is drawn for
+      const silentFor = simT === null ? 0 : (simT - tr.hist[tr.hist.length - 1].time) / 1000;
       const ext = tr.ext?.last === tr.hist[tr.hist.length - 1] ? tr.ext : null;
-      const past = simTime >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simTime) : { cap: Infinity, o: {} };
-      const T = targetAt(tr.hist, simTime, past.cap, past.o);
+      const past = simT >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simT) : { cap: Infinity, o: {} };
+      const T = targetAt(tr.hist, simT, past.cap, past.o);
       // bounced: when this train's data last went back on itself (a report against its way, a spike, a dropped jump).
-      const out = { stopAt: ext?.stopAt ?? Infinity, assumed: tr.assumed?.size ?? 0, longSilent: longSilent(tr, simTime), bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
+      const out = { stopAt: ext?.stopAt ?? Infinity, assumed: tr.assumed?.size ?? 0, longSilent: longSilent(tr, simT), bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
         mode: T.mode, stood: tr.stood,
         // for checks: the fading offset (m) and the direction the track ahead is laid in

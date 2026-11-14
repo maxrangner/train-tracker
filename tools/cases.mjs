@@ -88,7 +88,7 @@ function run(c) {
     const t = T - DELAY_MS;
     if (T % 1000 < STEP) drawn.prune(T);
     const d = drawn.placedAt(t).find(x => x.id === key);
-    const sim = drawn.simOf(key), tru = truth.reportedAt(key, t);
+    const sim = drawn.simOf(key), tru = truth.reportedAt(key, t - (d?.extra ?? 0));   // at the moment it is drawn for
     if (t < from || !d || !sim) continue;
     if (TRACE && T % 2000 < STEP) console.log(`  ${new Date(t).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm' })} drawn ${(sim.v * 3.6).toFixed(0)} km/h ` +
       `(${sim.target}${sim.syncing ? ', fast-forward' : ''}) at ${d.lat.toFixed(5)},${d.lon.toFixed(5)}; real ${tru ? `${tru.kmh.toFixed(0)} km/h, ${metres(d, tru).toFixed(0)} m away` : '-'}`);
