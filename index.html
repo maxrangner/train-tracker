@@ -254,7 +254,31 @@
       color: var(--station); will-change: transform;
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
 
-    #panel, #board, #picker {
+    /* Disruptions (src/disruptions.js): the list page opened from the menu (as the stats page), and a disruption's card
+       where a train's panel opens. The dot shows the level: yellow, orange, red (as on the map). */
+    #disruptions-page {
+      position: fixed; z-index: 6;
+      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
+      top: calc(var(--gap) + env(safe-area-inset-top, 0px));
+      max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+      max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    #disruptions-body { overflow: auto; min-height: 0; display: grid; gap: 2px; }
+    .dis-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; font: inherit; font-size: 14px; color: var(--ink);
+      background: none; border: 0; border-bottom: 1px solid var(--line); padding: 8px 2px; cursor: pointer; }
+    .dis-row:hover { background: var(--hover); }
+    .dis-row b { display: block; font-weight: 600; }
+    .dis-sub { display: block; color: var(--muted); font-size: 13px; }
+    .dis-dot { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 50%; margin-top: 4px; border: 1.5px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+    .dis-dot.yellow { background: #d4a017; } .dis-dot.orange { background: #e8701a; } .dis-dot.red { background: #d1242f; }
+    #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 14px; line-height: 1.45; }
+    .dis-source { font-size: 12px; margin: 6px 0 0; }
+    /* A station's own messages (what its monitors show), above its departures. */
+    .board-msgs { display: grid; gap: 4px; margin: 6px 0 2px; max-height: 30%; overflow: auto; }
+    .board-msg { font-size: 13px; white-space: pre-line; padding: 6px 8px; border-radius: 6px; border-left: 3px solid #d4a017; background: var(--hover); }
+
+    #panel, #board, #picker, #disruption {
       position: fixed;
       left: calc(var(--gap) + env(safe-area-inset-left, 0px));
       bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
@@ -363,6 +387,9 @@
       <button class="menu-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu">×</button>
     </div>
     <ul id="search-results" aria-live="polite"></ul>
+    <div class="menu-section" id="disruptions-section" hidden>
+      <button id="open-disruptions" class="menu-link" type="button"><b><span data-t="disruptions">Disruptions</span> <span id="disruptions-count"></span></b><span aria-hidden="true">›</span></button>
+    </div>
     <div class="menu-section">
       <button id="open-settings" class="menu-link" type="button"><b data-t="settings">Settings</b><span aria-hidden="true">›</span></button>
     </div>
@@ -398,17 +425,23 @@
       <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats">×</button></div>
     <div id="stats-body"></div>
   </div>
+  <div id="disruptions-page" class="card" role="dialog" aria-modal="true" aria-labelledby="disruptions-title" hidden>
+    <div class="panel-head"><strong id="disruptions-title" data-t="disruptions">Disruptions</strong>
+      <button class="panel-close" type="button" aria-label="Close disruptions" data-t-aria="closeDisruptions">×</button></div>
+    <div id="disruptions-body"></div>
+  </div>
   <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>
       <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp">×</button></div>
     <div class="help-body" data-lang="en">
       <h3>On the map</h3>
       <ul>
-        <li><b>Trains</b> are drawn where their GPS last put them, moving along the tracks. Everything is about 25 seconds behind, so the movement is smooth.</li>
+        <li><b>Trains</b> are drawn where their GPS last put them, moving along the tracks. Everything is about 25 seconds behind, so the movement is smooth; a train that sends no GPS, only fixed places along the track, about 40 seconds.</li>
         <li>Close in, each train is a model of its company's usual train: <b>compact</b> (bigger than real, easy to see and tap) or <b>realistic</b> (real size), chosen in ☰ → Settings. Further out it is a dot.</li>
         <li><b>The label</b> is the company, then the train number and the minutes off the timetable: <b>2311 (+3)</b> is 3 minutes late, <b>2057 (-2)</b> 2 minutes early.</li>
         <li><b>Dot colours</b>: green on time (up to 2 minutes late), yellow 3–5 minutes late, red 6 or more, grey not known. A faded grey train has sent nothing for a while; it is shown where it was last known.</li>
-        <li><b>Stations</b> are small rings; their names show when you zoom in. The grey lines are Trafikverket's tracks.</li>
+        <li><b>Stations</b> are small rings where the trains stand; their names show when you zoom in. The dark lines are Trafikverket's tracks.</li>
+        <li><b>Disruptions</b> reported to travellers show as a coloured line along the tracks where they are, with a dot: yellow, orange or red for how much traffic is affected. Tap one for Trafikverket's message.</li>
         <li><b>Tilt</b> the map so the trains stand up: two fingers up or down, the right or middle mouse button (it turns round the point under the pointer, or round the followed train), or the ↑ ↓ keys. The compass (top right) turns north up and lays the map flat again.</li>
       </ul>
       <h3>Tap</h3>
@@ -416,11 +449,13 @@
         <li><b>A train</b>: its stops, planned and actual, and its whole path in green (darker where it has already been), its stops as circles. The map follows it: drag to place the train where you want it on the screen (it stays there; dragged off the screen or behind this card, it closes), tap the map to close it. The <b>Following</b> button turns the following off and on.</li>
         <li><b>"3 trains"</b>: trains standing close together share one label; tap it to pick one.</li>
         <li><b>A station</b>: its next departures and arrivals, with new times in red and the track. Tap a row to see that train.</li>
+        <li><b>A disruption</b>: Trafikverket's message, what it affects and until when.</li>
         <li><b>The map</b> anywhere else closes what is open.</li>
       </ul>
       <h3>The menu (☰)</h3>
       <ul>
         <li><b>Search</b> for a train number or a station. A number also finds today's trains that are not running right now.</li>
+        <li><b>Disruptions</b>: the ones in force now, with a message for travellers. A station's own messages show on its board.</li>
         <li><b>Favourites</b>: tap ☆ on a train or a station; they show in the menu when the search field is empty. A starred train is kept by its number, so it works every day.</li>
         <li><b>?</b> (top) opens this help.</li>
       </ul>
@@ -428,18 +463,19 @@
       <ul>
         <li>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database License.</li>
         <li>Map tiles from <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, built on <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>.</li>
-        <li>Train positions, timetables and stations: <a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a>'s open data.</li>
+        <li>Train positions, timetables, stations, tracks and disruptions: <a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a>'s open data.</li>
         <li>Drawn with <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD licence) and <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT licence).</li>
       </ul>
     </div>
     <div class="help-body" data-lang="sv" hidden>
       <h3>På kartan</h3>
       <ul>
-        <li><b>Tågen</b> ritas där deras GPS senast placerade dem och rör sig längs spåren. Allt ligger ungefär 25 sekunder efter, så att rörelsen blir jämn.</li>
+        <li><b>Tågen</b> ritas där deras GPS senast placerade dem och rör sig längs spåren. Allt ligger ungefär 25 sekunder efter, så att rörelsen blir jämn; ett tåg som inte skickar GPS, bara fasta punkter längs spåret, ungefär 40 sekunder.</li>
         <li>På nära håll är varje tåg en modell av bolagets vanliga tåg: <b>kompakt</b> (större än verkligheten, lätt att se och trycka på) eller <b>realistisk</b> (verklig storlek), som du väljer i ☰ → Inställningar. Längre ut är det en prick.</li>
         <li><b>Etiketten</b> är bolaget, sedan tågnumret och minuter från tidtabellen: <b>2311 (+3)</b> är 3 minuter sent, <b>2057 (-2)</b> 2 minuter tidigt.</li>
         <li><b>Prickarnas färger</b>: grön i tid (upp till 2 minuter sent), gul 3–5 minuter sent, röd 6 eller mer, grå okänt. Ett blekt grått tåg har inte skickat något på en stund; det visas där det sågs senast.</li>
-        <li><b>Stationer</b> är små ringar; namnen syns när du zoomar in. De grå linjerna är Trafikverkets spår.</li>
+        <li><b>Stationer</b> är små ringar där tågen stannar; namnen syns när du zoomar in. De mörka linjerna är Trafikverkets spår.</li>
+        <li><b>Störningar</b> som meddelats resenärer visas som en färgad linje längs spåren där de är, med en prick: gul, orange eller röd efter hur mycket trafiken påverkas. Tryck på en för Trafikverkets meddelande.</li>
         <li><b>Luta</b> kartan så att tågen står upp: två fingrar upp eller ner, höger eller mittersta musknappen (den vrider runt punkten under pekaren, eller runt tåget som följs), eller tangenterna ↑ ↓. Kompassen (uppe till höger) vrider norr uppåt och lägger kartan platt igen.</li>
       </ul>
       <h3>Tryck</h3>
@@ -447,11 +483,13 @@
         <li><b>Ett tåg</b>: dess uppehåll, planerade och verkliga tider, och hela sträckan i grönt (mörkare där det redan har kört), med uppehållen som ringar. Kartan följer tåget: dra för att placera tåget där du vill ha det på skärmen (där stannar det; drar du det utanför skärmen eller bakom det här kortet stängs det), tryck på kartan för att stänga det. Knappen <b>Följer</b> slår av och på följandet.</li>
         <li><b>”3 tåg”</b>: tåg som står nära varandra delar en etikett; tryck på den för att välja ett.</li>
         <li><b>En station</b>: nästa avgångar och ankomster, med nya tider i rött och spåret. Tryck på en rad för att se det tåget.</li>
+        <li><b>En störning</b>: Trafikverkets meddelande, vad den påverkar och hur länge.</li>
         <li><b>Kartan</b> någon annanstans stänger det som är öppet.</li>
       </ul>
       <h3>Menyn (☰)</h3>
       <ul>
         <li><b>Sök</b> efter ett tågnummer eller en station. Ett nummer hittar också dagens tåg som inte går just nu.</li>
+        <li><b>Störningar</b>: de som gäller nu och har ett meddelande till resenärer. En stations egna meddelanden syns på dess tavla.</li>
         <li><b>Favoriter</b>: tryck på ☆ vid ett tåg eller en station; de visas i menyn när sökfältet är tomt. Ett stjärnmärkt tåg sparas med sitt nummer, så det fungerar varje dag.</li>
         <li><b>?</b> (överst) öppnar den här hjälpen.</li>
       </ul>
@@ -459,7 +497,7 @@
       <ul>
         <li>Kartdata © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMaps bidragsgivare</a>, tillgänglig under Open Database License.</li>
         <li>Kartrutor från <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, byggda på <a href="https://openmaptiles.org/" target="_blank" rel="noopener">© OpenMapTiles</a>.</li>
-        <li>Tågens positioner, tidtabeller och stationer: <a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverkets</a> öppna data.</li>
+        <li>Tågens positioner, tidtabeller, stationer, spår och störningar: <a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverkets</a> öppna data.</li>
         <li>Ritad med <a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD-licens) och <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT-licens).</li>
       </ul>
     </div>
@@ -467,6 +505,7 @@
   <div id="panel" class="card" hidden></div>
   <div id="board" class="card" hidden></div>
   <div id="picker" class="card" hidden></div>
+  <div id="disruption" class="card" role="dialog" aria-label="Disruption" hidden></div>
   <script>
     // Show any error on screen (phones have no console to look at), and say so if the program never starts.
     (function () {
