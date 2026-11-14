@@ -6,12 +6,18 @@
 //   number of points. Line ends meet on exactly equal numbers; src/rail-net.js finds them again on loading.
 // - Pieces under 5 m are taken out and their ends joined (joinTinyPieces in src/rail-net.js; it was done by the page
 //   at every start).
+// - Overlap pieces are taken out: a line of up to OVERLAP_M with, at both its ends, a meeting point of exactly two
+//   lines that turn back on each other (over 120°). Two lines overlap there and the bit between them points backwards,
+//   so no train "can" pass (Rörstorp 22.5 m, Olskroken 5.8 m, Haga 5.2 m: the only 3 in Sweden; 43 route pieces were
+//   drawn straight because of them; night of 2026-11-14, docs: night-1114/paths.md). The neighbour whose end piece is
+//   shorter has its end moved across, so the two neighbours meet; kept only where they then meet at 30° or less.
 // Run: node tools/rail-net.mjs
 import { readFileSync, writeFileSync, statSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { joinTinyPieces } from '../src/rail-net.js';
 
 const JOIN_M = 2;
+const OVERLAP_M = 60;
 const SIMPLIFY_M = 0.5;
 const src = new URL('../public/rail-trv.geojson', import.meta.url);
 const out = new URL('../public/rail-net.json', import.meta.url);
@@ -118,9 +124,51 @@ for (const c of simple) {
 }
 // Tiny pieces (under 5 m) are taken out and their ends joined here, with the page's own code (src/rail-net.js), so
 // the page loads a network that is ready (`joined`).
-const ready = joinTinyPieces({ scale: 1e5, n, d });
+const joinedTiny = joinTinyPieces({ scale: 1e5, n, d });
+const ready = removeOverlaps(joinedTiny);
 const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: ready.n, d: ready.d });
 writeFileSync(out, json);
+
+// ---- 4. Overlap pieces (see the top) ----
+function removeOverlaps({ n: nn, d: dd }) {
+  const ls = [];
+  let x = 0, y = 0, k = 0;
+  for (const cnt of nn) { const pts = []; for (let i = 0; i < cnt; i++) { x += dd[2 * k]; y += dd[2 * k + 1]; k++; pts.push([x, y]); } ls.push(pts); }
+  const mXY = (a, b) => Math.hypot((b[0] - a[0]) * kx(a[1]), (b[1] - a[1]) * KY);
+  const lineLen = l => { let t = 0; for (let i = 1; i < l.length; i++) t += mXY(l[i - 1], l[i]); return t; };
+  const headXY = (a, b) => (Math.atan2((b[0] - a[0]) * Math.cos(a[1] / 1e5 * R), b[1] - a[1]) / R + 360) % 360;
+  const angle = (a, b) => { const v = Math.abs(a - b) % 360; return v > 180 ? 360 - v : v; };
+  const at = new Map();   // meeting point -> [[line, 0 start / 1 end]]
+  ls.forEach((l, li) => { for (const e of [0, 1]) { const kk = key(e ? l.at(-1) : l[0]); (at.get(kk) ?? at.set(kk, []).get(kk)).push([li, e]); } });
+  const leave = (li, e) => (e ? headXY(ls[li].at(-1), ls[li].at(-2)) : headXY(ls[li][0], ls[li][1]));
+  const turn = (a, b) => angle((leave(...a) + 180) % 360, leave(...b));
+  const kink = new Set();
+  for (const [kk, es] of at) if (es.length === 2 && es[0][0] !== es[1][0] && turn(es[0], es[1]) > 120) kink.add(kk);
+  let removed = 0;
+  ls.forEach((l, li) => {
+    const ka = key(l[0]), kb = key(l.at(-1));
+    if (!kink.has(ka) || !kink.has(kb) || ka === kb) return;
+    const len = lineLen(l);
+    if (len > OVERLAP_M) return;
+    const a = at.get(ka).find(([lj]) => lj !== li), b = at.get(kb).find(([lj]) => lj !== li);
+    if (!a || !b || !ls[a[0]] || !ls[b[0]] || a[0] === b[0]) return;
+    const endSeg = ([lj, e]) => { const L = ls[lj]; return e ? mXY(L.at(-1), L.at(-2)) : mXY(L[0], L[1]); };
+    const moveA = endSeg(a) < endSeg(b) && endSeg(a) > len;
+    const mv = moveA ? a : b, stay = moveA ? b : a;
+    const B = ls[mv[0]], saved = [...(mv[1] ? B.at(-1) : B[0])];
+    const target = moveA ? [...l.at(-1)] : [...l[0]];
+    if (mv[1]) B[B.length - 1] = target; else B[0] = target;
+    if (turn(stay, mv) > 30 || lineLen(B) < 1) { if (mv[1]) B[B.length - 1] = saved; else B[0] = saved; return; }
+    console.log(`overlap piece of ${len.toFixed(1)} m taken out at ${(l[0][1] / 1e5).toFixed(5)},${(l[0][0] / 1e5).toFixed(5)}`);
+    ls[li] = null;
+    removed++;
+  });
+  const n2 = [], d2 = [];
+  let px = 0, py = 0;
+  for (const l of ls) { if (!l) continue; n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } }
+  console.log(`overlap pieces taken out: ${removed}`);
+  return { n: n2, d: d2 };
+}
 
 const before = statSync(src).size;
 const pts = simple.reduce((a, c) => a + c.length, 0), ptsBefore = lines.reduce((a, c) => a + c.length, 0);

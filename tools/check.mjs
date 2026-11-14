@@ -131,6 +131,18 @@ if (REBASE && !skipReplay) {
   console.log(`baseline written: ${BASELINE}`);
 }
 failed += missingCore;
+// Routes drawn straight across (no way along the rails) must be 0 in these recordings' timetables
+// (tools/path-check.mjs; 0 of 73,368 pieces in eight recordings since 2026-11-14, 181 before). Its inputs (the path
+// code, the network) are replay inputs, so it runs when the replay does.
+for (const f of skipReplay ? [] : recordings) {
+  const tt = `data/${f.replace('positions-', 'timetable-')}`;
+  if (!existsSync(tt)) continue;
+  try {
+    const p = JSON.parse(execFileSync('node', ['tools/path-check.mjs', tt, '--json'], { encoding: 'utf8', maxBuffer: 1e8 }).trim().split('\n').at(-1));
+    console.log(`${p.straight ? 'FAIL' : 'ok  '} routes ${f.slice(10, 29)}: ${p.straight} of ${p.pieces} pieces drawn straight (must be 0)`);
+    if (p.straight) failed++;
+  } catch (e) { console.log(`FAIL routes ${f}: ${e.message.split('\n')[0]}`); failed++; }
+}
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
     ` (replay ${Math.round((Date.now() - replayStart) / 1000)} s)`);

@@ -6,6 +6,10 @@
 // journey at once: the shortest way along the rails through all places. Where no way is found with the trains'
 // own turning rule, a sharper turn is allowed (odd junctions in the data); where still none, that piece is a
 // straight line. Measured on 80 rush-hour trains: straight pieces 269 of 2,167 before.
+// Where a piece is still straight after two rounds, a third tries every track up to FAR_M from its two places, each
+// costing FAR_COST metres per metre from the place (the nearest that works wins): some timetable places lie beside the
+// trains' way (Lockarp and Kattarp, 255-370 m; night of 2026-11-14, docs: paths.md). With the 3 faulty pieces taken
+// out of the network (tools/rail-net.mjs) this left 0 straight pieces of 73,368 in eight recordings (181 before).
 
 const R = Math.PI / 180;
 const metres = (a, b) => Math.hypot((b.lon - a.lon) * Math.cos(a.lat * R), b.lat - a.lat) * R * 6371000;
@@ -15,6 +19,22 @@ const SHARP_TURN = 120;   // degrees, the fallback where the trains' own rule fi
 // First up to 6 tracks per place (points 60 m apart round it); next to a piece still straight, up to 30 (points
 // 30 m apart, four rings: big stations such as Stockholm C have dozens of tracks).
 const QUICK = { step: 60, rings: 1, max: 6 }, WIDE = { step: 30, rings: 4, max: 30 };
+const FAR_M = 600, FAR_MAX = 40, FAR_COST = 2;
+
+// Every track within far metres of place p (the point of each line nearest the place), nearest first: the third round.
+function farCandidates(net, p, far, max) {
+  const best = new Map();
+  const k = 111320 * Math.cos(p.lat * R), step = 150, n = Math.ceil(far / step);
+  for (let rx = -n; rx <= n; rx++) for (let ry = -n; ry <= n; ry++) {
+    for (const s of net.snapsNear({ lon: p.lon + rx * step / k, lat: p.lat + ry * step / 110540 }, 200)) {
+      const d = metres(p, s);
+      if (d > far) continue;
+      const o = best.get(s.li);
+      if (!o || d < o.dist) best.set(s.li, { ...s, dist: d, far: true });
+    }
+  }
+  return [...best.values()].sort((a, b) => a.dist - b.dist).slice(0, max);
+}
 
 // The different tracks near place p, nearest first.
 function candidates(net, p, { step, rings, max }) {
@@ -35,12 +55,17 @@ export function pathOf(places, net) {
   const C = places.map(p => (net ? candidates(net, p, QUICK) : []));
   for (let i = 0; i < C.length; i++) if (!C[i].length) C[i] = [null];
   let chosen = choose(places, net, C);
-  // Pieces still straight: try again with more tracks at their two places.
-  const wider = new Set();
-  chosen.forEach((c, i) => { if (i > 0 && !c.poly && net) { wider.add(i - 1); wider.add(i); } });
+  // Pieces still straight: try again with more tracks at their two places; then with tracks further away.
+  const straightAt = () => { const w = new Set(); chosen.forEach((c, i) => { if (i > 0 && !c.poly && net) { w.add(i - 1); w.add(i); } }); return w; };
+  let wider = straightAt();
   if (wider.size) {
     for (const i of wider) { const w = candidates(net, places[i], WIDE); if (w.length) C[i] = w; }
     chosen = choose(places, net, C);
+    wider = straightAt();
+    if (wider.size) {
+      for (const i of wider) { const w = farCandidates(net, places[i], FAR_M, FAR_MAX); if (w.length) C[i] = w; }
+      chosen = choose(places, net, C);
+    }
   }
 
   const coords = [], at = [];
@@ -63,7 +88,9 @@ export function pathOf(places, net) {
 function choose(places, net, C) {
   // best[i][j]: the cheapest way to reach candidate j of place i: { cost, prev, poly }. A straight piece costs a
   // lot more than its length, so a way along the rails is always preferred.
-  const best = [C[0].map(() => ({ cost: 0, prev: -1, poly: null }))];
+  // A track found in the third round costs FAR_COST metres per metre from its place.
+  const pen = q => (q?.far ? FAR_COST * q.dist : 0);
+  const best = [C[0].map(q => ({ cost: pen(q), prev: -1, poly: null }))];
   for (let i = 1; i < places.length; i++) {
     const a = places[i - 1], b = places[i], dist = metres(a, b);
     const maxM = dist * 3 + 3000, straightCost = dist * 4 + 5000;
@@ -81,6 +108,7 @@ function choose(places, net, C) {
         if (!poly) cost = straightCost;
         if (before + cost < pick.cost) pick = { cost: before + cost, prev: k, poly };
       });
+      pick.cost += pen(q);
       return pick;
     }));
   }
