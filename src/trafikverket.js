@@ -239,6 +239,65 @@ export async function fetchDayArrivals(since, changedSince = null) {
   return out;
 }
 
+// ---------- Disruptions ----------
+
+// The disruptions in force now that have a text for travellers (OperativeEvent: Trafikverket's traffic messages,
+// replacing TrainMessage since Sep 2025; night of 2026-11-14, docs: night-1114/messages.md: about 8 at a time, 6-15 kB).
+// An event can have several impacts, each with its own times and its own text: those in force now are kept.
+// [{ id, kind, header, text, since, until (ms or null), level (1 green .. 4 red, Trafikverket's OperatingLevel),
+//    point { lon, lat }, sections: [[sig, ...], ...] (each: from, via..., to: where the disruption is) }]
+// at: the page's clock (ms).
+export async function fetchDisruptions(at) {
+  const now = new Date(at).toISOString();
+  const r = await ask(
+    `<QUERY objecttype="OperativeEvent" namespace="ols.open" schemaversion="1">` +
+    `<FILTER><EQ name="EventState" value="1"/><EXISTS name="TrafficImpact.PublicMessage.Header" value="true"/>` +
+    `<ELEMENTMATCH><GT name="TrafficImpact.EndDateTime" value="${now}"/><LT name="TrafficImpact.StartDateTime" value="${now}"/></ELEMENTMATCH></FILTER>` +
+    ['OperativeEventId', 'EventType.Description', 'Geometry.WGS84', 'EventSection', 'TrafficImpact.StartDateTime',
+      'TrafficImpact.EndDateTime', 'TrafficImpact.PublicMessage.Header', 'TrafficImpact.PublicMessage.Description',
+      'TrafficImpact.PublicMessage.StartDateTime', 'TrafficImpact.PublicMessage.EndDateTime',
+      'TrafficImpact.SelectedSection.OperatingLevel'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+  const out = [];
+  for (const e of r.OperativeEvent ?? []) {
+    const inForce = (from, to) => (!from || Date.parse(from) <= at) && (!to || Date.parse(to) > at);
+    const imps = (e.TrafficImpact ?? []).filter(i => i.PublicMessage?.Header && inForce(i.StartDateTime, i.EndDateTime) &&
+      inForce(i.PublicMessage.StartDateTime, i.PublicMessage.EndDateTime));
+    if (!imps.length) continue;
+    // The event's point is written latitude first (the stations' points the other way round).
+    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(e.Geometry?.WGS84 ?? '');
+    const sig = l => l?.Signature ?? null;
+    const sections = (e.EventSection ?? []).map(s => [sig(s.FromLocation), sig(s.ViaLocation), sig(s.ToLocation)].filter(Boolean)).filter(s => s.length);
+    const ends = imps.map(i => (i.EndDateTime ? Date.parse(i.EndDateTime) : null));
+    out.push({
+      id: e.OperativeEventId, kind: e.EventType?.Description ?? '', header: imps[0].PublicMessage.Header.trim(),
+      text: imps.map(i => i.PublicMessage.Description?.trim()).filter((x, k, a) => x && a.indexOf(x) === k).join('\n\n'),
+      since: Math.min(...imps.map(i => Date.parse(i.StartDateTime))), until: ends.includes(null) ? null : Math.max(...ends),
+      level: Math.max(0, ...imps.flatMap(i => (i.SelectedSection ?? []).map(s => s.OperatingLevel ?? 0))),
+      point: m ? { lat: Number(m[1]), lon: Number(m[2]) } : null, sections,
+    });
+  }
+  return out;
+}
+
+// A station's own messages valid now: what its monitors show (TrainStationMessage; 94 stations had one in the night
+// of 2026-11-14). Test messages are left out, and the same text only once. [{ text, until (ms or null) }]
+export async function fetchStationMessages(sig, at) {
+  const now = new Date(at).toISOString();
+  const r = await ask(
+    `<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
+    `<FILTER><EQ name="LocationCode" value="${sig}"/><EQ name="MediaType" value="Monitor"/>` +
+    `<LT name="StartDateTime" value="${now}"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
+    ['FreeText', 'EndDateTime', 'Status'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+  const seen = new Set(), out = [];
+  for (const m of r.TrainStationMessage ?? []) {
+    const text = String(m.FreeText ?? '').trim();
+    if (!text || /testmeddelande/i.test(text) || seen.has(text)) continue;
+    seen.add(text);
+    out.push({ text, until: m.EndDateTime ? Date.parse(m.EndDateTime) : null });
+  }
+  return out;
+}
+
 // ---------- Stations ----------
 
 // Signature -> { sig, name, lon, lat, advertised } for every station, e.g. "Cst" -> Stockholm C and its place.

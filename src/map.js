@@ -21,10 +21,10 @@ const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' :
 // "Night" dark, rails in warm light; src/map-look.js).
 const colours = dark => (dark
   ? { label: '#ffffff', halo: LOOK.dark.water, station: '#d6deea', ring: '#e8c170', ringFill: LOOK.dark.land, group: '#58a6ff',
-      rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land,
+      rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land, dis: ['#e3b341', '#f0883e', '#ff6b61'], disEdge: LOOK.dark.land, disDash: true,
       casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
   : { label: '#1b1f24', halo: '#ffffff', station: '#33373d', ring: '#33373d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#33373d', railEdge: '#ffffff', railK: 1.25, nameHalo: LOOK.light.land,
+      rail: '#33373d', railEdge: '#ffffff', railK: 1.25, nameHalo: LOOK.light.land, dis: ['#d4a017', '#e8701a', '#d1242f'], disEdge: '#ffffff', disDash: false,
       casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
@@ -92,13 +92,13 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-points', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
 // onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
-export function createMap(container, { onTrainTap, onStationTap, onGroupTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
+export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onDisruptionTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
@@ -212,7 +212,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty() };
+  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty() };
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
@@ -221,6 +221,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
     add('stations');
     add('trains');
+    add('disruptions');
   }
 
   // Our layers, with the colours, model zoom and language as they are now.
@@ -265,6 +266,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-gradient': pathColours().line,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
+    // Disruptions (setDisruptions; Max, 2026-11-14: in the menu and on the map): the stretch where it is, along our
+    // tracks, and a mark at its place, coloured by Trafikverket's level (1-2 yellow, 3 orange, 4 red: its "green"
+    // level 1 is still a disruption with a message for travellers). Over the rails and the open train's route, under
+    // the stations and the trains.
+    const disColour = ['step', ['get', 'level'], C.dis[0], 3, C.dis[1], 4, C.dis[2]];
+    // In the Night look the rails are warm yellow too: there the stretch is dashed, over a dark edge, to tell it apart.
+    map.addLayer({ id: 'disruption-edge', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disDash ? 'visible' : 'none' },
+      paint: { 'line-color': C.disEdge, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
+    map.addLayer({ id: 'disruption-lines', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': C.disDash ? 'butt' : 'round', 'line-join': 'round' },
+      paint: { 'line-color': disColour, 'line-opacity': C.disDash ? 1 : 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 5, 14, 9],
+        ...(C.disDash ? { 'line-dasharray': [1.6, 1] } : {}) } });
+    map.addLayer({ id: 'disruption-points', type: 'circle', source: 'disruptions', filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-color': disColour, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 8, 14, 10],
+        'circle-stroke-color': C.disEdge, 'circle-stroke-width': 2 } });
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
       id: 'station-dots',
@@ -475,6 +492,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         const st = map.queryRenderedFeatures([[e.point.x - sp, e.point.y - sp], [e.point.x + sp, e.point.y + sp]], { layers: ['station-dots', 'station-names'] })
           .reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
         if (st) return onStationTap(st.properties.sig);
+      }
+      // No train or station there: a disruption's mark or stretch?
+      if (!nearest && onDisruptionTap) {
+        const dp = 12;
+        const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-points', 'disruption-lines'] });
+        const hit = dis.find(f => f.layer.id === 'disruption-points') ?? dis[0];
+        if (hit) return onDisruptionTap(hit.properties.id);
       }
       onTrainTap?.(nearest?.properties.id ?? null);
     });
@@ -867,6 +891,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       moveTo(new LngLat(target.lng + following.gap.lng, target.lat + following.gap.lat));
     },
     // The passenger stations: [{ sig, name, lon, lat }].
+    // The disruptions to show (src/disruptions.js): a GeoJSON of their stretches and marks ({ id, level }).
+    async setDisruptions(geojson) {
+      data.disruptions = geojson ?? empty();
+      await ready;
+      if (isReady) map.getSource('disruptions').setData(data.disruptions);
+    },
     async setStations(list) {
       data.stations = { type: 'FeatureCollection', features: list.map(st => ({
         type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };

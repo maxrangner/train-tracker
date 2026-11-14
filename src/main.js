@@ -9,7 +9,8 @@ import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
+import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
@@ -114,11 +115,15 @@ const map = createMap('map', {
   // following"). A tap that only closed the menu does nothing more.
   onTrainTap(id) {
     if (menu.justClosed) return;
-    if (!openTrain(id)) { panel.close(); board.close(); }
+    if (!openTrain(id)) { panel.close(); board.close(); disruptionEl.hidden = true; }
   },
   onStationTap(sig) {
     if (menu.justClosed) return;
     openStation(sig);
+  },
+  onDisruptionTap(id) {
+    if (menu.justClosed) return;
+    openDisruption(id);
   },
   onGroupTap(list) {
     if (menu.justClosed) return;
@@ -136,6 +141,7 @@ const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'
 function showPicker(list) {
   panel.close();
   board.close();
+  disruptionEl.hidden = true;
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
     `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div><ul class="pick-list">` +
@@ -152,12 +158,15 @@ const board = createBoard(document.getElementById('board'), {
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   isStarred: sig => favourites.has('station', sig),
   onStar: sig => favourites.toggle('station', sig),
+  // The station's own messages (live only).
+  messages: !replay && hasKey ? sig => fetchStationMessages(sig, now()) : null,
 });
 async function openStation(sig, { go = false } = {}) {
   const st = stations.get(sig);
   if (!st) return;
   if (panel.openId) panel.close();
   map.unfollow();
+  disruptionEl.hidden = true;
   board.open(st);
   if (go) map.goTo(shownAt(st), 13);   // lands above the board
 }
@@ -176,6 +185,7 @@ function openTrain(id, { go = false } = {}) {
   if (!r) return false;
   board.close();
   pickerEl.hidden = true;
+  disruptionEl.hidden = true;
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
@@ -191,7 +201,7 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; disruptionsPage.hidden = true; } });
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -293,6 +303,8 @@ onSettingChange((key) => {
     if (!statsPage.hidden) drawStats();
     board.relabel();
     pickerEl.hidden = true;
+    if (!disruptionsPage.hidden) drawDisruptions();
+    if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
   }
   if (key === 'boardRows') board.relabel();
   showSettings();
@@ -332,6 +344,62 @@ function openStats() {
 }
 document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
+
+// ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
+const disruptionEl = document.getElementById('disruption');
+const disruptionsPage = document.getElementById('disruptions-page');
+let stationsLoaded;
+const stationsReady = new Promise((resolve) => { stationsLoaded = resolve; });
+let netNow = null;
+netReady.then((n) => { netNow = n; });
+const disruptions = createDisruptions({ load: fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
+  onData({ list, geojson }) {
+    map.setDisruptions(geojson);
+    document.getElementById('disruptions-count').textContent = `(${list.length})`;
+    if (!disruptionsPage.hidden) drawDisruptions();
+    const open = disruptionEl.dataset.id;
+    if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
+  } });
+if (!replay && hasKey) {
+  document.getElementById('disruptions-section').hidden = false;
+  Promise.all([netReady, stationsReady]).then(() => disruptions.start());
+}
+function drawDisruptions() {
+  const list = disruptions.list;
+  document.getElementById('disruptions-body').innerHTML = `<p class="panel-note">${t(list.length ? 'disruptionsNote' : 'noDisruptions')}</p>` +
+    list.map(d => rowHtml(d, stationName, now())).join('');
+  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
+}
+function drawDisruption(id) {
+  const d = disruptions.byId(id);
+  if (!d) return;
+  disruptionEl.dataset.id = id;
+  disruptionEl.innerHTML = cardHtml(d, stationName, now());
+  disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
+}
+// Open a disruption's card where a train's panel sits; go: fly to it.
+function openDisruption(id, { go = false } = {}) {
+  const d = disruptions.byId(id);
+  if (!d) return;
+  if (panel.openId) panel.close();
+  board.close();
+  pickerEl.hidden = true;
+  map.unfollow();
+  drawDisruption(id);
+  disruptionEl.hidden = false;
+  const p = disruptions.placeOf(d);
+  if (go && p) map.goTo(p, 9);
+}
+document.getElementById('open-disruptions').onclick = () => {
+  menu.close();
+  helpEl.hidden = true;
+  settingsPage.hidden = true;
+  statsPage.hidden = true;
+  drawDisruptions();
+  disruptionsPage.hidden = false;
+  disruptionsPage.querySelector('.panel-close').focus();
+};
+disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };
 
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
@@ -374,6 +442,7 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
 
 function gotStations(m) {
   stations = m;
+  stationsLoaded();
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
   stopPlacesReady.then(() => map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null).map(shownAt)));
 }
