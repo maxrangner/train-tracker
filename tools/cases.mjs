@@ -14,6 +14,7 @@
 // Exit code 1 when a case fails that isn't marked knownFailing.
 import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { readPositions } from './lib/records.mjs';
 import { resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -42,17 +43,7 @@ function load(name) {
   if (loaded.has(name)) return loaded.get(name);
   const file = `data/positions-${name}.jsonl`, ttFile = `data/timetable-${name}.jsonl`;
   if (!existsSync(file)) return null;
-  const recs = [];
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!line) continue;
-    const p = JSON.parse(line);
-    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
-    if (!m || !p.Train) continue;
-    recs.push({ id: `${p.Train.OperationalTrainNumber}/${p.Train.OperationalTrainDepartureDate.slice(0, 10)}`,
-      lon: Number(m[1]), lat: Number(m[2]), speed: p.Speed ?? null, bearing: p.Bearing ?? null,
-      time: Date.parse(p.TimeStamp), got: Date.parse(p.got), gone: p.Deleted === true || p.Status?.Active === false });
-  }
-  recs.sort((a, b) => a.got - b.got);
+  const recs = readPositions(file);   // as the page reads them (tools/lib/records.mjs)
   const rows = existsSync(ttFile) ? readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
   const out = { recs, rows };
   loaded.set(name, out);

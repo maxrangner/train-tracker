@@ -262,7 +262,7 @@ export function createTrains(options = {}) {
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dwellOf(tr, t)),
         frozen: t + DELAY_MS - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -584,11 +584,22 @@ export function createTrains(options = {}) {
     // Take in a batch of records. Returns true if anything changed.
     update(records, now = Date.now()) {
       let changed = false;
-      for (const r of records) {
+      for (let r of records) {
         if (r.gone) { changed = byId.delete(r.id) || changed; continue; }
         if (!(r.time > now - MAX_AGE_MS)) continue;            // too old (the stream has sent 2-day-old ones)
         let tr = byId.get(r.id);
         if (tr && tr.latest.time >= r.time) continue;           // not newer than what we have
+        // A report without a speed is a fixed place along the track, not GPS (about 1 report in 4; a third of the
+        // trains send only these). Such a place is often sent again with Speed 0 or 1 while the train runs at full
+        // speed, and that was taken for "it stands": the train was drawn standing, then fast-forwarded at the next
+        // place (20153 near Falkenberg: 250 of 1,800 s fast-forwarding). A speed under 2 km/h at exactly the train's
+        // last no-speed place is no speed (night of 2026-11-14, docs: night-1114/nassjo.md; morning rush: frozen
+        // 0.82 -> 0.61 %, 90 % within 7.36 -> 6.67 s).
+        if (tr?.lastFixed && r.speed !== null && r.speed !== undefined && r.speed < 2 && tr.lastFixed.lon === r.lon && tr.lastFixed.lat === r.lat) {
+          r = { ...r, speed: null };
+          counts.speedAtFixed++;
+        }
+        if (tr && (r.speed === null || r.speed === undefined)) tr.lastFixed = r;
         // The GPS is back: it replaces the passings used shortly before it (their times are only whole minutes).
         // Not an exact repeat of its last position, though: that is a frozen GPS, not a new place (take ignores it),
         // and replacing the passings with nothing would leave the train drawn past where it should wait.

@@ -1,15 +1,19 @@
 // Train positions from Trafikverket: the positions of the last 10 minutes, then every new one live.
 import { follow, hasKey, trainKey } from './trafikverket.js';
+import { reportTime } from './report-time.js';
 
 const RECENT_MS = 10 * 60 * 1000;
 // Only the fields toRecord reads are asked for. The stream is not compressed, and a whole position object is
 // 517 bytes against 316 with these (measured live 2026-11-13: the same 1,083 reports in a minute, 39 % fewer
 // bytes; about 62 -> 38 MB an hour at rush hour). The recorder (tools/collect.mjs) still saves everything.
+// ModifiedTime (Trafikverket's receive time) tells a report stamped by a clock running behind (src/report-time.js);
+// it adds about 13 % (night of 2026-11-14).
 const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDepartureDate', 'Train.AdvertisedTrainNumber',
-  'Position.WGS84', 'TimeStamp', 'Status.Active', 'Bearing', 'Speed', 'Deleted'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
+  'Position.WGS84', 'TimeStamp', 'Status.Active', 'Bearing', 'Speed', 'Deleted', 'ModifiedTime'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 
-// Trafikverket's position object -> our plain record. Null if it has no usable position.
-export function toRecord(p) {
+// Trafikverket's position object -> our plain record. Null if it has no usable position. first: it came in the
+// first answer after starting (a recording says so itself: via 'start').
+export function toRecord(p, first = p?.via === 'start') {
   const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
   if (!m || !p.Train) return null;
   return {
@@ -21,7 +25,7 @@ export function toRecord(p) {
     lat: Number(m[2]),
     speed: p.Speed ?? null,
     bearing: p.Bearing ?? null,
-    time: Date.parse(p.TimeStamp),
+    time: reportTime(p, first),
     gone: p.Deleted === true || p.Status?.Active === false,
   };
 }
@@ -39,8 +43,8 @@ export function startTrainSource({ onRecords, onStatus }) {
         `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
         `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER>${FIELDS}</QUERY>`;
     },
-    onResult: (r) => {
-      const records = (r.TrainPosition ?? []).map(toRecord).filter(Boolean);
+    onResult: (r, { first = false } = {}) => {
+      const records = (r.TrainPosition ?? []).map(p => toRecord(p, first)).filter(Boolean);
       if (records.length) onRecords(records);
     },
     onStatus,

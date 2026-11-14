@@ -74,7 +74,7 @@ const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).si
 // What the replay's result depends on: these files' contents, and the replayed recordings' names and contents
 // (their SHA-256; names and sizes before, so a changed recording of the same size passed as unchanged).
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
-  'tools/motion-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
+  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'src/report-time.js', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
 const stamp = createHash('sha256')
   .update(MODE)
