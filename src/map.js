@@ -758,9 +758,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // focus (Max, 2026-11-13: "when clicking, dragging, then releasing - that should be the new center for the follow
   // ... so that you can reframe how you want it stuck"). Dragging doesn't stop following; a single tap on the map
   // closes the train (main.js). Kept on the screen and above the panel. Nothing else moves when it is let go.
-  // Dragged away, off the screen or behind the panel, the train is let go: it is closed, as by a tap on the map
-  // (Max, 2026-11-13 evening: "if you drag too far from the train it should let it go. Especially if it is off
-  // screen"). LET_GO_PX: how far past the edge its middle must be (0: just past it).
+  // Dragged away, off the screen or behind the panel, the train is let go (Max, 2026-11-13 evening: "if you drag too
+  // far from the train it should let it go. Especially if it is off screen"): the camera stops following it, but it
+  // stays chosen with its card open, "Follow" in the card follows again (Max, 2026-11-14: "Remove the automatic
+  // deselect of a train when scrolling too far away"; until then it was closed). LET_GO_PX: how far past the edge
+  // its middle must be (0: just past it).
   const LET_GO_PX = 0;
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
@@ -772,11 +774,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     if (!p) return;
     const { clientWidth: w, clientHeight: h } = box, at = map.project([p.lon, p.lat]);
     const panelEdge = h - Math.round(h * 0.45) - 10;   // the panel's top (index.html: 45 % high, 10 px from the bottom)
-    if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > panelEdge + LET_GO_PX) {
-      const away = following.onAway;
-      stopFollowing(false);
-      return away?.();
-    }
+    if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > panelEdge + LET_GO_PX) return stopFollowing(true);
     following.focus = { x: Math.max(30, Math.min(w - 30, at.x)), y: Math.max(70, Math.min(panelTop() - 30, at.y)) };
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.gap = null;
@@ -851,12 +849,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
     // Zoom, turn and tilt stay the user's; a drag moves the point the train is held at (above). onEnd() is called
-    // when following stops by itself (the train is gone); onAway() when a drag took the train off the screen or
-    // behind the panel (above).
-    async follow(getPlace, onEnd, onAway) {
+    // when following stops by itself: the train is gone, or a drag took it off the screen or behind the panel (above).
+    async follow(getPlace, onEnd) {
       await ready;
       dragged = false;
-      following = { getPlace, onEnd, onAway, locked: false, focus: defaultFocus(), place: null };
+      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), place: null };
       zoomAroundCenter(true);
       followRotation(true);
       map.setTransformCameraUpdate(holdTrain);

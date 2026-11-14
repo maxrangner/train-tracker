@@ -9,6 +9,7 @@
 //   tapat:<lon>,<lat>  tap the map at a place
 //   tapgroup         tap the first "N trains" label on screen
 //   taptrain         tap the moving train nearest the middle
+//   drag:<dx>,<dy>   drag the map with the mouse by that many pixels
 //   shot:<name>      save <picture-prefix><name>.jpg
 //   json:<js>        run a line in the page and print its result
 import { launch, openMap, sleep, RUSH_HOUR } from './lib/browser.mjs';
@@ -43,6 +44,13 @@ for (const step of steps) {
       const q = m.project(f.geometry.coordinates);
       m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
     });
+  } else if (kind === 'drag') {
+    // A mouse drag from the middle of the map by dx, dy pixels, in 20 small moves.
+    const [dx, dy] = v.split(',').map(Number);
+    const vp = page.viewport(), x = vp.width / 2, y = vp.height / 3;
+    await page.mouse.move(x, y); await page.mouse.down();
+    for (let i = 1; i <= 20; i++) { await page.mouse.move(x + dx * i / 20, y + dy * i / 20); await sleep(16); }
+    await page.mouse.up();
   } else if (kind === 'shot') {
     await page.screenshot({ path: `${prefix}${v}.jpg`, quality: 82 });
     console.log('shot', `${prefix}${v}.jpg`);
