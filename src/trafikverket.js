@@ -38,6 +38,7 @@ export async function ask(queryXml) {
 // Keep a query live: ask once with a stream address, then follow the stream. If the stream breaks, ask again from
 // where it left off; if it keeps breaking, ask every 10 s instead, and try the stream again every 5 minutes.
 // makeQuery({changeId, stream}) returns the <QUERY> xml; onResult(result) gets every answer and stream message.
+// onResult(result, { first }): first is true for the first answer after starting (every object's latest version).
 export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   let lastChangeId = null;
   let es = null;
@@ -69,6 +70,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   async function openStream() {
     if (stopped) return;
     let result;
+    const first = lastChangeId === null;
     try {
       result = await ask(makeQuery({ changeId: lastChangeId, stream: true }));
     } catch (e) {
@@ -76,7 +78,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
     }
     if (stopped) return;   // stopped while the answer was on its way: no new stream
     lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
-    onResult(result);
+    onResult(result, { first });
     const url = result.INFO?.SSEURL;
     if (!url) return streamFailed('no stream address in the answer');
 

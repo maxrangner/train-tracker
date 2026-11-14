@@ -15,6 +15,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
 import { createRoutes } from '../src/routes.js';
+import { readPositions } from './lib/records.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
@@ -25,20 +26,8 @@ const STEP = 100;   // ms between drawing moments
 const file = argv.find(a => a.endsWith('.jsonl')) ??
   'data/' + readdirSync('data').filter(f => f.startsWith('positions-')).sort().at(-1);
 
-// The same reading as src/trains-source.js (not imported: that file needs the page's settings).
-const recs = [];
-for (const line of readFileSync(file, 'utf8').split('\n')) {
-  if (!line) continue;
-  const p = JSON.parse(line);
-  const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
-  if (!m || !p.Train) continue;
-  recs.push({
-    id: `${p.Train.OperationalTrainNumber}/${p.Train.OperationalTrainDepartureDate.slice(0, 10)}`,
-    lon: Number(m[1]), lat: Number(m[2]), speed: p.Speed ?? null, bearing: p.Bearing ?? null,
-    time: Date.parse(p.TimeStamp), got: Date.parse(p.got), gone: p.Deleted === true || p.Status?.Active === false,
-  });
-}
-recs.sort((a, b) => a.got - b.got);
+// The same reading as src/trains-source.js (tools/lib/records.mjs: the same fields and report time).
+const recs = readPositions(file);
 
 const R = Math.PI / 180;
 const metres = (a, b) => {
