@@ -435,10 +435,30 @@ const positionHandlers = {
     if (s.error) console.warn('positions:', s.error);
   },
 };
+let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
-  if (!replay) return startTrainSource(positionHandlers);
+  if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
+});
+
+// Back from the background (another app, a locked phone, another tab) after BACK_MS or more: a phone froze the page,
+// so every train's data is as old as that. Each train is placed where it is now as soon as its next report comes
+// (trains.resume), instead of fast-forwarding there (Max, 2026-11-14, note 3); the live feeds ask again at once; and
+// the "no data" halt waits a minute from now (otherwise every train came back braking, grey, until data came).
+const BACK_MS = 10 * 1000;
+let hiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = now(); return; }
+  if (hiddenAt === null) return;
+  const was = hiddenAt;
+  hiddenAt = null;
+  if (now() - was < BACK_MS) return;
+  trains.resume(was, now());
+  if (lastDataAt !== null) lastDataAt = Math.max(lastDataAt, now());
+  if (trains.halted) trains.setHalted(false);
+  positionsFeed?.restart?.();
+  passingsFeed?.restart?.();
 });
 
 function gotStations(m) {
@@ -457,7 +477,7 @@ function loadStations(tries = 0) {
 }
 if (hasKey && replay) loadStations();
 if (hasKey && !replay) {
-  followPassings({
+  passingsFeed = followPassings({
     onPassings,
     onStatus(s) {
       status.passings = s.mode;
