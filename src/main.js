@@ -42,7 +42,7 @@ const routes = createRoutes();
 trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
-const stats = createStats();   // the stats page's running numbers (src/stats.js)
+const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
 // Today's arrivals for the stats page's graph: asked for only while that page is open (live, with a key).
 const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
@@ -345,6 +345,8 @@ function openStats() {
 }
 document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
+// Taps on the page (its toggles): one listener, as the page is drawn anew every second.
+statsBody.addEventListener('click', (e) => { if (stats.click(e.target)) drawStats(); });
 
 // ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
 const disruptionEl = document.getElementById('disruption');

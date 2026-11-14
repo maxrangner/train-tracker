@@ -35,8 +35,8 @@ try {
       first: document.querySelector('#stats-body .st-big')?.textContent ?? '', bars: document.querySelectorAll('#stats-body .st-bar').length,
       sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count }));
     expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
-    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 7,
-      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 7 sections`);
+    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 8,
+      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 8 sections`);
     await page.click('#stats-page .panel-close');
     await sleep(300);
     expect(await page.evaluate(() => document.getElementById('stats-page').hidden), `${lang}/${theme}: × did not close the stats page`);
