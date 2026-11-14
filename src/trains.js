@@ -23,6 +23,7 @@ export const DELAY_MS = 25 * 1000;
 const NO_GPS_RUN = 3;
 const NO_GPS_EXTRA_MS = 15 * 1000;
 const NO_GPS_SLIDE = 0.5;
+const RESUME_MS = 2 * 60 * 1000;     // back from the background: how long a train waits for a newer report to be placed (resume)
 const MAX_AGE_MS = 15 * 60 * 1000;   // a report older than this is not shown; a train silent this long is removed
 const KEEP_MS = 3 * 60 * 1000;       // history kept per train
 const JUMP_KMH = 300;                // a position jump: faster than this between two reports...
@@ -475,6 +476,19 @@ export function createTrains(options = {}) {
       tr.sim = { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, heading: pointAt(tr, T.s).heading ?? null, jumped: false };
       return;
     }
+    // Back from the background (resume): the train's first report newer than the moment the page was hidden puts it
+    // straight where it is now, rather than fast-forwarding it there (Max, 2026-11-14: "When multi tasking and coming
+    // back to the app it fast forwards almost all trains. Cant it just keep up or update to real time directly?").
+    // A phone freezes a page in the background, so nothing can keep up meanwhile. Until that report comes the train
+    // carries on as before; after RESUME_MS without one the mark lapses.
+    if (tr.resumeAfter !== undefined) {
+      if (h[h.length - 1].time > tr.resumeAfter) {
+        Object.assign(sim, { s: T.s, v: T.v, syncing: false, off: { lon: 0, lat: 0 }, jumped: true });
+        tr.resumeAfter = undefined;
+        return;
+      }
+      if (t > tr.resumeUntil) tr.resumeAfter = undefined;
+    }
     const e = T.s - sim.s;
     // A confirmed jump in the data that the target has passed, a far-off target, or a long pause (a hidden tab):
     // jump there.
@@ -603,6 +617,11 @@ export function createTrains(options = {}) {
     // No data arriving at all (true): every train brakes to a stop and is shown stale. false: back to normal (the
     // trains fast-forward to where their data now says).
     setHalted(on) { halted = on; },
+    // The page was hidden from hiddenAt and is back at backAt (main.js): each train is placed where it is now when its
+    // first newer report comes (step), for up to RESUME_MS. Times on the page's clock (now()).
+    resume(hiddenAt, backAt) {
+      for (const tr of byId.values()) { tr.resumeAfter = hiddenAt; tr.resumeUntil = backAt + RESUME_MS; }
+    },
     get halted() { return halted; },
     // How it stands with train id at drawing moment t: { stale, silentFor (s since its last position or passing),
     // gpsSilentFor (s since its last position), syncing, mode ('gps' between reports, 'coasting', 'coasted out',

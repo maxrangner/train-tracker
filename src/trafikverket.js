@@ -122,7 +122,16 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   }
 
   openStream();
-  return () => { stopped = true; closeStream(); };
+  const stop = () => { stopped = true; closeStream(); };
+  // Back from the background (main.js): a phone froze the page, and the stream may have died without a word. Ask
+  // again from where it left off at once, rather than when the silence timer runs out (up to silentMs later). While
+  // asking every 10 s, or while a stream is being opened, nothing is needed.
+  stop.restart = () => {
+    if (stopped || !es) return;
+    closeStream();
+    openStream();
+  };
+  return stop;
 }
 
 const changeAttrs = ({ changeId, stream }) =>
