@@ -36,6 +36,8 @@ const MARGINS = {
   lag90S: [b => b + 1, '90 % of moments within (s of travel)'],
   dwellThroughPct: [b => b + 2, 'real stops drawn driving through (%)'],
   wrongWay: [b => b + 2, 'drawn against the real train'],
+  // Drawn onto another track before the next report (tools/lib/branch.mjs; since 2026-11-14).
+  wrongBranch: [b => b + Math.max(3, Math.round(0.2 * b)), 'drawn onto a wrong branch'],
   extraTurnBacks: [b => b + Math.max(5, Math.round(0.1 * b)), 'U-turns drawn beyond the data’s own'],
 };
 const ALWAYS = new Set(['pastStop', 'movedAfterStanding', 'offTrack99M']);
@@ -74,7 +76,7 @@ const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).si
 // What the replay's result depends on: these files' contents, and the replayed recordings' names and contents
 // (their SHA-256; names and sizes before, so a changed recording of the same size passed as unchanged).
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
-  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'src/report-time.js', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
+  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'tools/lib/branch.mjs', 'tools/path-check.mjs', 'src/report-time.js', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
 const stamp = createHash('sha256')
   .update(MODE)

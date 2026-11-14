@@ -11,8 +11,12 @@
 //   so no train "can" pass (Rörstorp 22.5 m, Olskroken 5.8 m, Haga 5.2 m: the only 3 in Sweden; 43 route pieces were
 //   drawn straight because of them; night of 2026-11-14, docs: night-1114/paths.md). The neighbour whose end piece is
 //   shorter has its end moved across, so the two neighbours meet; kept only where they then meet at 30° or less.
+// - Each line gets one digit (`c`, a string, one per line) from its link's properties (public/rail-trv-props.json, from
+//   tools/rail-trv.mjs): 3 for a slow (40 km/h or less) or not public track, else 0; plus its traffic direction (0 both
+//   ways, 1 along the line's points, 2 against them). src/rail-net.js makes routes prefer main tracks and the right
+//   track of a double track with it. Without the properties file the network is written without `c`.
 // Run: node tools/rail-net.mjs
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { joinTinyPieces } from '../src/rail-net.js';
 
@@ -23,8 +27,11 @@ const src = new URL('../public/rail-trv.geojson', import.meta.url);
 const out = new URL('../public/rail-net.json', import.meta.url);
 
 const R = Math.PI / 180;
-const lines = JSON.parse(readFileSync(src, 'utf8')).features
-  .map(f => f.geometry.coordinates.map(([lon, lat]) => [Math.round(lon * 1e5), Math.round(lat * 1e5)]));
+const feats = JSON.parse(readFileSync(src, 'utf8')).features;
+const lines = feats.map(f => f.geometry.coordinates.map(([lon, lat]) => [Math.round(lon * 1e5), Math.round(lat * 1e5)]));
+const linkOf = feats.map(f => String(f.properties.id).replace(/^SE/, '').toLowerCase());   // each line's link (carried below)
+const propsFile = new URL('../public/rail-trv-props.json', import.meta.url);
+const props = existsSync(propsFile) ? JSON.parse(readFileSync(propsFile, 'utf8')).links : null;
 const key = p => `${p[0]},${p[1]}`;
 // Flat metres around a latitude, for distances (fine over a few hundred metres).
 const kx = lat => Math.cos(lat / 1e5 * R) * 1.11195;   // metres per 1e-5 degree of longitude
@@ -75,22 +82,23 @@ for (const c of lines) for (const e of [c[0], c[c.length - 1]]) {
   joined++;
 }
 // Split the lines that were joined to (several splits on one line handled in order along it).
-const split = [];
+const split = [], splitLink = [];
+const put = (c, li) => { split.push(c); splitLink.push(linkOf[li]); };
 lines.forEach((c, li) => {
   const at = splits.get(li);
-  if (!at) return split.push(c);
+  if (!at) return put(c, li);
   at.sort((x, y) => x.i - y.i || x.t - y.t);
   let cur = [c[0]], j = 0;
   for (let i = 0; i + 1 < c.length; i++) {
     for (; j < at.length && at[j].i === i; j++) {
       const p = at[j].p;
       if (key(p) !== key(cur[cur.length - 1])) cur.push(p);
-      if (cur.length >= 2) split.push(cur);
+      if (cur.length >= 2) put(cur, li);
       cur = [p];
     }
     if (key(c[i + 1]) !== key(cur[cur.length - 1])) cur.push(c[i + 1]);
   }
-  if (cur.length >= 2) split.push(cur);
+  if (cur.length >= 2) put(cur, li);
 });
 
 // ---- 2. Simplify (Douglas-Peucker), keeping the ends ----
@@ -113,7 +121,11 @@ function simplify(c) {
   }
   return c.filter((_, i) => keep[i]);
 }
-const simple = split.map(simplify).filter(c => c.length >= 2 && !(c.length === 2 && key(c[0]) === key(c[1])));
+const simple = [], simpleLink = [];
+split.forEach((c, i) => {
+  const s = simplify(c);
+  if (s.length >= 2 && !(s.length === 2 && key(s[0]) === key(s[1]))) { simple.push(s); simpleLink.push(splitLink[i]); }
+});
 
 // ---- 3. Save ----
 const n = [], d = [];
@@ -126,7 +138,18 @@ for (const c of simple) {
 // the page loads a network that is ready (`joined`).
 const joinedTiny = joinTinyPieces({ scale: 1e5, n, d });
 const ready = removeOverlaps(joinedTiny);
-const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: ready.n, d: ready.d });
+// Each remaining line's digit (see the top): slow or not public 3, plus the direction.
+let c;
+if (props) {
+  const linkAt = ready.kept.map(i => simpleLink[joinedTiny.kept[i]]);
+  c = linkAt.map((id) => {
+    const [v, a, f] = props[id] ?? [0, 3, 0];
+    return ((v > 0 && v <= 40) || a !== 0 ? 3 : 0) + f;
+  }).join('');
+  const slow = [...c].filter(x => x >= '3').length, oneWay = [...c].filter(x => x % 3 !== 0).length;
+  console.log(`track properties: ${slow} of ${c.length} lines slow or not public, ${oneWay} one-way`);
+} else console.log('no public/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
+const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: ready.n, d: ready.d, ...(c ? { c } : {}) });
 writeFileSync(out, json);
 
 // ---- 4. Overlap pieces (see the top) ----
@@ -163,11 +186,11 @@ function removeOverlaps({ n: nn, d: dd }) {
     ls[li] = null;
     removed++;
   });
-  const n2 = [], d2 = [];
+  const n2 = [], d2 = [], kept = [];
   let px = 0, py = 0;
-  for (const l of ls) { if (!l) continue; n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } }
+  ls.forEach((l, i) => { if (!l) return; kept.push(i); n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } });
   console.log(`overlap pieces taken out: ${removed}`);
-  return { n: n2, d: d2 };
+  return { n: n2, d: d2, kept };
 }
 
 const before = statSync(src).size;

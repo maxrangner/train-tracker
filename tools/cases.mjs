@@ -11,10 +11,13 @@
 //   standsAt: { sig, s }   drawn standing at least s seconds within 300 m of station sig
 //   noSlideWhileStanding: M  the drawn train moves at most M metres in all while the real train stands (GPS wobble
 //                          or a changed path must not slide it about)
+//   noWrongBranch: true    never drawn onto another track than the real train took, before its next report
+//                          (tools/lib/branch.mjs; the train code must call options.onWayChange)
 // Exit code 1 when a case fails that isn't marked knownFailing.
 import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { readPositions } from './lib/records.mjs';
+import { branchCounter } from './lib/branch.mjs';
 import { resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -64,7 +67,10 @@ function run(c) {
   const passings = rows.filter(a => a.TimeAtLocation).map(a => ({ got: Date.parse(a.got), p: { key, station: a.LocationSignature,
     time: Date.parse(a.TimeAtLocation), activity: a.ActivityType,
     minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000) } })).sort((x, y) => x.got - y.got);
-  const drawn = createTrains({ net, routes }), truth = createTrains({ net, routes });   // the truth knows the routes too, on purpose (as in motion-check)
+  // The real way, for wrong branches: the train's whole recording, all of it kept.
+  const oracle = createTrains({ net, keepMs: Infinity }), branches = branchCounter(oracle);
+  if (c.rules.noWrongBranch) for (let i = 0; i < mine.length;) { const T = mine[i].got, batch = []; while (i < mine.length && mine[i].got <= T + 1000) batch.push(mine[i++]); oracle.update(batch, T + 1000); }
+  const drawn = createTrains({ net, routes, onWayChange: branches.onWayChange }), truth = createTrains({ net, routes });   // the truth knows the routes too, on purpose (as in motion-check)
   const gots = rec.recs.map(r => r.got);   // every report's arrival: "no data at all" for 60 s halts every train
   const feed = (trains, upTo, i) => {
     const batch = [];
@@ -108,12 +114,15 @@ function run(c) {
   if (r.noStopWhileMoving !== undefined && m.standMovingMaxS >= r.noStopWhileMoving) bad.push(`drawn standing ${m.standMovingMaxS.toFixed(1)} s while the real train moved (limit ${r.noStopWhileMoving} s)`);
   if (r.maxKmh !== undefined && m.maxKmh > r.maxKmh) bad.push(`drawn at ${Math.round(m.maxKmh)} km/h (limit ${r.maxKmh})`);
   if (r.standsAt && m.standsAtS < r.standsAt.s) bad.push(`drawn standing ${m.standsAtS.toFixed(0)} s at ${r.standsAt.sig} (needs ${r.standsAt.s} s)`);
+  const wrongs = branches.events.filter(e => e.time >= from - DELAY_MS && e.time <= to);
+  if (r.noWrongBranch && wrongs.length) bad.push(`drawn onto a wrong branch: ${wrongs.map(e => `${new Date(e.time).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm' })} slid ${e.slide} m`).join(', ')}`);
   if (r.noSlideWhileStanding !== undefined && m.slideM > r.noSlideWhileStanding) bad.push(`drawn moved ${m.slideM.toFixed(0)} m while the real train stood (from ${m.firstSlide}; limit ${r.noSlideWhileStanding} m)`);
   const said = [
     r.noStopWhileMoving !== undefined && `standing while moving at most ${m.standMovingMaxS.toFixed(1)} s`,
     r.maxKmh !== undefined && `top ${Math.round(m.maxKmh)} km/h`,
     r.standsAt && `stood ${m.standsAtS.toFixed(0)} s at ${r.standsAt.sig}`,
     r.noSlideWhileStanding !== undefined && `moved ${m.slideM.toFixed(0)} m while the real train stood`,
+    r.noWrongBranch && 'no wrong branch',
   ].filter(Boolean).join(', ');
   return { ok: !bad.length, why: bad.join('; '), said };
 }

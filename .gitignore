@@ -13,4 +13,5 @@ node_modules/
 data/
 shots/
 public/rail-*.geojson
+public/rail-trv-props.json
 public/rail-net.json

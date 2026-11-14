@@ -219,6 +219,42 @@
       },
       "seen": "Found in the replay (U-turn hunt, 2026-11-12): GPS wobble at the standing train turned the track ahead round; the drawn train slid ~110 m back and forth at Kallhäll, 18:05.",
       "fixedBy": "trains: a direction needs 20 m of movement (main, 'fix/wrong-way')"
+    },
+    {
+      "id": "8251-gavle",
+      "recording": "2026-11-12T06-00-00-005Z",
+      "train": "8251/2026-11-12",
+      "from": "2026-11-12T07:49:30+01:00",
+      "to": "2026-11-12T07:52:30+01:00",
+      "rules": {
+        "noWrongBranch": true
+      },
+      "seen": "Found in the replay (night of 2026-11-14, wrong-branch count): coming from Strömsbro towards Gävle C the drawn train took the shortest way to a track near the station point, the other side of the yard, and slid about 340 m sideways when its report came (6 trains an hour there).",
+      "fixedBy": "rail-net: main tracks first for the track ahead (night/fixes-1114-main-tracks)"
+    },
+    {
+      "id": "218-glia",
+      "recording": "2026-11-12T06-00-00-005Z",
+      "train": "218/2026-11-12",
+      "from": "2026-11-12T07:05:30+01:00",
+      "to": "2026-11-12T07:08:00+01:00",
+      "rules": {
+        "noWrongBranch": true
+      },
+      "seen": "Found in the replay (night of 2026-11-14): towards Södertälje Syd the drawn train took the commuter line below the main-line station (shorter by about 140 m) and slid about 80 m sideways.",
+      "fixedBy": "rail-net: main tracks first for the track ahead (night/fixes-1114-main-tracks)"
+    },
+    {
+      "id": "1704-triangeln",
+      "recording": "2026-11-12T06-00-00-005Z",
+      "train": "1704/2026-11-12",
+      "from": "2026-11-12T07:03:00+01:00",
+      "to": "2026-11-12T07:08:00+01:00",
+      "rules": {
+        "maxKmh": 250
+      },
+      "seen": "Found in the replay (night of 2026-11-14): a reported passing at Triangeln, 77 m away, was reached only the long way round Malmö (21.8 km) and the drawn train fast-forwarded along it at about 1,000 km/h (346 km/h after the report fixes of the same day; a Pågatåg runs at most 200).",
+      "fixedBy": "trains: a passing is used only when the way to it is at most 1.5 x the straight distance + 2 km (night/fixes-1114-main-tracks)"
     }
   ]
 }
