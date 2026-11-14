@@ -6,6 +6,7 @@ import { createTrainLayer, modelZoom, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
+import { LOOK, restyleBase } from './map-look.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -14,13 +15,19 @@ setWorkerUrl(workerUrl);
 // OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out; in dark their Dark
 // style (Max, 2026-11-12: B, near black, of Dark and Fiord).
 const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
-// Our own colours on the map, light and dark. In dark, labels are white with a black border (Max, 2026-11-12).
+// Our own colours on the map, light and dark. In dark, labels are white with a dark border (Max, 2026-11-12).
 // The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
+// The rails and stations follow the map's look (Max, 2026-11-14: "Paper" light, dark rails with a white edge;
+// "Night" dark, rails in warm light; src/map-look.js).
 const colours = dark => (dark
-  ? { label: '#ffffff', halo: '#000000', station: '#ffffff', ring: '#e6edf3', ringFill: '#161b22', group: '#58a6ff',
-      rail: '#7d8590', casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
-  : { label: '#1b1f24', halo: '#ffffff', station: '#3d444d', ring: '#3d444d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#6e7781', casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
+  ? { label: '#ffffff', halo: LOOK.dark.water, station: '#d6deea', ring: '#e8c170', ringFill: LOOK.dark.land, group: '#58a6ff',
+      rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land,
+      casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
+  : { label: '#1b1f24', halo: '#ffffff', station: '#33373d', ring: '#33373d', ringFill: '#ffffff', group: '#1f6feb',
+      rail: '#33373d', railEdge: '#ffffff', railK: 1.25, nameHalo: LOOK.light.land,
+      casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
+// The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
+const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
 // 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
@@ -85,7 +92,7 @@ const dotOpacity = sel => ['step', ['zoom'],
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -229,7 +236,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
     map.addLayer({ id: 'sweden-mask', type: 'fill', source: 'sweden-mask', filter: ['==', ['get', 'kind'], 'mask'],
       paint: { 'fill-color': sea, 'fill-antialias': false } }, firstName);
     namesOnlyInSweden();
-    // Rail lines first, so they sit under the trains.
+    // Rail lines first, so they sit under the trains. In the light look a white edge under them (the Paper look).
+    if (C.railEdge) {
+      map.addLayer({ id: 'rail-edge', type: 'line', source: 'rail-trv',
+        layout: { visibility: shownRail === 'trv' ? 'visible' : 'none', 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': C.railEdge, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0, 8, 2.6, 10, 3.6, 13, 4.6, 16, 5.4] } });
+    }
     for (const id of Object.keys(RAIL_SOURCES)) {
       map.addLayer({
         id: `rail-${id}`,
@@ -238,7 +250,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         layout: { visibility: id === shownRail ? 'visible' : 'none', 'line-cap': 'round', 'line-join': 'round' },
         paint: {
           'line-color': C.rail,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 8, 1.2, 14, 3],
+          'line-width': railWidth(C.railK),
         },
       });
     }
@@ -362,7 +374,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
         'text-anchor': 'bottom',
         'text-optional': true,
       },
-      paint: { 'text-color': C.station, 'text-halo-color': C.halo, 'text-halo-width': 1.5 },
+      paint: { 'text-color': C.station, 'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
     });
 
     applySelectionFilters();
@@ -429,6 +441,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
   }
 
   const ready = new Promise(resolve => map.on('load', () => {
+    restyleBase(map, dark);
     addSources();
     addLayers();
 
@@ -940,6 +953,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       shownRail = id;
       if (isReady) for (const key of Object.keys(RAIL_SOURCES))
         map.setLayoutProperty(`rail-${key}`, 'visibility', key === id ? 'visible' : 'none');
+      if (isReady && map.getLayer('rail-edge')) map.setLayoutProperty('rail-edge', 'visibility', id === 'trv' ? 'visible' : 'none');
       if (id && !loaded.has(id) && railData[id]) {
         loaded.add(id);
         railData[id]().then((g) => { data[`rail-${id}`] = g; map.getSource(`rail-${id}`)?.setData(g); })
@@ -968,6 +982,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, get
       dark = want;
       isReady = false;
       map.once('style.load', () => {
+        restyleBase(map, dark);
         removeLayers();
         addSources();
         addLayers();
