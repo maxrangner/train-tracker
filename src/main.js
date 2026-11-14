@@ -46,6 +46,14 @@ const stats = createStats();   // the stats page's running numbers (src/stats.js
 const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
+// Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs; 280 stations measured from the
+// recordings): the map draws its ring and name there, and a flight to it lands there (Max, 2026-11-14; Trafikverket's
+// point is often not at the platform: Bohus 1.3 km off). Everything else (the trains' movement, routes, the dwell
+// rule) keeps Trafikverket's point.
+let stopPlaces = {};
+const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; })
+  .catch(e => console.warn('stop places:', e.message));
+const shownAt = (st) => { const p = stopPlaces[st.sig]; return p ? { ...st, lon: p[0], lat: p[1] } : st; };
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
@@ -151,7 +159,7 @@ async function openStation(sig, { go = false } = {}) {
   if (panel.openId) panel.close();
   map.unfollow();
   board.open(st);
-  if (go) map.goTo(st, 13);   // lands above the board
+  if (go) map.goTo(shownAt(st), 13);   // lands above the board
 }
 
 // A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
@@ -367,7 +375,7 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
 function gotStations(m) {
   stations = m;
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
-  map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null));
+  stopPlacesReady.then(() => map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null).map(shownAt)));
 }
 // The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
 // left the page without station names, search, boards and planned routes until it was loaded again.)
