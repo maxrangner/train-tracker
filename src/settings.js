@@ -6,11 +6,14 @@ const phoneLang = () => (String(globalThis.navigator?.languages?.[0] ?? globalTh
 const DEFAULTS = {
   theme: 'auto',        // 'auto': as the phone is set; 'light'; 'dark' (Max, 2026-11-12)
   language: phoneLang(), // 'sv' or 'en'
-  trainStyle: 'real',   // 'toy': each company's usual train as a toy, bigger than real; 'real': real size
+  trainStyle: 'real',   // 'toy': each company's usual train as a toy, bigger than real; 'real': real size;
+                        // 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14)
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
   toyZoom: 11,          // toys from this zoom in (further out: dots)
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
-  trainSymbol: 'circle', // a train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting)
+  // A train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting; the
+  // triangle the default since 2026-11-14, Max: "make triangles default").
+  trainSymbol: 'triangle',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -31,7 +34,7 @@ const hash = new URLSearchParams(location.hash.slice(1));
 const valid = {
   theme: v => (['auto', 'light', 'dark'].includes(v) ? v : undefined),
   language: v => (['sv', 'en'].includes(v) ? v : undefined),
-  trainStyle: v => (['toy', 'real'].includes(v) ? v : undefined),
+  trainStyle: v => (['toy', 'real', 'symbol'].includes(v) ? v : undefined),
   toySize: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(30, Math.min(150, Number(v))) : undefined),
   toyZoom: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(8, Math.min(16, Number(v))) : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),

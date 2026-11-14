@@ -27,6 +27,7 @@ const EN = {
   trains: 'Trains',
   toys: 'Compact',              // the enlarged trains (Max, 2026-11-12: "compact" and "realistic")
   realSize: 'Realistic',
+  symbolOnly: 'Symbol',
   look: 'Look',
   auto: 'Auto',
   light: 'Light',
@@ -163,6 +164,7 @@ const SV = {
   trains: 'Tåg',
   toys: 'Kompakt',
   realSize: 'Realistisk',
+  symbolOnly: 'Symbol',
   look: 'Utseende',
   auto: 'Auto',
   light: 'Ljust',

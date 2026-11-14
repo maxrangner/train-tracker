@@ -403,16 +403,16 @@
       <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings">×</button></div>
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
-        <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button></div></div>
+        <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
+      <div class="set-section menu-label" data-t="debug">Debug</div>
       <div class="set-row toy-only"><label for="set-toysize" data-t="toySize">Compact size</label>
         <span class="range"><input id="set-toysize" type="range" min="40" max="120" step="10"><output id="set-toysize-out" for="set-toysize"></output></span></div>
       <div class="set-row toy-only"><span data-t="toyZoom">Compact from zoom</span>
         <div class="seg" data-key="toyZoom" role="group" aria-label="Compact from zoom" data-t-aria="toyZoom"><button type="button" data-v="10">10</button><button type="button" data-v="11">11</button><button type="button" data-v="12">12</button><button type="button" data-v="13">13</button></div></div>
-      <div class="set-section menu-label" data-t="debug">Debug</div>
       <div class="set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
       <div class="set-row"><span data-t="trainSymbol">Train symbol</span>
@@ -437,7 +437,7 @@
       <h3>On the map</h3>
       <ul>
         <li><b>Trains</b> are drawn where their GPS last put them, moving along the tracks. Everything is about 25 seconds behind, so the movement is smooth; a train that sends no GPS, only fixed places along the track, about 40 seconds.</li>
-        <li>Close in, each train is a model of its company's usual train: <b>compact</b> (bigger than real, easy to see and tap) or <b>realistic</b> (real size), chosen in ☰ → Settings. Further out it is a dot.</li>
+        <li>Close in, each train is a model of its company's usual train: <b>compact</b> (bigger than real, easy to see and tap) or <b>realistic</b> (real size), chosen in ☰ → Settings. Further out it is a triangle pointing the way it goes. Choose <b>symbol</b> to always see the triangle, never a model.</li>
         <li><b>The label</b> is the company, then the train number and the minutes off the timetable: <b>2311 (+3)</b> is 3 minutes late, <b>2057 (-2)</b> 2 minutes early.</li>
         <li><b>Dot colours</b>: green on time (up to 2 minutes late), yellow 3–5 minutes late, red 6 or more, grey not known. A faded grey train has sent nothing for a while; it is shown where it was last known.</li>
         <li><b>Stations</b> are small rings where the trains stand; their names show when you zoom in. The dark lines are Trafikverket's tracks.</li>
@@ -471,7 +471,7 @@
       <h3>På kartan</h3>
       <ul>
         <li><b>Tågen</b> ritas där deras GPS senast placerade dem och rör sig längs spåren. Allt ligger ungefär 25 sekunder efter, så att rörelsen blir jämn; ett tåg som inte skickar GPS, bara fasta punkter längs spåret, ungefär 40 sekunder.</li>
-        <li>På nära håll är varje tåg en modell av bolagets vanliga tåg: <b>kompakt</b> (större än verkligheten, lätt att se och trycka på) eller <b>realistisk</b> (verklig storlek), som du väljer i ☰ → Inställningar. Längre ut är det en prick.</li>
+        <li>På nära håll är varje tåg en modell av bolagets vanliga tåg: <b>kompakt</b> (större än verkligheten, lätt att se och trycka på) eller <b>realistisk</b> (verklig storlek), som du väljer i ☰ → Inställningar. Längre ut är det en triangel som pekar åt det håll tåget kör. Välj <b>symbol</b> för att alltid se triangeln, aldrig en modell.</li>
         <li><b>Etiketten</b> är bolaget, sedan tågnumret och minuter från tidtabellen: <b>2311 (+3)</b> är 3 minuter sent, <b>2057 (-2)</b> 2 minuter tidigt.</li>
         <li><b>Prickarnas färger</b>: grön i tid (upp till 2 minuter sent), gul 3–5 minuter sent, röd 6 eller mer, grå okänt. Ett blekt grått tåg har inte skickat något på en stund; det visas där det sågs senast.</li>
         <li><b>Stationer</b> är små ringar där tågen stannar; namnen syns när du zoomar in. De mörka linjerna är Trafikverkets spår.</li>
