@@ -15,6 +15,9 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
   // train key -> { rows: Map, locs (ordered, built on demand), until, delay (minutes), passed: { sig, time, activity } }
   const byKey = new Map();
   const snaps = new Map();   // signature -> the station's place on the track (or null)
+  // Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs): signature -> { lon, lat }.
+  let stopPlaces = new Map();
+  const stopSnaps = new Map();   // signature -> the stopping place on the track (or null)
   const entry = (key) => {
     let e = byKey.get(key);
     if (!e) byKey.set(key, e = { rows: new Map(), locs: null, until: 0, delay: 0, passed: null });
@@ -50,10 +53,34 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     }
     return snaps.get(sig);
   }
+  // The measured stopping place on the track, or null (not measured, or no track within 50 m of it).
+  function stopSnap(sig) {
+    if (!stopSnaps.has(sig)) {
+      const p = stopPlaces.get(sig);
+      stopSnaps.set(sig, p && net ? net.snap(p, null, 50) : null);
+    }
+    return stopSnaps.get(sig);
+  }
+  // Where the dwell rule looks for a station: its stopping place where that is over FAR_STOP_M from Trafikverket's point
+  // (28 stations, 2026-11-14: a train standing at Bohus's platform is 1.3 km from "Bohus" and wasn't seen as at its
+  // stop), else the point (Max, 2026-11-14, point 5 B; docs: night-1114/plan-5b.md).
+  const FAR_STOP_M = 200;
+  function dwellPlace(sig) {
+    const st = stations.get(sig), p = stopPlaces.get(sig);
+    return st && p && metres(p, st) > FAR_STOP_M ? p : st;
+  }
 
   return {
     setStations(map) { stations = map; snaps.clear(); tracks.clear(); },
-    setNet(n) { net = n; snaps.clear(); tracks.clear(); },
+    setNet(n) { net = n; snaps.clear(); tracks.clear(); stopSnaps.clear(); },
+    // places: { signature: [lon, lat, ...] } (public/stop-places.json's `places`).
+    setStopPlaces(places) {
+      stopPlaces = new Map(Object.entries(places ?? {}).map(([sig, p]) => [sig, { lon: p[0], lat: p[1] }]));
+      stopSnaps.clear();
+    },
+    stopSnap,
+    // Whether the train's timetable has a planned stop (an arrival) at this location.
+    stopsAt(key, sig) { const e = byKey.get(key); return Boolean(e && locsOf(e).some(l => l.sig === sig && l.stop)); },
     // rows: [{ key (trainKey), sig, activity ('Ankomst' / 'Avgang'), planned (ms) }]
     add(rows) {
       for (const r of rows) {
@@ -83,7 +110,7 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       if (!e || !place) return null;
       let best = null, bestD = 300;
       for (const l of locsOf(e)) {
-        const st = stations.get(l.sig);
+        const st = dwellPlace(l.sig);
         if (!st || l.arr === null || l.dep === null) continue;
         const d = metres(place, st);
         if (d < bestD) { bestD = d; best = l; }
@@ -161,7 +188,8 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       const snap = placeOf(pick.sig);
       if (!snap) return null;
       const planned = pick.arr ?? pick.dep;
-      return { sig: pick.sig, stop: pick.stop, snap, snaps: placesOf(pick.sig), eta: planned === null ? null : planned + e.delay * 60000 };
+      return { sig: pick.sig, stop: pick.stop, snap, snaps: placesOf(pick.sig), eta: planned === null ? null : planned + e.delay * 60000,
+        stopSnap: pick.stop ? stopSnap(pick.sig) : null };
     },
   };
 }

@@ -49,10 +49,11 @@ let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
 // Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs; 280 stations measured from the
 // recordings): the map draws its ring and name there, and a flight to it lands there (Max, 2026-11-14; Trafikverket's
-// point is often not at the platform: Bohus 1.3 km off). Everything else (the trains' movement, routes, the dwell
-// rule) keeps Trafikverket's point.
+// point is often not at the platform: Bohus 1.3 km off). The movement uses it too (src/routes.js setStopPlaces, Max
+// 2026-11-14, point 5 B): a train seen only at fixed places waits there for its stop, and the dwell rule looks there at
+// the stations where it is over 200 m from the point. Everything else keeps Trafikverket's point.
 let stopPlaces = {};
-const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; })
+const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; routes.setStopPlaces(stopPlaces); })
   .catch(e => console.warn('stop places:', e.message));
 const shownAt = (st) => { const p = stopPlaces[st.sig]; return p ? { ...st, lon: p[0], lat: p[1] } : st; };
 
@@ -532,6 +533,7 @@ function statusLine(st, noData) {
   if (st.mode === 'stood') return quiet ? t('stoodStill', quiet, passed) : '';
   if (st.mode === 'waiting' && st.lastPassing?.sig === st.waitingFor && st.lastPassing.activity === 'Ankomst')
     return t('atStation', q, stationName(st.waitingFor), clock(st.lastPassing.time));
+  if (st.mode === 'waiting' && st.waitingAt) return t('waitingAt', q, stationName(st.waitingFor), passed);
   if (st.mode === 'waiting') return t('waitingBefore', q, stationName(st.waitingFor), passed);
   if (st.mode === 'timetable') return t('byTimetable', q, passed);
   if (st.mode === 'coasted out') return t('stoppedLastSeen', q, passed);
