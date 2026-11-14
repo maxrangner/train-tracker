@@ -25,7 +25,10 @@ for (const step of steps) {
   const [kind, ...rest] = step.split(':');
   const v = rest.join(':');
   if (kind === 'wait') await sleep(Number(v));
-  else if (kind === 'click') await page.click(v);
+  else if (kind === 'click') {
+    // (A page drawn anew every second, the stats page, can replace the element between finding and tapping it.)
+    for (let i = 0; ; i++) { try { await page.click(v); break; } catch (e) { if (i >= 3 || !/detached/i.test(e.message)) throw e; await sleep(100); } }
+  }
   else if (kind === 'type') await page.keyboard.type(v, { delay: 60 });
   else if (kind === 'tapat') {
     const [lon, lat] = v.split(',').map(Number);

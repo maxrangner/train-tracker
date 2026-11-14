@@ -7,6 +7,7 @@ import { lateClass, label } from './lateness.js';
 import { styleFor } from './brands.js';
 import { STAND_MS } from './trains.js';
 import { swedishDay } from './clock.js';
+import { KINDS, kindOf } from './train-kinds.js';
 
 const RATE_MS = 60 * 1000;          // positions per second and their age: over the last minute
 const BUSY_MS = 15 * 60 * 1000;     // busiest station: trains passing in the last 15 minutes
@@ -162,15 +163,27 @@ export function createStats({ keep = true } = {}) {
       for (const x of frame) { if (x.stale) continue; if (x.v >= STAND_MS) moving++; else standing++; }
       out.push(`<p class="st-big">${t('stMoving', num(d.count), num(moving), num(standing), num(Math.max(0, d.count - moving - standing)))}</p>`);
 
-      // 1: companies
-      const byBrand = new Map();
-      for (const r of reports) { const b = lateness.brand(r.id) ?? ''; byBrand.set(b, (byBrand.get(b) ?? 0) + 1); }
+      // 1: kinds of train and companies. Each row a button: a tap shows only those trains on the map, taps stack
+      // (Max, 2026-11-14; main.js, src/filter.js).
+      const byBrand = new Map(), byKind = new Map();
+      for (const r of reports) {
+        const b = lateness.brand(r.id) ?? '', k = kindOf(b);
+        byBrand.set(b, (byBrand.get(b) ?? 0) + 1);
+        byKind.set(k, (byKind.get(k) ?? 0) + 1);
+      }
+      const bars = (type, list, name, colour) => {
+        const most = Math.max(1, ...list.map(r => r[1]));
+        return `<div class="st-bars">` + list.map(([v, n]) =>
+          `<button type="button" class="st-row" data-filter="${type}" data-v="${esc(v)}" aria-pressed="${Boolean(d.filter?.has(type, v))}">` +
+          `<span class="st-name">${name(v)}</span>` +
+          `<span class="st-track"><span class="st-bar" style="width:${(100 * n / most).toFixed(1)}%;background:${colour(v)}"></span></span>` +
+          `<span class="st-n">${num(n)}</span></button>`).join('') + `</div>`;
+      };
+      const kinds = KINDS.filter(k => byKind.has(k)).map(k => [k, byKind.get(k)]);
+      section(t('stKinds'), bars('kind', kinds, k => (k === 'unknown' ? `<i>${t('stNoCompany')}</i>` : t(`kind_${k}`)),
+        k => (k === 'unknown' ? 'var(--muted)' : 'var(--accent)')) + `<p class="st-hint">${t('stTapToFilter')}</p>`);
       const rows = [...byBrand].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1] - a[1]);
-      const most = Math.max(1, ...rows.map(r => r[1]));
-      section(t('stCompanies'), `<div class="st-bars">` + rows.map(([b, n]) =>
-        `<span class="st-name">${b ? esc(b) : `<i>${t('stNoCompany')}</i>`}</span>` +
-        `<span class="st-track"><span class="st-bar" style="width:${(100 * n / most).toFixed(1)}%;background:${b ? brandColour(b) : 'var(--muted)'}"></span></span>` +
-        `<span class="st-n">${num(n)}</span>`).join('') + `</div>`);
+      section(t('stCompanies'), bars('brand', rows, b => (b ? esc(b) : `<i>${t('stNoCompany')}</i>`), b => (b ? brandColour(b) : 'var(--muted)')));
 
       // 2: punctuality: the trains on the map now, and under it today's arrivals per hour (Max, 2026-11-13: together)
       const groups = { ontime: 0, some: 0, late: 0, unknown: 0 };
