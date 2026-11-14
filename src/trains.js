@@ -30,7 +30,14 @@ const JUMP_FAR_M = 2000;             // ...and further than this (report times a
 const STILL_M = 5;                   // a report this close to the last place is the train standing (GPS jitter)
 const COAST_DEFAULT_MS = 30 * 1000;  // with no new position, coast on at the last speed at most this long
 const AHEAD_M = 3000;                // the track ahead worked out for coasting (300 km/h for 30 s is 2.5 km)
-const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop
+const STOP_BEFORE_M = 200;           // a coasting train waits this far before its next planned stop...
+// ...except a train seen only at fixed places (NO_GPS_RUN): it may drive up to the stop's measured stopping place
+// (src/routes.js stopSnap; public/stop-places.json) and wait there, where trains really stand. Its last fixed place is
+// a median 370 m before the platform, and 200 m before the station point is often not where the station is (Bohus:
+// the point is 1.3 km from the platform). Max, 2026-11-14 (point 5 B, docs: night-1114/plan-5b.md): "All rules are
+// removable if it results in a better experience". Trains with GPS keep the 200 m: their own reports show where they
+// stand. STOP_SIDE_M: how far beside the track ahead the stopping place may lie (another platform track) to count.
+const STOP_SIDE_M = 30;
 // A long silence: no new position for this long (Max, 2026-11-12, changing three earlier rules; measured on 18
 // running trains silent 11-29 min: missing from the map 27 % -> 0-1 %, 90 % within 8-9 km -> 4-9 km):
 //   - a train moves on past a planned stop by its timetable once the stop's expected time + 1 minute has passed
@@ -78,6 +85,22 @@ const ahead = (p, h, d) => ({
   lon: p.lon + d * Math.sin(h * R) / (111195 * Math.cos(p.lat * R)),
   lat: p.lat + d * Math.cos(h * R) / 111195,
 });
+
+// How far along polyline poly ({ lon, lat, cum }) the point nearest p lies, when that point is within maxSide metres of
+// p; else null.
+function alongPoly(poly, p, maxSide) {
+  const k = Math.cos(p.lat * R) * 111195, m = 111195;
+  let best = null, bestD = maxSide;
+  for (let i = 1; i < poly.lon.length; i++) {
+    const ax = (poly.lon[i - 1] - p.lon) * k, ay = (poly.lat[i - 1] - p.lat) * m;
+    const bx = (poly.lon[i] - p.lon) * k, by = (poly.lat[i] - p.lat) * m;
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    const f = L2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+    const d = Math.hypot(ax + f * dx, ay + f * dy);
+    if (d <= bestD) { bestD = d; best = poly.cum[i - 1] + f * (poly.cum[i] - poly.cum[i - 1]); }
+  }
+  return best;
+}
 
 // ---------- One train's path: its accepted reports, each with s = metres along the path from the first ----------
 
@@ -159,19 +182,23 @@ export function createTrains(options = {}) {
   function trackAhead(tr, now = 0) {
     const h = tr.hist, last = h[h.length - 1];
     if (!NET || !last.snap) return null;
-    if (tr.ext?.last !== last || now - tr.ext.at > 10000) {
+    const noGps = tr.nullRun >= NO_GPS_RUN;
+    if (tr.ext?.last !== last || now - tr.ext.at > 10000 || tr.ext.noGps !== noGps) {
       const hd = coastHeading(h);
       const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.assumed ? new Set([...(tr.reached ?? []), ...tr.assumed]) : tr.reached) : null;
-      if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig) {
+      if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig || tr.ext.noGps !== noGps) {
         // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
         // straight distance (a far detour to a track that only happens to lie near the station is not the way).
         const straight = toward?.snap ? metres(last, toward.snap) : 0;
         const poly = hd === null || hd === undefined ? null
           : NET.ahead(last.snap, hd, AHEAD_M, toward?.snaps ?? toward?.snap ?? null, Math.min(PASSING_MAX_M, 1.5 * straight + 2000));
         const reached = poly?.towardAt !== undefined;
-        const stopAt = toward?.stop && reached ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
+        // Seen only at fixed places: wait at the stop's stopping place, when the track ahead runs by it.
+        const place = noGps && toward?.stop && toward.stopSnap && poly ? alongPoly(poly, toward.stopSnap, STOP_SIDE_M) : null;
+        const stopAt = place !== null ? last.s + place
+          : toward?.stop && reached ? last.s + Math.max(0, poly.towardAt - STOP_BEFORE_M) : Infinity;
         // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).
-        tr.ext = { last, sig: toward?.sig, poly, stopAt, towardS: reached ? last.s + poly.towardAt : null,
+        tr.ext = { last, sig: toward?.sig, poly, stopAt, atPlace: place !== null, noGps, towardS: reached ? last.s + poly.towardAt : null,
           eta: reached ? toward.eta : null, at: now };
       } else tr.ext.at = now;
     }
@@ -574,7 +601,8 @@ export function createTrains(options = {}) {
       const T = targetAt(h, own, past.cap, past.o);
       return { stale: staleAt(tr, t), silentFor: (t + DELAY_MS - tr.heard) / 1000,
         gpsSilentFor: (t + DELAY_MS - tr.latest.time) / 1000, syncing: tr.sim?.syncing ?? false, mode: T.mode,
-        waitingFor: T.mode === 'waiting' ? tr.ext?.sig ?? null : null, lastPassing: ROUTES?.lastPassing(id) ?? null };
+        waitingFor: T.mode === 'waiting' ? tr.ext?.sig ?? null : null, waitingAt: T.mode === 'waiting' && Boolean(tr.ext?.atPlace),
+        lastPassing: ROUTES?.lastPassing(id) ?? null };
     },
     // Reported station passings [{ key, station, time, activity }]: one at a station ahead of the train, newer than
     // its last report, is used as a report at that station's place (the train really got there). An arrival at a
@@ -584,7 +612,9 @@ export function createTrains(options = {}) {
       for (const p of list) {
         const tr = byId.get(p.key), h = tr?.hist, last = h?.[h.length - 1];
         if (!last?.snap || p.time <= last.time || p.time < tr.latest.time + PASSING_QUIET_MS) continue;
-        const at = ROUTES.placeOf(p.station);
+        // A train seen only at fixed places, at one of its planned stops: at the stopping place, where it waits for this
+        // passing (see STOP_SIDE_M), not at Trafikverket's point (up to 1.3 km off).
+        const at = (tr.nullRun >= NO_GPS_RUN && ROUTES.stopsAt(p.key, p.station) ? ROUTES.stopSnap(p.station) : null) ?? ROUTES.placeOf(p.station);
         if (!at) continue;
         const hd = coastHeading(h);
         const dir = hd === null || hd === undefined ? 0 : angle(last.snap.heading, hd) <= 90 ? +1 : -1;
@@ -730,7 +760,7 @@ export function createTrains(options = {}) {
       const past = simT >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simT) : { cap: Infinity, o: {} };
       const T = targetAt(tr.hist, simT, past.cap, past.o);
       // bounced: when this train's data last went back on itself (a report against its way, a spike, a dropped jump).
-      const out = { stopAt: ext?.stopAt ?? Infinity, assumed: tr.assumed?.size ?? 0, longSilent: longSilent(tr, simT), bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
+      const out = { stopAt: ext?.stopAt ?? Infinity, atPlace: Boolean(ext?.atPlace), noGps: tr.nullRun >= NO_GPS_RUN, assumed: tr.assumed?.size ?? 0, longSilent: longSilent(tr, simT), bounced: tr.bounced ?? -Infinity, pastLast: sim.s - tr.hist[tr.hist.length - 1].s, s: sim.s, v: sim.v, syncing: sim.syncing, jumped: sim.jumped, silentFor, gap: T.s - sim.s,
         lastGap: tr.hist.length > 1 ? (tr.hist[tr.hist.length - 1].time - tr.hist[tr.hist.length - 2].time) / 1000 : null,
         mode: T.mode, stood: tr.stood,
         // for checks: the fading offset (m) and the direction the track ahead is laid in

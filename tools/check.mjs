@@ -39,6 +39,9 @@ const MARGINS = {
   // Drawn onto another track before the next report (tools/lib/branch.mjs; since 2026-11-14).
   wrongBranch: [b => b + Math.max(3, Math.round(0.2 * b)), 'drawn onto a wrong branch'],
   extraTurnBacks: [b => b + Math.max(5, Math.round(0.1 * b)), 'U-turns drawn beyond the data’s own'],
+  // Trains seen only at fixed places, drawn standing at real stops: median metres from where trains really stand
+  // (public/stop-places.json; since 2026-11-14, point 5 B: 186 -> 23 m in the morning rush).
+  standNoGpsMedM: [b => b + Math.max(10, Math.round(0.3 * b)), 'trains without GPS standing at stops, median m from the stopping place'],
 };
 const ALWAYS = new Set(['pastStop', 'movedAfterStanding', 'offTrack99M']);
 const REBASE = process.argv.includes('--rebaseline');

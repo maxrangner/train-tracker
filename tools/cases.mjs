@@ -39,6 +39,7 @@ const stations = new Map(JSON.parse(readFileSync('data/stations.json', 'utf8')).
   const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(st.Geometry?.WGS84 ?? '');
   return [st.LocationSignature, m ? { lon: Number(m[1]), lat: Number(m[2]) } : null];
 }).filter(([, v]) => v));
+const stopPlaces = existsSync('public/stop-places.json') ? JSON.parse(readFileSync('public/stop-places.json', 'utf8')).places : {};
 
 // A recording, read as tools/motion-check.mjs does; kept while its cases run.
 const loaded = new Map();
@@ -61,6 +62,7 @@ function run(c) {
   if (!mine.length) return { ok: false, why: `no reports of ${key}` };
   // The page's planned route and passings, for this train only.
   const routes = createRoutes({ stations, net });
+  routes.setStopPlaces?.(stopPlaces);   // as the page (src/main.js); older code (--src) has none
   const rows = rec.rows.filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation &&
     `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}` === key);
   routes.add(rows.map(a => ({ key, sig: a.LocationSignature, activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
