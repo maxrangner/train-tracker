@@ -65,11 +65,19 @@ function joinParts(train) {
 }
 
 // getTrains() -> [{ id, lon, lat, bearing (compass degrees), brand, stale }] at the moment being drawn.
+// selection() -> { id, colour, faded } for the selected train, or null: a ring on the ground round its model, under it
+// (Max, 2026-11-15: "the ring around the train should be underneath the model, not on top"), as wide as the model is
+// long as drawn, plus RING_MARGIN_PX; RING_PX thick, as the ring further out.
 // along(id, d) -> { lon, lat } d metres along the train's track from its drawn place (+ ahead), or null: each car
 // is set on the track there, so a train bends round a curve (without it, or where it gives null, the train is
 // drawn straight).
-export function createTrainLayer({ getTrains, along = null }) {
+const RING_MARGIN_PX = 8, RING_PX = 2.5;
+export function createTrainLayer({ getTrains, along = null, selection = null }) {
   let map, renderer, scene, camera;
+  // The selected train's ring: a flat ring of radius 1 on the ground, scaled to the model. Its thickness is a share of
+  // the radius, so a new shape is made only when that share changes by half a percent.
+  let ring = null, ringShare = null;
+  const ringPaint = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide });
   const TOY = isToy();   // fixed for this layer
   const shown = new Map();        // id -> { object, brand }
   // Each drawn train's outline on the ground: id -> { lon, lat, bearing, length, width } in metres, the middle at
@@ -156,6 +164,10 @@ export function createTrainLayer({ getTrains, along = null }) {
       const sun = new THREE.DirectionalLight(0xffffff, 2.2);
       sun.position.set(-0.6, -0.8, 1.2);
       scene.add(sun, new THREE.HemisphereLight(0xffffff, 0x8a8f96, 1.3));
+      ring = new THREE.Mesh(new THREE.BufferGeometry(), ringPaint);
+      ring.visible = false;
+      ring.renderOrder = -1;   // before the models; they cover it where they lie over it
+      scene.add(ring);
       renderer = renderers.get(gl);
       if (!renderer) {
         renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
@@ -210,6 +222,23 @@ export function createTrainLayer({ getTrains, along = null }) {
           outlines.set(t.id, { lon: t.lon, lat: t.lat, bearing: t.bearing ?? 0,
             length: entry.object.userData.length * k, width: (templateFor(key).userData.width ?? 3) * k, cars: cars || null });
         }
+
+        // The selected train's ring, on the ground under its model.
+        const sel = selection?.(), o = sel && shown.has(sel.id) ? outlines.get(sel.id) : null;
+        if (o) {
+          const radius = o.length / 2 + RING_MARGIN_PX * metresPerPx;
+          const share = Math.min(0.5, Math.round(RING_PX * metresPerPx / radius * 200) / 200);
+          if (share !== ringShare) {
+            ringShare = share;
+            ring.geometry.dispose();
+            ring.geometry = new THREE.RingGeometry(1 - share, 1, 96);
+          }
+          ring.position.copy(shown.get(sel.id).object.position).setZ(0.05);
+          ring.scale.setScalar(radius);
+          ringPaint.color.set(sel.colour);
+          ringPaint.opacity = sel.faded ? 0.45 : 1;
+          ring.visible = true;
+        } else ring.visible = false;
 
         const toMap = new THREE.Matrix4()
           .makeTranslation(origin.x, origin.y, origin.z)
