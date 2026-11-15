@@ -5,6 +5,7 @@
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
+import { stateHtml } from './state.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { hhmm, now } from './clock.js';
@@ -127,14 +128,14 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     el.hidden = false;
     el.classList.toggle('full', settings.trainCard === 'expanded');   // Settings → Train card
     shown = { train, route: null };
-    el.innerHTML = head(train) + `<p class="panel-note">${t('loadingRoute')}</p>`;
+    el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
 
     let route;
     try {
       route = await fetchRoute(train.operational, train.date);
     } catch (e) {
-      if (openId === train.id) { el.querySelector('.panel-note').textContent = t('routeFailed', e.message); refreshLater(train); }
+      if (openId === train.id) { el.querySelector('.state').outerHTML = stateHtml('error', t('routeFailed', e.message)); refreshLater(train); }
       return;
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
@@ -289,7 +290,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
           `<div class="panel-table tl">${rows}</div>`
-        : `<p class="panel-note">${t('noStops')}</p>`);
+        : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => el.classList.toggle('full');
@@ -313,7 +314,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   function relabel() {
     if (!openId || !shown) return;
     if (shown.route) { draw(shown.train, shown.route, { keepScroll: true }); return; }
-    el.innerHTML = head(shown.train) + `<p class="panel-note">${t('loadingRoute')}</p>`;
+    el.innerHTML = head(shown.train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
   }
 

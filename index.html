@@ -215,8 +215,13 @@
     .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
-    .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 130px + env(safe-area-inset-bottom, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
-      max-width: min(300px, calc(100% - 20px)); padding: 8px 10px; background: var(--bg); color: var(--ink); font-size: 13px; }
+    .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); right: calc(72px + env(safe-area-inset-right, 0px));
+      max-width: min(280px, calc(100% - 90px)); padding: 10px 12px; border-radius: 16px; box-shadow: var(--shadow-s); background: var(--card); color: var(--ink);
+      font: 500 13.5px/1.4 var(--font); animation: note-in .2s ease-out; }
+    @keyframes note-in { from { opacity: 0; transform: translateX(8px); } }
+    .geo-off .maplibregl-ctrl-geolocate { pointer-events: none; }   /* the tap reaches the box, which shows the note */
+    .geo-off .maplibregl-ctrl-geolocate .maplibregl-ctrl-icon { opacity: 0.35;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='29' height='29' fill='%23333' viewBox='0 0 20 20'%3E%3Cpath d='M10 4C9 4 9 5 9 5v.1A5 5 0 0 0 5.1 9H5s-1 0-1 1 1 1 1 1h.1A5 5 0 0 0 9 14.9v.1s0 1 1 1 1-1 1-1v-.1a5 5 0 0 0 3.9-3.9h.1s1 0 1-1-1-1-1-1h-.1A5 5 0 0 0 11 5.1V5s0-1-1-1m0 2.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 1 1 0-7'/%3E%3Ccircle cx='10' cy='10' r='2'/%3E%3C/svg%3E") !important; }
     /* In dark the map's button icons are turned light (above); My location's own blue and red states stay as they are. */
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon,
@@ -251,6 +256,7 @@
     .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; text-align: center;
       font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
       box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); margin-top: 6px; }
+    .sel-train.model .sel-label { top: calc(50% + 16px); }   /* close in: 16 px under the train, as the bubbles (src/map.js LABEL_DY) */
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
 
@@ -414,6 +420,15 @@
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
     #panel.full .panel-more { margin: 6px 0 2px; }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
+    /* Loading, empty and error messages (src/state.js; round 4): a soft tile, centred, with a turning ring, (i) or ⚠. */
+    .state { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 4px; padding: 14px 12px; border-radius: 14px;
+      background: var(--hover); color: var(--muted); font-size: 14px; text-align: center; list-style: none; flex: none; }
+    .state svg { flex: none; }
+    .state.error { color: var(--late); background: var(--t-late-bg); }
+    .state.error span { color: var(--ink); }
+    .spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
     .panel-status { margin: 4px 0 0; color: var(--late); }
     /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
     .panel-tvnotes { margin: 0 0 6px; display: grid; gap: 2px; }

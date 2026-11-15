@@ -210,6 +210,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => { note.hidden = true; }, 5000);
   }
+  // Not on a secure address: the button greyed (round 4: a plain grey icon, not MapLibre's red slash), a tap explains.
+  if (!window.isSecureContext) map.getContainer().classList.add('geo-off');
   geoBox?.addEventListener('pointerdown', () => { if (!window.isSecureContext) showNote(t('noLocation')); }, true);
   geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); });
   // The button's words in the page's language (again after a change of language: relabel).

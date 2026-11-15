@@ -10,6 +10,7 @@
 
 import { t } from './i18n.js';
 import { icon } from './icons.js';
+import { stateEl } from './state.js';
 
 // All matches are listed (Max, 2026-11-12: 8 was too few; "2" matches 66 trains at rush hour); the list scrolls.
 const MAX_ROWS = 200;
@@ -77,15 +78,15 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
         () => onPickTrain({ ...tr, onMap: true })));
     }
     for (const st of stations) list.append(row(`<b>${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
-    if (!digits && !stations.length) list.append(note(t('noStation')));
+    if (!digits && !stations.length) list.append(stateEl('empty', t('noStation'), 'li'));
     if (!digits) return;
 
     // A whole number: also today's timetable, for trains that aren't on the map (not started yet, or done).
-    const waiting = note(t('lookingTimetable'));
+    const waiting = stateEl('loading', t('lookingTimetable'), 'li');
     list.append(waiting);
     timer = setTimeout(async () => {
       let found;
-      try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.textContent = t('timetableFailed', e.message); return; }
+      try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.replaceWith(stateEl('error', t('timetableFailed', e.message), 'li')); return; }
       if (n !== asked) return;
       waiting.remove();
       const onMap = new Set(trains.map(tr => tr.id));
@@ -94,7 +95,7 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
         list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
           () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
       }
-      if (!trains.length && !more.length) list.append(note(t('noTrainToday', q)));
+      if (!trains.length && !more.length) list.append(stateEl('empty', t('noTrainToday', q), 'li'));
     }, 350);
   }
 

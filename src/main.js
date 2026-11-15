@@ -14,6 +14,7 @@ import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS } from './colours.js';
 import { initSheets } from './sheet.js';
 import { logoSvg } from './logo.js';
+import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -483,7 +484,7 @@ if (!replay && hasKey) {
 }
 function drawDisruptions() {
   const list = disruptions.list;
-  document.getElementById('disruptions-body').innerHTML = `<p class="panel-note">${t(list.length ? 'disruptionsNote' : 'noDisruptions')}</p>` +
+  document.getElementById('disruptions-body').innerHTML = (list.length ? `<p class="panel-note">${t('disruptionsNote')}</p>` : stateHtml('empty', t('noDisruptions'))) +
     list.map(d => rowHtml(d, stationName, now())).join('');
   for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
 }

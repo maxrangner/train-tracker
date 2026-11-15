@@ -11,6 +11,7 @@ const MESSAGES_MS = 5 * 60 * 1000;
 
 import { star } from './panel.js';
 import { tagHtml } from './tag.js';
+import { stateHtml } from './state.js';
 import { lateClass } from './lateness.js';
 import { icon } from './icons.js';
 import { hhmm } from './clock.js';
@@ -70,18 +71,18 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
   async function refresh(showLoading = false) {
     if (!station) return;
     const n = ++asked;
-    if (showLoading) frame(`<p class="panel-note">${t('loading')}</p>`);
+    if (showLoading) frame(stateHtml('loading', t('loading')));
     let rows;
     try {
       rows = await load(station.sig, activity);
     } catch (e) {
-      if (n === asked && station) frame(`<p class="panel-note">${esc(t('boardFailed', e.message))}</p>`);
+      if (n === asked && station) frame(stateHtml('error', t('boardFailed', e.message)));
       return;
     }
     if (n !== asked || !station) return;
     const dep = activity === 'Avgang';
     const scroll = el.querySelector('.panel-table')?.scrollTop ?? 0;
-    if (!rows.length) { frame(`<p class="panel-note">${t(dep ? 'noDepartures' : 'noArrivals')}</p>`); return; }
+    if (!rows.length) { frame(stateHtml('empty', t(dep ? 'noDepartures' : 'noArrivals'))); return; }
     // One row per train, in the train card's style (round 4, 2026-11-15): the planned time (the new one under it in
     // the lateness colour), where it goes (or comes from) with its number and kind, the lateness tag, the track.
     const body = rows.map((r, i) => {
