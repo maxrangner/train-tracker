@@ -1,124 +1,105 @@
-// The stats page's small Sweden (Max, 2026-11-15, sketch D: "exactly as your demo"): every train a dot in its
-// lateness colour, a ripple when its new position arrives, the trains furthest north and south joined by a dashed
-// line. A tap picks the closest dot within 16 px and shows a label; a tap on the label opens that train.
-// Drawn on a canvas, and only while it can be seen (the page open, the map scrolled into view, the tab shown), at
-// most 30 times a second; with nothing rippling, only when the numbers change (once a second).
+// The stats page's small Sweden as a heatmap (Max, 2026-11-15: "a heatmap of train density instead", then the soft
+// glow, "a proper color gradient … cold to hot", and "a toggle switching between density and lateness"; the sketch:
+// docs/stats-1115/heat.src.html). Each train adds a soft spot (a Gaussian, sigma 3.8 px); the spots add up on a grid
+// of one screen pixel, and the sum gives the colour:
+//   trains:   cold to hot (src/colours.js HEAT), one train faint (~0.3), full at about 10 trains close together;
+//   lateness: the app's lateness colours, green -> yellow -> red by the average of the trains there (those whose
+//             lateness is known), brighter where more trains run.
+// Worked out once a second, and only while the map can be seen (the page open, scrolled into view, the tab shown).
 import OUTLINE from './sweden-outline.json';
+import { HEAT, LATE } from './colours.js';
 import { t } from './i18n.js';
-import { tagHtml } from './tag.js';
 
 const LON0 = 10.4, LON1 = 24.4, LAT0 = 55.0, LAT1 = 69.2, KX = Math.cos(62 * Math.PI / 180);
-const H = 290, W = Math.round(H * (LON1 - LON0) * KX / (LAT1 - LAT0));
-const RIPPLE_MS = 1200, FRAME_MS = 33, PICK_PX = 16;
-const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export const MAP_H = 290, MAP_W = Math.round(MAP_H * (LON1 - LON0) * KX / (LAT1 - LAT0));
+const SIG = 3.8, R = 10, FULL = 10;
+const SCORE = { ontime: 0, some: 0.5, late: 1 };   // lateness as 0..1 (not known: left out of the colour)
+const KERNEL = [];
+for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+  const w = Math.exp(-(dx * dx + dy * dy) / (2 * SIG * SIG));
+  if (w > 0.01) KERNEL.push(dx, dy, w);
+}
+const rgb = c => { const v = parseInt(c.slice(1), 16); return [v >> 16 & 255, v >> 8 & 255, v & 255]; };
+const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const ramp = (x, stops) => { const f = Math.min(0.999, Math.max(0, x)) * (stops.length - 1), i = Math.floor(f); return mix(stops[i], stops[i + 1], f - i); };
+const dark = () => document.documentElement.dataset.theme === 'dark';
+// The legend's gradient for the trains view, as CSS.
+export const heatGradient = () => `linear-gradient(90deg, ${HEAT[dark() ? 'dark' : 'light'].join(', ')})`;
 
-// describe(id): { number, brand, minutes } of a train; open(id): open it on the map.
-export function createSwedenMap({ describe, open }) {
+let mode = 'trains';   // 'trains' or 'lateness': kept while the app is open (not stored)
+export const heatMode = () => mode;
+
+export function createSwedenMap() {
   const box = document.createElement('div');
   box.className = 'st-se-map';
   const cv = document.createElement('canvas');
   cv.setAttribute('role', 'img');
   box.append(cv);
-  const dpr = Math.min(2, devicePixelRatio || 1);
+  const W = MAP_W, H = MAP_H, dpr = Math.min(2, devicePixelRatio || 1);
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = `${W}px`; cv.style.height = `${H}px`;
   const ctx = cv.getContext('2d');
+  const grid = document.createElement('canvas'); grid.width = W; grid.height = H;
+  const gctx = grid.getContext('2d');
   const X = lon => (lon - LON0) / (LON1 - LON0) * W, Y = lat => (LAT1 - lat) / (LAT1 - LAT0) * H;
   const land = new Path2D();
   for (const r of OUTLINE) { for (let i = 0; i < r.length; i += 2) (i ? land.lineTo : land.moveTo).call(land, X(r[i]), Y(r[i + 1])); land.closePath(); }
+  const dens = new Float32Array(W * H), lateSum = new Float32Array(W * H), lateW = new Float32Array(W * H);
 
-  let snap = null, pos = new Map(), ripples = [], picked = null, pickEl = null, colours = null;
-  let inView = true, raf = 0, last = 0, dirty = true;
-  new IntersectionObserver(([e]) => { inView = e.isIntersecting; if (inView) wake(); }).observe(cv);
-  document.addEventListener('visibilitychange', () => wake());
-
+  let snap = null, inView = true, dirty = true;
+  new IntersectionObserver(([e]) => { inView = e.isIntersecting; draw(); }).observe(cv);
+  document.addEventListener('visibilitychange', () => draw());
   const visible = () => inView && !document.hidden && cv.isConnected && cv.offsetParent !== null;
-  function wake() { if (!raf && visible()) raf = requestAnimationFrame(frame); }
-  function frame(now) {
-    raf = 0;
-    if (!visible()) return;
-    ripples = ripples.filter(r => now - r.t < RIPPLE_MS);
-    if (dirty || ripples.length) {
-      if (now - last >= FRAME_MS) { draw(now); last = now; dirty = false; }
-      raf = requestAnimationFrame(frame);
+
+  function draw() {
+    if (!dirty || !snap || !visible()) return;
+    dirty = false;
+    const cs = getComputedStyle(document.documentElement), card = cs.getPropertyValue('--card').trim(), line = cs.getPropertyValue('--line').trim();
+    dens.fill(0); lateSum.fill(0); lateW.fill(0);
+    for (const d of snap.dots) {
+      const px = Math.round(X(d.lon)), py = Math.round(Y(d.lat));
+      if (px < -R || py < -R || px >= W + R || py >= H + R) continue;
+      const sc = SCORE[d.late];
+      for (let k = 0; k < KERNEL.length; k += 3) {
+        const x = px + KERNEL[k], y = py + KERNEL[k + 1];
+        if (x < 0 || y < 0 || x >= W || y >= H) continue;
+        const j = y * W + x, w = KERNEL[k + 2];
+        dens[j] += w;
+        if (sc !== undefined) { lateSum[j] += w * sc; lateW[j] += w; }
+      }
     }
-  }
-  function draw(now) {
-    const C = colours;
+    const th = dark() ? 'dark' : 'light', hot = HEAT[th].map(rgb), L = LATE[th];
+    const green = rgb(L.ontime), yellow = rgb(L.some), red = rgb(L.late);
+    const img = gctx.createImageData(W, H), a = img.data;
+    for (let j = 0; j < dens.length; j++) {
+      const d = dens[j];
+      if (d < 0.03) continue;
+      const k = Math.min(1, d / FULL) ** 0.55;
+      let c;
+      if (mode === 'lateness') {
+        const s = lateW[j] > 0.02 ? lateSum[j] / lateW[j] : 0;
+        c = s < 0.5 ? mix(green, yellow, s * 2) : mix(yellow, red, (s - 0.5) * 2);
+      } else c = ramp(k, hot);
+      const o = j * 4;
+      a[o] = c[0]; a[o + 1] = c[1]; a[o + 2] = c[2]; a[o + 3] = Math.round(255 * Math.min(1, 0.06 + k * 0.94));
+    }
+    gctx.putImageData(img, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = C.card; ctx.fill(land);
-    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke(land);
-    if (!snap) return;
-    const pn = snap.north && pos.get(snap.north.id), ps = snap.south && pos.get(snap.south.id);
-    if (pn && ps) {
-      ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(pn.x, pn.y); ctx.lineTo(ps.x, ps.y); ctx.stroke(); ctx.restore();
-    }
-    for (const p of pos.values()) {
-      ctx.globalAlpha = p.stale ? 0.4 : 1;
-      ctx.fillStyle = C[p.late];
-      ctx.beginPath(); ctx.arc(p.x, p.y, 2.3, 0, 7); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    for (const r of ripples) {
-      const p = pos.get(r.id); if (!p) continue;
-      const k = (now - r.t) / RIPPLE_MS;
-      ctx.globalAlpha = (1 - k) * 0.8; ctx.strokeStyle = C[p.late]; ctx.lineWidth = 1.2;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 2.5 + k * 9, 0, 7); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    for (const p of [pn, ps]) if (p) {
-      ctx.fillStyle = C.accent; ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, 7); ctx.fill();
-      ctx.strokeStyle = C.card; ctx.lineWidth = 1.5; ctx.stroke();
-    }
-    const pp = picked && pos.get(picked);
-    if (pp) { ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pp.x, pp.y, 6, 0, 7); ctx.stroke(); }
+    ctx.fillStyle = card; ctx.fill(land);
+    ctx.save(); ctx.clip(land); ctx.imageSmoothingEnabled = true; ctx.drawImage(grid, 0, 0, W, H); ctx.restore();
+    ctx.strokeStyle = line; ctx.lineWidth = 1; ctx.stroke(land);
   }
-  function unpick() { pickEl?.remove(); pickEl = null; picked = null; dirty = true; wake(); }
-  function placePick() {
-    const p = picked && pos.get(picked);
-    if (!p) { if (picked) unpick(); return; }
-    // inside the box: the label's middle kept 8 px from its sides
-    const half = (pickEl.offsetWidth || 80) / 2;
-    pickEl.style.left = `${Math.max(half - 8, Math.min(W + 16 - half + 8, p.x + 8))}px`;
-    pickEl.style.top = `${p.y + 8}px`;
-  }
-  cv.addEventListener('click', (e) => {
-    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-    let best = null, bd = PICK_PX * PICK_PX;
-    for (const [id, p] of pos) { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd) { bd = d; best = id; } }
-    unpick();
-    if (!best) return;
-    const info = describe(best);
-    if (!info) return;
-    picked = best;
-    pickEl = document.createElement('button');
-    pickEl.type = 'button';
-    pickEl.className = 'st-pick';
-    pickEl.innerHTML = `<b>${esc(info.number)}</b> ${info.minutes === null || info.minutes === undefined
-      ? `<span class="tag unknown">${esc(t('stKeyUnknown'))}</span>` : tagHtml(info.minutes)}<small>${esc(info.brand || t('stNoCompany'))} ›</small>`;
-    pickEl.onclick = (ev) => { ev.stopPropagation(); const id = picked; unpick(); open(id); };
-    box.append(pickEl);
-    placePick();
-    dirty = true; wake();
-  });
 
   return {
     el: box,
     // Once a second while the page is open: the stats snapshot (src/stats.js).
     update(s) {
       snap = s;
-      cv.setAttribute('aria-label', t('stMapAria'));
-      const cs = getComputedStyle(document.documentElement), g = k => cs.getPropertyValue(k).trim();
-      colours = { card: g('--card'), line: g('--line'), ink: g('--ink'), accent: g('--accent'),
-        ontime: g('--c-ontime'), some: g('--c-some'), late: g('--c-late'), unknown: g('--c-unknown') };
-      pos = new Map();
-      for (const d of s.dots) if (d.lon >= LON0 - 1 && d.lon <= LON1 + 1) pos.set(d.id, { x: X(d.lon), y: Y(d.lat), late: d.late, stale: d.stale });
-      if (!reduce()) { const now = performance.now(); for (const id of s.arrived) if (pos.has(id)) ripples.push({ id, t: now }); }
-      if (pickEl) placePick();
+      cv.setAttribute('aria-label', t(mode === 'lateness' ? 'stHeatAriaLate' : 'stHeatAria'));
       dirty = true;
-      wake();
+      draw();
     },
+    // The switch beside the map: 'trains' or 'lateness'.
+    setMode(m) { mode = m; dirty = true; if (snap) this.update(snap); },
   };
 }

@@ -15,7 +15,6 @@ const NEAR_KM = 50;                 // "near" a station only when one is this cl
 // Fastest today: each train's highest reported speed today, while the app was open on this phone (Trafikverket keeps
 // only the latest position, so the day can't be asked for). Kept on the phone for the day: the FAST_KEEP fastest.
 const FAST_STORE = 'dayFastest', FAST_KEEP = 20, FAST_SAVE_MS = 30 * 1000;
-const ARRIVED_KEEP = 400;           // trains whose new position arrived since the page last looked (its map's ripples)
 
 const median = list => { const s = [...list].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
 
@@ -68,7 +67,6 @@ export function createStats({ keep = true } = {}) {
     try { localStorage.setItem(FAST_STORE, JSON.stringify({ day: fastDay, list: fastTop(FAST_KEEP) })); } catch { /* kept in memory */ }
   };
   let arrivals = [];                 // [{ at, age }] of positions arrived in the last minute
-  let arrived = [];                  // ids of trains whose position arrived since the last snapshot
   let firstBatch = true;             // the first answer holds the last 10 minutes at once: not "arriving"
   let firstAt = null;                // when positions started arriving live
   let passings = [];                 // [{ key, station, time }] of the last 15 minutes
@@ -90,9 +88,8 @@ export function createStats({ keep = true } = {}) {
     onRecords(records, at) {
       if (firstBatch) { firstBatch = false; return; }
       firstAt ??= at;
-      for (const r of records) { arrivals.push({ at, age: Math.max(0, at - r.time) }); arrived.push(r.id); }
+      for (const r of records) arrivals.push({ at, age: Math.max(0, at - r.time) });
       arrivals = arrivals.filter(a => a.at > at - RATE_MS);
-      if (arrived.length > ARRIVED_KEEP) arrived = arrived.slice(-ARRIVED_KEEP);
     },
     onPassings(list, at) {
       for (const p of list) if (p.time > at - BUSY_MS) passings.push({ key: p.key, station: p.station, time: p.time });
@@ -134,7 +131,7 @@ export function createStats({ keep = true } = {}) {
     // frame (drawn trains), lateness, stations, trainOf(id), at, replay, day (src/day-stats.js view, or null) }.
     snapshot(d) {
       const { reports, frame, lateness, stations, at } = d;
-      // Moving, standing, no news; the dots of the small map; north and south; the reported speeds added up.
+      // Moving, standing, no news; every train's place and lateness for the heatmap; north and south; the reported speeds added up.
       let moving = 0, standing = 0, sumKmh = 0, moved = 0, sumMoved = 0, north = null, south = null;
       const dots = [], fastNow = [];
       for (const x of frame) {
@@ -151,8 +148,6 @@ export function createStats({ keep = true } = {}) {
       }
       const place = x => x && { id: x.id, number: d.trainOf(x.id)?.number ?? '?', near: nearest(stations, x.lon, x.lat) };
       const withNear = list => list.map(x => ({ ...x, near: nearest(stations, x.lon, x.lat) }));
-      arrived = arrived.slice(-ARRIVED_KEEP);
-      const fresh = arrived; arrived = [];
 
       // Kinds of train and companies, punctuality and the most late, minutes late together.
       const byBrand = new Map(), byKind = new Map();
@@ -184,7 +179,7 @@ export function createStats({ keep = true } = {}) {
 
       return {
         at, replay: Boolean(d.replay), count: d.count, moving, standing, grey: Math.max(0, d.count - moving - standing),
-        dots, arrived: fresh, north: place(north), south: place(south), apart: north && south && north !== south ? km(north, south) : null,
+        dots, north: place(north), south: place(south), apart: north && south && north !== south ? km(north, south) : null,
         km: metres / 1000, sumKmh, avg: moved ? sumMoved / moved : null, lateMin,
         cancelled: d.replay ? 'replay' : cancelled.count !== null ? cancelled.count : cancelled.failed ? 'failed' : 'loading',
         groups, worst, day,

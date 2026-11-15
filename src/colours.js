@@ -14,6 +14,12 @@ export const TAG = {
 };
 // Disruptions on the map: yellow, orange, red (by level).
 export const DISRUPTION = { light: ['#d4a017', '#e8701a', '#d1242f'], dark: ['#e3b341', '#f0883e', '#ff6b61'] };
+// The stats page's heatmap, how many trains (Max, 2026-11-15: "cold to hot"): blue, violet, pink, orange; in dark on to
+// yellow (on the light land yellow vanishes, so light stops at orange-red). From few trains to many.
+export const HEAT = {
+  light: ['#3b6fe0', '#7c4dd6', '#d64084', '#f0622e'],
+  dark: ['#4678ff', '#9260f5', '#ec5496', '#ff8e40', '#ffe278'],
+};
 
 // The base map (src/map-look.js uses these with its own finer shades).
 export const MAP = {
