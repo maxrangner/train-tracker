@@ -51,7 +51,9 @@ export const RAIL_SOURCES = {
 // the base map's own sea colour, over the base map, under our rail lines and trains (trains abroad still show), and
 // the base map's names outside Sweden are left out. Panning stays round Sweden.
 const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
-const MAX_BOUNDS = [[-2, 52], [42, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// Wide east-west: on a wide screen at the furthest zoom (Sweden's height decides it) the map can still be panned
+// sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
+const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
 const MASK_URL = '/sweden-mask.json';
 // The zoom's limits (Max, 2026-11-13: the zoom slider shows the absolute minimum and maximum): furthest out, all of
 // Sweden on the screen (worked out for the screen's size); closest in, 19 (a street; the map's tiles end at 14 and
