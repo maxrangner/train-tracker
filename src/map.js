@@ -199,54 +199,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   function setZoomLimits() {
     const cam = map.cameraForBounds(SWEDEN_BOUNDS, { padding: 20, bearing: 0 });
     if (cam && Number.isFinite(cam.zoom)) map.setMinZoom(Math.max(0, Math.min(MAX_ZOOM - 1, cam.zoom)));
-    showZoom(false);
   }
-  // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
-  // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
-  // out 1.5 s after. While it shows it can be grabbed (Max, 2026-11-13 evening): a press or drag on it sets the zoom,
-  // around the screen's middle (while following, the train), and it stays while held. An invisible grip round the
-  // thin bar makes it easy to hit with a finger.
-  const zoomBar = document.createElement('div');
-  zoomBar.className = 'zoom-bar';
-  zoomBar.setAttribute('aria-hidden', 'true');
-  zoomBar.innerHTML = '<div class="zoom-knob"></div><div class="zoom-grip"></div>';
-  map.getContainer().appendChild(zoomBar);
-  const knob = zoomBar.firstChild, grip = zoomBar.lastChild;
-  let zoomBarTimer = null;
-  let held = null;   // the finger or mouse holding the slider
-  function zoomFromY(clientY) {
-    const r = zoomBar.getBoundingClientRect();
-    const f = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    map.jumpTo({ zoom: min + f * (max - min) });
-  }
-  grip.addEventListener('pointerdown', (e) => {
-    if (!zoomBar.classList.contains('shown')) return;
-    e.preventDefault();
-    held = e.pointerId;
-    grip.setPointerCapture(e.pointerId);
-    zoomBar.classList.add('held');
-    zoomFromY(e.clientY);
-  });
-  grip.addEventListener('pointermove', (e) => { if (e.pointerId === held) zoomFromY(e.clientY); });
-  const letGo = (e) => {
-    if (e.pointerId !== held) return;
-    held = null;
-    zoomBar.classList.remove('held');
-    showZoom();   // fades 1.5 s after letting go
-  };
-  grip.addEventListener('pointerup', letGo);
-  grip.addEventListener('pointercancel', letGo);
-  function showZoom(reveal = true) {
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
-    knob.style.top = `${(1 - f) * 100}%`;
-    if (!reveal) return;
-    zoomBar.classList.add('shown');
-    clearTimeout(zoomBarTimer);
-    zoomBarTimer = setTimeout(() => { if (held === null) zoomBar.classList.remove('shown'); }, 1500);
-  }
-  map.on('zoom', () => showZoom());
+  // (The zoom slider was removed 2026-11-15, Max: "Remove the zoom bar".)
   map.on('resize', setZoomLimits);
   setZoomLimits();
 
@@ -388,7 +342,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       paint: { 'icon-opacity': dotOpacity(selected ?? '') },
     });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
-      selection: () => (selected ? { id: selected, colour: dark ? '#e6edf3' : '#1b1f24', faded: selStale } : null) }); map.addLayer(layer3d); }
+      selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
@@ -711,7 +665,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
           n.el.className = `near-label${stale ? ' stale' : ''}`;
           const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
           n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-            ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+            ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = 'near-label group';
           n.el.textContent = text;
@@ -868,6 +822,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let isReady = false;
   let lastDrawnPlace = null;   // drawIfMoved
   let selStale = false;        // the selected train is grey (its ring under the model is faded too)
+  let selLate = 'unknown';     // its lateness: the ring's colour, zoomed in as zoomed out (Max, 2026-11-15)
   let lastTrainsSent = 0;      // setTrains
   ready.then(() => { isReady = true; warmRoute(); });
   // The first route shown made the map prepare its drawing programs for the route's line and stop dots: about 75 ms,
@@ -1100,12 +1055,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const { number, minutes, rest } = splitLabel(props.label);
         const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
         selLabel.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-          ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+          ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
       }
       const tri = triangles();
       const shape = arrow();   // the selected train's symbol: the same shape as the map's
       if (selShape.getAttribute('d') !== shape) selShape.setAttribute('d', shape);
       selStale = Boolean(props.stale);
+      selLate = props.late;
       const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
