@@ -11,6 +11,8 @@ import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS } from './colours.js';
+import { initSheets } from './sheet.js';
+import { logoSvg } from './logo.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -147,6 +149,11 @@ const map = createMap('map', {
 const splash = document.getElementById('splash');
 map.shown.then(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); });
 
+// ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
+const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
+  .map(id => document.getElementById(id)));
+const raise = id => sheets.raise(document.getElementById(id));
+
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
 const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
@@ -159,6 +166,7 @@ function showPicker(list) {
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
     rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(r.label)}</b> <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
+  raise('picker');
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
   for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
 }
@@ -180,6 +188,7 @@ async function openStation(sig, { go = false } = {}) {
   map.unfollow();
   disruptionEl.hidden = true;
   board.open(st);
+  raise('board');
   if (go) map.goTo(shownAt(st), 13);   // lands above the board
 }
 
@@ -189,6 +198,7 @@ function pickTrain(t) {
   if (t.onMap && openTrain(t.id, { go: true })) return;
   map.unfollow();
   panel.open({ id: t.id, operational: t.operational, date: t.date, number: t.number, label: String(t.number) }, { follow: false });
+  raise('panel');
 }
 
 // Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
@@ -199,6 +209,7 @@ function openTrain(id, { go = false } = {}) {
   pickerEl.hidden = true;
   disruptionEl.hidden = true;
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
+  raise('panel');
   const following = follow(id);
   const p = go && placeNow(id);
   if (p) following.then(() => map.goTo(p, 13, true));
@@ -212,7 +223,7 @@ function openTrain(id, { go = false } = {}) {
 const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
+document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; disruptionsPage.hidden = true; } });
 
 // ---- The menu: search for a train number or a station ----
@@ -469,6 +480,7 @@ function openDisruption(id, { go = false } = {}) {
   map.unfollow();
   drawDisruption(id);
   disruptionEl.hidden = false;
+  raise('disruption');
   const p = disruptions.placeOf(d);
   if (go && p) map.goTo(p, 9);
 }
@@ -616,6 +628,8 @@ if (hasKey && !replay) {
 
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
+const statusCount = statusEl.querySelector('.count');
+document.querySelector('.searchbar .logo').innerHTML = logoSvg({ small: true });
 const statusFullEl = document.getElementById('status-full');
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
@@ -650,8 +664,12 @@ setInterval(() => {
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
-  statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
-    (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
+  // The search bar's chip: the count (and the replay's time); the whole short line as its label (2026-11-15).
+  const short = `${t('trainsCount', trains.count)} · ` + (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
+  statusCount.textContent = noData || error ? short : `${trains.count}${replay ? ` · ${hhmm(tNow)}` : ''}`;
+  statusEl.title = short;
+  statusEl.ariaLabel = short;
+  statusEl.classList.toggle('slow', status.positions !== 'live' && !replay);
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
