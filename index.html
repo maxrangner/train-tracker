@@ -250,7 +250,7 @@
     .near-label .m.ontime { color: var(--t-ontime); } .near-label .m.some { color: var(--t-some); }
     .near-label .m.late { color: var(--t-late); } .near-label .m.unknown { color: var(--t-unknown); }
     .near-label.stale { opacity: 0.5; }
-    .near-label.tucked { visibility: hidden; }
+    .near-label.up::before { top: auto; bottom: -4px; border-radius: 0 0 2px 0; }   /* above its train: the pointer down */
     .near-label.group { font-size: 13px; font-weight: 800; color: var(--accent); }
     /* Lateness tags (src/tag.js): the card's heading, boards, the picker. */
     .tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
