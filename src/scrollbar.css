@@ -1,6 +1,8 @@
 /* The page's own thin scrollbar (src/scrollbar.js), with a mouse only. It sits in the sheet's right margin (16 px):
    a 5 px grey slider, no background, the arrows only while the mouse is over the sheet. */
-.sb-own { scrollbar-width: none; padding-right: 6px; }
+/* !important: the scrolling element's own rules (e.g. #stats-body's thin bar and padding) outranked these, so Firefox
+   showed its bar beside ours and the content ran up to it (Max, 2026-11-15). */
+.sb-own { scrollbar-width: none !important; padding-right: 6px !important; }
 .sb-own::-webkit-scrollbar { display: none; }
 .sb { position: absolute; right: 3px; width: 12px; display: flex; flex-direction: column; z-index: 2; }
 .sb[hidden] { display: none; }
