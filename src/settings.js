@@ -1,7 +1,9 @@
-// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&realsize=2&toyclose=6&realclose=2.5&truesize=1&boardrows=20&symbol=triangle&theme=dark&lang=en),
+// The settings, in one place. A value comes from the address (#train=toy&accent=ocean&toysize=80&toyzoom=12&realsize=2&toyclose=6&realclose=2.5&truesize=1&boardrows=20&symbol=triangle&theme=dark&lang=en),
 // else from what was chosen in the menu's Settings (remembered on this phone/browser), else these defaults.
 // Read them where they are used, each time, so a change takes effect without a reload where the code allows it.
 // The phone's language at first start: Swedish if it is Swedish, otherwise English (Max, 2026-11-12).
+import { ACCENTS, DEFAULT_ACCENT, cssVars } from './colours.js';
+
 const phoneLang = () => (String(globalThis.navigator?.languages?.[0] ?? globalThis.navigator?.language ?? '').toLowerCase().startsWith('sv') ? 'sv' : 'en');
 const DEFAULTS = {
   theme: 'auto',        // 'auto': as the phone is set; 'light'; 'dark' (Max, 2026-11-12)
@@ -22,6 +24,9 @@ const DEFAULTS = {
   // triangle the default since 2026-11-14, Max: "make triangles default"); 'dart', a wide arrow with a notch at the
   // back, to try (Max, 2026-11-15: option C of the arrow sketches, under Debug).
   trainSymbol: 'triangle',
+  // The accent colour: buttons, the chosen train's route (Max, 2026-11-15: a setting, a few curated colours;
+  // src/colours.js ACCENTS).
+  accent: DEFAULT_ACCENT,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -37,6 +42,7 @@ const KEYS = {
   trueSize: { param: 'truesize' },
   boardRows: { param: 'boardrows' },
   trainSymbol: { param: 'symbol' },
+  accent: { param: 'accent' },
 };
 const STORE = 'settings';
 
@@ -58,6 +64,7 @@ const valid = {
   trueSize: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
   trainSymbol: v => (['circle', 'triangle', 'dart'].includes(v) ? v : undefined),
+  accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
@@ -71,7 +78,13 @@ const changed = key => { for (const fn of listeners) fn(key); };
 // Dark or light now, as chosen (Auto: as the phone is set now). The page's colours follow <html data-theme>.
 const phoneDark = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
 export const isDark = () => settings.theme === 'dark' || (settings.theme === 'auto' && Boolean(phoneDark?.matches));
-const showTheme = () => { if (typeof document !== 'undefined') document.documentElement.dataset.theme = isDark() ? 'dark' : 'light'; };
+// The page's colours (src/colours.js) as CSS variables on <html>, for the theme and accent now.
+const showTheme = () => {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement, dark = isDark();
+  root.dataset.theme = dark ? 'dark' : 'light';
+  for (const [k, v] of Object.entries(cssVars(dark, settings.accent))) root.style.setProperty(k, v);
+};
 showTheme();
 phoneDark?.addEventListener('change', () => { if (settings.theme === 'auto') { showTheme(); changed('theme'); } });
 
@@ -88,7 +101,7 @@ export function setSetting(key, value) {
     now.delete(KEYS[key].param);
     history.replaceState(null, '', `#${now.toString().replace(/%2F/g, '/')}`);
   }
-  if (key === 'theme') showTheme();
+  if (key === 'theme' || key === 'accent') showTheme();
   changed(key);
   return true;
 }

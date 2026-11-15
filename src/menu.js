@@ -9,6 +9,7 @@
 // favourites() -> { stations: [{ sig, name }], trains: [{ number, company, onMap }] }; onPickFavouriteTrain(number)
 
 import { t } from './i18n.js';
+import { icon } from './icons.js';
 
 // All matches are listed (Max, 2026-11-12: 8 was too few; "2" matches 66 trains at rush hour); the list scrolls.
 const MAX_ROWS = 200;
@@ -107,10 +108,10 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
     }
     list.append(Object.assign(document.createElement('li'), { className: 'menu-label fav-label', textContent: t('favourites') }));
     for (const tr of f.trains) {
-      list.append(row(`<b>★ ${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))}${tr.onMap ? ` · ${t('onMap')}` : ''}</span>`,
+      list.append(row(`<b>${icon('starFilled', 15)} ${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))}${tr.onMap ? ` · ${t('onMap')}` : ''}</span>`,
         () => onPickFavouriteTrain(tr.number)));
     }
-    for (const st of f.stations) list.append(row(`<b>★ ${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
+    for (const st of f.stations) list.append(row(`<b>${icon('starFilled', 15)} ${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
   }
 
   return {

@@ -1,5 +1,6 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 import { fetchRoute } from './trafikverket.js';
+import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { hhmm } from './clock.js';
 
@@ -13,7 +14,7 @@ const off = (planned, at) => {
 };
 
 // The favourite star (☆ / ★), used by the train panel and the station board.
-export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${on ? '★' : '☆'}</button>`;
+export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
 // onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): the Follow button was pressed.
 // onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
@@ -30,7 +31,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     `<div class="panel-head"><strong>${label}</strong><span class="panel-buttons">` +
     (number && isStarred ? star(isStarred(number)) : '') +
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${t(following ? 'following' : 'follow')}</button>` : '') +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div>`;
+    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>`;
   function wireHead() {
     el.querySelector('.panel-close').onclick = close;
     const f = el.querySelector('.panel-follow');

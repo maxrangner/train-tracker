@@ -129,6 +129,13 @@ try {
     layers: ['rail-trv', 'train-dots', 'trains-3d', 'train-labels'].filter(id => window.__map.getLayer(id)).length }));
   expect(after.same, 'changing the look reloaded the page');
   expect(after.theme === 'dark' && after.layers === 4, `after choosing Dark: look ${after.theme}, ${after.layers} of 4 of our map layers`);
+  // The accent colour (Settings → Accent colour, 2026-11-15): a swatch sets the page's accent and the route's colour.
+  await page.click('#settings [data-key="accent"] [data-v="ocean"]');
+  await sleep(3000);
+  const accent = await page.evaluate(() => ({ css: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
+    route: JSON.stringify(window.__map.getPaintProperty('path-line', 'line-gradient')), pressed: document.querySelector('#settings [data-key="accent"] [aria-pressed="true"]')?.dataset.v }));
+  expect(accent.css === '#5fa8ff' && accent.route.includes('#5fa8ff') && accent.pressed === 'ocean',
+    `after choosing Ocean in dark: --accent ${accent.css}, route ${accent.route.slice(0, 60)}, pressed ${accent.pressed}`);
   await page.evaluate(() => localStorage.removeItem('settings'));
   expect(!page.errors.length, `page errors: ${page.errors.slice(0, 2).join(' | ')}`);
 

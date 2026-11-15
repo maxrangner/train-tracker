@@ -7,38 +7,23 @@
   <title>Spårat</title>
   <link rel="icon" href="data:,">
   <style>
+    /* The Soft look (Max, 2026-11-15). Colours: src/colours.js, set as CSS variables on <html> by src/settings.js
+       (--page --bg --card --ink --muted --line --hover --late --accent --accent-ink --accent-done --c-ontime …), so each
+       colour is written once; light or dark follows <html data-theme>. Here: shapes, spacing and the font. */
+    @font-face { font-family: 'Outfit'; font-style: normal; font-weight: 100 900; font-display: swap;
+      src: url('/fonts/outfit-latin.woff2') format('woff2');
+      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+    @font-face { font-family: 'Outfit'; font-style: normal; font-weight: 100 900; font-display: swap;
+      src: url('/fonts/outfit-latin-ext.woff2') format('woff2');
+      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
     :root {
-      --ink: #1b1f24;
-      --muted: #59636e;
-      --card: rgba(255, 255, 255, 0.94);
-      --bg: #ffffff;          /* the solid cards: menu, panels, Help, Settings */
-      --hover: #f0f4fa;
-      --line: #d8dee4;
-      --accent: #1f6feb;
-      --late: #a40e26;
-      --label: #1b1f24;       /* the selected train's label, as the map's labels */
-      --label-halo: #ffffff;
-      --group: #1f6feb;       /* the "3 trains" labels close in */
-      --station: #33373d;     /* the stations' names (the map's own further out: src/map.js) */
       --gap: 10px;
+      --radius: 22px;        /* the big cards */
+      --radius-s: 16px;      /* small floating things */
+      --font: 'Outfit', system-ui, sans-serif;
     }
-    /* Dark (Settings → Look; Auto follows the phone): src/settings.js sets data-theme. Labels white with a black
-       border (Max, 2026-11-12). */
-    :root[data-theme="dark"] {
-      color-scheme: dark;
-      --ink: #e6edf3;
-      --muted: #9198a1;
-      --card: rgba(22, 27, 34, 0.94);
-      --bg: #161b22;
-      --hover: #21262d;
-      --line: #30363d;
-      --late: #ff7b72;
-      --label: #ffffff;
-      --label-halo: #0b1220;
-      --group: #58a6ff;
-      --station: #d6deea;
-    }
-    :root[data-theme="dark"] body { background: #0d1117; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+    body { background: var(--page); }
     /* The map's zoom buttons and compass in dark: dark buttons, light icons. */
     :root[data-theme="dark"] .maplibregl-ctrl-group { background: var(--bg); }
     :root[data-theme="dark"] .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
@@ -49,13 +34,15 @@
        before the map library has started. */
     html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }
     #map { touch-action: none; }
-    body { font: 13px/1.35 system-ui, sans-serif; color: var(--ink); }
+    body { font: 500 14px/1.4 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
+    button, input { font-family: inherit; }
+    .icon { display: inline-block; vertical-align: -0.18em; flex: none; }
     #map { position: fixed; inset: 0; }
 
     .card {
       background: var(--card);
-      border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+      border-radius: var(--radius-s);
+      box-shadow: var(--shadow-s);
     }
     #top {
       position: fixed;
@@ -77,11 +64,11 @@
     #filter-bar { flex-basis: 100%; max-width: max-content; display: flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; font-size: 14px; }
     #filter-bar[hidden] { display: none; }
     #filter-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    #filter-clear { font: inherit; font-size: 18px; line-height: 1; border: 0; background: transparent; color: var(--muted); padding: 4px 8px; cursor: pointer; border-radius: 6px; }
+    #filter-clear { border: 0; background: transparent; color: var(--muted); padding: 6px; cursor: pointer; border-radius: 50%; display: grid; place-items: center; }
     .help-card { display: flex; padding: 3px; gap: 2px; }
     /* The menu: the ☰ button opens a panel under the top bar. */
     #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
-    #menu-button[aria-expanded="true"] { background: var(--accent); color: #fff; }
+    #menu-button[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
     #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     #menu {
       position: fixed;
@@ -89,7 +76,7 @@
       top: calc(var(--gap) + 40px + env(safe-area-inset-top, 0px));
       width: min(420px, calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
       max-height: calc(100% - 70px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      overflow: hidden; background: var(--bg); padding: 10px 12px; box-sizing: border-box; z-index: 5;
+      overflow: hidden; background: var(--bg); padding: 12px 14px; box-sizing: border-box; z-index: 5; border-radius: var(--radius); box-shadow: var(--shadow);
       display: flex; flex-direction: column; gap: 10px;
     }
     /* The search box stays on top; the results scroll in between (the phone's keyboard shrinks the page:
@@ -97,11 +84,10 @@
     #menu > * { flex: none; }
     #menu > #search-results { flex: 0 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
     .menu-head { display: flex; gap: 6px; align-items: center; }
-    #search { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
-      background: var(--bg); color: var(--ink); }
+    #search { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--hover); color: var(--ink); }
     #search:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
-    .menu-close { font: inherit; font-size: 22px; line-height: 1; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px; }
-    #search-results { list-style: none; margin: 0; padding: 0; display: grid; }
+        #search-results { list-style: none; margin: 0; padding: 0; display: grid; }
     #search-results:empty { display: none; }
     #search-results button {
       width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 9px 6px; border: 0; border-bottom: 1px solid var(--line);
@@ -111,17 +97,20 @@
     #search-results button:hover, #search-results button:focus-visible { background: var(--hover); outline: none; }
     .menu-note { color: var(--muted); padding: 8px 6px; }
     .fav-label { padding: 2px 6px 0; }
-    .panel-star { font: inherit; font-size: 20px; line-height: 1; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px; }
-    .panel-star[aria-pressed="true"] { color: #d4a72c; }
+        .panel-star[aria-pressed="true"] { color: var(--c-some); }
     .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .menu-text { margin: 0; color: var(--ink); }
     .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
     .set-row > span:first-child, .set-row > label { font-size: 14px; }
-    .seg { display: flex; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-    .seg button { font: inherit; font-size: 14px; padding: 6px 11px; border: 0; border-left: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
-    .seg button:first-child { border-left: 0; }
-    .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-    .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .seg { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--hover); }
+    .seg button { font: inherit; font-size: 14px; font-weight: 600; padding: 6px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); cursor: pointer; }
+    .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+    .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* Settings → Accent colour: round swatches, the chosen one ringed (Max, 2026-11-15). */
+    .seg.swatches { background: none; padding: 0; gap: 8px; }
+    .seg.swatches button { --sw: var(--sw-l); width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 2px var(--card); }
+    :root[data-theme="dark"] .seg.swatches button { --sw: var(--sw-d); }
+    .seg.swatches button[aria-pressed="true"] { background: var(--sw); outline: 2.5px solid var(--sw); outline-offset: 2px; }
     .range { display: flex; align-items: center; gap: 8px; }
     .range input { width: 140px; accent-color: var(--accent); }
     .range output { font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; font-size: 14px; }
@@ -130,7 +119,7 @@
     /* Settings: a line, then the debug settings under their own heading (Max, 2026-11-13). */
     .set-section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 10px; }
     /* ? at the top: Help, with the credits (Max, 2026-11-12: a permanent "?" instead of a credit line). */
-    #help-button { font: inherit; font-weight: 700; border: 0; border-radius: 6px; padding: 4px 10px; background: transparent; color: var(--muted); cursor: pointer; }
+    #help-button { border: 0; border-radius: 50%; padding: 4px; background: transparent; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
     #help-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* Help: over the map, scrolls inside. */
     #help {
@@ -138,6 +127,7 @@
       left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
       top: calc(var(--gap) + env(safe-area-inset-top, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
       max-width: 560px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      border-radius: var(--radius); box-shadow: var(--shadow);
       display: flex; flex-direction: column;
     }
     /* Settings: its own card over the map, opened from ☰ → Settings (Max, 2026-11-12), in the middle of the screen
@@ -148,6 +138,7 @@
       top: calc(var(--gap) + env(safe-area-inset-top, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
       height: fit-content; max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
       max-width: 480px; margin: auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      border-radius: var(--radius); box-shadow: var(--shadow);
       display: flex; flex-direction: column; gap: 6px;
     }
     /* The stats page (opened from the status line): its own page over the map, at the top, as Settings was before. */
@@ -157,6 +148,7 @@
       top: calc(var(--gap) + env(safe-area-inset-top, 0px));
       max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
       max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      border-radius: var(--radius); box-shadow: var(--shadow);
       display: flex; flex-direction: column; gap: 6px;
     }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
@@ -184,10 +176,10 @@
     .st-bar { display: block; height: 100%; min-width: 2px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
     .st-n { text-align: right; }
     .st-stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
-    .st-ontime { background: #1a7f37; } .st-some { background: #d4a72c; } .st-late { background: #d1242f; }
+    .st-ontime { background: var(--c-ontime); } .st-some { background: var(--c-some); } .st-late { background: var(--c-late); }
     /* Today's graph (src/stats.js dayGraph): the same three colours as the dots. */
     .st-day { width: 100%; height: auto; display: block; overflow: visible; }
-    .st-day .d-ontime { fill: #1a7f37; } .st-day .d-some { fill: #d4a72c; } .st-day .d-late { fill: #d1242f; }
+    .st-day .d-ontime { fill: var(--c-ontime); } .st-day .d-some { fill: var(--c-some); } .st-day .d-late { fill: var(--c-late); }
     .st-day .d-hit { fill: transparent; }
     .st-day g:hover .d-hit { fill: var(--hover); }
     .st-day line { stroke: var(--line); stroke-width: 1; }
@@ -199,9 +191,9 @@
     .st-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
     .st-seg button { font-size: 13px; padding: 3px 9px; }
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
-      padding: 9px 6px; cursor: pointer; display: flex; justify-content: space-between; border-radius: 6px; }
+      padding: 10px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
-    .menu-link span { color: var(--muted); }
+    .menu-link span { color: var(--muted); display: flex; align-items: center; }
     .help-body { overflow: auto; min-height: 0; font-size: 14px; line-height: 1.45; }
     .help-body h3 { font-size: 15px; margin: 14px 0 4px; }
     .help-body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -235,26 +227,26 @@
     /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
     .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
       display: grid; place-items: center; pointer-events: none; }
-    .sel-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff; background: #8c959f; }
+    .sel-dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #fff; background: var(--c-unknown); }
     .sel-train.model .sel-dot { display: none; }
-    .sel-train.late-ontime .sel-dot { background: #1a7f37; }
-    .sel-train.late-some .sel-dot { background: #d4a72c; }
-    .sel-train.late-late .sel-dot { background: #d1242f; }
+    .sel-train.late-ontime .sel-dot { background: var(--c-ontime); }
+    .sel-train.late-some .sel-dot { background: var(--c-some); }
+    .sel-train.late-late .sel-dot { background: var(--c-late); }
     .sel-train.late-stale { opacity: 0.45; }
     /* Round a model the ring is drawn on the ground under it (src/trains-3d.js); this one keeps only the label's place. */
     .sel-train.model { border-color: transparent; }
     /* Settings → Train symbol: Triangle. The selected train's dot is a triangle turned the way it goes (src/map.js). */
     .sel-dot svg { display: none; width: 100%; height: 100%; overflow: visible; }
-    .sel-train.tri .sel-dot { width: 15px; height: 15px; border: 0; border-radius: 0; background: none !important; color: #8c959f; }
+    .sel-train.tri .sel-dot { width: 15px; height: 15px; border: 0; border-radius: 0; background: none !important; color: var(--c-unknown); }
     .sel-train.tri .sel-dot svg { display: block; }
-    .sel-train.tri.late-ontime .sel-dot { color: #1a7f37; }
-    .sel-train.tri.late-some .sel-dot { color: #d4a72c; }
-    .sel-train.tri.late-late .sel-dot { color: #d1242f; }
+    .sel-train.tri.late-ontime .sel-dot { color: var(--c-ontime); }
+    .sel-train.tri.late-some .sel-dot { color: var(--c-some); }
+    .sel-train.tri.late-late .sel-dot { color: var(--c-late); }
     /* Zoomed out (a dot, not a model) the ring has the dot's colour (Max, 2026-11-13); round a model it stays as the text. */
-    .sel-train:not(.model) { border-color: #8c959f; }
-    .sel-train.late-ontime:not(.model) { border-color: #1a7f37; }
-    .sel-train.late-some:not(.model) { border-color: #d4a72c; }
-    .sel-train.late-late:not(.model) { border-color: #d1242f; }
+    .sel-train:not(.model) { border-color: var(--c-unknown); }
+    .sel-train.late-ontime:not(.model) { border-color: var(--c-ontime); }
+    .sel-train.late-some:not(.model) { border-color: var(--c-some); }
+    .sel-train.late-late:not(.model) { border-color: var(--c-late); }
     .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: pre; text-align: center;
       font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label);
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
@@ -282,6 +274,7 @@
       top: calc(var(--gap) + env(safe-area-inset-top, 0px));
       max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
       max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
+      border-radius: var(--radius); box-shadow: var(--shadow);
       display: flex; flex-direction: column; gap: 6px;
     }
     #disruptions-body { overflow: auto; min-height: 0; display: grid; gap: 2px; }
@@ -291,12 +284,12 @@
     .dis-row b { display: block; font-weight: 600; }
     .dis-sub { display: block; color: var(--muted); font-size: 13px; }
     .dis-dot { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 50%; margin-top: 4px; border: 1.5px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
-    .dis-dot.yellow { background: #d4a017; } .dis-dot.orange { background: #e8701a; } .dis-dot.red { background: #d1242f; }
+    .dis-dot.yellow { background: var(--dis-1); } .dis-dot.orange { background: var(--dis-2); } .dis-dot.red { background: var(--dis-3); }
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 14px; line-height: 1.45; }
     .dis-source { font-size: 12px; margin: 6px 0 0; }
     /* A station's own messages (what its monitors show), above its departures. */
     .board-msgs { display: grid; gap: 4px; margin: 6px 0 2px; max-height: 30%; overflow: auto; }
-    .board-msg { font-size: 13px; white-space: pre-line; padding: 6px 8px; border-radius: 6px; border-left: 3px solid #d4a017; background: var(--hover); }
+    .board-msg { font-size: 13px; white-space: pre-line; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--dis-1); background: var(--hover); }
 
     #panel, #board, #picker, #disruption {
       position: fixed;
@@ -307,21 +300,25 @@
       background: var(--bg);
       display: flex;
       flex-direction: column;
-      padding: 10px 12px;
+      padding: 14px 16px;
       box-sizing: border-box;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
     }
-    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 15px; }
-    .panel-buttons { display: flex; align-items: center; gap: 4px; }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 17px; }
+    .panel-head strong { font-weight: 800; }
+    .panel-buttons { display: flex; align-items: center; gap: 6px; }
     .panel-follow {
-      font: inherit; font-size: 13px;
-      border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
-      background: var(--bg); color: var(--muted); cursor: pointer;
+      font: inherit; font-size: 14px; font-weight: 600;
+      border: 1.5px solid var(--line); border-radius: 999px; padding: 7px 14px;
+      background: var(--bg); color: var(--ink); cursor: pointer;
     }
-    .panel-follow[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .panel-close {
-      font: inherit; font-size: 20px; line-height: 1;
-      border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 2px 6px;
+    .panel-follow[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .panel-close, .panel-star, .menu-close {
+      width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
+      border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0;
     }
+    .panel-close:focus-visible, .menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
     .panel-status { margin: 4px 0 0; color: var(--late); }
     /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
@@ -348,8 +345,8 @@
     .pick-list button:hover, .pick-list button:focus-visible { background: var(--hover); outline: none; }
     /* A station's board */
     .board-tabs { display: flex; gap: 4px; margin: 6px 0; }
-    .board-tabs button { font: inherit; font-size: 14px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--muted); cursor: pointer; }
-    .board-tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .board-tabs button { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); cursor: pointer; }
+    .board-tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
     table.board td { vertical-align: top; padding: 5px 6px 5px 0; }
     table.board tbody tr { cursor: pointer; }
     table.board tbody tr:hover td { background: var(--hover); }
@@ -398,22 +395,22 @@
       <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
     </button>
     <button id="status" class="card" type="button" aria-controls="stats-page" data-t="connecting">connecting…</button>
-    <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton">?</button></div>
+    <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6M12 16.6v.3"/></svg></button></div>
     <div id="filter-bar" class="card" hidden><span id="filter-text"></span>
-      <button id="filter-clear" type="button" aria-label="Show every train" data-t-aria="filterClear">×</button></div>
+      <button id="filter-clear" type="button" aria-label="Show every train" data-t-aria="filterClear"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
   </div>
   <div id="menu" class="card" hidden>
     <div class="menu-head">
       <input id="search" type="search" placeholder="Train number or station" data-t-ph="searchPh" autocomplete="off" autocorrect="off"
         spellcheck="false" enterkeyhint="search" aria-label="Search for a train number or a station" data-t-aria="searchAria">
-      <button class="menu-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu">×</button>
+      <button class="menu-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
     </div>
     <ul id="search-results" aria-live="polite"></ul>
     <div class="menu-section" id="disruptions-section" hidden>
-      <button id="open-disruptions" class="menu-link" type="button"><b><span data-t="disruptions">Disruptions</span> <span id="disruptions-count"></span></b><span aria-hidden="true">›</span></button>
+      <button id="open-disruptions" class="menu-link" type="button"><b><span data-t="disruptions">Disruptions</span> <span id="disruptions-count"></span></b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
     </div>
     <div class="menu-section">
-      <button id="open-settings" class="menu-link" type="button"><b data-t="settings">Settings</b><span aria-hidden="true">›</span></button>
+      <button id="open-settings" class="menu-link" type="button"><b data-t="settings">Settings</b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
     </div>
     <div class="menu-section">
       <div class="menu-label" data-t="liveData">Live data</div>
@@ -422,7 +419,7 @@
   </div>
   <div id="settings-page" class="card" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
-      <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings">×</button></div>
+      <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
@@ -430,6 +427,8 @@
         <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
+      <div class="set-row"><span data-t="accent">Accent colour</span>
+        <div class="seg swatches" data-key="accent" role="group" aria-label="Accent colour" data-t-aria="accent"></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="set-section menu-label" data-t="debug">Debug</div>
@@ -450,17 +449,17 @@
   <div id="settings-backdrop"></div>
   <div id="stats-page" class="card" role="dialog" aria-modal="true" aria-labelledby="stats-title" hidden>
     <div class="panel-head"><strong id="stats-title" data-t="stats">Live statistics</strong>
-      <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats">×</button></div>
+      <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="stats-body"></div>
   </div>
   <div id="disruptions-page" class="card" role="dialog" aria-modal="true" aria-labelledby="disruptions-title" hidden>
     <div class="panel-head"><strong id="disruptions-title" data-t="disruptions">Disruptions</strong>
-      <button class="panel-close" type="button" aria-label="Close disruptions" data-t-aria="closeDisruptions">×</button></div>
+      <button class="panel-close" type="button" aria-label="Close disruptions" data-t-aria="closeDisruptions"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="disruptions-body"></div>
   </div>
   <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>
-      <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp">×</button></div>
+      <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div class="help-body" data-lang="en">
       <h3>On the map</h3>
       <ul>
