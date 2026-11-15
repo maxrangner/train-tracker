@@ -34,6 +34,8 @@
        before the map library has started. */
     html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }
     #map { touch-action: none; }
+    /* No light-blue box round what a finger holds on a phone (Max, 2026-11-15); a designed pressed look: docs/ideas.md. */
+    html { -webkit-tap-highlight-color: transparent; }
     body { font: 500 14px/1.4 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
     button, input { font-family: inherit; }
     .icon { display: inline-block; vertical-align: -0.18em; flex: none; }
