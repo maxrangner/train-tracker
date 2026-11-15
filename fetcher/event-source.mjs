@@ -6,8 +6,13 @@ export class NodeEventSource {
   static CONNECTING = 0;
   static OPEN = 1;
   static CLOSED = 2;
+  static open = new Set();   // the streams now open (the live test breaks them: main.mjs --test-breaks)
+
+  // Break the stream as a lost connection would: it says CLOSED and follow() asks again.
+  fail() { this.ctrl.abort(); }
 
   constructor(url) {
+    NodeEventSource.open.add(this);
     this.url = url;
     this.readyState = NodeEventSource.CONNECTING;
     this.onopen = null;
@@ -19,6 +24,7 @@ export class NodeEventSource {
 
   close() {
     this.readyState = NodeEventSource.CLOSED;
+    NodeEventSource.open.delete(this);
     this.ctrl.abort();
   }
 
@@ -52,6 +58,7 @@ export class NodeEventSource {
     }
     if (this.readyState === NodeEventSource.CLOSED) return;
     this.readyState = NodeEventSource.CLOSED;
+    NodeEventSource.open.delete(this);
     this.onerror?.({ message: this.error ?? 'the stream ended' });
   }
 }

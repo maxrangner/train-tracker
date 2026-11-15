@@ -46,7 +46,7 @@ export const positionsQuery = ({ changeId, stream }) => {
     `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
     `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER>${FIELDS}</QUERY>`;
 };
-export function followPositions({ onRecords, onStatus }) {
+export function followPositions({ onRecords, onStatus, retryStreamMs }) {
   return follow({
     makeQuery: positionsQuery,
     onResult: (r, { first = false } = {}) => {
@@ -54,5 +54,6 @@ export function followPositions({ onRecords, onStatus }) {
       if (records.length) onRecords(records);
     },
     onStatus,
+    retryStreamMs,
   });
 }

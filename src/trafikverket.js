@@ -64,14 +64,14 @@ async function askOnce(queryXml) {
 // where it left off; if it keeps breaking, ask every 10 s instead, and try the stream again every 5 minutes.
 // makeQuery({changeId, stream}) returns the <QUERY> xml; onResult(result) gets every answer and stream message.
 // onResult(result, { first }): first is true for the first answer after starting (every object's latest version).
-export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
+// retryStreamMs: while asking every 10 s, how often to try the live stream again (the fetcher tries sooner).
+export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryStreamMs = 5 * 60 * 1000 }) {
   let lastChangeId = null;
   let es = null;
   let silentTimer = null;
   let failures = [];
   let stopped = false;
   let pollingSince = null;   // when it started asking every 10 s (null: following the stream)
-  const RETRY_STREAM_MS = 5 * 60 * 1000;
 
   const closeStream = () => {
     clearTimeout(silentTimer);
@@ -137,7 +137,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
       onStatus({ mode: 'polling', error: e.message });
     }
     // Every 5 minutes, try the live stream again (if it breaks three more times, back to asking every 10 s).
-    if (Date.now() - pollingSince >= RETRY_STREAM_MS) {
+    if (Date.now() - pollingSince >= retryStreamMs) {
       pollingSince = null;
       failures = [];
       onStatus({ mode: 'reconnecting' });
@@ -169,7 +169,7 @@ export const trainKey = (operationalNumber, departureDate) => `${operationalNumb
 
 // Follow actual passings at stations (the timetable feed). onPassings(list) gets
 // [{key, minutes, station, time, brand, activity}] where minutes = actual - planned, rounded (+ late, - early).
-export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
+export function followPassings({ onPassings, onStatus, sinceMinutes = 90, retryStreamMs }) {
   return follow({
     makeQuery: (c) => {
       const since = new Date(Date.now() - sinceMinutes * 60000).toISOString();
@@ -185,6 +185,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
       if (list.length) onPassings(list, { first });   // first: the first answer (the last 90 minutes at once)
     },
     onStatus,
+    retryStreamMs,
     silentMs: 120000,   // passings are rarer than positions at quiet hours
   });
 }

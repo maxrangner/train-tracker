@@ -47,8 +47,12 @@ const log = (...a) => console.log(new Date().toISOString().slice(0, 19).replace(
 // ---------- load on Trafikverket, counted ----------
 const load = { asks: 0, streams: 0, since: Date.now() };
 const realFetch = globalThis.fetch;
+let offlineUntil = 0;   // --test-breaks: a pretend lost internet
 globalThis.fetch = (url, opts) => {
-  if (String(url).includes('trafikverket.se')) { if (opts?.method === 'POST') load.asks++; else load.streams++; }
+  if (String(url).includes('trafikverket.se')) {
+    if (Date.now() < offlineUntil) return Promise.reject(new Error('test break: no internet'));
+    if (opts?.method === 'POST') load.asks++; else load.streams++;
+  }
   return realFetch(url, opts);
 };
 
@@ -58,7 +62,7 @@ let uploader = null;
 const shelf = createShelf({ onAdd: (name, f) => uploader?.add(name, f), onRemove: (name, f) => uploader?.remove(name, f) });
 if (args.includes('--upload')) {
   const { createUploader } = await import('./upload.mjs');
-  uploader = createUploader(cfg, log);
+  uploader = createUploader(cfg, log, { keep: name => Boolean(shelf.get(name)) });
 }
 const feeds = { positions: { mode: 'starting', since: Date.now() }, passings: { mode: 'starting', since: Date.now() }, lastRecordAt: null };
 const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), feeds, state: state.sizes(), load,
@@ -73,8 +77,8 @@ const onFeed = name => s => {
   if (s.mode !== f.mode) { f.mode = s.mode; f.since = Date.now(); }
 };
 const stops = [
-  followPositions({ onRecords: rs => { state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now(); }, onStatus: onFeed('positions') }),
-  followPassings({ onPassings: (list, how) => state.addPassings(list, Date.now(), how), onStatus: onFeed('passings') }),
+  followPositions({ onRecords: rs => { state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now(); }, onStatus: onFeed('positions'), retryStreamMs: MIN }),
+  followPassings({ onPassings: (list, how) => state.addPassings(list, Date.now(), how), onStatus: onFeed('passings'), retryStreamMs: MIN }),
 ];
 
 // ---------- timers ----------
@@ -176,12 +180,13 @@ every('arrivals', 5 * MIN, 6000, async () => {
 });
 
 // ---------- a status line every 10 minutes ----------
-let lastLoad = { asks: 0, streams: 0, at: Date.now() };
+let lastLoad = { asks: 0, streams: 0, at: Date.now(), cpu: process.cpuUsage() };
 every('status', 10 * MIN, 10 * MIN, () => {
-  const s = status(), mins = (Date.now() - lastLoad.at) / MIN;
-  log(`status: ${s.state.trains} trains, ${s.state.passings} passings, ${s.state.planned} routes; Trafikverket ${((load.asks - lastLoad.asks) / mins).toFixed(1)} asks/min, ${load.streams - lastLoad.streams} streams opened; ` +
-    `${s.upload ? `uploads ${s.upload.ok} ok, ${s.upload.failed} failed, ${s.upload.reconnects} reconnects; ` : ''}memory ${s.memoryMB} MB; feeds ${feeds.positions.mode}/${feeds.passings.mode}`);
-  lastLoad = { asks: load.asks, streams: load.streams, at: Date.now() };
+  const s = status(), ms = Date.now() - lastLoad.at, cpu = process.cpuUsage(lastLoad.cpu);
+  log(`status: ${s.state.trains} trains, ${s.state.passings} passings, ${s.state.planned} routes; Trafikverket ${((load.asks - lastLoad.asks) / (ms / MIN)).toFixed(1)} asks/min, ${load.streams - lastLoad.streams} streams opened; ` +
+    `${s.upload ? `uploads ${s.upload.ok} ok, ${s.upload.failed} failed, ${s.upload.reconnects} reconnects, ${s.upload.waiting} waiting; ` : ''}` +
+    `memory ${s.memoryMB} MB, CPU ${((cpu.user + cpu.system) / 10 / ms).toFixed(1)} %; feeds ${feeds.positions.mode}/${feeds.passings.mode}`);
+  lastLoad = { asks: load.asks, streams: load.streams, at: Date.now(), cpu: process.cpuUsage() };
 });
 
 // ---------- stopping ----------
@@ -196,4 +201,14 @@ async function stop(why) {
 process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 if (minutes) setTimeout(() => stop(`${minutes} minutes`), minutes * MIN);
-log(`started (${envPath}; Node ${process.version}, ${process.platform})`);
+
+// --test-breaks A,B,...: at these minutes after the start, pretend the internet is lost for a minute: Trafikverket
+// can't be reached, the open streams break, the upload connection drops and can't reconnect (the live test).
+const breaks = arg('--test-breaks');
+if (breaks) for (const m of breaks.split(',').map(Number)) setTimeout(() => {
+  log('test break: no internet for 60 s');
+  offlineUntil = Date.now() + MIN;
+  for (const es of NodeEventSource.open) es.fail();
+  uploader?.breakFor(MIN);
+}, m * MIN);
+log(`started (${envPath}; Node ${process.version}, ${process.platform}, process ${process.pid})`);
