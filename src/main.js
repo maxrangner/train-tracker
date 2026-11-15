@@ -658,7 +658,9 @@ if (hasKey && !replay) {
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusCount = statusEl.querySelector('.count');
-document.querySelector('.searchbar .logo').innerHTML = logoSvg({ small: true });
+const barLogo = document.querySelector('.searchbar .logo');
+barLogo.innerHTML = logoSvg({ small: true });
+barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
 const statusFullEl = document.getElementById('status-full');
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)

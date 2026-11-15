@@ -58,9 +58,9 @@
     #top > * { pointer-events: auto; }
     /* The search bar (the Soft look, 2026-11-15): logo, search (opens the menu sheet), the live count (opens the
        stats page; Max, 2026-11-13). The count's colour: live green, slower (polling, reconnecting) yellow, a problem red. */
-    .searchbar { flex: 1 1 100%; min-width: 0; height: 50px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 14px;
+    .searchbar { flex: 1 1 100%; min-width: 0; height: 50px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 14px;   /* the chip 10 px from the edge all round (Max, 2026-11-15) */
       border-radius: 999px; box-shadow: var(--shadow); box-sizing: border-box; }
-    .searchbar .logo { width: 66px; flex: none; display: flex; color: var(--ink); }
+    .searchbar .logo { width: 66px; flex: none; display: flex; color: var(--ink); cursor: pointer; }
     .searchbar .logo svg { width: 100%; height: auto; }
     #menu-button { flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; gap: 7px; border: 0; border-left: 1.5px solid var(--line);
       border-radius: 0; background: transparent; color: var(--muted); font: inherit; font-size: 15px; padding: 0 4px 0 10px; cursor: pointer; text-align: left; }
