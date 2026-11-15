@@ -148,7 +148,10 @@ const map = createMap('map', {
 
 // The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
 const splash = document.getElementById('splash');
-map.shown.then(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); });
+// The start screen's logo draws itself in about 1.3 s (index.html): the screen stays at least that long.
+const SPLASH_MIN_MS = 1300;
+map.shown.then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
+  Math.max(0, SPLASH_MIN_MS - performance.now())));
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
