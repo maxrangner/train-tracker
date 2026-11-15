@@ -95,7 +95,7 @@ const dotOpacity = sel => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-points', 'station-dots', 'path-stops', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -270,9 +270,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       paint: { 'line-gradient': pathColours().line,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
     // Disruptions (setDisruptions; Max, 2026-11-14: in the menu and on the map): the stretch where it is, along our
-    // tracks, and a mark at its place, coloured by Trafikverket's level (1-2 yellow, 3 orange, 4 red: its "green"
-    // level 1 is still a disruption with a message for travellers). Over the rails and the open train's route, under
-    // the stations and the trains.
+    // tracks, coloured by Trafikverket's level (1-2 yellow, 3 orange, 4 red: its "green" level 1 is still a
+    // disruption with a message for travellers). Over the rails and the open train's route, under the stations and
+    // the trains. The line only, no dot (Max, 2026-11-15, "B, line only"); a ring round the station for a disruption
+    // at one station, which has no line (src/disruptions.js geojson).
     const disColour = ['step', ['get', 'level'], C.dis[0], 3, C.dis[1], 4, C.dis[2]];
     // In the Night look the rails are warm yellow too: there the stretch is dashed, over a dark edge, to tell it apart.
     map.addLayer({ id: 'disruption-edge', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
@@ -282,9 +283,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: { 'line-cap': C.disDash ? 'butt' : 'round', 'line-join': 'round' },
       paint: { 'line-color': disColour, 'line-opacity': C.disDash ? 1 : 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 5, 14, 9],
         ...(C.disDash ? { 'line-dasharray': [1.6, 1] } : {}) } });
-    map.addLayer({ id: 'disruption-points', type: 'circle', source: 'disruptions', filter: ['==', ['geometry-type'], 'Point'],
-      paint: { 'circle-color': disColour, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 5, 10, 8, 14, 10],
-        'circle-stroke-color': C.disEdge, 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'disruption-rings', type: 'circle', source: 'disruptions', filter: ['==', ['geometry-type'], 'Point'],
+      paint: { 'circle-opacity': 0, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 11, 14, 15],
+        'circle-stroke-color': disColour, 'circle-stroke-width': 3.5 } });
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
       id: 'station-dots',
@@ -496,11 +497,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
           .reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
         if (st) return onStationTap(st.properties.sig);
       }
-      // No train or station there: a disruption's mark or stretch?
+      // No train or station there: a disruption's ring or stretch?
       if (!nearest && onDisruptionTap) {
         const dp = 12;
-        const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-points', 'disruption-lines'] });
-        const hit = dis.find(f => f.layer.id === 'disruption-points') ?? dis[0];
+        const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-rings', 'disruption-lines'] });
+        const hit = dis.find(f => f.layer.id === 'disruption-rings') ?? dis[0];
         if (hit) return onDisruptionTap(hit.properties.id);
       }
       onTrainTap?.(nearest?.properties.id ?? null);
