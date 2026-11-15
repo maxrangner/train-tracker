@@ -85,7 +85,7 @@ if (args.tap) {
   }
 }
 
-if (!args.page) console.log('status line:', await page.$eval('#status', el => el.textContent));
+if (!args.page) console.log('status line:', await page.$eval('#status', el => el.title || el.textContent));
 // --json trains.json: also save the trains on screen (id, label, company, place in CSS pixels), e.g. to label a picture.
 if (args.json) {
   const onScreen = await page.evaluate(() => {

@@ -56,29 +56,32 @@
       pointer-events: none;
     }
     #top > * { pointer-events: auto; }
-    /* The banner: a button that opens the stats page (Max, 2026-11-13). */
-    #status { padding: 6px 10px; font: inherit; font-variant-numeric: tabular-nums; border: 0; color: var(--ink); text-align: left; cursor: pointer; }
-    #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    #status.problem { color: var(--late); }
+    /* The search bar (the Soft look, 2026-11-15): logo, search (opens the menu sheet), the live count (opens the
+       stats page; Max, 2026-11-13). The count's colour: live green, slower (polling, reconnecting) yellow, a problem red. */
+    .searchbar { flex: 1 1 100%; min-width: 0; height: 50px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 14px;
+      border-radius: 999px; box-shadow: var(--shadow); box-sizing: border-box; }
+    @media (min-width: 440px) { .searchbar { flex: 0 1 520px; } }
+    .searchbar .logo { width: 66px; flex: none; display: flex; color: var(--ink); }
+    .searchbar .logo svg { width: 100%; height: auto; }
+    #menu-button { flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; gap: 7px; border: 0; border-left: 1.5px solid var(--line);
+      border-radius: 0; background: transparent; color: var(--muted); font: inherit; font-size: 15px; padding: 0 4px 0 10px; cursor: pointer; text-align: left; }
+    #menu-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #menu-button[aria-expanded="true"] { color: var(--accent); }
+    #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+    #status { flex: none; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 11px; cursor: pointer;
+      font: 700 14px/1 var(--font); font-variant-numeric: tabular-nums; background: var(--t-ontime-bg); color: var(--t-ontime); white-space: nowrap; }
+    #status .live { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
+    #status.slow { background: var(--t-some-bg); color: var(--t-some); }
+    #status.problem { background: var(--t-late-bg); color: var(--t-late); white-space: normal; }
+    #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .menu-icon { display: inline-flex; margin-right: 8px; color: var(--muted); vertical-align: -3px; }
     /* While the map shows only some trains (src/filter.js): what it shows, on its own line, and × for all again. */
     #filter-bar { flex-basis: 100%; max-width: max-content; display: flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; font-size: 14px; }
     #filter-bar[hidden] { display: none; }
     #filter-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
     #filter-clear { border: 0; background: transparent; color: var(--muted); padding: 6px; cursor: pointer; border-radius: 50%; display: grid; place-items: center; }
-    .help-card { display: flex; padding: 3px; gap: 2px; }
-    /* The menu: the ☰ button opens a panel under the top bar. */
-    #menu-button { border: 0; padding: 5px 8px; display: grid; place-items: center; color: var(--ink); cursor: pointer; }
-    #menu-button[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
-    #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    #menu {
-      position: fixed;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px));
-      top: calc(var(--gap) + 40px + env(safe-area-inset-top, 0px));
-      width: min(420px, calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-      max-height: calc(100% - 70px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      overflow: hidden; background: var(--bg); padding: 12px 14px; box-sizing: border-box; z-index: 5; border-radius: var(--radius); box-shadow: var(--shadow);
-      display: flex; flex-direction: column; gap: 10px;
-    }
+    /* The menu: the search bar opens it, a sheet (search, favourites, disruptions, Settings, Help, the live data). */
+    #menu { display: flex; flex-direction: column; gap: 10px; }
     /* The search box stays on top; the results scroll in between (the phone's keyboard shrinks the page:
        interactive-widget in the viewport line, so the last rows are never behind it). */
     #menu > * { flex: none; }
@@ -119,38 +122,13 @@
     /* Settings: a line, then the debug settings under their own heading (Max, 2026-11-13). */
     .set-section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 10px; }
     /* ? at the top: Help, with the credits (Max, 2026-11-12: a permanent "?" instead of a credit line). */
-    #help-button { border: 0; border-radius: 50%; padding: 4px; background: transparent; color: var(--ink); cursor: pointer; display: grid; place-items: center; }
-    #help-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* Help: over the map, scrolls inside. */
-    #help {
-      position: fixed; z-index: 6;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
-      top: calc(var(--gap) + env(safe-area-inset-top, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
-      max-width: 560px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
-      border-radius: var(--radius); box-shadow: var(--shadow);
-      display: flex; flex-direction: column;
-    }
+    #help { display: flex; flex-direction: column; }
     /* Settings: its own card over the map, opened from ☰ → Settings (Max, 2026-11-12), in the middle of the screen
        with the map dimmed behind it; a tap outside closes it (Max, 2026-11-13). */
-    #settings-page {
-      position: fixed; z-index: 7;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
-      top: calc(var(--gap) + env(safe-area-inset-top, 0px)); bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
-      height: fit-content; max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      max-width: 480px; margin: auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
-      border-radius: var(--radius); box-shadow: var(--shadow);
-      display: flex; flex-direction: column; gap: 6px;
-    }
+    #settings-page { display: flex; flex-direction: column; gap: 6px; z-index: 7; }
     /* The stats page (opened from the status line): its own page over the map, at the top, as Settings was before. */
-    #stats-page {
-      position: fixed; z-index: 6;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
-      top: calc(var(--gap) + env(safe-area-inset-top, 0px));
-      max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
-      border-radius: var(--radius); box-shadow: var(--shadow);
-      display: flex; flex-direction: column; gap: 6px;
-    }
+    #stats-page { display: flex; flex-direction: column; gap: 6px; }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
     #settings-page:not([hidden]) + #settings-backdrop { display: block; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
@@ -193,7 +171,7 @@
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 10px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
-    .menu-link span { color: var(--muted); display: flex; align-items: center; }
+    .menu-link > span { color: var(--muted); display: flex; align-items: center; }
     .help-body { overflow: auto; min-height: 0; font-size: 14px; line-height: 1.45; }
     .help-body h3 { font-size: 15px; margin: 14px 0 4px; }
     .help-body ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
@@ -201,7 +179,19 @@
     .menu-section { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* leave room on the right for the zoom buttons and compass */
-    #top { right: calc(56px + env(safe-area-inset-right, 0px)); }
+    #top { right: calc(68px + env(safe-area-inset-right, 0px)); }
+    /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15),
+       the compass only while the map is turned or tilted (src/map.js sets .touch and .turned on the map). */
+    .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px 10px 0 0; }
+    .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
+    .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
+    .maplibregl-ctrl-group button { width: 48px; height: 46px; }
+    .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+    .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
+    .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { height: 48px; }
+    .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
+    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass { display: none; }
+    .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
     .map-note { position: absolute; z-index: 3; top: calc(150px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
@@ -212,7 +202,7 @@
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-error .maplibregl-ctrl-icon { filter: none; }
     /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
     .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
-      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(50px + env(safe-area-inset-right, 0px));
+      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(66px + env(safe-area-inset-right, 0px));
       width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
     .zoom-bar.shown { opacity: 1; transition: opacity .15s; pointer-events: auto; }
     /* The grip: an invisible area round the bar, wide enough for a finger, clear of the + and − buttons. */
@@ -271,15 +261,7 @@
 
     /* Disruptions (src/disruptions.js): the list page opened from the menu (as the stats page), and a disruption's card
        where a train's panel opens. The dot shows the level: yellow, orange, red (as on the map). */
-    #disruptions-page {
-      position: fixed; z-index: 6;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
-      top: calc(var(--gap) + env(safe-area-inset-top, 0px));
-      max-height: calc(100% - 2 * var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-      max-width: 480px; margin: 0 auto; background: var(--bg); padding: 12px 14px; box-sizing: border-box;
-      border-radius: var(--radius); box-shadow: var(--shadow);
-      display: flex; flex-direction: column; gap: 6px;
-    }
+    #disruptions-page { display: flex; flex-direction: column; gap: 6px; }
     #disruptions-body { overflow: auto; min-height: 0; display: grid; gap: 2px; }
     .dis-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; font: inherit; font-size: 14px; color: var(--ink);
       background: none; border: 0; border-bottom: 1px solid var(--line); padding: 8px 2px; cursor: pointer; }
@@ -294,19 +276,25 @@
     .board-msgs { display: grid; gap: 4px; margin: 6px 0 2px; max-height: 30%; overflow: auto; }
     .board-msg { font-size: 13px; white-space: pre-line; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--dis-1); background: var(--hover); }
 
-    #panel, #board, #picker, #disruption {
-      position: fixed;
-      left: calc(var(--gap) + env(safe-area-inset-left, 0px));
-      bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
-      width: min(420px, calc(100% - 2 * var(--gap) - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
-      max-height: 45vh;
-      background: var(--bg);
-      display: flex;
-      flex-direction: column;
-      padding: 14px 16px;
-      box-sizing: border-box;
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
+    #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
+    /* Bottom sheets (src/sheet.js, the Soft look 2026-11-15): every card and page slides up from the bottom; a card at
+       most 45 % high (the map keeps the followed train above it: src/map.js panelTop), a page (search, stats,
+       Settings, Help, disruptions) up to the top bar. The handle: drag up for full height, down for half or closed.
+       From 440 px wide (src/map.js cardRight) a card at the left instead. Only the newest open sheet shows. */
+    .sheet { position: fixed; z-index: 6; box-sizing: border-box; background: var(--bg); display: flex; flex-direction: column;
+      left: 0; right: 0; bottom: 0; max-height: 45vh; overflow: hidden;
+      padding: 24px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+      border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
+      animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1); }
+    .sheet::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
+    .sheet.page, .sheet.full { max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); }
+    .sheet.behind { visibility: hidden; }
+    @keyframes sheet-in { from { transform: translateY(100%); } }
+    @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+    @media (min-width: 440px) {
+      .sheet { left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: auto; bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
+        width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 16px 14px; }
+      .sheet.page, .sheet.full { max-height: calc(100% - 78px - var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
     }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 17px; }
     .panel-head strong { font-weight: 800; }
@@ -394,15 +382,17 @@
   </div>
   <div id="map"></div>
   <div id="top">
-    <button id="menu-button" class="card" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search" data-t-aria="menu">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-    </button>
-    <button id="status" class="card" type="button" aria-controls="stats-page" data-t="connecting">connecting…</button>
-    <div class="card help-card"><button id="help-button" type="button" aria-label="Help and credits" data-t-aria="helpButton"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6M12 16.6v.3"/></svg></button></div>
+    <!-- One search bar (the Soft look, 2026-11-15): the logo (src/logo.js), the search that opens the menu sheet, and
+         the live count that opens the stats. -->
+    <div class="searchbar card">
+      <span class="logo" aria-hidden="true"></span>
+      <button id="menu-button" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search" data-t-aria="menu"><svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg><span data-t="search">Search</span></button>
+      <button id="status" type="button" aria-controls="stats-page"><span class="live"></span><span class="count" data-t="connecting">connecting…</span></button>
+    </div>
     <div id="filter-bar" class="card" hidden><span id="filter-text"></span>
       <button id="filter-clear" type="button" aria-label="Show every train" data-t-aria="filterClear"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
   </div>
-  <div id="menu" class="card" hidden>
+  <div id="menu" class="card page" hidden>
     <div class="menu-head">
       <input id="search" type="search" placeholder="Train number or station" data-t-ph="searchPh" autocomplete="off" autocorrect="off"
         spellcheck="false" enterkeyhint="search" aria-label="Search for a train number or a station" data-t-aria="searchAria">
@@ -416,11 +406,14 @@
       <button id="open-settings" class="menu-link" type="button"><b data-t="settings">Settings</b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
     </div>
     <div class="menu-section">
+      <button id="help-button" class="menu-link" type="button" aria-label="Help and credits" data-t-aria="helpButton"><b><span class="menu-icon"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.6M12 16.6v.3"/></svg></span><span data-t="help">Help</span></b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
+    </div>
+    <div class="menu-section">
       <div class="menu-label" data-t="liveData">Live data</div>
       <p id="status-full" class="menu-text" data-t="connecting">connecting…</p>
     </div>
   </div>
-  <div id="settings-page" class="card" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <div id="settings-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
       <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="settings">
@@ -450,17 +443,17 @@
     </div>
   </div>
   <div id="settings-backdrop"></div>
-  <div id="stats-page" class="card" role="dialog" aria-modal="true" aria-labelledby="stats-title" hidden>
+  <div id="stats-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="stats-title" hidden>
     <div class="panel-head"><strong id="stats-title" data-t="stats">Live statistics</strong>
       <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="stats-body"></div>
   </div>
-  <div id="disruptions-page" class="card" role="dialog" aria-modal="true" aria-labelledby="disruptions-title" hidden>
+  <div id="disruptions-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="disruptions-title" hidden>
     <div class="panel-head"><strong id="disruptions-title" data-t="disruptions">Disruptions</strong>
       <button class="panel-close" type="button" aria-label="Close disruptions" data-t-aria="closeDisruptions"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="disruptions-body"></div>
   </div>
-  <div id="help" class="card" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+  <div id="help" class="card page" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
     <div class="panel-head"><strong id="help-title" data-t="help">Help</strong>
       <button class="panel-close" type="button" aria-label="Close help" data-t-aria="closeHelp"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div class="help-body" data-lang="en">

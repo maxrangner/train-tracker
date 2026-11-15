@@ -152,6 +152,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+  // + and − only with a mouse; the compass only while the map is turned or tilted (index.html, the Soft look 2026-11-15).
+  const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
+  const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
+  showPointer();
+  mouse?.addEventListener('change', showPointer);
+  const showTurned = () => {
+    const turned = Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
+    if (turned !== map.getContainer().classList.contains('turned')) map.getContainer().classList.toggle('turned', turned);
+  };
+  map.on('rotate', showTurned);
+  map.on('pitch', showTurned);
 
   // My location (Max, 2026-11-13), under + and −: a tap flies the map to where this phone or computer is and shows
   // a blue dot there; it stops following a train. Browsers give the place only on a secure address (https, or the
