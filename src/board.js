@@ -11,6 +11,7 @@ const MESSAGES_MS = 5 * 60 * 1000;
 
 import { star } from './panel.js';
 import { tagHtml } from './tag.js';
+import { lateClass } from './lateness.js';
 import { icon } from './icons.js';
 import { hhmm } from './clock.js';
 import { t } from './i18n.js';
@@ -52,7 +53,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
       `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
       (isStarred ? star(isStarred(station.sig)) : '') +
       `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>` + msgsHtml() +
-      `<div class="board-tabs" role="group" aria-label="${t('depOrArr')}">` +
+      `<div class="seg board-tabs" role="group" aria-label="${t('depOrArr')}">` +
       `<button type="button" data-act="Avgang" aria-pressed="${dep}">${t('departures')}</button>` +
       `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">${t('arrivals')}</button></div>` + body;
     el.querySelector('.panel-close').onclick = close;
@@ -81,23 +82,25 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     const dep = activity === 'Avgang';
     const scroll = el.querySelector('.panel-table')?.scrollTop ?? 0;
     if (!rows.length) { frame(`<p class="panel-note">${t(dep ? 'noDepartures' : 'noArrivals')}</p>`); return; }
+    // One row per train, in the train card's style (round 4, 2026-11-15): the planned time (the new one under it in
+    // the lateness colour), where it goes (or comes from) with its number and kind, the lateness tag, the track.
     const body = rows.map((r, i) => {
       const seen = r.actual ?? r.estimated;
       const late = seen ? Math.round((seen - r.planned) / 60000) : 0;
-      const when = r.canceled ? `<span class="late">${t('cancelled')}</span>`
-        : late > 0 ? `<span class="late">${time(seen)}</span>` : '';
+      const when = r.canceled ? '' : late > 0 ? `<small class="m ${lateClass(late)}">${time(seen)}</small>` : '';
       const place = dep ? r.to : r.from;
-      return `<tr data-i="${i}" class="${r.canceled ? 'canceled' : ''}"><td class="t">${time(r.planned)}${when ? `<br>${when}` : ''}</td>` +
-        `<td class="st">${esc(place ? stationName(place) : '')}${!r.canceled && late > 0 ? ` ${tagHtml(late, { short: true })}` : ''}<div class="sub">${esc(r.number)} ${esc(r.product ?? '')}</div></td>` +
-        `<td class="trk">${esc(r.track)}</td></tr>`;
+      return `<button type="button" data-i="${i}" class="bd-row${r.canceled ? ' canceled' : ''}"><span class="bd-time">${time(r.planned)}${when}</span>` +
+        `<span class="bd-name"><b>${esc(place ? stationName(place) : '')}</b><small>${esc(r.number)} ${esc(r.product ?? '')}</small></span>` +
+        `<span class="bd-tag">${r.canceled ? `<span class="tag late">${t('cancelled')}</span>` : late > 0 ? tagHtml(late, { short: true }) : ''}</span>` +
+        `<span class="tl-trk">${esc(r.track)}</span></button>`;
     }).join('');
-    frame(`<div class="panel-table"><table class="board"><thead><tr><th>${t('time')}</th><th>${t(dep ? 'to' : 'from')}</th><th>${t('track')}</th></tr></thead>` +
-      `<tbody>${body}</tbody></table></div>`);
+    frame(`<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
+      `<div class="panel-table bd">${body}</div>`);
     const box = el.querySelector('.panel-table');
     box.scrollTop = scroll;
-    for (const tr of el.querySelectorAll('tr[data-i]')) {
-      const r = rows[Number(tr.dataset.i)];
-      tr.onclick = () => onPickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number });
+    for (const b of el.querySelectorAll('.bd-row')) {
+      const r = rows[Number(b.dataset.i)];
+      b.onclick = () => onPickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number });
     }
   }
 

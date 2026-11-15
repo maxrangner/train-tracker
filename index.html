@@ -275,19 +275,22 @@
     /* Disruptions (src/disruptions.js): the list page opened from the menu (as the stats page), and a disruption's card
        where a train's panel opens. The dot shows the level: yellow, orange, red (as on the map). */
     #disruptions-page { display: flex; flex-direction: column; gap: 6px; }
-    #disruptions-body { overflow: auto; min-height: 0; display: grid; gap: 2px; }
-    .dis-row { display: flex; gap: 10px; align-items: flex-start; text-align: left; font: inherit; font-size: 14px; color: var(--ink);
-      background: none; border: 0; border-bottom: 1px solid var(--line); padding: 8px 2px; cursor: pointer; }
-    .dis-row:hover { background: var(--hover); }
-    .dis-row b { display: block; font-weight: 600; }
-    .dis-sub { display: block; color: var(--muted); font-size: 13px; }
-    .dis-dot { display: inline-block; flex: none; width: 11px; height: 11px; border-radius: 50%; margin-top: 4px; border: 1.5px solid var(--bg); box-shadow: 0 0 0 1px var(--line); }
+    .sheet.page > .panel-head strong { font-size: 22px; }
+    /* Round 4 (2026-11-15): rows as soft tiles, as the train card's; the level's dot bigger; the card's text larger. */
+    #disruptions-body { overflow: auto; min-height: 0; display: grid; gap: 6px; align-content: start; margin-top: 8px; }
+    .dis-row { display: flex; gap: 12px; align-items: flex-start; text-align: left; font: inherit; font-size: 14.5px; color: var(--ink);
+      background: var(--hover); border: 0; border-radius: 14px; padding: 11px 12px; cursor: pointer; }
+    .dis-row:hover { box-shadow: inset 0 0 0 1.5px var(--line); }
+    .dis-row b { display: block; font-weight: 700; }
+    .dis-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .dis-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
     .dis-dot.yellow { background: var(--dis-1); } .dis-dot.orange { background: var(--dis-2); } .dis-dot.red { background: var(--dis-3); }
-    #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 14px; line-height: 1.45; }
-    .dis-source { font-size: 12px; margin: 6px 0 0; }
+    #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
+    #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
+    .dis-source { font-size: 12px; margin: 8px 0 0; }
     /* A station's own messages (what its monitors show), above its departures. */
-    .board-msgs { display: grid; gap: 4px; margin: 6px 0 2px; max-height: 30%; overflow: auto; }
-    .board-msg { font-size: 13px; white-space: pre-line; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--dis-1); background: var(--hover); }
+    .board-msgs { display: grid; gap: 6px; margin: 10px 0 2px; max-height: 30%; overflow: auto; flex: none; }
+    .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 12px; border-radius: 14px; background: var(--t-some-bg); color: var(--ink); }
 
     #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
     /* Bottom sheets (src/sheet.js, the Soft look 2026-11-15): every card and page slides up from the bottom; a card at
@@ -446,9 +449,27 @@
     .pick-list button span { color: var(--muted); font-size: 13px; }
     .pick-list button:hover, .pick-list button:focus-visible { background: var(--hover); outline: none; }
     /* A station's board */
-    .board-tabs { display: flex; gap: 4px; margin: 6px 0; }
-    .board-tabs button { font: inherit; font-size: 14px; font-weight: 600; padding: 7px 14px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); cursor: pointer; }
-    .board-tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    /* A station's board (src/board.js; round 4, 2026-11-15): the name big, Departures / Arrivals as a segmented
+       switch, then one row per train: time (the new time under it in its colour), where to with number and kind,
+       the lateness tag, the track. */
+    #board .panel-head strong { font-size: 26px; line-height: 1.1; }
+    .board-tabs { align-self: flex-start; margin: 10px 0 6px; flex: none; }
+    .bd-head { display: grid; grid-template-columns: 50px 1fr auto; column-gap: 10px; padding: 4px 10px 4px 0; font-size: 12px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
+    .bd { display: grid; align-content: start; font-variant-numeric: tabular-nums; }
+    .bd-row { display: grid; grid-template-columns: 50px 1fr auto auto; column-gap: 10px; align-items: center; width: 100%; padding: 9px 0;
+      border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+    .bd-row:hover { background: var(--hover); }
+    .bd-row:last-child { border-bottom: 0; }
+    .bd-time { font-weight: 700; font-size: 15px; line-height: 1.15; }
+    .bd-time small { display: block; font-size: 12px; font-weight: 700; }
+    .bd-time .m.ontime { color: var(--t-ontime); } .bd-time .m.some { color: var(--t-some); } .bd-time .m.late { color: var(--t-late); }
+    .bd-name { min-width: 0; }
+    .bd-name b { display: block; font-weight: 700; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bd-name small { display: block; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bd-tag .tag { margin-left: 0; }
+    .bd-row.canceled .bd-time, .bd-row.canceled .bd-name b { text-decoration: line-through; color: var(--muted); }
+    .bd-row .tl-trk { min-width: 22px; text-align: center; }
     table.board td { vertical-align: top; padding: 5px 6px 5px 0; }
     table.board tbody tr { cursor: pointer; }
     table.board tbody tr:hover td { background: var(--hover); }
