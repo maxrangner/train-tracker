@@ -57,8 +57,10 @@ function candidates(net, p, { step, rings, max }, passFast = false) {
 }
 
 // places: [{ lon, lat, stop }] in the train's order; net: the rail network, or null.
+// A place may carry mark: { lon, lat }, where its station's ring is drawn (the measured stopping place): its stop dot
+// goes to the path's point nearest that.
 // Returns { coords: [[lon, lat], ...], at: [index in coords of each place], stops: [[lon, lat], ...] (the passenger
-// stops), stopAt: [index in coords of each stop] }.
+// stops' dots), stopAt: [index in coords where each stop's piece starts], stopF: [0 to 1 along that piece] }.
 // options (for comparing, tools/route-check.mjs): costed (default: when the network has costs), passFast (default: true).
 export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = true } = {}) {
   const opts = { costed, maxW: costed ? net.maxWeight : 1 };
@@ -91,8 +93,30 @@ export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = 
     else add(s?.lon ?? p.lon, s?.lat ?? p.lat);
     at.push(coords.length - 1);
   });
-  const stopIdx = places.map((p, i) => (p.stop ? at[i] : null)).filter(i => i !== null);
-  return { coords, at, stops: stopIdx.map(i => coords[i]), stopAt: stopIdx };
+  // Each stop's dot: the path's point nearest the station's ring (p.mark, else the place itself), looked for between
+  // the places before and after it (Max, 2026-11-15, "A": the dots were a median 58 m from the rings, Södra 249 m).
+  const stops = [], stopAt = [], stopF = [];
+  places.forEach((p, i) => {
+    if (!p.stop) return;
+    const n = nearestOn(coords, p.mark ?? p, at[Math.max(0, i - 1)], at[Math.min(at.length - 1, i + 1)]);
+    stops.push(n.point); stopAt.push(n.k); stopF.push(n.f);
+  });
+  return { coords, at, stops, stopAt, stopF };
+}
+
+// The point of coords between indexes lo and hi nearest to place m: { point: [lon, lat], k (the piece's first
+// index), f (0 to 1 along that piece) }. A single point: itself.
+function nearestOn(coords, m, lo, hi) {
+  const k0 = Math.cos(m.lat * R);
+  let best = { point: coords[lo], k: lo, f: 0 }, bestD = Infinity;
+  for (let k = lo; k < hi; k++) {
+    const [ax, ay] = coords[k], [bx, by] = coords[k + 1];
+    const vx = (bx - ax) * k0, vy = by - ay, L2 = vx * vx + vy * vy;
+    const f = L2 ? Math.max(0, Math.min(1, (((m.lon - ax) * k0) * vx + (m.lat - ay) * vy) / L2)) : 0;
+    const d = ((m.lon - ax) * k0 - vx * f) ** 2 + (m.lat - ay - vy * f) ** 2;
+    if (d < bestD) { bestD = d; best = { point: [ax + (bx - ax) * f, ay + (by - ay) * f], k, f }; }
+  }
+  return best;
 }
 
 // The track per place (an index into C[i]) and the way from the place before: [{ j, poly (null: straight) }].
