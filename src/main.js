@@ -1,5 +1,6 @@
 import { startTrainSource } from './trains-source.js';
 import { icon } from './icons.js';
+import { splitLabel, tagHtml } from './tag.js';
 import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap } from './map.js';
@@ -164,7 +165,7 @@ function showPicker(list) {
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
-    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(r.label)}</b> <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
+    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
   raise('picker');
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };

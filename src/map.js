@@ -2,6 +2,8 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
+import { splitLabel, minutesText } from './tag.js';
+import { lateClass } from './lateness.js';
 import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
@@ -654,6 +656,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
+    nameBoxes = placed;
   }
   // The station whose name (close in) is under a point of the map, or null.
   function stationNameAt(pt) {
@@ -667,7 +670,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   }
   let nearProps = new globalThis.Map();   // id -> the properties setTrains got for each train near the view
   const nearEls = new globalThis.Map();   // key -> { el, text, ids }
-  const LABEL_DY = 12;   // the label's top below the train's point (the map's labels: 1.1 em of 11 px)
+  const LABEL_DY = 16;   // the bubble's top (its pointer's tip) below the train's point
+  // A bubble never covers a station's name (they are placed first: placeStationNames; the Soft look, 2026-11-15).
+  let nameBoxes = [];
   function placeNearLabels() {
     if (!isReady) return;
     const { clientWidth: W, clientHeight: H } = box, pts = [];
@@ -702,15 +707,26 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         n.text = text;
         if (one) {
           const { company, label, stale } = g[0].pr;
+          const { number, minutes, rest } = splitLabel(label);
           n.el.className = `near-label${stale ? ' stale' : ''}`;
-          n.el.replaceChildren(...(company ? [Object.assign(document.createElement('span'), { className: 'co', textContent: company }), '\n'] : []), String(label));
+          const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+          n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
+            ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = 'near-label group';
           n.el.textContent = text;
         }
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
-      n.el.style.transform = `translate(${x.toFixed(1)}px, ${(y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again). Over a
+      // station's name it moves down below the name; hidden only if that is far from its train.
+      const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
+      const h = one && g[0].pr.company ? 40 : 26;
+      let top = y + LABEL_DY;
+      for (const o of nameBoxes) if (o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt) top = o.bt + 6;
+      const hide = top - (y + LABEL_DY) > 60;
+      if (hide !== n.el.classList.contains('tucked')) n.el.classList.toggle('tucked', hide);
+      n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
     }
     for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
   }
