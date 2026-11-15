@@ -747,7 +747,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const top = up ? y - LABEL_DY - h : y + LABEL_DY;
       n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
     }
-    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
+    // A bubble that goes fades out (round 4; it fades in by CSS), then is removed.
+    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.classList.add('out'); setTimeout(() => n.el.remove(), 160); nearEls.delete(key); }
   }
   // The close-in label under a point of the map (screen pixels), with 3 px to spare, or null.
   function nearLabelAt(pt) {
