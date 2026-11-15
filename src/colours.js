@@ -18,7 +18,7 @@ export const DISRUPTION = { light: ['#d4a017', '#e8701a', '#d1242f'], dark: ['#e
 // The base map (src/map-look.js uses these with its own finer shades).
 export const MAP = {
   light: { land: '#f7f3ec', water: '#cfe4f1', rail: '#c4bcb0' },
-  dark: { land: '#1d2130', water: '#131725', rail: '#434c64' },
+  dark: { land: '#1d2130', water: '#131725', rail: '#56617f' },
 };
 
 // The page: cards, text, lines, and the problem colour for text (a cancelled stop, a red note).

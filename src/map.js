@@ -6,8 +6,8 @@ import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trai
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
-import { LOOK, restyleBase } from './map-look.js';
-import { LATE, ACCENTS, DEFAULT_ACCENT, DISRUPTION } from './colours.js';
+import { restyleBase } from './map-look.js';
+import { LATE, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -25,13 +25,15 @@ const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' :
 const accentOf = dark => (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT])[dark ? 'dark' : 'light'];
 const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: accentOf(dark).c, routeDone: accentOf(dark).done,
   dis: DISRUPTION[dark ? 'dark' : 'light'] });
+// Soft (2026-11-15): pale, thin rails (pushed back, so the trains stand out), no white rail edge; rings and names in the
+// page's colours (src/colours.js).
 const colourBase = dark => (dark
-  ? { label: '#ffffff', halo: LOOK.dark.water, station: '#d6deea', ring: '#e8c170', ringFill: LOOK.dark.land, group: '#58a6ff',
-      rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land, dis: ['#e3b341', '#f0883e', '#ff6b61'], disEdge: LOOK.dark.land, disDash: true,
-      casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
-  : { label: '#1b1f24', halo: '#ffffff', station: '#33373d', ring: '#33373d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#33373d', railEdge: '#ffffff', railK: 1.25, nameHalo: LOOK.light.land, dis: ['#d4a017', '#e8701a', '#d1242f'], disEdge: '#ffffff', disDash: false,
-      casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
+  ? { label: PAGE.dark.label, halo: PAGE.dark.halo, station: PAGE.dark.station, ring: '#8a93a8', ringFill: MAP.dark.land,
+      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: MAP.dark.land, disDash: true,
+      casing: MAP.dark.land, stopFill: MAP.dark.land }
+  : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
+      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: '#ffffff', disDash: false,
+      casing: '#ffffff', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
