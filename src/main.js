@@ -87,6 +87,7 @@ const panel = createPanel(document.getElementById('panel'), {
     map.select(id);
     if (!id) map.unfollow();   // the map stays exactly as it is
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
+    map.setRouteStations(null);   // the new train's come with its route
   },
   // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
   // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
@@ -113,6 +114,7 @@ const panel = createPanel(document.getElementById('panel'), {
       else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
       map.setPathProgress(done);
       map.setPath(shownPath.path);
+      map.setRouteStations(places.filter(p => p.stop).map(p => p.sig));   // their names in pills (Max, 2026-11-15)
       if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
     });
   },

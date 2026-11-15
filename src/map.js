@@ -89,6 +89,18 @@ const symbolSize = () => (settings.trainSymbol === 'drop'
   ? ['interpolate', ['linear'], ['zoom'], 4, 1.0, 7, 1.2, 10, 1.5, 13, 1.7]
   : ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25]);
 const triangles = () => settings.trainSymbol !== 'circle';
+// The pill behind a name of the open train's stations (Max, 2026-11-15: white name pills): a rounded box in the card's
+// colour with a thin edge, stretched round the text (icon-text-fit).
+function addPill(map, dark) {
+  const c = document.createElement('canvas');
+  c.width = 48; c.height = 32;
+  const g = c.getContext('2d');
+  g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
+  g.fillStyle = PAGE[dark ? 'dark' : 'light'].card; g.fill();
+  g.lineWidth = 1.5; g.strokeStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'; g.stroke();
+  if (map.hasImage('pill')) map.removeImage('pill');
+  map.addImage('pill', g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+}
 function addTriangles(map, dark) {
   for (const [name, colour] of Object.entries(dotColours(dark))) {
     const c = document.createElement('canvas');
@@ -121,7 +133,7 @@ const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
 const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'train-dots', 'train-triangles',
-  'trains-3d', 'train-labels', 'station-names'];
+  'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -209,7 +221,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty() };
+  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty() };
+  let routeSigs = [];   // the open train's stations (setRouteStations): their names in pills
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
@@ -222,6 +235,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // refresh of the dots at zoom 11; measured 2026-11-15).
     add('trains', { maxzoom: 12 });
     add('disruptions');
+    add('route-names');
+  }
+  // The open train's stations: names in pills (route-names), left out of the plain names (station-names), first stop
+  // and last placed first where they collide.
+  function routeNames() {
+    const at = new globalThis.Map(routeSigs.map((sig, i) => [sig, i === 0 || i === routeSigs.length - 1 ? 0 : 1]));
+    data['route-names'] = { type: 'FeatureCollection', features: data.stations.features.filter(f => at.has(f.properties.sig))
+      .map(f => ({ ...f, properties: { ...f.properties, rank: at.get(f.properties.sig) } })) };
+    if (!isReady) return;
+    map.getSource('route-names')?.setData(data['route-names']);
+    if (map.getLayer('station-names')) map.setFilter('station-names', routeSigs.length ? ['!', ['in', ['get', 'sig'], ['literal', routeSigs]]] : null);
   }
 
   // Our layers, with the colours, model zoom and language as they are now.
@@ -395,6 +419,29 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       },
       paint: { 'text-color': C.station, 'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
     });
+    // The open train's stations: their names in pills, at every zoom up to where names are page elements (there the
+    // page's names get the pill: placeStationNames).
+    addPill(map, dark);
+    map.addLayer({
+      id: 'route-names',
+      type: 'symbol',
+      source: 'route-names',
+      maxzoom: Math.max(11, MODEL_ZOOM),
+      layout: {
+        'text-field': ['get', 'name'],
+        'text-font': ['Noto Sans Regular'],
+        'text-size': 13,
+        'text-offset': [0, -1.25],
+        'text-anchor': 'bottom',
+        'icon-image': 'pill',
+        'icon-text-fit': 'both',
+        'icon-text-fit-padding': [2, 7, 2, 7],
+        'symbol-sort-key': ['get', 'rank'],
+        'text-padding': 3,
+      },
+      paint: { 'text-color': C.station },
+    });
+    routeNames();
 
     applySelectionFilters();
     relabelControls();
@@ -594,8 +641,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (nameEls.size) { namesBox.replaceChildren(); nameEls.clear(); }
       return;
     }
-    const placed = [], keep = new Set();
-    for (const f of data.stations.features) {
+    const placed = [], keep = new Set(), onRoute = new Set(routeSigs);
+    const order = onRoute.size ? [...data['route-names'].features, ...data.stations.features.filter(f => !onRoute.has(f.properties.sig))] : data.stations.features;
+    for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
       const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
@@ -609,6 +657,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         namesBox.appendChild(el);
         nameEls.set(sig, el);
       }
+      el.classList.toggle('pill', onRoute.has(sig));
       el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
@@ -991,6 +1040,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
+      if (routeSigs.length) routeNames();
+    },
+    // The open train's stations (signatures, in order) get their names in pills; null: none.
+    async setRouteStations(sigs) {
+      routeSigs = sigs ?? [];
+      await ready;
+      routeNames();
     },
     // Draw a train's whole path (path.js) and its stops; null: none.
     async setPath(path) {
