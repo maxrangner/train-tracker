@@ -385,7 +385,8 @@
        disruption's card too (his answer 2A). */
     @media (max-width: 439px) { #panel .panel-close, #board .panel-close, #disruption .panel-close { display: none; } }
     .cd { display: contents; }
-    .cd-tiles { display: grid; grid-template-columns: 3fr 2fr; gap: 8px; margin-top: 12px; flex: none; }
+    .cd-tiles { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; margin-top: 12px; flex: none; }
+    .tile b.long { font-size: 18px; line-height: 1.4; }   /* "≈ 1 h 43 min": smaller, inside its tile (Max, 2026-11-15) */
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
     .tile b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .tile small { display: flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 500; color: var(--muted); margin-top: 2px; }
@@ -457,12 +458,17 @@
     .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
     .tl-node::before { content: ''; position: absolute; left: calc(50% - 2px); top: -1px; bottom: -1px; width: 4px; background: var(--line); }
     .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
-    .tl-row:first-child .tl-node::before { top: 50%; }
+    .tl-row:first-child .tl-node::before, .tl-head + .tl-row .tl-node::before { top: 50%; }
     .tl-row:last-child .tl-node::before { bottom: 50%; }
     .tl-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
     .tl-row.next .tl-dot { width: 18px; height: 18px; box-sizing: border-box; background: var(--bg); border: 3.5px solid var(--accent); box-shadow: none; }
-    .tl-row.passed .tl-dot { width: 22px; height: 22px; display: grid; place-items: center; background: var(--t-ontime-bg); color: var(--t-ontime); box-shadow: none; }
-    .tl-row.canceled .tl-dot { background: var(--late); }
+    /* Passed: an accent ring, the card's colour inside, a green ✓; cancelled: a red ring with ✕ (Max, 2026-11-15). */
+    .tl-row.passed .tl-dot, .tl-row.canceled .tl-dot { width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center;
+      background: var(--bg); border: 2.5px solid var(--accent); color: var(--c-ontime); box-shadow: none; }
+    .tl-row.canceled .tl-dot { border-color: var(--late); color: var(--late); }
+    /* "Track" over the tracks (Max, 2026-11-15), kept at the top while the stops scroll. */
+    .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; padding: 2px 0 4px;
+      background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
       background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
     .tl-now { min-height: 40px; color: var(--accent); font-weight: 700; font-size: 13.5px; }

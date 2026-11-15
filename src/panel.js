@@ -18,11 +18,11 @@ const time = t => (t ? hhmm(t) : '');
 // The favourite star (☆ / ★), used by the train panel and the station board.
 export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
-// "12 min", "1 h 5 min"; 0 or less: "Now".
+// "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {
   const m = Math.round(ms / 60000);
   if (m <= 0) return t('cdNow');
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} ${t('hours')} ${m % 60} min`;
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 };
 
 // The stops a passenger sees, one per station: arrival and departure at the same station merged (they can come in
@@ -179,7 +179,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     };
     const g = row(goal);
     const stopTile = `<button class="cd-stop tile" type="button" aria-expanded="${picking}">` +
-      `<b>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
+      `<b${(g.mark + g.inn).length > 8 ? ' class="long"' : ''}>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
       `${g.w.kind === 'planned' ? ` · ${t('planned')}` : ''}</span>${icon(picking ? 'chevronUp' : 'chevronDown', 14)}</small></button>`;
     const list = picking ? `<div class="cd-pick"><p>${t('countDownTo')}</p><div class="cd-list">${ahead.map(a => {
       const r = row(a), on = a === goal;
@@ -203,7 +203,11 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       `<div class="cd-names"><span>${esc(stationName(stops[0].station))}</span>` +
       `<b class="${goal.i === nextIdx ? 'goal' : ''}">${esc(nextName)}</b>` +
       `<span class="${isEnd ? 'goal' : ''}">${esc(stationName(stops.at(-1).station))}</span></div></div>`;
-    return { tiles: lateTile + stopTile, list, trip };
+    // The timeline's line where the train is: "In 4 min" to the next stop; standing there, "Leaves in 2 min".
+    const nx = row({ s: next, i: nextIdx }), soon = nx.w.at - tNow < 30000;
+    const nowLine = soon ? t(nx.here ? 'leavesNow' : 'arrivesNow')
+      : t(`${nx.here ? 'leaves' : 'arrives'}${nx.mark ? 'About' : 'In'}`, inText(nx.w.at - tNow));
+    return { tiles: lateTile + stopTile, list, trip, nowLine };
   }
   function wireGlance() {
     const b = el.querySelector('.cd-stop');
@@ -216,6 +220,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     const box = el.querySelector('.cd');
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
+    const line = el.querySelector('.tl-now-text');
+    if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
     const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}${g.trip}`;
     el.classList.toggle('picking', Boolean(g.list));   // the card grows while the stops ahead are listed
     if (html === glanceSeen) return;   // each second: only when something on it changed
@@ -248,12 +254,19 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       const seen = main.actual ?? main.estimated;
       const state = main.canceled ? 'canceled' : i < nextIdx || nextIdx === -1 ? 'passed' : i === nextIdx ? 'next' : '';
       const m = seen && main.planned ? Math.round((seen - main.planned) / 60000) : null;
+      // Passed: the minutes off ("+2"); ahead: the expected clock time (Max, 2026-11-15: "estimated time instead of +n
+      // on upcoming stations"), both in the lateness colour.
       const offText = main.canceled ? `<small class="m late">${t('cancelledStop')}</small>`
-        : m ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}${main.actual ? '' : ` ${t('est')}`}</small>` : '';
+        : !m ? '' : main.actual ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}</small>`
+        : `<small class="m ${lateClass(m)}">${time(main.estimated)}</small>`;
       const dwell = a && d && time(a.planned) !== time(d.planned) ? `<small>${t('arr')} ${time(a.planned)}</small>` : '';
-      const dot = state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
+      // Passed: an accent ring with a green ✓; cancelled: a red ring with ✕ (Max, 2026-11-15).
+      const dot = state === 'canceled' ? `<span class="tl-dot">${icon('close', 12, 3)}</span>`
+        : state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
+      // Where the train is: the minutes to the next stop (or till it leaves the one it stands at), each second
+      // (showGlance; Max, 2026-11-15: "Nu · nästa station X" said nothing new).
       const now = i === nextIdx && i > 0
-        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span>${esc(t('nowNext', stationName(s.station)))}</span></div>` : '';
+        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>` : '';
       return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
         `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
@@ -289,7 +302,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
-          `<div class="panel-table tl">${rows}</div>`
+          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${rows}</div>`
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
