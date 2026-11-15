@@ -4,7 +4,7 @@
 // Checked: the page starts without errors in English/light and Swedish/dark; a tap opens a train's card; every
 // "N trains" label lists exactly N; a search lists every matching train and scrolls; a setting changes without the
 // page reloading; no model has surfaces on top of each other (tools/models-check.mjs); a tap on the banner opens the
-// stats page in each language, filled in, and × closes it; the compact train card (tiles, the stop list, "All stops"); a tap on a company there shows only its trains, and × on
+// stats page in each language, filled in (Sweden drawn), a train tapped there opens its card, and × closes it; the compact train card (tiles, the stop list, "All stops"); a tap on a company there shows only its trains, and × on
 // the bar that appears shows them all again.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
 import { existsSync } from 'node:fs';
@@ -35,10 +35,11 @@ try {
     await sleep(1200);
     const st = await page.evaluate(() => ({ open: !document.getElementById('stats-page').hidden, title: document.getElementById('stats-title').textContent,
       first: document.querySelector('#stats-body .st-big')?.textContent ?? '', bars: document.querySelectorAll('#stats-body .st-bar').length,
-      sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count }));
+      sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count,
+      map: document.querySelector('#stats-body canvas')?.width ?? 0 }));
     expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
-    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 9,
-      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 9 sections`);
+    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 9 && st.map > 0,
+      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 9 sections, Sweden ${st.map ? 'drawn' : 'missing'}`);
     // ---- A tap on a company shows only its trains on the map; × on the bar shows them all again ----
     if (lang === 'en') {
       const drawn = () => page.evaluate(() => ({ n: window.__last3d.length, bar: !document.getElementById('filter-bar').hidden,
@@ -53,6 +54,19 @@ try {
       filtered = `${company}: ${only.n} of ${all.n} drawn`;
       expect(!all.bar && only.bar && only.n > 0 && only.n < all.n && only.text.includes(company) && !again.bar && again.n >= all.n - 5,
         `filter on ${company}: drawn ${all.n} -> ${only.n} (bar ${only.bar ? `"${only.text}"` : 'hidden'}) -> × ${again.n} (bar ${again.bar ? 'shown' : 'hidden'})`);
+      // ---- A tap on a train there (the most late, else the fastest) closes the page and opens its card ----
+      const tapped = await page.evaluate(() => {
+        const b = document.querySelector('#stats-body .st-worst:not([hidden])') ?? document.querySelector('#stats-body .st-fastrow[data-id]');
+        if (!b) return null;
+        const n = b.querySelector('b')?.textContent; b.click(); return n;
+      });
+      await sleep(1200);
+      const card = await page.evaluate(() => ({ stats: !document.getElementById('stats-page').hidden, panel: !document.getElementById('panel').hidden,
+        title: document.querySelector('#panel .panel-title strong')?.textContent ?? '' }));
+      expect(tapped && !card.stats && card.panel && card.title.startsWith(tapped),
+        `a tap on train ${tapped ?? '(none to tap)'} on the stats page: page ${card.stats ? 'still open' : 'closed'}, card ${card.panel ? `"${card.title}"` : 'not open'}`);
+      await page.click('#status');
+      await sleep(800);
     }
     await page.click('#stats-page .panel-close');
     await sleep(300);
