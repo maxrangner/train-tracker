@@ -172,7 +172,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       const e = stops.findLast(s => s.station === to), x = e && (e.arr ?? e.dep);
       if (!x?.actual && !x?.canceled) {
         const name = t('towardsEnd', stationName(to));
-        return { tiles: lateTile + `<div class="cd-stop tile"><b${name.length > 8 ? ' class="long"' : ''}>${esc(name)}</b>` +
+        return { tiles: lateTile + `<div class="cd-stop tile"><b class="wrap">${esc(name)}</b>` +
           `<small><span>${t('timeUnknown')}</span></small></div>`, list: '', trip: '' };
       }
     }
@@ -307,9 +307,21 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       }
     }
 
+    // On the small card, one red line with what matters for the rest of the trip (Max, 2026-11-15, VR 2047: "Ändrad
+    // väg · Elfel · Alingsås inställt"): Trafikverket's problem notes at the stops not yet passed (the end station
+    // too), each once, then every cancelled stop by name ("Inställt" itself is then said by the names). Problems at
+    // passed stops ("Spårändrat" at Herrljunga) stay on the full card only, with everything else.
+    const ahead = new Set();
+    if (nextIdx !== -1) for (let i = nextIdx; i < stops.length; i++) {
+      for (const x of [stops[i].arr, stops[i].dep]) for (const text of x?.problems ?? []) if (!/^inställ/i.test(text)) ahead.add(text);
+    }
+    const cancelled = stops.filter(s => (s.dep ?? s.arr).canceled).map(s => stationName(s.station));
+    const alert = [...ahead, ...(cancelled.length ? [t('stopsCancelled', cancelled)] : [])].join(' · ');
+
     glanceSeen = '';
     el.innerHTML =
       head(train, route.product) +
+      (alert ? `<p class="panel-alert">${esc(alert)}</p>` : '') +
       (stops.length
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
