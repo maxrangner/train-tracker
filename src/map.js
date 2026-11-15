@@ -55,6 +55,8 @@ const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // Open
 // sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
 const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
 const MASK_URL = '/sweden-mask.json';
+// The ranges of Outfit letters in public/glyphs/ (tools/glyphs.mjs GLYPH_RANGES).
+const GLYPH_RANGES = new Set(['0-255', '8192-8447', '8704-8959']);
 // The zoom's limits (Max, 2026-11-13: the zoom slider shows the absolute minimum and maximum): furthest out, all of
 // Sweden on the screen (worked out for the screen's size); closest in, 19 (a street; the map's tiles end at 14 and
 // are only enlarged after that, the default limit 22 was empty enlargement).
@@ -165,6 +167,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Labels appear and go at once. Their 0.3 s fade kept the map drawing after every refresh of the dots: 27 frames
     // a second over all of Sweden with nothing moving on screen (measured 2026-11-15; Max: "Optimization is KEY").
     fadeDuration: 0,
+    // Our labels' letters in Outfit (round 4): cut by tools/glyphs.mjs into public/glyphs/; a range not cut there
+    // (letters Outfit hasn't) comes from OpenFreeMap's Noto Sans. The base map's own names stay Noto Sans.
+    transformRequest: (url, type) => {
+      if (type !== 'Glyphs') return undefined;
+      const m = /\/fonts\/([^/]+)\/(\d+-\d+)\.pbf/.exec(url);
+      const stack = m && decodeURIComponent(m[1]);
+      if (!stack?.startsWith('Outfit')) return undefined;
+      if (GLYPH_RANGES.has(m[2])) return { url: new URL(`/glyphs/${stack.replace(/ /g, '-')}/${m[2]}.pbf`, location.href).href };
+      return { url: url.replace(m[1], encodeURIComponent(stack.endsWith('Bold') ? 'Noto Sans Bold' : 'Noto Sans Regular')) };
+    },
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
@@ -382,7 +394,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'text-field': ['format', ['get', 'num'], {}, ['case', ['==', ['get', 'mins'], ''], '', ' '], {},
           ['get', 'mins'], { 'text-color': ['match', ['get', 'late'], 'ontime', T.ontime[1], 'some', T.some[1], 'late', T.late[1], T.unknown[1]] },
           ['get', 'rest'], {}],
-        'text-font': ['Noto Sans Bold'],
+        'text-font': ['Outfit Bold'],
         'text-size': 11,
         // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,
         // option A: the label is the only place a toy shows its lateness). Further out, overlapping labels are left out.
@@ -410,7 +422,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
         'text-field': ['get', 'name'],
-        'text-font': ['Noto Sans Regular'],
+        'text-font': ['Outfit Medium'],
         'text-size': 14,
         'text-offset': [0, -1.1],
         'text-anchor': 'bottom',
@@ -428,7 +440,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
         'text-field': ['get', 'name'],
-        'text-font': ['Noto Sans Regular'],
+        'text-font': ['Outfit SemiBold'],
         'text-size': 13,
         'text-offset': [0, -1.25],
         'text-anchor': 'bottom',
