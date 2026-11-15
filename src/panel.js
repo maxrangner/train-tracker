@@ -164,6 +164,18 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     const late = lateNow(stops);
     const lateTile = `<div class="cd-late tile ${lateClass(late)}"><b>${late === null ? '–' : minutesText(late)}</b>` +
       `<small>${t(late === null ? 'lateUnknown' : late > 0 ? 'lateNow' : late < 0 ? 'earlyNow' : 'rightNow')}</small></div>`;
+    // Every known stop passed, but the trip's own end station (route.to) not reached, and the train still on the map:
+    // a part of the trip is missing from the timetable (VR 2047, 2026-11-15: "Framme Herrljunga C" on the way to
+    // Göteborg C). "To Göteborg C · time unknown" instead of "Arrived".
+    const to = shown?.route?.to;
+    if (nextIdx === -1 && to && lateOf?.(openId) !== undefined) {
+      const e = stops.findLast(s => s.station === to), x = e && (e.arr ?? e.dep);
+      if (!x?.actual && !x?.canceled) {
+        const name = t('towardsEnd', stationName(to));
+        return { tiles: lateTile + `<div class="cd-stop tile"><b${name.length > 8 ? ' class="long"' : ''}>${esc(name)}</b>` +
+          `<small><span>${t('timeUnknown')}</span></small></div>`, list: '', trip: '' };
+      }
+    }
     if (nextIdx === -1) {   // arrived
       const end = stops.at(-1), x = end.arr ?? end.dep;
       return { tiles: lateTile + `<div class="cd-stop tile"><b>${t('arrived')}</b><small><span>${esc(stationName(end.station))} ${time(x.actual)}</span></small></div>`, list: '', trip: '' };
