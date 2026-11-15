@@ -240,9 +240,11 @@
     .sel-train.late-ontime:not(.model) { border-color: var(--c-ontime); }
     .sel-train.late-some:not(.model) { border-color: var(--c-some); }
     .sel-train.late-late:not(.model) { border-color: var(--c-late); }
-    .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: pre; text-align: center;
+    .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; text-align: center;
       font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
       box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); margin-top: 6px; }
+    .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
+    .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
 
     /* Close in, the trains' labels (src/map.js: placeNearLabels): page elements placed every frame, like the
        selected train's; company above number (lateness), "3 trains" for trains standing close together. */
@@ -333,6 +335,33 @@
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }
     .panel-table { overflow: auto; min-height: 0; position: relative; }
+    /* The trip as a timeline (src/panel.js; the Soft look, 2026-11-15). Columns: time, the line with its dot, the
+       station, the track. The line is the accent up to the train, then grey. */
+    .tl { margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .tl-row, .tl-now { display: grid; grid-template-columns: 50px 28px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
+    .tl-time { text-align: right; font-weight: 700; font-size: 15px; line-height: 1.15; }
+    .tl-time small, .tl-name small { display: block; font-size: 11.5px; font-weight: 700; }
+    .tl-name small { color: var(--muted); font-weight: 500; }
+    .m.ontime { color: var(--t-ontime); } .m.some { color: var(--t-some); } .m.late { color: var(--t-late); } .m.unknown { color: var(--t-unknown); }
+    .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
+    .tl-node::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--line); }
+    .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
+    .tl-row:first-child .tl-node::before { top: 50%; }
+    .tl-row:last-child .tl-node::before { bottom: 50%; }
+    .tl-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
+    .tl-row.next .tl-dot { width: 18px; height: 18px; box-sizing: border-box; background: var(--bg); border: 3.5px solid var(--accent); box-shadow: none; }
+    .tl-row.passed .tl-dot { width: 22px; height: 22px; display: grid; place-items: center; background: var(--t-ontime-bg); color: var(--t-ontime); box-shadow: none; }
+    .tl-row.canceled .tl-dot { background: var(--late); }
+    .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
+    .tl-now { min-height: 40px; color: var(--accent); font-weight: 700; font-size: 13.5px; }
+    .tl-now > span:last-child { grid-column: 3 / -1; }
+    .tl-name { font-size: 15.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+    .tl-row.passed .tl-time, .tl-row.passed .tl-name, .tl-row.passed .tl-trk { opacity: 0.5; }
+    .tl-row.next .tl-name { font-weight: 800; }
+    .tl-row.canceled .tl-name { text-decoration: line-through; color: var(--late); }
+    .tl-trk { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--hover); padding: 4px 8px; border-radius: 8px; }
+    .tl-trk:empty { visibility: hidden; }
     table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
     th { text-align: left; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--bg); }
     th, td { padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
