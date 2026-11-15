@@ -60,7 +60,6 @@
        stats page; Max, 2026-11-13). The count's colour: live green, slower (polling, reconnecting) yellow, a problem red. */
     .searchbar { flex: 1 1 100%; min-width: 0; height: 50px; display: flex; align-items: center; gap: 6px; padding: 0 6px 0 14px;
       border-radius: 999px; box-shadow: var(--shadow); box-sizing: border-box; }
-    @media (min-width: 440px) { .searchbar { flex: 0 1 520px; } }
     .searchbar .logo { width: 66px; flex: none; display: flex; color: var(--ink); }
     .searchbar .logo svg { width: 100%; height: auto; }
     #menu-button { flex: 1; min-width: 0; height: 34px; display: flex; align-items: center; gap: 7px; border: 0; border-left: 1.5px solid var(--line);
@@ -68,7 +67,7 @@
     #menu-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #menu-button[aria-expanded="true"] { color: var(--accent); }
     #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-    #status { flex: none; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 11px; cursor: pointer;
+    #status { flex: none; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 8px 14px 8px 13px; cursor: pointer;
       font: 700 14px/1 var(--font); font-variant-numeric: tabular-nums; background: var(--t-ontime-bg); color: var(--t-ontime); white-space: nowrap; }
     #status .live { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
     #status.slow { background: var(--t-some-bg); color: var(--t-some); }
@@ -179,40 +178,29 @@
     .menu-section { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* leave room on the right for the zoom buttons and compass */
-    #top { right: calc(68px + env(safe-area-inset-right, 0px)); }
+    #top { right: calc(var(--gap) + env(safe-area-inset-right, 0px)); }
     /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15),
        the compass only while the map is turned or tilted (src/map.js sets .touch and .turned on the map). */
-    .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px 10px 0 0; }
+    .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: min(calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)), calc(100% - 200px)); right: env(safe-area-inset-right, 0px);
+      transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
     .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
-    .maplibregl-ctrl-group button { width: 48px; height: 46px; }
+    .maplibregl-ctrl.maplibregl-ctrl-group button { width: 46px; height: 46px; }
     .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
     .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
-    .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { height: 48px; }
+    .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { width: 48px; height: 48px; }
     .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
     .maplibregl-map:not(.turned) .maplibregl-ctrl-compass { display: none; }
     .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
-    .map-note { position: absolute; z-index: 3; top: calc(150px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
+    .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 130px + env(safe-area-inset-bottom, 0px)); right: calc(10px + env(safe-area-inset-right, 0px));
       max-width: min(300px, calc(100% - 20px)); padding: 8px 10px; background: var(--bg); color: var(--ink); font-size: 13px; }
     /* In dark the map's button icons are turned light (above); My location's own blue and red states stay as they are. */
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon,
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-error .maplibregl-ctrl-icon { filter: none; }
-    /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
-    .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
-      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(66px + env(safe-area-inset-right, 0px));
-      width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
-    .zoom-bar.shown { opacity: 1; transition: opacity .15s; pointer-events: auto; }
-    /* The grip: an invisible area round the bar, wide enough for a finger, clear of the + and − buttons. */
-    .zoom-grip { position: absolute; left: -18px; right: -8px; top: -12px; bottom: -12px; cursor: ns-resize; touch-action: none; }
-    .zoom-bar.held .zoom-knob { transform: scale(1.25); }
-    .zoom-bar::before, .zoom-bar::after { content: ''; position: absolute; left: -4px; width: 14px; height: 2px; border-radius: 1px; background: var(--muted); }
-    .zoom-bar::before { top: 0; }
-    .zoom-bar::after { bottom: 0; }
-    .zoom-knob { position: absolute; left: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-      background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; }
 
     /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
     .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
@@ -258,10 +246,11 @@
     .near-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .near-label b { font-weight: 800; }
     .near-label i { font-style: normal; color: var(--muted); }
+    .near-label .m, .sel-label .m { margin-left: 5px; }
     .near-label .m.ontime { color: var(--t-ontime); } .near-label .m.some { color: var(--t-some); }
     .near-label .m.late { color: var(--t-late); } .near-label .m.unknown { color: var(--t-unknown); }
     .near-label.stale { opacity: 0.5; }
-    .near-label.tucked { visibility: hidden; }
+    .near-label.up::before { top: auto; bottom: -4px; border-radius: 0 0 2px 0; }   /* above its train: the pointer down */
     .near-label.group { font-size: 13px; font-weight: 800; color: var(--accent); }
     /* Lateness tags (src/tag.js): the card's heading, boards, the picker. */
     .tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
@@ -299,19 +288,35 @@
        Settings, Help, disruptions) up to the top bar. The handle: drag up for full height, down for half or closed.
        From 440 px wide (src/map.js cardRight) a card at the left instead. Only the newest open sheet shows. */
     .sheet { position: fixed; z-index: 6; box-sizing: border-box; background: var(--bg); display: flex; flex-direction: column;
-      left: 0; right: 0; bottom: 0; max-height: 45vh; overflow: hidden;
+      left: 0; right: 0; bottom: 0; max-height: 45vh; overflow: hidden; touch-action: none;
       padding: 24px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
       border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
-      animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1); }
+      animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1);
+      transition: max-height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
+    .sheet.dragging { transition: none; }
+    .sheet.leaving { transition: transform .2s ease-in; }
+    /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
+    .sheet .panel-table, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
     .sheet::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
     .sheet.page, .sheet.full { max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); }
     .sheet.behind { visibility: hidden; }
     @keyframes sheet-in { from { transform: translateY(100%); } }
-    @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+    @keyframes sheet-down { from { transform: translateY(-14px); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .sheet { animation: none; transition: none; } }
+    /* The search opens from the search bar (Max, 2026-11-15: on the phone the keyboard hid the results). */
+    #menu.sheet { top: calc(68px + env(safe-area-inset-top, 0px)); bottom: auto; left: calc(var(--gap) + env(safe-area-inset-left, 0px));
+      right: calc(var(--gap) + env(safe-area-inset-right, 0px)); padding: 14px 16px; border-radius: var(--radius); box-shadow: var(--shadow);
+      max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); animation-name: sheet-down; animation-duration: .2s; }
+    #menu.sheet::before { display: none; }
+    /* Wider screens (from 440 px; src/map.js knows it too): every sheet opens from the search bar, at the left, 420 px
+       wide, as tall as it needs; no handle. */
     @media (min-width: 440px) {
-      .sheet { left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: auto; bottom: calc(var(--gap) + env(safe-area-inset-bottom, 0px));
-        width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px 16px 14px; }
-      .sheet.page, .sheet.full { max-height: calc(100% - 78px - var(--gap) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+      .sheet, #menu.sheet { top: calc(70px + env(safe-area-inset-top, 0px)); bottom: auto; left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: auto;
+        width: 420px; max-height: calc(100% - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; animation-name: sheet-down; animation-duration: .2s; touch-action: auto; }
+      .sheet::before { display: none; }
+      .sheet.page, .sheet.full { max-height: calc(100% - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
+      .searchbar { flex: 0 1 420px; }
     }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 17px; }
     .panel-head strong { font-weight: 800; }
@@ -334,17 +339,17 @@
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }
-    .panel-table { overflow: auto; min-height: 0; position: relative; }
+    .panel-table { overflow: auto; min-height: 0; position: relative; padding-right: 10px; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable; }
     /* The trip as a timeline (src/panel.js; the Soft look, 2026-11-15). Columns: time, the line with its dot, the
        station, the track. The line is the accent up to the train, then grey. */
     .tl { margin-top: 8px; font-variant-numeric: tabular-nums; }
-    .tl-row, .tl-now { display: grid; grid-template-columns: 50px 28px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
+    .tl-row, .tl-now { display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
     .tl-time { text-align: right; font-weight: 700; font-size: 15px; line-height: 1.15; }
     .tl-time small, .tl-name small { display: block; font-size: 11.5px; font-weight: 700; }
     .tl-name small { color: var(--muted); font-weight: 500; }
     .m.ontime { color: var(--t-ontime); } .m.some { color: var(--t-some); } .m.late { color: var(--t-late); } .m.unknown { color: var(--t-unknown); }
     .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
-    .tl-node::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--line); }
+    .tl-node::before { content: ''; position: absolute; left: calc(50% - 2px); top: -1px; bottom: -1px; width: 4px; background: var(--line); }
     .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
     .tl-row:first-child .tl-node::before { top: 50%; }
     .tl-row:last-child .tl-node::before { bottom: 50%; }
@@ -465,7 +470,7 @@
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
-      <div class="set-row model-only"><span data-t="trueSize">Realistic size</span>
+      <div class="set-row real-only"><span data-t="trueSize">Realistic size</span>
         <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>

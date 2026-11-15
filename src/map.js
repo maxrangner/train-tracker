@@ -153,7 +153,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     fadeDuration: 0,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
-  map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
   // + and − only with a mouse; the compass only while the map is turned or tilted (index.html, the Soft look 2026-11-15).
   const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
   const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
@@ -170,7 +170,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // a blue dot there; it stops following a train. Browsers give the place only on a secure address (https, or the
   // computer itself), so over the home wifi (http://192.168.x.x) the button is grey, and a tap on it says why.
   const geolocate = new GeolocateControl({ positionOptions: { enableHighAccuracy: true }, fitBoundsOptions: { maxZoom: 14 } });
-  map.addControl(geolocate, 'top-right');
+  map.addControl(geolocate, 'bottom-right');
   const geoBox = geolocate._container;   // the control's own box (its button is inside)
   geoBox?.addEventListener('click', () => { if (following) stopFollowing(); }, true);
   const note = document.createElement('div');
@@ -199,54 +199,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   function setZoomLimits() {
     const cam = map.cameraForBounds(SWEDEN_BOUNDS, { padding: 20, bearing: 0 });
     if (cam && Number.isFinite(cam.zoom)) map.setMinZoom(Math.max(0, Math.min(MAX_ZOOM - 1, cam.zoom)));
-    showZoom(false);
   }
-  // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
-  // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
-  // out 1.5 s after. While it shows it can be grabbed (Max, 2026-11-13 evening): a press or drag on it sets the zoom,
-  // around the screen's middle (while following, the train), and it stays while held. An invisible grip round the
-  // thin bar makes it easy to hit with a finger.
-  const zoomBar = document.createElement('div');
-  zoomBar.className = 'zoom-bar';
-  zoomBar.setAttribute('aria-hidden', 'true');
-  zoomBar.innerHTML = '<div class="zoom-knob"></div><div class="zoom-grip"></div>';
-  map.getContainer().appendChild(zoomBar);
-  const knob = zoomBar.firstChild, grip = zoomBar.lastChild;
-  let zoomBarTimer = null;
-  let held = null;   // the finger or mouse holding the slider
-  function zoomFromY(clientY) {
-    const r = zoomBar.getBoundingClientRect();
-    const f = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    map.jumpTo({ zoom: min + f * (max - min) });
-  }
-  grip.addEventListener('pointerdown', (e) => {
-    if (!zoomBar.classList.contains('shown')) return;
-    e.preventDefault();
-    held = e.pointerId;
-    grip.setPointerCapture(e.pointerId);
-    zoomBar.classList.add('held');
-    zoomFromY(e.clientY);
-  });
-  grip.addEventListener('pointermove', (e) => { if (e.pointerId === held) zoomFromY(e.clientY); });
-  const letGo = (e) => {
-    if (e.pointerId !== held) return;
-    held = null;
-    zoomBar.classList.remove('held');
-    showZoom();   // fades 1.5 s after letting go
-  };
-  grip.addEventListener('pointerup', letGo);
-  grip.addEventListener('pointercancel', letGo);
-  function showZoom(reveal = true) {
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
-    knob.style.top = `${(1 - f) * 100}%`;
-    if (!reveal) return;
-    zoomBar.classList.add('shown');
-    clearTimeout(zoomBarTimer);
-    zoomBarTimer = setTimeout(() => { if (held === null) zoomBar.classList.remove('shown'); }, 1500);
-  }
-  map.on('zoom', () => showZoom());
+  // (The zoom slider was removed 2026-11-15, Max: "Remove the zoom bar".)
   map.on('resize', setZoomLimits);
   setZoomLimits();
 
@@ -388,7 +342,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       paint: { 'icon-opacity': dotOpacity(selected ?? '') },
     });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
-      selection: () => (selected ? { id: selected, colour: dark ? '#e6edf3' : '#1b1f24', faded: selStale } : null) }); map.addLayer(layer3d); }
+      selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
@@ -711,21 +665,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
           n.el.className = `near-label${stale ? ' stale' : ''}`;
           const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
           n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-            ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+            ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = 'near-label group';
           n.el.textContent = text;
         }
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
-      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again). Over a
-      // station's name it moves down below the name; hidden only if that is far from its train.
+      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
       const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
       const h = one && g[0].pr.company ? 40 : 26;
-      let top = y + LABEL_DY;
-      for (const o of nameBoxes) if (o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt) top = o.bt + 6;
-      const hide = top - (y + LABEL_DY) > 60;
-      if (hide !== n.el.classList.contains('tucked')) n.el.classList.toggle('tucked', hide);
+      // Under its train; over a station's name there, above its train instead; if a name is in the way there too, under
+      // it anyway (Max, 2026-11-15: bubbles pushed down past a name ended up far from their trains).
+      const covers = top => nameBoxes.some(o => o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt);
+      const up = covers(y + LABEL_DY) && !covers(y - LABEL_DY - h);
+      if (up !== n.el.classList.contains('up')) n.el.classList.toggle('up', up);
+      const top = up ? y - LABEL_DY - h : y + LABEL_DY;
       n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
     }
     for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
@@ -762,15 +717,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.on('resize', () => { size = { w: box.clientWidth, h: box.clientHeight }; });
   const GAP = 10, CARD_W = 420;
   const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
-  // Does the card reach the screen's middle (a phone), or leave it free (a wider window)?
+  // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
+  // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
+  // needs, so the free map is to its right.
+  const NARROW_PX = 440, TOP_BAR = 62;
+  const narrow = () => size.w < NARROW_PX;
+  // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
-  // The card's top edge, with a margin.
+  // The bottom card's top edge (a phone), with a margin.
   const panelTop = () => size.h - (Math.round(size.h * 0.45) + 20);
   // Where a train is held: the middle of the screen when the card leaves it free (Max, 2026-11-15: "the default set
   // position for following does not have the train centered in view"), otherwise the middle of the map above it.
-  const defaultFocus = () => (cardInMiddle() ? { x: size.w / 2, y: panelTop() / 2 } : { x: size.w / 2, y: size.h / 2 });
+  const defaultFocus = () => (narrow() ? { x: size.w / 2, y: panelTop() / 2 }
+    : cardInMiddle() ? { x: (cardRight() + size.w) / 2, y: size.h / 2 } : { x: size.w / 2, y: size.h / 2 });
   // Is a screen point behind the card?
-  const behindCard = (at, margin = 0) => at.y > size.h - Math.round(size.h * 0.45) - 10 - margin && at.x < cardRight() + margin;
+  const behindCard = (at, margin = 0) => at.x < cardRight() + margin &&
+    (narrow() ? at.y > size.h - Math.round(size.h * 0.45) - 10 - margin : at.y > TOP_BAR - margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -846,8 +808,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const { w, h } = size, at = map.project([p.lon, p.lat]);
     if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > h + LET_GO_PX || behindCard(at, -LET_GO_PX)) return stopFollowing(true);
     // Kept 30 px inside the edges, and 30 px clear of the card.
-    const x = Math.max(30, Math.min(w - 30, at.x));
-    following.focus = { x, y: Math.max(70, Math.min((behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    const x0 = Math.max(30, Math.min(w - 30, at.x)), x = narrow() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
+    following.focus = { x, y: Math.max(70, Math.min((narrow() && behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.glide = null;
   });
@@ -868,6 +830,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let isReady = false;
   let lastDrawnPlace = null;   // drawIfMoved
   let selStale = false;        // the selected train is grey (its ring under the model is faded too)
+  let selLate = 'unknown';     // its lateness: the ring's colour, zoomed in as zoomed out (Max, 2026-11-15)
   let lastTrainsSent = 0;      // setTrains
   ready.then(() => { isReady = true; warmRoute(); });
   // The first route shown made the map prepare its drawing programs for the route's line and stop dots: about 75 ms,
@@ -1060,7 +1023,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const h = map.getContainer().clientHeight;
       flying = true;
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
+        { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
+          duration: 1000, maxZoom: 13 });
     },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
@@ -1100,12 +1064,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const { number, minutes, rest } = splitLabel(props.label);
         const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
         selLabel.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-          ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+          ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
       }
       const tri = triangles();
       const shape = arrow();   // the selected train's symbol: the same shape as the map's
       if (selShape.getAttribute('d') !== shape) selShape.setAttribute('d', shape);
       selStale = Boolean(props.stale);
+      selLate = props.late;
       const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
