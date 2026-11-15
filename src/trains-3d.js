@@ -8,6 +8,7 @@ import { styleFor } from './brands.js';
 import { buildToy } from './toy-trains.js';
 import { toyFor } from './toy-brands.js';
 import { settings } from './settings.js';
+import { modelScale } from './model-size.js';
 
 // Toy or real-size trains, the toy size and from which zoom: src/settings.js, read when used. A change of toy or real
 // makes the map add a new layer (map.js), whose trains are then built the new way.
@@ -116,7 +117,7 @@ export function createTrainLayer({ getTrains, along = null }) {
   };
 
   // Set each car of train t's model on the track: its middle where the track is at its place along the train, turned
-  // to face from its back end to its front end along the track. k: the model's enlargement (compact models). The
+  // to face from its back end to its front end along the track. k: the model's enlargement (model-size.js). The
   // model itself isn't turned then; its cars carry the direction. False when the track isn't known far enough back;
   // otherwise where each car lies on the ground, [back lon, back lat, front lon, front lat] (for taps, map.js).
   const R = Math.PI / 180, M = 111195;
@@ -180,7 +181,7 @@ export function createTrainLayer({ getTrains, along = null }) {
         // Everything is placed relative to the middle of the view, in metres: x east, y north, z up.
         const origin = MercatorCoordinate.fromLngLat(map.getCenter(), 0);
         const s = origin.meterInMercatorCoordinateUnits();
-        // A toy is enlarged so it is never shorter than settings.toySize on the screen (metres per pixel at this zoom).
+        // How much each model is enlarged: src/model-size.js (metres per pixel at this zoom).
         const metresPerPx = EARTH * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** zoom);
         const b = map.getBounds();
         const padLon = (b.getEast() - b.getWest()) * 0.2, padLat = (b.getNorth() - b.getSouth()) * 0.2;
@@ -199,8 +200,8 @@ export function createTrainLayer({ getTrains, along = null }) {
           }
           const m = MercatorCoordinate.fromLngLat([t.lon, t.lat], 0);
           entry.object.position.set((m.x - origin.x) / s, -(m.y - origin.y) / s, 0);
-          const k = TOY ? Math.max(1, settings.toySize * metresPerPx / entry.object.userData.length) : 1;
-          if (TOY) entry.object.scale.setScalar(k);
+          const k = modelScale({ toy: TOY, zoom, metresPerPx, length: entry.object.userData.length, s: settings });
+          entry.object.scale.setScalar(k);
           const cars = bend(entry.object, t, k);
           if (!cars) {
             entry.object.rotation.z = -THREE.MathUtils.degToRad(t.bearing ?? 0);

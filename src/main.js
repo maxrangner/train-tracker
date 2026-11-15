@@ -316,14 +316,22 @@ onSettingChange((key) => {
     if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
   }
   if (key === 'boardRows') board.relabel();
+  // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
+  if (key === 'toySize' || key === 'modelSize' || key === 'closeSize' || key === 'trueSize') map.drawNow();
   showSettings();
 });
 function showSettings() {
   for (const seg of settingsEl.querySelectorAll('.seg'))
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
   settingsEl.classList.toggle('real', settings.trainStyle !== 'toy');
+  settingsEl.classList.toggle('style-real', settings.trainStyle === 'real');
+  settingsEl.classList.toggle('symbol', settings.trainStyle === 'symbol');
   sizeEl.value = settings.toySize;
   sizeOut.textContent = `${settings.toySize} px`;
+  realSizeEl.value = settings.modelSize;
+  realSizeOut.textContent = `×${settings.modelSize}`;
+  closeSizeEl.value = settings.closeSize;
+  closeSizeOut.textContent = `×${settings.closeSize}`;
 }
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
@@ -332,6 +340,10 @@ for (const seg of settingsEl.querySelectorAll('.seg')) {
 }
 const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');
 sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
+const realSizeEl = document.getElementById('set-realsize'), realSizeOut = document.getElementById('set-realsize-out');
+realSizeEl.oninput = () => { setSetting('modelSize', realSizeEl.value); showSettings(); };
+const closeSizeEl = document.getElementById('set-closesize'), closeSizeOut = document.getElementById('set-closesize-out');
+closeSizeEl.oninput = () => { setSetting('closeSize', closeSizeEl.value); showSettings(); };
 showSettings();
 
 // ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----

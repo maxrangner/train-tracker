@@ -126,6 +126,7 @@
     .range input { width: 140px; accent-color: var(--accent); }
     .range output { font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; font-size: 14px; }
     #settings.real .toy-only { display: none; }
+    #settings:not(.style-real) .real-only, #settings.symbol .model-only { display: none; }
     /* Settings: a line, then the debug settings under their own heading (Max, 2026-11-13). */
     .set-section { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 10px; }
     /* ? at the top: Help, with the credits (Max, 2026-11-12: a permanent "?" instead of a credit line). */
@@ -423,6 +424,8 @@
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
+      <div class="set-row model-only"><span data-t="trueSize">Realistic size</span>
+        <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
       <div class="set-row"><span data-t="language">Language</span>
@@ -432,6 +435,10 @@
         <span class="range"><input id="set-toysize" type="range" min="40" max="120" step="10"><output id="set-toysize-out" for="set-toysize"></output></span></div>
       <div class="set-row toy-only"><span data-t="toyZoom">Compact from zoom</span>
         <div class="seg" data-key="toyZoom" role="group" aria-label="Compact from zoom" data-t-aria="toyZoom"><button type="button" data-v="10">10</button><button type="button" data-v="11">11</button><button type="button" data-v="12">12</button><button type="button" data-v="13">13</button></div></div>
+      <div class="set-row real-only"><label for="set-realsize" data-t="modelSize">Realistic model size</label>
+        <span class="range"><input id="set-realsize" type="range" min="1" max="4" step="0.5"><output id="set-realsize-out" for="set-realsize"></output></span></div>
+      <div class="set-row model-only"><label for="set-closesize" data-t="closeSize">Size zoomed in</label>
+        <span class="range"><input id="set-closesize" type="range" min="1" max="6" step="0.5"><output id="set-closesize-out" for="set-closesize"></output></span></div>
       <div class="set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
       <div class="set-row"><span data-t="trainSymbol">Train symbol</span>

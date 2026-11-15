@@ -1,4 +1,4 @@
-// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&boardrows=20&symbol=triangle&theme=dark&lang=en),
+// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&realsize=2&closesize=3&truesize=1&boardrows=20&symbol=triangle&theme=dark&lang=en),
 // else from what was chosen in the menu's Settings (remembered on this phone/browser), else these defaults.
 // Read them where they are used, each time, so a change takes effect without a reload where the code allows it.
 // The phone's language at first start: Swedish if it is Swedish, otherwise English (Max, 2026-11-12).
@@ -10,6 +10,10 @@ const DEFAULTS = {
                         // 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14)
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
   toyZoom: 11,          // toys from this zoom in (further out: dots)
+  // How big the models are drawn (src/model-size.js; Max, 2026-11-15, debug settings except trueSize):
+  modelSize: 1,         // realistic models at zoom 13, times real size (1 to 4); further in the same length on screen
+  closeSize: 1,         // zooming in, models stop shrinking at this, times real size (1 to 6)
+  trueSize: false,      // "Realistic size": real size at every zoom, the sizes above not used
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
   // A train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting; the
   // triangle the default since 2026-11-14, Max: "make triangles default"); 'dart', a wide arrow with a notch at the
@@ -24,6 +28,9 @@ const KEYS = {
   trainStyle: { param: 'train' },
   toySize: { param: 'toysize' },
   toyZoom: { param: 'toyzoom' },
+  modelSize: { param: 'realsize' },
+  closeSize: { param: 'closesize' },
+  trueSize: { param: 'truesize' },
   boardRows: { param: 'boardrows' },
   trainSymbol: { param: 'symbol' },
 };
@@ -32,12 +39,18 @@ const STORE = 'settings';
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') ?? {}; } catch { /* storage blocked or broken: defaults */ }
 const hash = new URLSearchParams(location.hash.slice(1));
+// A number from lo to hi in half steps, or undefined.
+const halves = (lo, hi) => v => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
+  ? Math.max(lo, Math.min(hi, Math.round(Number(v) * 2) / 2)) : undefined);
 const valid = {
   theme: v => (['auto', 'light', 'dark'].includes(v) ? v : undefined),
   language: v => (['sv', 'en'].includes(v) ? v : undefined),
   trainStyle: v => (['toy', 'real', 'symbol'].includes(v) ? v : undefined),
   toySize: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(30, Math.min(150, Number(v))) : undefined),
   toyZoom: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(8, Math.min(16, Number(v))) : undefined),
+  modelSize: halves(1, 4),
+  closeSize: halves(1, 6),
+  trueSize: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
   trainSymbol: v => (['circle', 'triangle', 'dart'].includes(v) ? v : undefined),
 };
