@@ -14,6 +14,8 @@ const PATHS = {
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   menu: '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
   chevron: '<path d="m9.5 6 6 6-6 6"/>',
+  chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronUp: '<path d="m6 15 6-6 6 6"/>',
   warning: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.2M12 16.8v.3"/>',
 };
 export const icon = (name, size = 20, stroke = 2) =>

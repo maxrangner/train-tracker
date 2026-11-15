@@ -10,7 +10,7 @@
 // lists and buttons. Up: taller, to full height; down: from full to half, from half (or a page) further to close. A
 // tap on the handle (the sheet's top) switches between half and full.
 const NARROW = typeof matchMedia === 'function' ? matchMedia('(max-width: 439px)') : null;
-const SCROLLERS = '.panel-table, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text';
+const SCROLLERS = '.panel-table, .cd-list, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text';
 const SNAP_PX = 40;      // a drag this far (up or down) changes the height
 const CLOSE_PX = 100;    // dragged down this far from half height (or on a page): closed
 const HANDLE_PX = 34;    // the handle: the sheet's top this high
