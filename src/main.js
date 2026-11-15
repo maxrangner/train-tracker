@@ -234,6 +234,14 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
+// About (round 4): the logo, Buy me a coffee (Max's Ko-fi link, when he gives it: until then the button does nothing)
+// and Report a bug (does nothing yet: "Leave non functional for now").
+const KOFI_URL = '';
+helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
+document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
+document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
+document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
+helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL);
 // Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
