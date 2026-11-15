@@ -19,17 +19,21 @@ const RING = { cx: 789, cy: 290 };
 const VIEW = '100 220 1470 510';
 let n = 0;
 
-export function logoSvg({ small = false, label = 'Spårat' } = {}) {
-  const id = `spl${++n}`;
-  const path = d => `<path d="${d}"/>`;
+// draw: every line draws itself, left to right (the start screen; CSS .draw in index.html). fill: a fixed colour
+// instead of the text's (the browser icon). view: another viewBox (the å alone: ICON_VIEW).
+export const ICON_VIEW = '649 216 286 428';
+// id: the mask's name, unique on the page (a logo written into index.html takes its own, so it never clashes).
+export function logoSvg({ small = false, label = 'Spårat', draw = false, fill = 'currentColor', view = VIEW, id = `spl${++n}` } = {}) {
+  const delay = d => (draw ? ` pathLength="1" class="draw" style="--d:${((Number(/[\d.]+/.exec(d)[0]) - 100) / 1470 * 0.5).toFixed(2)}s"` : '');
+  const path = d => `<path${delay(d)} d="${d}"/>`;
   const inner = small
     ? `<g fill="none" stroke="white" stroke-width="50">${LETTERS.map(path).join('')}` +
       BOWLS.map(([cx, dir]) => `<circle cx="${cx}" cy="496" r="101"/>${path(`M ${cx + dir * 101} 496 L ${cx + dir * 101} ${dir < 0 ? 717 : 630}`)}`).join('') + '</g>' +
       `<circle cx="${RING.cx}" cy="${RING.cy}" r="44" fill="none" stroke="white" stroke-width="26"/><circle cx="${RING.cx}" cy="${RING.cy}" r="14" fill="white"/>`
     : `<g fill="none" stroke="white" stroke-width="66">${LETTERS.map(path).join('')}</g><g fill="none" stroke="black" stroke-width="14">${LETTERS.map(path).join('')}</g>` +
       `<g fill="none" stroke="white" stroke-width="26">${BOWLS.flatMap(([cx, dir]) => rails(cx, dir)).map(path).join('')}</g>` +
-      `<circle cx="${RING.cx}" cy="${RING.cy}" r="46" fill="none" stroke="white" stroke-width="26"/><circle cx="${RING.cx}" cy="${RING.cy}" r="19" fill="white"/>`;
-  return `<svg class="logo-svg" viewBox="${VIEW}" role="img" aria-label="${label}"><mask id="${id}" maskUnits="userSpaceOnUse" x="100" y="220" width="1470" height="510">` +
+      `<circle${delay(String(RING.cx))} cx="${RING.cx}" cy="${RING.cy}" r="46" fill="none" stroke="white" stroke-width="26"/><circle cx="${RING.cx}" cy="${RING.cy}" r="19" fill="white"${draw ? ' class="draw-dot"' : ''}/>`;
+  return `<svg class="logo-svg" viewBox="${view}" role="img" aria-label="${label}"><mask id="${id}" maskUnits="userSpaceOnUse" x="100" y="220" width="1470" height="510">` +
     `<rect x="100" y="220" width="1470" height="510" fill="black"/>${inner}</mask>` +
-    `<rect x="100" y="220" width="1470" height="510" fill="currentColor" mask="url(#${id})"/></svg>`;
+    `<rect x="100" y="220" width="1470" height="510" fill="${fill}" mask="url(#${id})"/></svg>`;
 }
