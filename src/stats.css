@@ -6,6 +6,10 @@
 #stats-body { overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 8px;
   font-size: 14px; font-variant-numeric: tabular-nums; scrollbar-width: thin; }
 #stats-body > * { flex: none; }
+/* Without our own bar (a phone: src/scrollbar.js is for a mouse), the phone's bar is drawn over the scrolling area's
+   right edge, and it covered the numbers (Max, 2026-11-16, his phone's picture). The area reaches 10 px into the
+   sheet's margin and pads them back: the content stays where it was, the bar runs in the margin. */
+#stats-body:not(.sb-own) { margin-right: -10px; padding-right: 10px; }
 #stats-body p { margin: 0; }
 #stats-body button { font-family: inherit; }
 #stats-body .tag { margin-left: 0; }
