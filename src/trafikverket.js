@@ -159,6 +159,13 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
   return stop;
 }
 
+// Taps (a train's route, a station's board and its messages, a train number) can go through our own server instead:
+// in the public version php/ask.php asks Trafikverket the same question (the same XML, built there from kind and
+// params) and keeps the answer 30 s for everyone. tapAsker(kind, params) -> Promise of Trafikverket's RESULT.
+let tapAsker = null;
+export function setTapAsker(fn) { tapAsker = fn; }
+const askTap = (kind, params, xml) => tapAsker ? tapAsker(kind, params) : ask(xml);
+
 const changeAttrs = ({ changeId, stream }) =>
   `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}"`;
 
@@ -213,7 +220,7 @@ export function passingsOf(rows) {
 // notes (a bus instead, booking, a bistro, the carriage order). Their texts, in Swedish. In 600 rows (2026-11-13):
 // problem notes on 71, other notes on 26, booking 29, bistro or kiosk 11, carriage order 14.
 export async function fetchRoute(operationalNumber, departureDate) {
-  const r = await ask(
+  const r = await askTap('route', { train: operationalNumber, date: departureDate.slice(0, 10) },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
     `<FILTER><EQ name="OperationalTrainNumber" value="${operationalNumber}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${departureDate.slice(0, 10)}"/></FILTER>` +
@@ -323,7 +330,7 @@ export async function fetchDisruptions(at) {
 // of 2026-11-14). Test messages are left out, and the same text only once. [{ text, until (ms or null) }]
 export async function fetchStationMessages(sig, at) {
   const now = new Date(at).toISOString();
-  const r = await ask(
+  const r = await askTap('messages', { sig },
     `<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
     `<FILTER><EQ name="LocationCode" value="${sig}"/><EQ name="MediaType" value="Monitor"/>` +
     `<LT name="StartDateTime" value="${now}"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
@@ -360,7 +367,7 @@ export async function fetchStations() {
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
 export async function fetchBoard(sig, activity, at, n) {
-  const r = await ask(
+  const r = await askTap('board', { sig, act: activity, n },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
@@ -389,7 +396,7 @@ export async function fetchBoard(sig, activity, at, n) {
 // The trains with this public number running on this day (YYYY-MM-DD, Swedish time):
 // [{ key, operational, date, number, from, to, product }] (from/to are station signatures).
 export async function fetchTrainsByNumber(number, day) {
-  const r = await ask(
+  const r = await askTap('train', { number: String(number).replace(/\D/g, ''), day },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="200">` +
     `<FILTER><EQ name="AdvertisedTrainIdent" value="${String(number).replace(/\D/g, '')}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
