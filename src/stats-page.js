@@ -10,6 +10,7 @@ import './stats.css';
 import { t, lang } from './i18n.js';
 import { brandColour } from './stats.js';
 import { createSwedenMap } from './stats-sweden.js';
+import { addScrollbar } from './scrollbar.js';
 import OUTLINE from './sweden-outline.json';
 
 const FUN_EVERY_MS = 10 * 1000;     // "for fun": a new comparison this often (or at a tap)
@@ -139,6 +140,7 @@ const ICONS = {
 // filter: src/filter.js (which rows show as pressed; main.js toggles it on a tap of [data-filter]).
 export function createStatsPage(root, { openTrain, openStation, describe, filter }) {
   let builtLang = null, parts = [], funOffset = 0, beatSlot = null;
+  addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
   const view = { fastest: 'now', busiest: 'recent' };   // the toggles: not remembered
   let companiesOpen = false, hourOn = null, last = null;
 

@@ -1,0 +1,15 @@
+/* The page's own thin scrollbar (src/scrollbar.js), with a mouse only. It sits in the sheet's right margin (16 px):
+   a 5 px grey slider, no background, the arrows only while the mouse is over the sheet. */
+.sb-own { scrollbar-width: none; padding-right: 6px; }
+.sb-own::-webkit-scrollbar { display: none; }
+.sb { position: absolute; right: 3px; width: 12px; display: flex; flex-direction: column; z-index: 2; }
+.sb[hidden] { display: none; }
+.sb-arrow { flex: none; width: 12px; height: 12px; padding: 0; border: 0; background: none; color: var(--muted); display: grid; place-items: center;
+  cursor: pointer; opacity: 0; transition: opacity .15s; }
+.sheet:hover .sb-arrow { opacity: .85; }
+.sb-arrow:hover { color: var(--ink); }
+.sb-track { position: relative; flex: 1; min-height: 0; cursor: pointer; }
+.sb-thumb { position: absolute; top: 0; left: 50%; width: 5px; margin-left: -2.5px; border-radius: 3px; cursor: grab;
+  background: color-mix(in srgb, var(--muted) 50%, transparent); transition: background-color .15s; }
+.sb-thumb:hover, .sb-thumb.sb-drag { background: color-mix(in srgb, var(--muted) 85%, transparent); }
+.sb-thumb.sb-drag { cursor: grabbing; }
