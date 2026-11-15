@@ -1,4 +1,5 @@
-// The map's own look (Max, 2026-11-14: "Paper" for light, "Night" for dark, chosen from five sketches). The base map
+import { MAP } from './colours.js';
+// The map's own look (Max, 2026-11-14: "Paper" for light, "Night" for dark; since 2026-11-15 the Soft look). The base map
 // stays OpenFreeMap's (positron for light, dark for dark); restyleBase() recolours it and hides what a train map
 // doesn't need: the base map's own railways (ours are drawn instead), borders, airports, and every name except places
 // and water. Layers are found by their kind (source-layer), so a renamed layer in OpenFreeMap's style still works.
@@ -9,13 +10,15 @@
 // regions, countries; 'all' adds villages and suburbs); text, halo: place names; waterText: sea and lake names (null:
 // hidden).
 export const LOOK = {
+  // Soft (Max, 2026-11-15, replacing Paper and Night): warm paper with pastel water in light, blue-grey in dark;
+  // land and water from src/colours.js MAP.
   light: {
-    land: '#f4f0e6', water: '#c5dbe8', park: '#e4ecd6', wood: '#e2ead4', town: '#ece6d8', building: '#e2dbca', rivers: '#c5dbe8',
-    road: '#ffffff', roadMinor: null, roadCasing: null, places: 'towns', text: '#5a5246', halo: '#f4f0e6', waterText: '#6f93aa',
+    land: MAP.light.land, water: MAP.light.water, park: '#e5eedb', wood: '#e7eedd', town: '#f1ebe1', building: '#e9e1d4', rivers: MAP.light.water,
+    road: '#fffdf9', roadMinor: null, roadCasing: null, places: 'towns', text: '#7d7468', halo: MAP.light.land, waterText: '#86a7bd',
   },
   dark: {
-    land: '#131c2c', water: '#0b1220', park: null, wood: '#16233a', woodOpacity: 0.6, town: '#182338', building: '#1c2940', rivers: '#0b1220',
-    road: '#1e2a41', roadMinor: null, roadCasing: null, places: 'towns', text: '#9fb0c6', halo: '#131c2c', waterText: null,
+    land: MAP.dark.land, water: MAP.dark.water, park: null, wood: '#202536', woodOpacity: 1, town: '#232839', building: '#282e41', rivers: MAP.dark.water,
+    road: '#272d40', roadMinor: null, roadCasing: null, places: 'towns', text: '#8a93a8', halo: MAP.dark.land, waterText: null,
   },
 };
 
