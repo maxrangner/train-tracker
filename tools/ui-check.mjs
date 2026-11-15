@@ -142,6 +142,30 @@ try {
       await page.evaluate(() => { document.getElementById('picker').hidden = true; document.querySelector('#panel .panel-close')?.click(); });
     }
   }
+  // Far out the map groups close labels too (2026-11-15): a tap on one lists its trains, as many as it says.
+  let farGroups = 0;
+  for (const zoom of [8, 9]) {
+    await page.evaluate(z => window.__map.jumpTo({ center: [18.0, 59.35], zoom: z }), zoom);
+    await sleep(2500);
+    const found = await page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-labels'] })
+      .filter(f => f.properties.point_count).map(f => ({ n: f.properties.point_count, q: window.__map.project(f.geometry.coordinates) }))
+      .filter(g => g.q.x > 40 && g.q.x < innerWidth - 40 && g.q.y > 90 && g.q.y < innerHeight - 60).slice(0, 3));
+    for (const g of found) {
+      let rows = null;
+      for (const dy of [15, 18, -15, 0]) {   // the label is under its point, or moved above it
+        await page.evaluate(() => { document.getElementById('picker').hidden = true; });
+        await page.evaluate((x, y) => { const m = window.__map; m.fire('click', { point: { x, y }, lngLat: m.unproject([x, y]), originalEvent: new MouseEvent('click') }); }, g.q.x, g.q.y + dy);
+        await sleep(300);
+        rows = await page.evaluate(() => (document.getElementById('picker').hidden ? null : document.querySelectorAll('#picker [data-i]').length));
+        if (rows !== null) break;
+      }
+      if (rows === null) continue;
+      farGroups++;
+      expect(rows === g.n, `far out (zoom ${zoom}), a "${g.n} trains" label listed ${rows}`);
+    }
+    await page.evaluate(() => { document.getElementById('picker').hidden = true; document.querySelector('#panel .panel-close')?.click(); });
+  }
+  expect(farGroups > 0, 'far out, no "N trains" label could be tapped');
 
   // ---- Search lists every matching train, in a list that scrolls ----
   await page.click('#menu-button');
@@ -201,7 +225,7 @@ try {
   expect(models.compact === 0 && models.realistic === 0, `model surfaces on top of each other: compact ${models.compact}, realistic ${models.realistic}`);
 
   console.log(problems.length ? `UI check FAILED (${replay ? 'rush-hour replay' : 'live'}):` : `UI check ok (${replay ? 'rush-hour replay' : 'live'}): ` +
-    `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists, ` +
+    `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists (${farGroups} far out), ` +
     `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), filter ${filtered}, model surfaces 0`);
   for (const p of problems) console.log('  -', p);
 } finally {
