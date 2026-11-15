@@ -1,5 +1,5 @@
 // The stats page as Max picked it (2026-11-15: "1D … I want it exactly as your demo"; the sketch in docs/stats-1115/):
-// Sweden with every train at the top, then tiles: driven and cancelled, punctuality with the most late train and
+// Sweden as a heatmap at the top (how many trains or how late, a switch beside it; Max 2026-11-15), then tiles: driven and cancelled, punctuality with the most late train and
 // today's graph, the fastest on a speedometer, kinds of train and companies (a tap filters the map), the busiest
 // stations, "for fun", and the data as a grey line at the end.
 // Built once (and again when the language changes); after that, once a second, only what changed moves: numbers
@@ -9,7 +9,7 @@
 import './stats.css';
 import { t, lang } from './i18n.js';
 import { brandColour } from './stats.js';
-import { createSwedenMap } from './stats-sweden.js';
+import { createSwedenMap, heatMode, heatGradient } from './stats-sweden.js';
 import { addScrollbar } from './scrollbar.js';
 import OUTLINE from './sweden-outline.json';
 
@@ -151,20 +151,30 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     root.append(...parts);
   }
 
-  // ---- Sweden, with the count beside it ----
+  // ---- Sweden as a heatmap, with the count beside it and the switch Trains / Lateness ----
   function sweden() {
-    const map = createSwedenMap({ describe, open: openTrain });
+    const map = createSwedenMap();
     const el = h(`<section class="st-sec st-se"><div class="st-se-side">` +
       `<div><b class="st-big st-count">0</b><div class="st-sub">${t('stTrainsNow')}</div></div>` +
       `<div class="st-legend"><div class="st-row"><span class="st-key k-moving"></span>${t('stMoving')}<b class="st-m"></b></div>` +
       `<div class="st-row"><span class="st-key k-standing"></span>${t('stStanding')}<b class="st-s"></b></div>` +
       `<div class="st-row"><span class="st-key k-grey"></span>${t('stNoNews')}<b class="st-g"></b></div></div>` +
       `<div class="st-apart"><b class="st-ap">–</b>${t('stApart')}</div>` +
-      `<div class="st-keys"><span><span class="st-key k-ontime"></span>${t('stKeyOnTime')}</span><span><span class="st-key k-some"></span>${t('stKeySome')}</span>` +
-      `<span><span class="st-key k-late"></span>${t('stKeyLate')}</span><span><span class="st-key k-unknown"></span>${t('stKeyUnknown')}</span></div>` +
-      `<p class="st-sub">${t('stTapDot')}</p></div></section>`);
+      `<div class="seg st-seg st-heatseg" role="group" aria-label="${esc(t('stHeatWhat'))}"><button type="button" data-v="trains">${t('stHeatTrains')}</button><button type="button" data-v="lateness">${t('stHeatLate')}</button></div>` +
+      `<div class="st-heatkey"></div></div></section>`);
     el.prepend(map.el);
+    const key = $(el, '.st-heatkey'), segs = el.querySelectorAll('.st-heatseg button');
+    const showMode = () => {
+      const m = heatMode();
+      segs.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === m)));
+      put(key, m === 'lateness'
+        ? `<div class="st-keys"><span><span class="st-key k-ontime"></span>${t('stKeyOnTime')}</span><span><span class="st-key k-some"></span>${t('stKeySome')}</span>` +
+          `<span><span class="st-key k-late"></span>${t('stKeyLate')}</span></div><p class="st-sub">${t('stHeatBrighter')}</p>`
+        : `<div class="st-ramp"><i style="background:${heatGradient()}"></i><span><span>${t('stHeatFewer')}</span><span>${t('stHeatMore')}</span></span></div>`);
+    };
+    segs.forEach((b) => { b.onclick = () => { map.setMode(b.dataset.v); showMode(); }; });
     el.update = (s) => {
+      showMode();   // also follows a change of light / dark (the gradient)
       map.update(s);
       roll($(el, '.st-count'), s.count); roll($(el, '.st-m'), s.moving); roll($(el, '.st-s'), s.standing); roll($(el, '.st-g'), s.grey);
       if (s.apart === null) $(el, '.st-ap').textContent = '–'; else roll($(el, '.st-ap'), Math.round(s.apart), 0, ' km');

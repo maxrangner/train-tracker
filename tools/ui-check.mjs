@@ -40,6 +40,15 @@ try {
     expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
     expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 9 && st.map > 0,
       `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 9 sections, Sweden ${st.map ? 'drawn' : 'missing'}`);
+    // The heatmap's switch: Lateness, then back to Trains.
+    const heat = await page.evaluate(() => {
+      const late = document.querySelector('#stats-body .st-heatseg [data-v="lateness"]'), trains = document.querySelector('#stats-body .st-heatseg [data-v="trains"]');
+      if (!late || !trains) return 'no switch';
+      late.click(); const a = late.getAttribute('aria-pressed') === 'true' && Boolean(document.querySelector('#stats-body .st-heatkey .st-keys'));
+      trains.click(); const b = trains.getAttribute('aria-pressed') === 'true' && Boolean(document.querySelector('#stats-body .st-heatkey .st-ramp'));
+      return a && b ? 'ok' : `lateness ${a}, trains ${b}`;
+    });
+    expect(heat === 'ok', `${lang}/${theme}: the heatmap's switch: ${heat}`);
     // ---- A tap on a company shows only its trains on the map; × on the bar shows them all again ----
     if (lang === 'en') {
       const drawn = () => page.evaluate(() => ({ n: window.__last3d.length, bar: !document.getElementById('filter-bar').hidden,

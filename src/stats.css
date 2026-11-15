@@ -37,20 +37,22 @@
 .st-legend .st-row b { margin-left: auto; font-weight: 700; padding-left: 10px; }
 .st-legend .st-row.st-sub { font-size: 14px; }
 
-/* Sweden: every train a dot (src/stats-sweden.js), the numbers beside it. */
+/* Sweden as a heatmap (src/stats-sweden.js), the numbers and the switch Trains / Lateness beside it. */
 .st-se { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: stretch; }
 .st-se-map { position: relative; border-radius: 18px; background: var(--hover); padding: 8px; }
-.st-se-map canvas { display: block; touch-action: manipulation; cursor: pointer; }
-.st-pick { position: absolute; z-index: 2; transform: translate(-50%, calc(-100% - 10px)); background: var(--card); box-shadow: var(--shadow-s); border-radius: 12px;
-  padding: 5px 9px; font-size: 12.5px; white-space: nowrap; border: 0; color: var(--ink); cursor: pointer; text-align: center; line-height: 1.3; }
-.st-pick .tag { padding: 2px 6px; font-size: 11.5px; }
-.st-pick small { display: block; color: var(--muted); font-size: 11px; }
+.st-se-map canvas { display: block; }
 .st-se-side { display: grid; align-content: start; gap: 10px; min-width: 0; }
 .st-se-side .st-big { font-size: 44px; }
 .st-apart { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
 .st-apart b { color: var(--ink); font-size: 18px; display: block; }
 .st-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
 .st-keys span { display: inline-flex; align-items: center; }
+.st-heatseg { justify-self: start; }
+/* The same height in both views, so nothing below jumps when switching. */
+.st-heatkey { min-height: 50px; display: grid; align-content: start; gap: 4px; }
+.st-ramp { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.st-ramp i { display: block; height: 8px; border-radius: 4px; }
+.st-ramp > span { display: flex; justify-content: space-between; }
 
 /* Driven and cancelled. */
 .st-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
