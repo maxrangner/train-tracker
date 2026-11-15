@@ -74,7 +74,7 @@ try {
     const own = [...document.querySelectorAll('.near-label:not(.group)')].map(e => e.getBoundingClientRect());
     for (const f of m.queryRenderedFeatures({ layers: ['train-dots'] })) {
       const q = m.project(f.geometry.coordinates);
-      if (own.some(r => Math.abs((r.left + r.right) / 2 - q.x) < 2 && Math.abs(r.top - q.y - 12) < 3)) lone.add(f.properties.id);
+      if (own.some(r => Math.abs((r.left + r.right) / 2 - q.x) < 2 && Math.abs(r.top - q.y - 16) < 3)) lone.add(f.properties.id);   // a bubble starts 16 px below its train (src/map.js LABEL_DY)
     }
     const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id)).sort((a, b) => d(a) - d(b))[0];
     if (!f) return null;
