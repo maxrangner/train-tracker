@@ -112,7 +112,10 @@ button.st-fastrow:hover { background: var(--card); }
 .st-more { font: inherit; font-weight: 700; color: var(--accent); background: none; border: 0; padding: 6px 0 0; cursor: pointer; justify-self: start; }
 
 /* Busiest stations: a tap opens the station's board. */
-.st-rank { display: grid; gap: 4px; }
+/* Max, 2026-11-15: the rows blended together (dark): more room between them and under the title, and in dark a
+   darker fill (the page's colour) so they stand apart from the tile. */
+.st-rank { display: grid; gap: 8px; margin-top: 8px; }
+:root[data-theme="dark"] .st-rank .st-go { background: var(--page); }
 .st-rank .st-go { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--card); width: 100%; box-sizing: border-box; }
 .st-rank .st-go:hover { box-shadow: inset 0 0 0 1.5px var(--line); }
 .st-rank .st-pos { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--hover); }
