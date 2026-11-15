@@ -1,5 +1,6 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 import { fetchRoute } from './trafikverket.js';
+import { splitLabel, tagHtml } from './tag.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { hhmm } from './clock.js';
@@ -28,7 +29,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
 
   // The top line: the train's label, the Follow button (pressed while the camera follows the train) and ×.
   const head = label =>
-    `<div class="panel-head"><strong>${label}</strong><span class="panel-buttons">` +
+    `<div class="panel-head"><span class="panel-title"><strong>${splitLabel(label).number}</strong>${tagHtml(splitLabel(label).minutes)}</span><span class="panel-buttons">` +
     (number && isStarred ? star(isStarred(number)) : '') +
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${t(following ? 'following' : 'follow')}</button>` : '') +
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>`;

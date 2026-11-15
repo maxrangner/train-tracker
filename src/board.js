@@ -10,6 +10,7 @@ const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
 import { star } from './panel.js';
+import { tagHtml } from './tag.js';
 import { icon } from './icons.js';
 import { hhmm } from './clock.js';
 import { t } from './i18n.js';
@@ -87,7 +88,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
         : late > 0 ? `<span class="late">${time(seen)}</span>` : '';
       const place = dep ? r.to : r.from;
       return `<tr data-i="${i}" class="${r.canceled ? 'canceled' : ''}"><td class="t">${time(r.planned)}${when ? `<br>${when}` : ''}</td>` +
-        `<td class="st">${esc(place ? stationName(place) : '')}<div class="sub">${esc(r.number)} ${esc(r.product ?? '')}</div></td>` +
+        `<td class="st">${esc(place ? stationName(place) : '')}${!r.canceled && late > 0 ? ` ${tagHtml(late, { short: true })}` : ''}<div class="sub">${esc(r.number)} ${esc(r.product ?? '')}</div></td>` +
         `<td class="trk">${esc(r.track)}</td></tr>`;
     }).join('');
     frame(`<div class="panel-table"><table class="board"><thead><tr><th>${t('time')}</th><th>${t(dep ? 'to' : 'from')}</th><th>${t('track')}</th></tr></thead>` +

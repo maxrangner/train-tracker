@@ -241,18 +241,33 @@
     .sel-train.late-some:not(.model) { border-color: var(--c-some); }
     .sel-train.late-late:not(.model) { border-color: var(--c-late); }
     .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: pre; text-align: center;
-      font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label);
-      text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
+      font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
+      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); margin-top: 6px; }
 
     /* Close in, the trains' labels (src/map.js: placeNearLabels): page elements placed every frame, like the
        selected train's; company above number (lateness), "3 trains" for trains standing close together. */
     .near-labels { position: absolute; left: 0; top: 0; pointer-events: none; }
-    .near-label { position: absolute; left: 0; top: 0; white-space: pre; text-align: center; line-height: 1.2;
-      font: 700 11px 'Noto Sans', system-ui, sans-serif; color: var(--label); will-change: transform;
-      text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
-    .near-label .co { font-size: 0.85em; }
-    .near-label.stale { opacity: 0.45; }
-    .near-label.group { font-size: 13px; color: var(--group); }
+    /* Bubbles (the Soft look, 2026-11-15, after Max's picture 1): a white card with a pointer up to the train. */
+    .near-label { position: absolute; left: 0; top: 0; white-space: nowrap; text-align: center; will-change: transform;
+      font: 600 12.5px/1.2 var(--font); font-variant-numeric: tabular-nums; color: var(--ink); background: var(--card);
+      padding: 4px 9px 5px; border-radius: 12px; box-shadow: var(--shadow-s); }
+    .near-label::before { content: ''; position: absolute; left: 50%; top: -4px; width: 9px; height: 9px; margin-left: -4.5px;
+      background: inherit; transform: rotate(45deg); border-radius: 2px 0 0 0; }
+    .near-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
+    .near-label b { font-weight: 800; }
+    .near-label i { font-style: normal; color: var(--muted); }
+    .near-label .m.ontime { color: var(--t-ontime); } .near-label .m.some { color: var(--t-some); }
+    .near-label .m.late { color: var(--t-late); } .near-label .m.unknown { color: var(--t-unknown); }
+    .near-label.stale { opacity: 0.5; }
+    .near-label.tucked { visibility: hidden; }
+    .near-label.group { font-size: 13px; font-weight: 800; color: var(--accent); }
+    /* Lateness tags (src/tag.js): the card's heading, boards, the picker. */
+    .tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+      font: 700 12.5px/1 var(--font); font-variant-numeric: tabular-nums; vertical-align: 1px; }
+    .tag.ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .tag.some { background: var(--t-some-bg); color: var(--t-some); }
+    .tag.late { background: var(--t-late-bg); color: var(--t-late); } .tag.unknown { background: var(--t-unknown-bg); color: var(--t-unknown); }
+    .panel-title { display: flex; align-items: center; min-width: 0; }
+    .panel-title strong { font-size: 22px; font-weight: 800; }
     /* Close in, the stations' names, above the trains' labels (src/map.js: placeStationNames). */
     .station-names { position: absolute; left: 0; top: 0; pointer-events: none; }
     .station-name { position: absolute; left: 0; top: 0; white-space: nowrap; font: 400 14px 'Noto Sans', system-ui, sans-serif;
