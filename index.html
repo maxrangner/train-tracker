@@ -34,6 +34,8 @@
        before the map library has started. */
     html, body { touch-action: pan-x pan-y; overscroll-behavior: none; }
     #map { touch-action: none; }
+    /* No light-blue box round what a finger holds on a phone (Max, 2026-11-15); a designed pressed look: docs/ideas.md. */
+    html { -webkit-tap-highlight-color: transparent; }
     body { font: 500 14px/1.4 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
     button, input { font-family: inherit; }
     .icon { display: inline-block; vertical-align: -0.18em; flex: none; }
@@ -134,42 +136,8 @@
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
     #settings-page:not([hidden]) + #settings-backdrop { display: block; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
-    /* The stats page (src/stats.js): sections, company bars, the punctuality bar in the dots' colours. */
-    #stats-body { overflow: auto; min-height: 0; display: grid; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; padding-top: 4px; }
-    #stats-body p { margin: 0; }
-    .st-sec { display: grid; gap: 4px; }
-    .st-big { font-size: 15px; font-weight: 600; }
-    .st-sub { color: var(--muted); font-size: 13px; }
-    .st-part { font-weight: 600; margin-top: 4px !important; }
-    .st-bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr auto; gap: 4px 8px; align-items: center; }
-    .st-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* A company or kind of train is one button across the three columns: a tap shows only those trains on the map. */
-    .st-row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; gap: 4px 8px;
-      font: inherit; color: inherit; text-align: left; border: 0; background: transparent; padding: 1px 4px; margin: 0 -4px; border-radius: 6px; cursor: pointer; }
-    .st-row:hover { background: var(--hover); }
-    .st-row[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-    .st-row[aria-pressed="true"] .st-name { font-weight: 600; }
-    .st-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-    .st-hint { color: var(--muted); font-size: 13px; }
-    .st-name i { color: var(--muted); }
-    .st-track { height: 10px; }
-    .st-bar { display: block; height: 100%; min-width: 2px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--muted) 45%, transparent); }
-    .st-n { text-align: right; }
-    .st-stack { display: flex; height: 12px; border-radius: 3px; overflow: hidden; }
-    .st-ontime { background: var(--c-ontime); } .st-some { background: var(--c-some); } .st-late { background: var(--c-late); }
-    /* Today's graph (src/stats.js dayGraph): the same three colours as the dots. */
-    .st-day { width: 100%; height: auto; display: block; overflow: visible; }
-    .st-day .d-ontime { fill: var(--c-ontime); } .st-day .d-some { fill: var(--c-some); } .st-day .d-late { fill: var(--c-late); }
-    .st-day .d-hit { fill: transparent; }
-    .st-day g:hover .d-hit { fill: var(--hover); }
-    .st-day line { stroke: var(--line); stroke-width: 1; }
-    .st-day text { fill: var(--muted); font-size: 8px; }
-    .st-legend { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
-    .st-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
-    .st-legend .st-key:not(:first-child) { margin-left: 6px; }
-    /* A section's title with its toggle (now / today) on the right. */
-    .st-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
-    .st-seg button { font-size: 13px; padding: 3px 9px; }
+    .set-data { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+    /* The stats page's own look: src/stats.css (loaded by src/stats-page.js). */
     .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
       padding: 10px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; }
     .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
@@ -624,6 +592,7 @@
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="set-section menu-label" data-t="debug">Debug</div>
+      <div class="set-row"><span data-t="stDebugData">Positions arriving</span><span id="set-data" class="set-data">–</span></div>
       <div class="set-row toy-only"><label for="set-toysize" data-t="toySize">Compact size</label>
         <span class="range"><input id="set-toysize" type="range" min="40" max="120" step="10"><output id="set-toysize-out" for="set-toysize"></output></span></div>
       <div class="set-row toy-only"><span data-t="toyZoom">Compact from zoom</span>

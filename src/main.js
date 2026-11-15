@@ -22,6 +22,7 @@ import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
+import { createStatsPage } from './stats-page.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 
@@ -360,6 +361,7 @@ requestAnimationFrame(frame);
 // ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; every change shows at
 // once, without reloading the page (Max: reloading was a bad experience). ----
 const settingsPage = document.getElementById('settings-page');
+const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
   menu.close();
@@ -431,9 +433,20 @@ showSettings();
 // ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----
 const statsPage = document.getElementById('stats-page');
 const statsBody = document.getElementById('stats-body');
-function drawStats() {
-  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameAll, filter, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null });
+// The page is built once and then only its numbers change (src/stats-page.js); a tap on a train or a station there
+// closes it and opens that train's card (flying to it) or the station's board.
+const statsView = createStatsPage(statsBody, {
+  openTrain: (id) => { statsPage.hidden = true; openTrain(id, { go: true }); },
+  openStation: (sig) => { statsPage.hidden = true; openStation(sig, { go: true }); },
+  describe: (id) => {
+    const r = trains.get(id);
+    return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
+  },
+  filter,
+});
+function drawStats(first = false) {
+  statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
 }
 function openStats() {
   menu.close();
@@ -442,14 +455,14 @@ function openStats() {
   statsPage.hidden = false;
   if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(now())), now());
   dayStats?.open();
-  drawStats();
+  drawStats(true);
   statsPage.querySelector('.panel-close').focus();
 }
 document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
-// Taps on the page: one listener, as the page is drawn anew every second. Its toggles, and a company or kind of train,
-// which shows only those trains on the map (taps stack; tapped again, taken off). While a finger is down on it the
-// page is not drawn anew: a new drawing between finger down and up lost the tap (no click).
+// A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the
+// page's other taps are its own (src/stats-page.js). While a finger is down on the page its numbers wait, so nothing
+// moves under the finger.
 let statsHeld = false;
 statsBody.addEventListener('pointerdown', () => { statsHeld = true; });
 addEventListener('pointerup', () => { statsHeld = false; });
@@ -457,7 +470,7 @@ addEventListener('pointercancel', () => { statsHeld = false; });
 statsBody.addEventListener('click', (e) => {
   const row = e.target.closest?.('[data-filter]');
   if (row) filter.toggle(row.dataset.filter, row.dataset.v);
-  if (row || stats.click(e.target)) drawStats();
+  if (row) drawStats();
 });
 // The bar under the status line while a filter is on: what is shown, and × to show every train again.
 const filterBar = document.getElementById('filter-bar'), filterText = document.getElementById('filter-text');
@@ -724,6 +737,11 @@ setInterval(() => {
     if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
     dayStats?.tick();
     if (!statsHeld) drawStats();
+  }
+  // Settings → Debug: the positions' rate and age (Max, 2026-11-15, 3A: the stats page keeps only a grey line).
+  if (!settingsPage.hidden) {
+    const r = stats.rate(tNow);
+    debugDataEl.textContent = r ? t('stDebugRate', r.perSecond.toFixed(0), r.ageS.toFixed(0)) : '–';
   }
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
