@@ -1180,7 +1180,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
     // ({ label, late, stale }), or null.
     setSelectedPlace(place, props) {
-      if (!isReady || !selected || !place) {
+      // No details (props): the train has just left the map (arrived, or silent too long) while its last place is still
+      // known; the marker goes too (Max, 2026-11-15: "props is null" with 2047 after Herrljunga).
+      if (!isReady || !selected || !place || !props) {
         if (selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
         return;
       }
