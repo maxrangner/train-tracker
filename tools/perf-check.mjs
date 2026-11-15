@@ -108,7 +108,7 @@ if (part('idle') || part('tap') || part('back')) {
       await sleep(1200);
       const at = await onScreen(page, await placeOf(page, t.id));
       await page.evaluate((id) => {
-        const rec = window.__tap = { pos: [], frames: [] };
+        const rec = window.__tap = { pos: [], frames: [], at: [] };
         let last = performance.now();
         const t0 = last;
         const step = (ts) => {
@@ -116,6 +116,7 @@ if (part('idle') || part('tap') || part('back')) {
           const p = x ? window.__map.project([x.lon, x.lat]) : null;
           rec.pos.push(p && [p.x, p.y]);
           rec.frames.push(ts - last);
+          rec.at.push(Math.round(ts - t0));
           last = ts;
           if (ts - t0 < 1000) requestAnimationFrame(step);
         };
@@ -124,11 +125,15 @@ if (part('idle') || part('tap') || part('back')) {
       await page.mouse.click(at.x, at.y);
       await sleep(1300);
       const r = await page.evaluate(() => window.__tap);
-      let jump = 0;
-      for (let i = 1; i < r.pos.length; i++) if (r.pos[i] && r.pos[i - 1]) jump = Math.max(jump, Math.hypot(r.pos[i][0] - r.pos[i - 1][0], r.pos[i][1] - r.pos[i - 1][1]));
+      let jump = 0, jumpAt = 0;
+      for (let i = 1; i < r.pos.length; i++) {
+        const d = r.pos[i] && r.pos[i - 1] ? Math.hypot(r.pos[i][0] - r.pos[i - 1][0], r.pos[i][1] - r.pos[i - 1][1]) : 0;
+        if (d > jump) { jump = d; jumpAt = r.at[i]; }
+      }
       const end = r.pos.at(-1);
-      const slow = r.frames.slice(1).filter(f => f > 33).length;
-      say(`tap     ${which.padEnd(10)} longest frame ${Math.round(Math.max(...r.frames.slice(1)))} ms, frames over 33 ms ${slow}, biggest jump ${jump.toFixed(1)} px, train ends at ${end ? end.map(Math.round).join(', ') : '-'}`);
+      const slowAt = r.frames.map((f, i) => (i > 0 && f > 33 ? `${r.at[i]}` : null)).filter(Boolean);
+      const slow = slowAt.length;
+      say(`tap     ${which.padEnd(10)} longest frame ${Math.round(Math.max(...r.frames.slice(1)))} ms, frames over 33 ms ${slow}${slow ? ` (ending at ${slowAt.join(', ')} ms)` : ''}, biggest jump ${jump.toFixed(1)} px (at ${jumpAt} ms), train ends at ${end ? end.map(Math.round).join(', ') : '-'}`);
       await closePanel(page);
       await sleep(800);
     }

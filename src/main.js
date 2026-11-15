@@ -96,14 +96,19 @@ const panel = createPanel(document.getElementById('panel'), {
       places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
-    shownPath = { id, path: pathOf(places, net), places };
-    const here = placeNow(id);
-    let done = 0;
-    if (here) done = progressAt(shownPath.path, here);
-    else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
-    map.setPathProgress(done);
-    map.setPath(shownPath.path);
-    if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
+    // Worked out once the camera has come to the train: finding the way over the rail network takes about 45 ms,
+    // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
+    map.whenSettled().then(() => {
+      if (panel.openId !== id) return;   // closed, or another train opened meanwhile
+      shownPath = { id, path: pathOf(places, net), places };
+      const here = placeNow(id);
+      let done = 0;
+      if (here) done = progressAt(shownPath.path, here);
+      else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
+      map.setPathProgress(done);
+      map.setPath(shownPath.path);
+      if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
+    });
   },
   onFollow(id, on) {
     if (on) follow(id); else map.unfollow();
