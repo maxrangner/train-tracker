@@ -28,7 +28,7 @@ try {
     const s = await page.evaluate(() => ({ title: document.title, lang: document.documentElement.lang, theme: document.documentElement.dataset.theme,
       word: document.querySelector('#open-settings b').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
     expect(s.trains > 0, `${lang}/${theme}: no trains on the map (${s.status})`);
-    expect(s.title === 'Spårad', `${lang}/${theme}: the title is "${s.title}"`);
+    expect(s.title === 'Spårat', `${lang}/${theme}: the title is "${s.title}"`);
     expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
     // ---- The banner opens the stats page; × closes it ----
     await page.click('#status');

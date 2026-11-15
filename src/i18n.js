@@ -8,7 +8,7 @@ import { settings } from './settings.js';
 export const lang = () => settings.language;
 
 const EN = {
-  title: 'Spårad',
+  title: 'Spårat',
   menu: 'Menu and search',
   connecting: 'connecting…',
   helpButton: 'Help and credits',
@@ -179,7 +179,7 @@ const EN = {
 };
 
 const SV = {
-  title: 'Spårad',
+  title: 'Spårat',
   menu: 'Meny och sök',
   connecting: 'ansluter…',
   helpButton: 'Hjälp och källor',

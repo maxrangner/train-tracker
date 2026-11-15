@@ -11,7 +11,7 @@ const round = v => Math.round(v * 1e5) / 1e5;
 
 const res = await fetch('https://overpass-api.de/api/interpreter', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'sparad (private prototype)' },
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'sparat (private prototype)' },
   body: 'data=' + encodeURIComponent(QUERY),
 });
 if (!res.ok) throw new Error(`Overpass answered ${res.status}: ${(await res.text()).slice(0, 300)}`);
