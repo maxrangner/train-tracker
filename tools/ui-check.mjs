@@ -139,6 +139,26 @@ try {
   await page.evaluate(() => localStorage.removeItem('settings'));
   expect(!page.errors.length, `page errors: ${page.errors.slice(0, 2).join(' | ')}`);
 
+  // ---- A train picked in the search with the keyboard up (a short page) is held mid-map once the keyboard is gone
+  // (Max, 2026-11-15: it stayed too high) ----
+  {
+    const phone = { width: 393, height: 851, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+    const kb = await openMap(browser, { ...base, size: phone, lang: 'en', view: '9/59.33/18.06' });
+    await sleep(3000);
+    await kb.setViewport({ ...phone, height: 430 });
+    await sleep(400);
+    await kb.click('#menu-button'); await sleep(300);
+    await kb.keyboard.type('2311', { delay: 30 }); await sleep(700);
+    await kb.click('#search-results button');
+    await sleep(300);
+    await kb.setViewport(phone);
+    await sleep(3500);
+    const y = await kb.evaluate(() => { const b = document.querySelector('.sel-train')?.getBoundingClientRect(); return b ? Math.round(b.top + b.height / 2) : null; });
+    const want = Math.round((phone.height - (Math.round(phone.height * 0.45) + 20)) / 2);
+    expect(y !== null && Math.abs(y - want) < 20, `a train picked with the keyboard up is held at y ${y}, not about ${want}`);
+    await kb.close();
+  }
+
   // ---- Models ----
   let models;
   try { models = JSON.parse(execFileSync('node', ['tools/models-check.mjs', '--json'], { encoding: 'utf8' })); }

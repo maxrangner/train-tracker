@@ -716,7 +716,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // (index.html). Worked out from the window's size, kept from the last resize: reading the page's own sizes here
   // made the browser lay the page out again, 21 ms on the first frame after a tap (measured 2026-11-15).
   let size = { w: box.clientWidth, h: box.clientHeight };
-  map.on('resize', () => { size = { w: box.clientWidth, h: box.clientHeight }; });
+  // A new size (the phone's keyboard closing, a turned phone, a resized window): a followed train still held where it
+  // was put at first (not dragged elsewhere) is held at the new size's place for it (Max, 2026-11-15: a train picked in
+  // the search, with the keyboard still up, stayed too high once the keyboard had gone).
+  map.on('resize', () => {
+    size = { w: box.clientWidth, h: box.clientHeight };
+    if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
+  });
   const GAP = 10, CARD_W = 420;
   const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
   // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
@@ -812,6 +818,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Kept 30 px inside the edges, and 30 px clear of the card.
     const x0 = Math.max(30, Math.min(w - 30, at.x)), x = narrow() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
     following.focus = { x, y: Math.max(70, Math.min((narrow() && behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    following.moved = true;     // put there by a drag: kept when the screen's size changes
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.glide = null;
   });
@@ -918,7 +925,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     async follow(getPlace, onEnd) {
       await ready;
       dragged = false;
-      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), place: null, glide: null };
+      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), moved: false, place: null, glide: null };
       zoomAroundCenter(true);
       followRotation(true);
       map.setTransformCameraUpdate(holdTrain);
