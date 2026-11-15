@@ -10,6 +10,7 @@ const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
 import { star } from './panel.js';
+import { icon } from './icons.js';
 import { hhmm } from './clock.js';
 import { t } from './i18n.js';
 
@@ -49,7 +50,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     el.innerHTML =
       `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
       (isStarred ? star(isStarred(station.sig)) : '') +
-      `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div>` + msgsHtml() +
+      `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>` + msgsHtml() +
       `<div class="board-tabs" role="group" aria-label="${t('depOrArr')}">` +
       `<button type="button" data-act="Avgang" aria-pressed="${dep}">${t('departures')}</button>` +
       `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">${t('arrivals')}</button></div>` + body;

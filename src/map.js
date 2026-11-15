@@ -7,6 +7,7 @@ import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
 import { LOOK, restyleBase } from './map-look.js';
+import { LATE, ACCENTS, DEFAULT_ACCENT, DISRUPTION } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -19,7 +20,12 @@ const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' :
 // The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
 // The rails and stations follow the map's look (Max, 2026-11-14: "Paper" light, dark rails with a white edge;
 // "Night" dark, rails in warm light; src/map-look.js).
-const colours = dark => (dark
+// The route, its travelled part and the "N trains" labels take the accent colour (Settings → Accent colour, Max
+// 2026-11-15); lateness and disruption colours come from src/colours.js.
+const accentOf = dark => (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT])[dark ? 'dark' : 'light'];
+const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: accentOf(dark).c, routeDone: accentOf(dark).done,
+  dis: DISRUPTION[dark ? 'dark' : 'light'] });
+const colourBase = dark => (dark
   ? { label: '#ffffff', halo: LOOK.dark.water, station: '#d6deea', ring: '#e8c170', ringFill: LOOK.dark.land, group: '#58a6ff',
       rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land, dis: ['#e3b341', '#f0883e', '#ff6b61'], disEdge: LOOK.dark.land, disDash: true,
       casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
@@ -63,15 +69,15 @@ const GROUP_PX = 40;
 
 // A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
 // (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
-const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
+const dotColours = dark => LATE[dark ? 'dark' : 'light'];   // src/colours.js
 // The arrow's shape in a 64 x 64 picture, pointing up (north); middle (32, 32). Max, 2026-11-15, from four sketches
 // ("Change to A, but put a toggle under debug to toggle to C"): 'triangle' wider than before (base 44, was 34: hard
 // to read), 'dart' (Settings → Debug → Train symbol → Dart) wide with a notch at the back.
 const ARROWS = { triangle: [[32, 3], [54, 61], [10, 61]], dart: [[32, 3], [59, 61], [32, 48], [5, 61]] };
 const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.triangle;
 const triangles = () => settings.trainSymbol !== 'circle';
-function addTriangles(map) {
-  for (const [name, colour] of Object.entries(DOT_COLOURS)) {
+function addTriangles(map, dark) {
+  for (const [name, colour] of Object.entries(dotColours(dark))) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const g = c.getContext('2d');
@@ -328,8 +334,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7],
         // Minutes off timetable: green on time (+2 or less), yellow +3 to +5, red +6 or more, grey not known yet.
         // A stale train (silent for 2 minutes, or no data at all) is grey and faded.
-        'circle-color': ['case', ['get', 'stale'], '#8c959f',
-          ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f']],
+        'circle-color': ['case', ['get', 'stale'], dotColours(dark).unknown,
+          ['match', ['get', 'late'], 'ontime', dotColours(dark).ontime, 'some', dotColours(dark).some, 'late', dotColours(dark).late, dotColours(dark).unknown]],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
@@ -339,7 +345,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       },
     });
     // Triangles instead of circles (Settings → Train symbol): the circles stay, unseen, so taps still find the trains.
-    addTriangles(map);
+    addTriangles(map, dark);
     map.addLayer({
       id: 'train-triangles',
       type: 'symbol',

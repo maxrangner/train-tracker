@@ -1,4 +1,5 @@
 import { startTrainSource } from './trains-source.js';
+import { icon } from './icons.js';
 import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap } from './map.js';
@@ -8,7 +9,8 @@ import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
-import { t, translatePage } from './i18n.js';
+import { t, translatePage, lang } from './i18n.js';
+import { ACCENTS } from './colours.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -154,7 +156,7 @@ function showPicker(list) {
   disruptionEl.hidden = true;
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div><ul class="pick-list">` +
+    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
     rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(r.label)}</b> <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
@@ -328,9 +330,10 @@ settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden
 document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent') map.applySettings();
   if (key === 'language') {
     translatePage();
+    nameSwatches();
     map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
@@ -361,6 +364,13 @@ function showSettings() {
   closeSizeEl.value = close;
   closeSizeOut.textContent = `×${close}`;
 }
+// Settings → Accent colour: one round swatch per curated colour (src/colours.js; Max, 2026-11-15), each in the light
+// and the dark shade (the page's style picks one).
+const swatchesEl = settingsEl.querySelector('.seg.swatches');
+swatchesEl.innerHTML = Object.entries(ACCENTS).map(([k, a]) =>
+  `<button type="button" data-v="${k}" style="--sw-l:${a.light.c};--sw-d:${a.dark.c}"></button>`).join('');
+const nameSwatches = () => { for (const b of swatchesEl.children) b.title = b.ariaLabel = ACCENTS[b.dataset.v].name[lang()]; };
+nameSwatches();
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
     setSetting(seg.dataset.key, b.dataset.v);
