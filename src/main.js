@@ -9,13 +9,15 @@ import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage } from './i18n.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
+import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
 import { createDayStats } from './day-stats.js';
+import { createFilter } from './filter.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -41,11 +43,22 @@ const routes = createRoutes();
 trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
-const stats = createStats();   // the stats page's running numbers (src/stats.js)
+const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
+// Which trains the map shows (src/filter.js): chosen by tapping companies and kinds on the stats page.
+const filter = createFilter();
 // Today's arrivals for the stats page's graph: asked for only while that page is open (live, with a key).
 const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
+// Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs; 280 stations measured from the
+// recordings): the map draws its ring and name there, and a flight to it lands there (Max, 2026-11-14; Trafikverket's
+// point is often not at the platform: Bohus 1.3 km off). The movement uses it too (src/routes.js setStopPlaces, Max
+// 2026-11-14, point 5 B): a train seen only at fixed places waits there for its stop, and the dwell rule looks there at
+// the stations where it is over 200 m from the point. Everything else keeps Trafikverket's point.
+let stopPlaces = {};
+const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; routes.setStopPlaces(stopPlaces); })
+  .catch(e => console.warn('stop places:', e.message));
+const shownAt = (st) => { const p = stopPlaces[st.sig]; return p ? { ...st, lon: p[0], lat: p[1] } : st; };
 
 const minutesOf = r => lateness.get(r.id)?.minutes;
 const labelFor = r => label(r.number, minutesOf(r));
@@ -58,8 +71,8 @@ const propsFor = (r, sim) => ({
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
-// Dragged off the screen or behind the panel, the train is closed (map.js).
-const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false), () => panel.close());
+// Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
+const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   isStarred: number => favourites.has('train', number),
@@ -79,7 +92,8 @@ const panel = createPanel(document.getElementById('panel'), {
       if (!st || st.lon === null) continue;
       const last = places[places.length - 1];
       if (last && last.sig === s.station) { last.stop ||= s.advertised; last.actual ||= s.actual; continue; }
-      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual });
+      // mark: where the station's ring is (shownAt), so the route's stop dot sits next to it (Max, 2026-11-15).
+      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };
@@ -106,11 +120,15 @@ const map = createMap('map', {
   // following"). A tap that only closed the menu does nothing more.
   onTrainTap(id) {
     if (menu.justClosed) return;
-    if (!openTrain(id)) { panel.close(); board.close(); }
+    if (!openTrain(id)) { panel.close(); board.close(); disruptionEl.hidden = true; }
   },
   onStationTap(sig) {
     if (menu.justClosed) return;
     openStation(sig);
+  },
+  onDisruptionTap(id) {
+    if (menu.justClosed) return;
+    openDisruption(id);
   },
   onGroupTap(list) {
     if (menu.justClosed) return;
@@ -128,6 +146,7 @@ const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;'
 function showPicker(list) {
   panel.close();
   board.close();
+  disruptionEl.hidden = true;
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
     `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div><ul class="pick-list">` +
@@ -144,14 +163,17 @@ const board = createBoard(document.getElementById('board'), {
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   isStarred: sig => favourites.has('station', sig),
   onStar: sig => favourites.toggle('station', sig),
+  // The station's own messages (live only).
+  messages: !replay && hasKey ? sig => fetchStationMessages(sig, now()) : null,
 });
 async function openStation(sig, { go = false } = {}) {
   const st = stations.get(sig);
   if (!st) return;
   if (panel.openId) panel.close();
   map.unfollow();
+  disruptionEl.hidden = true;
   board.open(st);
-  if (go) map.goTo(st, 13);   // lands above the board
+  if (go) map.goTo(shownAt(st), 13);   // lands above the board
 }
 
 // A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
@@ -168,6 +190,7 @@ function openTrain(id, { go = false } = {}) {
   if (!r) return false;
   board.close();
   pickerEl.hidden = true;
+  disruptionEl.hidden = true;
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
   const following = follow(id);
   const p = go && placeNow(id);
@@ -183,7 +206,7 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; disruptionsPage.hidden = true; } });
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -234,11 +257,14 @@ const menu = createMenu({
 // from the places this frame already worked out (every train in Sweden used to be worked through a second time and
 // sent, also when five of them were on screen).
 let lastDraw = 0;
-let frameTrains = [], frameById = new Map();
+// frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
+// dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
+let frameAll = [], frameTrains = [], frameById = new Map();
 function frame(ts) {
   const t = now() - DELAY_MS;
-  frameTrains = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
-  frameById = new Map(frameTrains.map(x => [x.id, x]));
+  frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+  frameTrains = filter.active ? frameAll.filter(x => x.id === panel.openId || filter.shows(x.brand)) : frameAll;
+  frameById = new Map(frameAll.map(x => [x.id, x]));
   if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
   if (ts - lastDraw >= map.trainsEvery()) {
     lastDraw = ts;
@@ -283,8 +309,11 @@ onSettingChange((key) => {
     menu.refresh();
     panel.relabel();
     if (!statsPage.hidden) drawStats();
+    showFilter();
     board.relabel();
     pickerEl.hidden = true;
+    if (!disruptionsPage.hidden) drawDisruptions();
+    if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
   }
   if (key === 'boardRows') board.relabel();
   showSettings();
@@ -309,7 +338,7 @@ showSettings();
 const statsPage = document.getElementById('stats-page');
 const statsBody = document.getElementById('stats-body');
 function drawStats() {
-  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameTrains, lateness, stations,
+  statsBody.innerHTML = stats.render({ count: trains.count, reports: trains.reports(), frame: frameAll, filter, lateness, stations,
     trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null });
 }
 function openStats() {
@@ -324,6 +353,84 @@ function openStats() {
 }
 document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
+// Taps on the page: one listener, as the page is drawn anew every second. Its toggles, and a company or kind of train,
+// which shows only those trains on the map (taps stack; tapped again, taken off). While a finger is down on it the
+// page is not drawn anew: a new drawing between finger down and up lost the tap (no click).
+let statsHeld = false;
+statsBody.addEventListener('pointerdown', () => { statsHeld = true; });
+addEventListener('pointerup', () => { statsHeld = false; });
+addEventListener('pointercancel', () => { statsHeld = false; });
+statsBody.addEventListener('click', (e) => {
+  const row = e.target.closest?.('[data-filter]');
+  if (row) filter.toggle(row.dataset.filter, row.dataset.v);
+  if (row || stats.click(e.target)) drawStats();
+});
+// The bar under the status line while a filter is on: what is shown, and × to show every train again.
+const filterBar = document.getElementById('filter-bar'), filterText = document.getElementById('filter-text');
+function showFilter() {
+  lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
+  filterBar.hidden = !filter.active;
+  filterText.textContent = filter.active
+    ? t('filterShowing', filter.list().map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')) : '';
+}
+filter.onChange(showFilter);
+document.getElementById('filter-clear').onclick = () => { filter.clear(); if (!statsPage.hidden) drawStats(); };
+
+// ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
+const disruptionEl = document.getElementById('disruption');
+const disruptionsPage = document.getElementById('disruptions-page');
+let stationsLoaded;
+const stationsReady = new Promise((resolve) => { stationsLoaded = resolve; });
+let netNow = null;
+netReady.then((n) => { netNow = n; });
+const disruptions = createDisruptions({ load: fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
+  onData({ list, geojson }) {
+    map.setDisruptions(geojson);
+    document.getElementById('disruptions-count').textContent = `(${list.length})`;
+    if (!disruptionsPage.hidden) drawDisruptions();
+    const open = disruptionEl.dataset.id;
+    if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
+  } });
+if (!replay && hasKey) {
+  document.getElementById('disruptions-section').hidden = false;
+  Promise.all([netReady, stationsReady]).then(() => disruptions.start());
+}
+function drawDisruptions() {
+  const list = disruptions.list;
+  document.getElementById('disruptions-body').innerHTML = `<p class="panel-note">${t(list.length ? 'disruptionsNote' : 'noDisruptions')}</p>` +
+    list.map(d => rowHtml(d, stationName, now())).join('');
+  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
+}
+function drawDisruption(id) {
+  const d = disruptions.byId(id);
+  if (!d) return;
+  disruptionEl.dataset.id = id;
+  disruptionEl.innerHTML = cardHtml(d, stationName, now());
+  disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
+}
+// Open a disruption's card where a train's panel sits; go: fly to it.
+function openDisruption(id, { go = false } = {}) {
+  const d = disruptions.byId(id);
+  if (!d) return;
+  if (panel.openId) panel.close();
+  board.close();
+  pickerEl.hidden = true;
+  map.unfollow();
+  drawDisruption(id);
+  disruptionEl.hidden = false;
+  const p = disruptions.placeOf(d);
+  if (go && p) map.goTo(p, 9);
+}
+document.getElementById('open-disruptions').onclick = () => {
+  menu.close();
+  helpEl.hidden = true;
+  settingsPage.hidden = true;
+  statsPage.hidden = true;
+  drawDisruptions();
+  disruptionsPage.hidden = false;
+  disruptionsPage.querySelector('.panel-close').focus();
+};
+disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };
 
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
@@ -358,16 +465,37 @@ const positionHandlers = {
     if (s.error) console.warn('positions:', s.error);
   },
 };
+let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
-  if (!replay) return startTrainSource(positionHandlers);
+  if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
 });
 
+// Back from the background (another app, a locked phone, another tab) after BACK_MS or more: a phone froze the page,
+// so every train's data is as old as that. Each train is placed where it is now as soon as its next report comes
+// (trains.resume), instead of fast-forwarding there (Max, 2026-11-14, note 3); the live feeds ask again at once; and
+// the "no data" halt waits a minute from now (otherwise every train came back braking, grey, until data came).
+const BACK_MS = 10 * 1000;
+let hiddenAt = null;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = now(); return; }
+  if (hiddenAt === null) return;
+  const was = hiddenAt;
+  hiddenAt = null;
+  if (now() - was < BACK_MS) return;
+  trains.resume(was, now());
+  if (lastDataAt !== null) lastDataAt = Math.max(lastDataAt, now());
+  if (trains.halted) trains.setHalted(false);
+  positionsFeed?.restart?.();
+  passingsFeed?.restart?.();
+});
+
 function gotStations(m) {
   stations = m;
+  stationsLoaded();
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
-  map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null));
+  stopPlacesReady.then(() => map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null).map(shownAt)));
 }
 // The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
 // left the page without station names, search, boards and planned routes until it was loaded again.)
@@ -379,7 +507,7 @@ function loadStations(tries = 0) {
 }
 if (hasKey && replay) loadStations();
 if (hasKey && !replay) {
-  followPassings({
+  passingsFeed = followPassings({
     onPassings,
     onStatus(s) {
       status.passings = s.mode;
@@ -455,6 +583,7 @@ function statusLine(st, noData) {
   if (st.mode === 'stood') return quiet ? t('stoodStill', quiet, passed) : '';
   if (st.mode === 'waiting' && st.lastPassing?.sig === st.waitingFor && st.lastPassing.activity === 'Ankomst')
     return t('atStation', q, stationName(st.waitingFor), clock(st.lastPassing.time));
+  if (st.mode === 'waiting' && st.waitingAt) return t('waitingAt', q, stationName(st.waitingFor), passed);
   if (st.mode === 'waiting') return t('waitingBefore', q, stationName(st.waitingFor), passed);
   if (st.mode === 'timetable') return t('byTimetable', q, passed);
   if (st.mode === 'coasted out') return t('stoppedLastSeen', q, passed);
@@ -481,11 +610,11 @@ setInterval(() => {
   statusEl.classList.toggle('problem', Boolean(error) || noData);
 
   // The stats: the running numbers every second; the page itself only while it is open.
-  stats.tick(frameTrains, tNow, id => trains.get(id));
+  stats.tick(frameAll, tNow, id => trains.get(id));
   if (!statsPage.hidden) {
     if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
     dayStats?.tick();
-    drawStats();
+    if (!statsHeld) drawStats();
   }
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.

@@ -41,9 +41,9 @@ export const BRANDS = {
     source: 'Silver X31K, black front, thin orange line. oresundstag.se; Commons: Göteborgs C 2026-04-06.',
   },
   'Krösatågen': {
-    colours: { body: '#9da2a6', skirt: '#6e7378', roof: '#d9343f', nose: '#d9343f' },
+    colours: { body: '#d6d9dc', skirt: '#c8323c', roof: '#f2c230', nose: '#f2c230' },
     cars: 2,
-    source: 'Grey with red front and roof band. Commons: Krösatågen, Västervik 2026-05-25.',
+    source: 'X11/X14 (2 in 3 of its trains): light grey, yellow roof and front, red along the bottom. Commons: Krösatågen, Alvesta station 2025-07-15.',
   },
   'Östgötapendel': {
     colours: { body: '#ece6da', skirt: '#e2475a', nose: '#1f1f22', stripe: '#f09a2e' },
@@ -78,7 +78,7 @@ export const BRANDS = {
   'VTAB': {
     colours: { body: '#e6e7e8', skirt: '#6e7175', roof: '#f2c230', nose: '#f2c230', stripe: '#2e9e4a' },
     cars: 2,
-    source: 'White with yellow front and roof edge, green stripe (newest photo 2022). Commons: Kil X53 9049.',
+    source: 'White with yellow front and roof, green stripe, light grey bottom edge. Commons: VY Värmlandståg, Stockholms Central 2026-03-21.',
   },
   'X-Tåget': {
     colours: { body: '#c9cbce', skirt: '#8d9094', roof: '#d9262e', nose: '#d9262e' },

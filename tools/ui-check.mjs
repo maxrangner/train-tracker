@@ -4,7 +4,8 @@
 // Checked: the page starts without errors in English/light and Swedish/dark; a tap opens a train's card; every
 // "N trains" label lists exactly N; a search lists every matching train and scrolls; a setting changes without the
 // page reloading; no model has surfaces on top of each other (tools/models-check.mjs); a tap on the banner opens the
-// stats page in each language, filled in, and × closes it.
+// stats page in each language, filled in, and × closes it; a tap on a company there shows only its trains, and × on
+// the bar that appears shows them all again.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -16,6 +17,7 @@ const replay = existsSync(`data/positions-${RUSH_HOUR}.jsonl`) ? RUSH_HOUR : nul
 const base = { ...(replay ? { replay } : {}), view: '12/59.33/18.06', train: 'toy' };
 const problems = [];
 let stats = 0;   // sections on the stats page
+let filtered = '';   // the filter step's result
 const expect = (ok, what) => { if (!ok) problems.push(what); };
 
 const browser = await launch();
@@ -35,8 +37,23 @@ try {
       first: document.querySelector('#stats-body .st-big')?.textContent ?? '', bars: document.querySelectorAll('#stats-body .st-bar').length,
       sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count }));
     expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
-    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 7,
-      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 7 sections`);
+    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 9,
+      `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 9 sections`);
+    // ---- A tap on a company shows only its trains on the map; × on the bar shows them all again ----
+    if (lang === 'en') {
+      const drawn = () => page.evaluate(() => ({ n: window.__last3d.length, bar: !document.getElementById('filter-bar').hidden,
+        text: document.getElementById('filter-text').textContent }));
+      const all = await drawn();
+      const company = await page.evaluate(() => { const b = document.querySelector('#stats-body [data-filter="brand"]'); b.click(); return b.dataset.v; });
+      await sleep(400);
+      const only = await drawn();
+      await page.evaluate(() => document.getElementById('filter-clear').click());
+      await sleep(400);
+      const again = await drawn();
+      filtered = `${company}: ${only.n} of ${all.n} drawn`;
+      expect(!all.bar && only.bar && only.n > 0 && only.n < all.n && only.text.includes(company) && !again.bar && again.n >= all.n - 5,
+        `filter on ${company}: drawn ${all.n} -> ${only.n} (bar ${only.bar ? `"${only.text}"` : 'hidden'}) -> × ${again.n} (bar ${again.bar ? 'shown' : 'hidden'})`);
+    }
     await page.click('#stats-page .panel-close');
     await sleep(300);
     expect(await page.evaluate(() => document.getElementById('stats-page').hidden), `${lang}/${theme}: × did not close the stats page`);
@@ -123,7 +140,7 @@ try {
 
   console.log(problems.length ? `UI check FAILED (${replay ? 'rush-hour replay' : 'live'}):` : `UI check ok (${replay ? 'rush-hour replay' : 'live'}): ` +
     `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists, ` +
-    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), model surfaces 0`);
+    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), filter ${filtered}, model surfaces 0`);
   for (const p of problems) console.log('  -', p);
 } finally {
   await browser.close();

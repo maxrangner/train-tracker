@@ -11,9 +11,13 @@
 //   standsAt: { sig, s }   drawn standing at least s seconds within 300 m of station sig
 //   noSlideWhileStanding: M  the drawn train moves at most M metres in all while the real train stands (GPS wobble
 //                          or a changed path must not slide it about)
+//   noWrongBranch: true    never drawn onto another track than the real train took, before its next report
+//                          (tools/lib/branch.mjs; the train code must call options.onWayChange)
 // Exit code 1 when a case fails that isn't marked knownFailing.
 import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { readPositions } from './lib/records.mjs';
+import { branchCounter } from './lib/branch.mjs';
 import { resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
@@ -35,6 +39,7 @@ const stations = new Map(JSON.parse(readFileSync('data/stations.json', 'utf8')).
   const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(st.Geometry?.WGS84 ?? '');
   return [st.LocationSignature, m ? { lon: Number(m[1]), lat: Number(m[2]) } : null];
 }).filter(([, v]) => v));
+const stopPlaces = existsSync('public/stop-places.json') ? JSON.parse(readFileSync('public/stop-places.json', 'utf8')).places : {};
 
 // A recording, read as tools/motion-check.mjs does; kept while its cases run.
 const loaded = new Map();
@@ -42,17 +47,7 @@ function load(name) {
   if (loaded.has(name)) return loaded.get(name);
   const file = `data/positions-${name}.jsonl`, ttFile = `data/timetable-${name}.jsonl`;
   if (!existsSync(file)) return null;
-  const recs = [];
-  for (const line of readFileSync(file, 'utf8').split('\n')) {
-    if (!line) continue;
-    const p = JSON.parse(line);
-    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
-    if (!m || !p.Train) continue;
-    recs.push({ id: `${p.Train.OperationalTrainNumber}/${p.Train.OperationalTrainDepartureDate.slice(0, 10)}`,
-      lon: Number(m[1]), lat: Number(m[2]), speed: p.Speed ?? null, bearing: p.Bearing ?? null,
-      time: Date.parse(p.TimeStamp), got: Date.parse(p.got), gone: p.Deleted === true || p.Status?.Active === false });
-  }
-  recs.sort((a, b) => a.got - b.got);
+  const recs = readPositions(file);   // as the page reads them (tools/lib/records.mjs)
   const rows = existsSync(ttFile) ? readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
   const out = { recs, rows };
   loaded.set(name, out);
@@ -67,13 +62,17 @@ function run(c) {
   if (!mine.length) return { ok: false, why: `no reports of ${key}` };
   // The page's planned route and passings, for this train only.
   const routes = createRoutes({ stations, net });
+  routes.setStopPlaces?.(stopPlaces);   // as the page (src/main.js); older code (--src) has none
   const rows = rec.rows.filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation &&
     `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}` === key);
   routes.add(rows.map(a => ({ key, sig: a.LocationSignature, activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
   const passings = rows.filter(a => a.TimeAtLocation).map(a => ({ got: Date.parse(a.got), p: { key, station: a.LocationSignature,
     time: Date.parse(a.TimeAtLocation), activity: a.ActivityType,
     minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000) } })).sort((x, y) => x.got - y.got);
-  const drawn = createTrains({ net, routes }), truth = createTrains({ net, routes });   // the truth knows the routes too, on purpose (as in motion-check)
+  // The real way, for wrong branches: the train's whole recording, all of it kept.
+  const oracle = createTrains({ net, keepMs: Infinity }), branches = branchCounter(oracle);
+  if (c.rules.noWrongBranch) for (let i = 0; i < mine.length;) { const T = mine[i].got, batch = []; while (i < mine.length && mine[i].got <= T + 1000) batch.push(mine[i++]); oracle.update(batch, T + 1000); }
+  const drawn = createTrains({ net, routes, onWayChange: branches.onWayChange }), truth = createTrains({ net, routes });   // the truth knows the routes too, on purpose (as in motion-check)
   const gots = rec.recs.map(r => r.got);   // every report's arrival: "no data at all" for 60 s halts every train
   const feed = (trains, upTo, i) => {
     const batch = [];
@@ -97,7 +96,7 @@ function run(c) {
     const t = T - DELAY_MS;
     if (T % 1000 < STEP) drawn.prune(T);
     const d = drawn.placedAt(t).find(x => x.id === key);
-    const sim = drawn.simOf(key), tru = truth.reportedAt(key, t);
+    const sim = drawn.simOf(key), tru = truth.reportedAt(key, t - (d?.extra ?? 0));   // at the moment it is drawn for
     if (t < from || !d || !sim) continue;
     if (TRACE && T % 2000 < STEP) console.log(`  ${new Date(t).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm' })} drawn ${(sim.v * 3.6).toFixed(0)} km/h ` +
       `(${sim.target}${sim.syncing ? ', fast-forward' : ''}) at ${d.lat.toFixed(5)},${d.lon.toFixed(5)}; real ${tru ? `${tru.kmh.toFixed(0)} km/h, ${metres(d, tru).toFixed(0)} m away` : '-'}`);
@@ -117,12 +116,15 @@ function run(c) {
   if (r.noStopWhileMoving !== undefined && m.standMovingMaxS >= r.noStopWhileMoving) bad.push(`drawn standing ${m.standMovingMaxS.toFixed(1)} s while the real train moved (limit ${r.noStopWhileMoving} s)`);
   if (r.maxKmh !== undefined && m.maxKmh > r.maxKmh) bad.push(`drawn at ${Math.round(m.maxKmh)} km/h (limit ${r.maxKmh})`);
   if (r.standsAt && m.standsAtS < r.standsAt.s) bad.push(`drawn standing ${m.standsAtS.toFixed(0)} s at ${r.standsAt.sig} (needs ${r.standsAt.s} s)`);
+  const wrongs = branches.events.filter(e => e.time >= from - DELAY_MS && e.time <= to);
+  if (r.noWrongBranch && wrongs.length) bad.push(`drawn onto a wrong branch: ${wrongs.map(e => `${new Date(e.time).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm' })} slid ${e.slide} m`).join(', ')}`);
   if (r.noSlideWhileStanding !== undefined && m.slideM > r.noSlideWhileStanding) bad.push(`drawn moved ${m.slideM.toFixed(0)} m while the real train stood (from ${m.firstSlide}; limit ${r.noSlideWhileStanding} m)`);
   const said = [
     r.noStopWhileMoving !== undefined && `standing while moving at most ${m.standMovingMaxS.toFixed(1)} s`,
     r.maxKmh !== undefined && `top ${Math.round(m.maxKmh)} km/h`,
     r.standsAt && `stood ${m.standsAtS.toFixed(0)} s at ${r.standsAt.sig}`,
     r.noSlideWhileStanding !== undefined && `moved ${m.slideM.toFixed(0)} m while the real train stood`,
+    r.noWrongBranch && 'no wrong branch',
   ].filter(Boolean).join(', ');
   return { ok: !bad.length, why: bad.join('; '), said };
 }

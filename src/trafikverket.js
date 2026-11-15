@@ -38,6 +38,7 @@ export async function ask(queryXml) {
 // Keep a query live: ask once with a stream address, then follow the stream. If the stream breaks, ask again from
 // where it left off; if it keeps breaking, ask every 10 s instead, and try the stream again every 5 minutes.
 // makeQuery({changeId, stream}) returns the <QUERY> xml; onResult(result) gets every answer and stream message.
+// onResult(result, { first }): first is true for the first answer after starting (every object's latest version).
 export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   let lastChangeId = null;
   let es = null;
@@ -69,6 +70,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   async function openStream() {
     if (stopped) return;
     let result;
+    const first = lastChangeId === null;
     try {
       result = await ask(makeQuery({ changeId: lastChangeId, stream: true }));
     } catch (e) {
@@ -76,7 +78,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
     }
     if (stopped) return;   // stopped while the answer was on its way: no new stream
     lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
-    onResult(result);
+    onResult(result, { first });
     const url = result.INFO?.SSEURL;
     if (!url) return streamFailed('no stream address in the answer');
 
@@ -120,7 +122,16 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   }
 
   openStream();
-  return () => { stopped = true; closeStream(); };
+  const stop = () => { stopped = true; closeStream(); };
+  // Back from the background (main.js): a phone froze the page, and the stream may have died without a word. Ask
+  // again from where it left off at once, rather than when the silence timer runs out (up to silentMs later). While
+  // asking every 10 s, or while a stream is being opened, nothing is needed.
+  stop.restart = () => {
+    if (stopped || !es) return;
+    closeStream();
+    openStream();
+  };
+  return stop;
 }
 
 const changeAttrs = ({ changeId, stream }) =>
@@ -233,6 +244,65 @@ export async function fetchDayArrivals(since, changedSince = null) {
   for (const a of r.TrainAnnouncement ?? []) {
     if (!a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
     out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation) });
+  }
+  return out;
+}
+
+// ---------- Disruptions ----------
+
+// The disruptions in force now that have a text for travellers (OperativeEvent: Trafikverket's traffic messages,
+// replacing TrainMessage since Sep 2025; night of 2026-11-14, docs: night-1114/messages.md: about 8 at a time, 6-15 kB).
+// An event can have several impacts, each with its own times and its own text: those in force now are kept.
+// [{ id, kind, header, text, since, until (ms or null), level (1 green .. 4 red, Trafikverket's OperatingLevel),
+//    point { lon, lat }, sections: [[sig, ...], ...] (each: from, via..., to: where the disruption is) }]
+// at: the page's clock (ms).
+export async function fetchDisruptions(at) {
+  const now = new Date(at).toISOString();
+  const r = await ask(
+    `<QUERY objecttype="OperativeEvent" namespace="ols.open" schemaversion="1">` +
+    `<FILTER><EQ name="EventState" value="1"/><EXISTS name="TrafficImpact.PublicMessage.Header" value="true"/>` +
+    `<ELEMENTMATCH><GT name="TrafficImpact.EndDateTime" value="${now}"/><LT name="TrafficImpact.StartDateTime" value="${now}"/></ELEMENTMATCH></FILTER>` +
+    ['OperativeEventId', 'EventType.Description', 'Geometry.WGS84', 'EventSection', 'TrafficImpact.StartDateTime',
+      'TrafficImpact.EndDateTime', 'TrafficImpact.PublicMessage.Header', 'TrafficImpact.PublicMessage.Description',
+      'TrafficImpact.PublicMessage.StartDateTime', 'TrafficImpact.PublicMessage.EndDateTime',
+      'TrafficImpact.SelectedSection.OperatingLevel'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+  const out = [];
+  for (const e of r.OperativeEvent ?? []) {
+    const inForce = (from, to) => (!from || Date.parse(from) <= at) && (!to || Date.parse(to) > at);
+    const imps = (e.TrafficImpact ?? []).filter(i => i.PublicMessage?.Header && inForce(i.StartDateTime, i.EndDateTime) &&
+      inForce(i.PublicMessage.StartDateTime, i.PublicMessage.EndDateTime));
+    if (!imps.length) continue;
+    // The event's point is written latitude first (the stations' points the other way round).
+    const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(e.Geometry?.WGS84 ?? '');
+    const sig = l => l?.Signature ?? null;
+    const sections = (e.EventSection ?? []).map(s => [sig(s.FromLocation), sig(s.ViaLocation), sig(s.ToLocation)].filter(Boolean)).filter(s => s.length);
+    const ends = imps.map(i => (i.EndDateTime ? Date.parse(i.EndDateTime) : null));
+    out.push({
+      id: e.OperativeEventId, kind: e.EventType?.Description ?? '', header: imps[0].PublicMessage.Header.trim(),
+      text: imps.map(i => i.PublicMessage.Description?.trim()).filter((x, k, a) => x && a.indexOf(x) === k).join('\n\n'),
+      since: Math.min(...imps.map(i => Date.parse(i.StartDateTime))), until: ends.includes(null) ? null : Math.max(...ends),
+      level: Math.max(0, ...imps.flatMap(i => (i.SelectedSection ?? []).map(s => s.OperatingLevel ?? 0))),
+      point: m ? { lat: Number(m[1]), lon: Number(m[2]) } : null, sections,
+    });
+  }
+  return out;
+}
+
+// A station's own messages valid now: what its monitors show (TrainStationMessage; 94 stations had one in the night
+// of 2026-11-14). Test messages are left out, and the same text only once. [{ text, until (ms or null) }]
+export async function fetchStationMessages(sig, at) {
+  const now = new Date(at).toISOString();
+  const r = await ask(
+    `<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
+    `<FILTER><EQ name="LocationCode" value="${sig}"/><EQ name="MediaType" value="Monitor"/>` +
+    `<LT name="StartDateTime" value="${now}"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
+    ['FreeText', 'EndDateTime', 'Status'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+  const seen = new Set(), out = [];
+  for (const m of r.TrainStationMessage ?? []) {
+    const text = String(m.FreeText ?? '').trim();
+    if (!text || /testmeddelande/i.test(text) || seen.has(text)) continue;
+    seen.add(text);
+    out.push({ text, until: m.EndDateTime ? Date.parse(m.EndDateTime) : null });
   }
   return out;
 }

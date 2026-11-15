@@ -15,6 +15,8 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
 import { createRoutes } from '../src/routes.js';
+import { readPositions } from './lib/records.mjs';
+import { branchCounter } from './lib/branch.mjs';
 
 const argv = process.argv.slice(2);
 const flag = (name, def) => { const i = argv.indexOf(`--${name}`); return i >= 0 ? Number(argv[i + 1]) : def; };
@@ -25,20 +27,8 @@ const STEP = 100;   // ms between drawing moments
 const file = argv.find(a => a.endsWith('.jsonl')) ??
   'data/' + readdirSync('data').filter(f => f.startsWith('positions-')).sort().at(-1);
 
-// The same reading as src/trains-source.js (not imported: that file needs the page's settings).
-const recs = [];
-for (const line of readFileSync(file, 'utf8').split('\n')) {
-  if (!line) continue;
-  const p = JSON.parse(line);
-  const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
-  if (!m || !p.Train) continue;
-  recs.push({
-    id: `${p.Train.OperationalTrainNumber}/${p.Train.OperationalTrainDepartureDate.slice(0, 10)}`,
-    lon: Number(m[1]), lat: Number(m[2]), speed: p.Speed ?? null, bearing: p.Bearing ?? null,
-    time: Date.parse(p.TimeStamp), got: Date.parse(p.got), gone: p.Deleted === true || p.Status?.Active === false,
-  });
-}
-recs.sort((a, b) => a.got - b.got);
+// The same reading as src/trains-source.js (tools/lib/records.mjs: the same fields and report time).
+const recs = readPositions(file);
 
 const R = Math.PI / 180;
 const metres = (a, b) => {
@@ -58,12 +48,17 @@ const passings = [];
 // Real stops: an actual arrival and an actual departure at the same station (the train stood there), for the dwell
 // measure below (bug hunt 2026-11-12: commuter trains drawn driving through stations they really stopped at).
 const realStops = new Map();   // train key -> [{ sig, at: { lon, lat }, arr, dep, near: s, still: s }]
+// Where trains really stand at stations (public/stop-places.json): the page's movement uses it (src/routes.js), and the
+// "drawn stand to the stopping place" measure below.
+const stopFile = new URL('../public/stop-places.json', import.meta.url);
+const stopPlaces = existsSync(stopFile) ? JSON.parse(readFileSync(stopFile, 'utf8')).places : {};
 if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('data/stations.json')) {
   const stations = new Map(JSON.parse(readFileSync('data/stations.json', 'utf8')).map(st => {
     const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(st.Geometry?.WGS84 ?? '');
     return [st.LocationSignature, m ? { lon: Number(m[1]), lat: Number(m[2]) } : null];
   }).filter(([, v]) => v));
   routes = createRoutes({ stations, net });
+  routes.setStopPlaces?.(stopPlaces);   // as the page (src/main.js); older code (a worktree) has none
   const rows = readFileSync(ttFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
   // The actual passings, fed in when they arrived (as the page gets them from its passings stream).
   if (!argv.includes('--nopassings')) for (const a of rows) {
@@ -84,7 +79,9 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
     for (const [k, e] of acts) {
       if (e.Ankomst === undefined || e.Avgang === undefined) continue;
       const [key, sig] = k.split('|');
-      (realStops.get(key) ?? realStops.set(key, []).get(key)).push({ sig, at: stations.get(sig), arr: e.Ankomst, dep: e.Avgang, near: 0, still: 0 });
+      const sp = stopPlaces[sig];
+      (realStops.get(key) ?? realStops.set(key, []).get(key)).push({ sig, at: stations.get(sig), arr: e.Ankomst, dep: e.Avgang, near: 0, still: 0,
+        place: sp ? { lon: sp[0], lat: sp[1] } : null, run: null, best: null });
     }
   }
   routes.add(rows
@@ -92,7 +89,11 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
     .map(a => ({ key: `${a.OperationalTrainNumber}/${a.ScheduledDepartureDateTime.slice(0, 10)}`, sig: a.LocationSignature,
       activity: a.ActivityType, planned: Date.parse(a.AdvertisedTimeAtLocation) })));
 }
-const drawnTrains = createTrains({ net, routes, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
+// Wrong branches (tools/lib/branch.mjs): judged against an oracle that knows the whole recording.
+const oracle = createTrains({ net, keepMs: Infinity });
+const branches = branchCounter(oracle);
+if (net && !PLAIN) { let ko = 0; for (let T = recs[0].got; ko < recs.length; T += 1000) { const batch = []; while (ko < recs.length && recs[ko].got <= T) batch.push(recs[ko++]); if (batch.length) oracle.update(batch, T); } }
+const drawnTrains = createTrains({ net, routes, onWayChange: branches.onWayChange, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
 const truth = createTrains({ net, routes });   // with the routes, on purpose: the truth then knows a platform stop sent only as repeats
 // How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
 const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
@@ -110,10 +111,11 @@ const feed = (trains, upTo, i, skip) => {
 };
 
 const s = { pastStopBounced: 0, wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
-  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
+  syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, earlyAtPlace: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
 const truthDir = new Map(), drawnDir = new Map();
 const truthTurnAt = new Map(), wrongRun = new Map();   // wrong-way episodes (below)
+const capWas = new Map();   // id -> the drawn train's s at the moment before (has it moved?)
 function turnBack(dirs, id, p) {
   const a = dirs.get(id);
   if (!a) { dirs.set(id, { p, dir: null }); return 0; }
@@ -149,7 +151,8 @@ for (let T = start; T < end; T += STEP) {
     if (sim) console.log(new Date(t).toISOString().slice(11, 19), `sim s ${Math.round(sim.s)} v ${(sim.v * 3.6).toFixed(0)} km/h, target ${sim.target} ${Math.round(sim.gap)} m ahead of it, silent ${Math.round(sim.silentFor)} s${sim.syncing ? ' SYNC' : ''}; truth ${Math.round(tru?.kmh)} km/h`);
   }
   for (const d of drawn) {
-    const tru = truth.reportedAt(d.id, t);
+    // (a train drawn further behind, src/trains.js NO_GPS_EXTRA_MS, is compared at the moment it is drawn for)
+    const tru = truth.reportedAt(d.id, t - (d.extra ?? 0));
     if (!tru) continue;
     s.all++;
     if (d.stale) s.stale++;
@@ -163,6 +166,18 @@ for (let T = start; T < end; T += STEP) {
       st.near += STEP / 1000;
       if (sim ? sim.v < 0.8 : (prev.get(d.id) && metres(prev.get(d.id).p, d) <= 0.05)) st.still += STEP / 1000;
     }
+    // Where the drawn train stands at each real stop at a station with a measured stopping place: its stand (drawn
+    // under 0.8 m/s within 2.5 km) that overlaps the stop's time most, and how far that is from the stopping place
+    // (point 5 B, 2026-11-14; the night's tools/_stops_replay.mjs). At the moment the train is drawn for.
+    if (sim) for (const st of realStops.get(d.id) ?? []) {
+      const tt = t - (d.extra ?? 0);
+      if (!st.place || tt < st.arr - 60000 || tt > st.dep + 180000) continue;
+      if (sim.v >= 0.8 || metres(d, st.place) > 2500) { st.run = null; continue; }
+      if (!st.run) st.run = { from: tt, to: tt, lon: d.lon, lat: d.lat, noGps: (d.extra ?? 0) > 0 };
+      Object.assign(st.run, { to: tt, lon: d.lon, lat: d.lat });
+      const ov = r => Math.min(st.dep + 75000, r.to) - Math.max(st.arr, r.from);
+      if (!st.best || st.best === st.run || ov(st.run) > ov(st.best)) st.best = st.run;
+    }
     // A train that stood still before its GPS went quiet must not be moved on before new data says so (moving on:
     // speeding up; a train still braking to a stop when it is found to have stood doesn't count, 13644 2026-11-12).
     { const was = prev.get(d.id); if (sim?.mode === 'stood' && sim.silentFor > 30 && sim.pastLast > 1 && was && metres(was.p, d) > 0.05 && sim.v > 0.5 && sim.v > (was.v ?? 0) + 0.01) { s.stoodMoved++; if (argv.includes('--why') && !(s.stoodShown ??= new Set()).has(d.id) && s.stoodShown.add(d.id).size <= 6) console.log('moved after stood', d.id, new Date(t).toISOString().slice(11, 19), JSON.stringify(sim)); } }
@@ -171,13 +186,23 @@ for (let T = start; T < end; T += STEP) {
     // when the train's own data went back on itself within 5 minutes (two position sources taking turns 700 m apart
     // in the Nässjö yard, 2026-11-12: where the train really was isn't known, and a drawn train never goes back).
     // Since 2026-11-12 (Max): after a long silence a train may move on past a stop by its timetable; not counted.
+    const wasS = capWas.get(d.id);
+    if (sim) capWas.set(d.id, sim.s);
     if (sim && sim.mode !== 'gps' && sim.pastLast > 0 && Number.isFinite(sim.stopAt) && !sim.longSilent && !sim.assumed) {
       s.coastToStop++;
-      if (sim.s > sim.stopAt + 200) {
+      // stopAt is 200 m before the stop; for a train seen only at fixed places, which waits at the stopping place itself
+      // (point 5 B), the place. A moment counts when the drawn train moves while beyond that. Since point 5 B a limit can
+      // land behind a train that stands still (2026-11-14): a place set where it already stood a few metres on (1-13 m),
+      // new reports moving the place 9 m behind it (11788, 12 Nov 23:33), or its first GPS report bringing back the
+      // 200 m rule while it stood at the stopping place 42 m past the old limit (672, 17:17). It stays where it is:
+      // not driving past. And a place set right in front of a fast train is braked into with a few metres to spare
+      // (17552 at 75 km/h: 1 m; 11900 at 62 km/h: 6 m): up to 20 m past the stopping place is allowed (a platform is
+      // 200-300 m long; the 200 m rule hid this inside its 200 m).
+      if (sim.s > sim.stopAt + (sim.atPlace ? 20 : 200) && wasS !== undefined && sim.s > wasS + 0.01) {
         if (t - sim.bounced < 300000) { s.pastStopBounced++; } else
         s.pastStop++;
         if (argv.includes('--why') && !s.pastShown?.has(d.id) && (s.pastShown ??= new Set()).add(d.id) && s.pastShown.size <= 8)
-          console.log('past stop', d.id, new Date(t).toISOString().slice(11, 19), `${Math.round(sim.s - sim.stopAt - 200)} m past the stop's place; ${Math.round(sim.pastLast)} m past the last report; target ${sim.target}, ${Math.round(sim.v * 3.6)} km/h`);
+          console.log('past stop', d.id, new Date(t).toISOString().slice(11, 19), `${Math.round(sim.s - sim.stopAt - (sim.atPlace ? 0 : 200))} m past the stop's place${sim.atPlace ? ' (the stopping place)' : ''}; ${Math.round(sim.pastLast)} m past the last report; target ${sim.target}, ${Math.round(sim.v * 3.6)} km/h`);
       }
     }
     // When the GPS comes back after the train moved by its timetable: how far ahead of the new GPS it was drawn
@@ -236,6 +261,8 @@ for (let T = start; T < end; T += STEP) {
           s.lagM.push(off); s.lagS.push(off / (tru.kmh / 3.6));
           if (moved <= 0.05) {
             s.frozen++; now.frozenRun = last.frozenRun + 1;
+            // ...of them, waiting at a stopping place before the real train got there (point 5 B)
+            if (sim?.atPlace && sim.target === 'waiting before a stop') s.earlyAtPlace++;
             if (sim) { const why = sim.gap < -1 ? `ahead of the target (${sim.target})` : `target ${sim.target}`; s.why[why] = (s.why[why] ?? 0) + 1; }
           }
         } else {
@@ -262,10 +289,26 @@ for (let T = start; T < end; T += STEP) {
 // Dwell at real stops the drawn train came by (5 s or more within 300 m), inside the replayed time.
 const dwells = [...realStops.values()].flat().filter(st => st.near >= 5 && st.arr > start && st.dep < end);
 const dwellThrough = dwells.filter(st => st.still < 5).length;
+// Drawn stands at real stops with a stopping place, the whole stop inside the replayed time; a stand counts when it
+// overlaps the stop's time (30 s before the arrival to 75 s after the departure: the times are whole minutes).
+const placed = [...realStops.values()].flat().filter(st => st.place && st.arr > start + 120000 && st.dep < end - 240000);
+const stands = placed.filter(st => st.best && Math.min(st.dep + 75000, st.best.to) - Math.max(st.arr - 30000, st.best.from) >= 0)
+  .map(st => ({ m: metres(st.best, st.place), noGps: st.best.noGps }));
 const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
+// Wrong branches inside the replayed time.
+const wrongIn = branches.events.filter(e => e.time >= start - DELAY && e.time < end);
+if (argv.includes('--why')) for (const e of wrongIn.slice(0, 12)) console.log('wrong branch', e.id, new Date(e.time).toISOString().slice(11, 19), `slid ${e.slide} m, ${e.side} m sideways, at ${e.lat.toFixed(5)},${e.lon.toFixed(5)}`);
+// The stand numbers: all stops, and those of trains drawn as seen only at fixed places (point 5 B).
+function standNumbers(r) {
+  const ng = stands.filter(x => x.noGps).map(x => x.m), all = stands.map(x => x.m);
+  const over = (a, m) => (a.length ? r(100 * a.filter(x => x > m).length / a.length, 1) : null);
+  return { standStops: all.length, standPlaceMedM: all.length ? Math.round(q(all, 0.5)) : null, standPlace90M: all.length ? Math.round(q(all, 0.9)) : null,
+    standPlaceOver200Pct: over(all, 200), standNoGpsStops: ng.length, standNoGpsMedM: ng.length ? Math.round(q(ng, 0.5)) : null,
+    standNoGpsOver200Pct: over(ng, 200), earlyAtPlacePct: r(100 * s.earlyAtPlace / s.moving, 3) };
+}
 // --json: the main numbers as one JSON line (tools/check.mjs reads it), instead of the text below.
 if (argv.includes('--json')) {
   const r = (v, d = 2) => (Number.isFinite(v) ? Number(v.toFixed(d)) : null);
@@ -279,6 +322,8 @@ if (argv.includes('--json')) {
     returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
     dwellStops: dwells.length, dwellThroughPct: dwells.length ? r(100 * dwellThrough / dwells.length, 1) : null,
     pastStop: s.pastStop, pastStopBounced: s.pastStopBounced, movedAfterStanding: s.stoodMoved, syncStartsPerMin: r(s.syncStarts / minutes, 1),
+    wrongBranch: wrongIn.length, wrongBranch300: wrongIn.filter(e => e.slide >= 300).length,
+    ...standNumbers(r),
   }));
   process.exit(0);
 }
@@ -292,6 +337,7 @@ console.log(`stops of 0.5 s or more while really moving: ${s.freezes.length} (${
   `length median ${f1(q(s.freezes, 0.5))} s, 90 % ${f1(q(s.freezes, 0.9))} s`);
 console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}`);
 console.log(`wrong way (drawn against the real train, both moving, 3 s or more, not at its own turn): ${s.wrongWay}`);
+console.log(`wrong branch (drawn onto another track before its next report, slid ${30} m or more sideways): ${wrongIn.length}, of them 300 m or more ${wrongIn.filter(e => e.slide >= 300).length}`);
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
   `in seconds of travel: median ${f1(q(s.lagS, 0.5))}, 90 % ${f1(q(s.lagS, 0.9))}, 99 % ${f1(q(s.lagS, 0.99))}`);
 console.log(`distance from the truth while it stands: median ${f1(q(s.standM, 0.5))} m, 90 % ${f1(q(s.standM, 0.9))} m, 99 % ${f1(q(s.standM, 0.99))} m`);
@@ -302,6 +348,11 @@ if (!PLAIN && s.returnAheadM.length) console.log(`GPS back after moving by the t
 if (!PLAIN) console.log(`in longer silences, off from the (straight-line) truth: median ${f1(q(s.silentLagS, 0.5))} s of travel, ` +
   `90 % ${f1(q(s.silentLagS, 0.9))} s; moving on past where it stood, 30 s or more after its GPS went quiet (must be 0): ${s.stoodMoved}`);
 if (routes) console.log(`DWELL at real stops (an actual arrival and departure), drawn within 300 m: ${dwells.length}; drawn standing under 5 s (driving through): ${dwellThrough} = ${dwells.length ? (100 * dwellThrough / dwells.length).toFixed(1) : '-'} %; drawn standing median ${f1(q(dwells.map(st => st.still), 0.5))} s`);
+if (routes) {
+  const n = standNumbers((v, d = 2) => (Number.isFinite(v) ? Number(v.toFixed(d)) : null));
+  console.log(`STANDS at real stops with a measured stopping place: ${n.standStops} drawn standing; to the stopping place median ${n.standPlaceMedM} m, 90 % ${n.standPlace90M} m, over 200 m ${n.standPlaceOver200Pct} %; ` +
+    `trains seen only at fixed places ${n.standNoGpsStops}: median ${n.standNoGpsMedM} m, over 200 m ${n.standNoGpsOver200Pct} %; moving trains drawn waiting at a stopping place: ${n.earlyAtPlacePct} % of moments`);
+}
 if (routes) console.log(`coasting towards a planned stop: ${s.coastToStop} train-moments; past the stop: ${s.pastStop} (and ${s.pastStopBounced} where the train's own data went back on itself)`);
 if (offTrack.length) console.log(`distance from the nearest track: median ${f1(q(offTrack, 0.5))} m, 90 % ${f1(q(offTrack, 0.9))} m, 99 % ${f1(q(offTrack, 0.99))} m`);
 if (!PLAIN) console.log(`syncing (fast-forward): ${pct(s.syncMoments, s.all)} of train-moments, ${(s.syncStarts / minutes).toFixed(1)} starts a minute; jumps ${(s.jumps / minutes).toFixed(1)} a minute`);

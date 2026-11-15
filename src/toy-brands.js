@@ -38,10 +38,12 @@ export const TOYS = {
     note: 'X31K: light grey, a blunt black front, a thin orange line. Varberg, 2024-07-29.',
   },
   'Krösatågen': {
-    model: 'itino',     // Itino and X11/X14; which is most common is not confirmed; new all-red CAF trains coming
-    colours: { body: '#9da2a6', skirt: '#6e7378', roof: '#d9343f', nose: '#d9343f' },
-    photo: 'https://commons.wikimedia.org/w/index.php?search=Kr%C3%B6sat%C3%A5gen&title=Special:MediaSearch&type=image&sort=recency',
-    note: 'Grey with a red front and roof (repainted; older trains still yellow). New all-red trains are being delivered in 2026.',
+    // X11/X14 on the lines with wires: about 2 in 3 of its trains (Fri 13 Nov: 187 of 277). The others are Itino and Y2
+    // diesels; the new all-red CAF trains start in 2027 (docs/night-1114/lookups.md).
+    model: 'x10',
+    colours: { body: '#d6d9dc', skirt: '#c8323c', roof: '#f2c230', nose: '#d6d9dc', frame: '#f2c230' },
+    photo: C + 'Kr%C3%B6sat%C3%A5gen,_Alvesta_station_-_20250715_-_02.jpg',
+    note: 'X11/X14: light grey, a yellow roof and yellow round the two windscreens, red along the bottom. Alvesta, 2025-07-15. New all-red trains from 2027.',
   },
   'Östgötapendel': {
     model: 'coradia',   // X61, 18 sets
@@ -75,9 +77,9 @@ export const TOYS = {
   },
   'VTAB': {
     model: 'regina',    // Regina X53; also Itino
-    colours: { body: '#e6e7e8', skirt: '#2e7d4a', roof: '#e6e7e8', nose: '#f2c230', stripe: '#2e9e4a' },
-    photo: C + '13.05.22_Kil_X53_9049_(52093981186).jpg',
-    note: 'X53: white, a yellow front, green along the lower side. Kil, 2022-05-13 (the newest photo found; today\'s paint not confirmed).',
+    colours: { body: '#e6e7e8', skirt: '#c9ccce', roof: '#f2c230', nose: '#f2c230', stripe: '#2e9e4a' },
+    photo: C + 'VY_V%C3%A4rmlandst%C3%A5g,_Stockholms_Central_-_20260321_-_08.jpg',
+    note: 'X53: white, yellow over the roof and the front, a green line along the lower side, a light grey bottom edge. Stockholm C, 2026-03-21 (the same paint as 2022 and 2024).',
   },
   'SJ InterCity': {
     model: 'rc',        // Rc6 locomotive + coaches; some X40 too
@@ -125,10 +127,10 @@ export const TOYS = {
     note: 'Red Vectron with a black roof and lower band; light coaches with red. Malmö, 2025-11-15.',
   },
   'SJ': {
-    model: 'c73',       // probably SJ Norge's Trondheim–Storlien with Norwegian class 73 (not confirmed from our data)
+    model: 'c73',       // SJ Norge's Trondheim–Storlien (confirmed from our data, 2026-11-14); class 73 seen on it May–June 2026
     colours: { body: '#1d2a4d', skirt: '#162039', roof: '#1d2a4d', nose: '#1d2a4d', stripe: '#e8c22c' },
     photo: C + 'SJ_Norge_Class_73_Storlien_2026-06-25.jpg',
-    note: 'Probably SJ Norge\'s class 73 (Trondheim–Storlien): navy blue, a yellow line. Storlien, 2026-06-25. Not confirmed.',
+    note: 'SJ Norge\'s class 73 on Trondheim–Storlien (4 trains a day): navy blue, a yellow line. Storlien, 2026-06-25; seen on this service May–June 2026. Norway plans another train type for the line.',
   },
   'Tågab': {
     model: 'rc',        // Rc2/Rc3 locomotive + old ex-SJ coaches

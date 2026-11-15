@@ -10,19 +10,23 @@
       "when": "2026-11-13"
     },
     "2026-11-11T21-45-41-004Z": {
-      "frozenPct": 0.9,
-      "lag90S": 8.76,
+      "frozenPct": 0.53,
+      "lag90S": 5.7,
       "dwellThroughPct": 12.3,
       "wrongWay": 0,
-      "extraTurnBacks": 22,
+      "wrongBranch": 1,
+      "extraTurnBacks": 16,
+      "standNoGpsMedM": 16,
       "when": "2026-11-14"
     },
     "2026-11-12T06-00-00-005Z": {
-      "frozenPct": 0.82,
-      "lag90S": 7.36,
-      "dwellThroughPct": 15,
+      "frozenPct": 0.5,
+      "lag90S": 5.58,
+      "dwellThroughPct": 14,
       "wrongWay": 2,
-      "extraTurnBacks": 163,
+      "wrongBranch": 4,
+      "extraTurnBacks": 115,
+      "standNoGpsMedM": 18,
       "when": "2026-11-14"
     },
     "2026-11-12T15-30-00-006Z": {
@@ -34,11 +38,13 @@
       "when": "2026-11-13"
     },
     "2026-11-12T17-01-59-418Z": {
-      "frozenPct": 0.76,
-      "lag90S": 7.53,
-      "dwellThroughPct": 14,
+      "frozenPct": 0.45,
+      "lag90S": 5.7,
+      "dwellThroughPct": 13.7,
       "wrongWay": 1,
-      "extraTurnBacks": 145,
+      "wrongBranch": 3,
+      "extraTurnBacks": 119,
+      "standNoGpsMedM": 19,
       "when": "2026-11-14"
     },
     "2026-11-12T19-42-00-050Z": {
@@ -50,11 +56,13 @@
       "when": "2026-11-13"
     },
     "2026-11-12T23-02-56-574Z": {
-      "frozenPct": 1.47,
-      "lag90S": 12.83,
-      "dwellThroughPct": 11,
+      "frozenPct": 0.65,
+      "lag90S": 7.91,
+      "dwellThroughPct": 10.9,
       "wrongWay": 0,
-      "extraTurnBacks": 42,
+      "wrongBranch": 2,
+      "extraTurnBacks": 33,
+      "standNoGpsMedM": 12,
       "when": "2026-11-14"
     },
     "2026-11-13T04-00-00-000Z": {
@@ -74,11 +82,13 @@
       "when": "2026-11-13"
     },
     "2026-11-14T09-00-00-018Z": {
-      "frozenPct": 0.79,
-      "lag90S": 10.29,
-      "dwellThroughPct": 18.6,
+      "frozenPct": 0.31,
+      "lag90S": 6.38,
+      "dwellThroughPct": 17.8,
       "wrongWay": 0,
-      "extraTurnBacks": 92,
+      "wrongBranch": 2,
+      "extraTurnBacks": 78,
+      "standNoGpsMedM": 12,
       "when": "2026-11-14"
     }
   }

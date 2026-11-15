@@ -36,7 +36,12 @@ const MARGINS = {
   lag90S: [b => b + 1, '90 % of moments within (s of travel)'],
   dwellThroughPct: [b => b + 2, 'real stops drawn driving through (%)'],
   wrongWay: [b => b + 2, 'drawn against the real train'],
+  // Drawn onto another track before the next report (tools/lib/branch.mjs; since 2026-11-14).
+  wrongBranch: [b => b + Math.max(3, Math.round(0.2 * b)), 'drawn onto a wrong branch'],
   extraTurnBacks: [b => b + Math.max(5, Math.round(0.1 * b)), 'U-turns drawn beyond the data’s own'],
+  // Trains seen only at fixed places, drawn standing at real stops: median metres from where trains really stand
+  // (public/stop-places.json; since 2026-11-14, point 5 B: 186 -> 23 m in the morning rush).
+  standNoGpsMedM: [b => b + Math.max(10, Math.round(0.3 * b)), 'trains without GPS standing at stops, median m from the stopping place'],
 };
 const ALWAYS = new Set(['pastStop', 'movedAfterStanding', 'offTrack99M']);
 const REBASE = process.argv.includes('--rebaseline');
@@ -74,7 +79,7 @@ const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).si
 // What the replay's result depends on: these files' contents, and the replayed recordings' names and contents
 // (their SHA-256; names and sizes before, so a changed recording of the same size passed as unchanged).
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
-  'tools/motion-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
+  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'tools/lib/branch.mjs', 'tools/path-check.mjs', 'src/report-time.js', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
 const stamp = createHash('sha256')
   .update(MODE)
@@ -131,6 +136,18 @@ if (REBASE && !skipReplay) {
   console.log(`baseline written: ${BASELINE}`);
 }
 failed += missingCore;
+// Routes drawn straight across (no way along the rails) must be 0 in these recordings' timetables
+// (tools/path-check.mjs; 0 of 73,368 pieces in eight recordings since 2026-11-14, 181 before). Its inputs (the path
+// code, the network) are replay inputs, so it runs when the replay does.
+for (const f of skipReplay ? [] : recordings) {
+  const tt = `data/${f.replace('positions-', 'timetable-')}`;
+  if (!existsSync(tt)) continue;
+  try {
+    const p = JSON.parse(execFileSync('node', ['tools/path-check.mjs', tt, '--json'], { encoding: 'utf8', maxBuffer: 1e8 }).trim().split('\n').at(-1));
+    console.log(`${p.straight ? 'FAIL' : 'ok  '} routes ${f.slice(10, 29)}: ${p.straight} of ${p.pieces} pieces drawn straight (must be 0)`);
+    if (p.straight) failed++;
+  } catch (e) { console.log(`FAIL routes ${f}: ${e.message.split('\n')[0]}`); failed++; }
+}
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
     ` (replay ${Math.round((Date.now() - replayStart) / 1000)} s)`);
