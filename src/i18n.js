@@ -37,7 +37,7 @@ const EN = {
   // The compact train card (2026-11-15)
   lateNow: 'late now', earlyNow: 'early now', rightNow: 'right now', lateUnknown: 'not known',
   cdTo: s => `to ${s}`, cdAt: s => `At ${s}`, cdNow: 'Now', cdHere: 'Now', hours: 'h', planned: 'planned',
-  arrived: 'Arrived', countDownTo: 'Count down to', nextStop: 'next stop', stopHere: 'here now', endStation: 'end station',
+  arrived: 'Arrived', towardsEnd: s => `To ${s}`, timeUnknown: 'time unknown', countDownTo: 'Count down to', nextStop: 'next stop', stopHere: 'here now', endStation: 'end station',
   allStops: 'All stops', fewerStops: 'Less',
   messagesCount: n => `${n} message${n === 1 ? '' : 's'} from the station`,
   arrivesIn: s => `In ${s}`, arrivesAbout: s => `In about ${s}`, arrivesNow: 'Arriving now',
@@ -224,7 +224,7 @@ const SV = {
   // The compact train card (2026-11-15)
   lateNow: 'sen nu', earlyNow: 'före tid nu', rightNow: 'just nu', lateUnknown: 'okänt',
   cdTo: s => `till ${s}`, cdAt: s => `Vid ${s}`, cdNow: 'Nu', cdHere: 'Nu', hours: 'tim', planned: 'enligt tidtabell',
-  arrived: 'Framme', countDownTo: 'Räkna ner till', nextStop: 'nästa', stopHere: 'står här', endStation: 'slutstation',
+  arrived: 'Framme', towardsEnd: s => `Mot ${s}`, timeUnknown: 'tid okänd', countDownTo: 'Räkna ner till', nextStop: 'nästa', stopHere: 'står här', endStation: 'slutstation',
   allStops: 'Alla stationer', fewerStops: 'Mindre',
   messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`,
   arrivesIn: s => `Om ${s}`, arrivesAbout: s => `Om ca ${s}`, arrivesNow: 'Ankommer nu',
