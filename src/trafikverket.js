@@ -1,17 +1,35 @@
 // Everything that talks to Trafikverket lives here (and in trains-source.js, which uses it).
-// For the public version these are swapped for calls to our own helper.
+// Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
+// version, so the page and the fetcher ask Trafikverket the same things.
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
-const KEY = import.meta.env.VITE_TRV_KEY;
+// In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
+// no Vite, and hands its key over with setKey().
+let KEY = import.meta.env?.VITE_TRV_KEY;
 
-export const hasKey = Boolean(KEY);
+export let hasKey = Boolean(KEY);
+export function setKey(key) { KEY = key; hasKey = Boolean(key); }
 
 // One query. `query` is the inside of <QUERY ...>...</QUERY>, written by the caller.
+// "Too many requests" (HTTP 429, over 100 a second on the key, data.md "Request limits"): wait as Trafikverket says
+// (Retry-After), else 10 s, 30 s, 60 s, and ask again; after that it is an error like any other.
+const WAITS_429 = [10000, 30000, 60000];
+export async function ask(queryXml) {
+  for (let i = 0; ; i++) {
+    try {
+      return await askOnce(queryXml);
+    } catch (e) {
+      if (!e.tooMany || i >= WAITS_429.length) throw e;
+      await new Promise(r => setTimeout(r, e.retryAfter ?? WAITS_429[i]));
+    }
+  }
+}
+
 // A request that gets no answer is given up: ANSWER_MS for the answer to start, then BODY_MS for all of it to
 // arrive (the first passings answer is big on a slow connection). Without a limit a request could hang for good,
 // and the page said "connecting" with nothing trying again (measured 2026-11-13: 3 minutes, then the test ended).
 const ANSWER_MS = 20 * 1000, BODY_MS = 60 * 1000;
-export async function ask(queryXml) {
+async function askOnce(queryXml) {
   const ctrl = new AbortController();
   let timer = setTimeout(() => ctrl.abort(), ANSWER_MS);
   try {
@@ -23,6 +41,13 @@ export async function ask(queryXml) {
     });
     clearTimeout(timer);
     timer = setTimeout(() => ctrl.abort(), BODY_MS);
+    if (res.status === 429) {
+      const e = new Error('Trafikverket: too many requests (429)');
+      e.tooMany = true;
+      const after = Number(res.headers.get('retry-after'));
+      if (after > 0) e.retryAfter = Math.min(after, 120) * 1000;
+      throw e;
+    }
     if (!res.ok) throw new Error(`Trafikverket answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const result = (await res.json()).RESPONSE.RESULT[0];
     if (result.ERROR) throw new Error(`Trafikverket: ${result.ERROR.MESSAGE}`);

@@ -36,13 +36,19 @@ export function startTrainSource({ onRecords, onStatus }) {
     onStatus({ mode: 'stopped', error: 'no key: put VITE_TRV_KEY=... in the .env file' });
     return () => {};
   }
+  return followPositions({ onRecords, onStatus });
+}
+
+// The position stream itself, without the page's key check: the fetcher (fetcher/) follows it the same way.
+export const positionsQuery = ({ changeId, stream }) => {
+  const since = new Date(Date.now() - RECENT_MS).toISOString();
+  return `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" ` +
+    `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
+    `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER>${FIELDS}</QUERY>`;
+};
+export function followPositions({ onRecords, onStatus }) {
   return follow({
-    makeQuery: ({ changeId, stream }) => {
-      const since = new Date(Date.now() - RECENT_MS).toISOString();
-      return `<QUERY objecttype="TrainPosition" namespace="järnväg.trafikinfo" schemaversion="1.1" ` +
-        `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
-        `<FILTER><GT name="TimeStamp" value="${since}"/></FILTER>${FIELDS}</QUERY>`;
-    },
+    makeQuery: positionsQuery,
     onResult: (r, { first = false } = {}) => {
       const records = (r.TrainPosition ?? []).map(p => toRecord(p, first)).filter(Boolean);
       if (records.length) onRecords(records);
