@@ -159,6 +159,10 @@ if (!skipReplay) {
 const cases = spawnSync('node', ['tools/cases.mjs'], { stdio: 'inherit' });
 if (cases.status !== 0) failed++;
 
+// Trips split over several internal numbers (src/trip.js), on saved rows: seconds, offline.
+const split = spawnSync('node', ['tools/split-check.mjs'], { stdio: 'inherit' });
+if (split.status !== 0) failed++;
+
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 process.exit(failed || ui.status === 1 ? 1 : 0);
