@@ -191,7 +191,10 @@ every('status', 10 * MIN, 10 * MIN, () => {
 
 // ---------- stopping ----------
 async function stop(why) {
-  log(`stopping (${why})`);
+  const s = status(), mins = (Date.now() - load.since) / MIN;
+  log(`stopping (${why}) after ${mins.toFixed(1)} min: ${s.state.trains} trains, ${s.state.passings} passings, ${s.state.planned} routes, ` +
+    `${Object.keys(s.files).length} kinds of files; Trafikverket ${(load.asks / mins).toFixed(1)} asks/min, ${load.streams} streams opened; ` +
+    `${s.upload ? `uploads ${s.upload.ok} ok, ${s.upload.failed} failed; ` : ''}memory ${s.memoryMB} MB; feeds ${feeds.positions.mode}/${feeds.passings.mode}`);
   for (const s of stops) s();
   for (const t of timers) clearTimeout(t);
   server?.close();
