@@ -319,7 +319,14 @@
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
     .dis-source { font-size: 12px; margin: 8px 0 0; }
     /* A station's own messages (what its monitors show), above its departures. */
-    .board-msgs { display: grid; gap: 6px; margin: 10px 0 2px; max-height: 30%; overflow: auto; flex: none; }
+    .board-msgs { display: grid; gap: 6px; margin: 10px 0 2px; flex: none; }
+    /* Folded into one line; a tap opens them (Max, 2026-11-15). Open, they scroll in at most a third of the card. */
+    .board-msgs-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 14px; cursor: pointer;
+      background: var(--t-some-bg); color: var(--t-some); font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
+    .board-msgs-toggle span { flex: 1; color: var(--ink); }
+    .board-msg-list { display: grid; gap: 6px; max-height: 30vh; overflow: auto; touch-action: pan-y; }
+    .board-msg-list[hidden] { display: none; }
+    #board .busy { opacity: 0.45; transition: opacity .15s; }
     .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 12px; border-radius: 14px; background: var(--t-some-bg); color: var(--ink); }
 
     #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
