@@ -18,11 +18,11 @@ const time = t => (t ? hhmm(t) : '');
 // The favourite star (☆ / ★), used by the train panel and the station board.
 export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
-// "12 min", "1 h 5 min"; 0 or less: "Now".
+// "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {
   const m = Math.round(ms / 60000);
   if (m <= 0) return t('cdNow');
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} ${t('hours')} ${m % 60} min`;
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
 };
 
 // The stops a passenger sees, one per station: arrival and departure at the same station merged (they can come in
@@ -95,7 +95,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     refreshTimer = setTimeout(async () => {
       if (openId !== train.id) return;
       try {
-        const route = await fetchRoute(train.operational, train.date);
+        const route = await fetchRoute(train.operational, train.date, train.number);
         if (openId !== train.id) return;
         const first = !shown?.route;
         shown = { train, route };
@@ -133,7 +133,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
 
     let route;
     try {
-      route = await fetchRoute(train.operational, train.date);
+      route = await fetchRoute(train.operational, train.date, train.number);
     } catch (e) {
       if (openId === train.id) { el.querySelector('.state').outerHTML = stateHtml('error', t('routeFailed', e.message)); refreshLater(train); }
       return;
@@ -164,6 +164,18 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     const late = lateNow(stops);
     const lateTile = `<div class="cd-late tile ${lateClass(late)}"><b>${late === null ? '–' : minutesText(late)}</b>` +
       `<small>${t(late === null ? 'lateUnknown' : late > 0 ? 'lateNow' : late < 0 ? 'earlyNow' : 'rightNow')}</small></div>`;
+    // Every known stop passed, but the trip's own end station (route.to) not reached, and the train still on the map:
+    // a part of the trip is missing from the timetable (VR 2047, 2026-11-15: "Framme Herrljunga C" on the way to
+    // Göteborg C). "To Göteborg C · time unknown" instead of "Arrived".
+    const to = shown?.route?.to;
+    if (nextIdx === -1 && to && lateOf?.(openId) !== undefined) {
+      const e = stops.findLast(s => s.station === to), x = e && (e.arr ?? e.dep);
+      if (!x?.actual && !x?.canceled) {
+        const name = t('towardsEnd', stationName(to));
+        return { tiles: lateTile + `<div class="cd-stop tile"><b class="wrap">${esc(name)}</b>` +
+          `<small><span>${t('timeUnknown')}</span></small></div>`, list: '', trip: '' };
+      }
+    }
     if (nextIdx === -1) {   // arrived
       const end = stops.at(-1), x = end.arr ?? end.dep;
       return { tiles: lateTile + `<div class="cd-stop tile"><b>${t('arrived')}</b><small><span>${esc(stationName(end.station))} ${time(x.actual)}</span></small></div>`, list: '', trip: '' };
@@ -179,7 +191,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     };
     const g = row(goal);
     const stopTile = `<button class="cd-stop tile" type="button" aria-expanded="${picking}">` +
-      `<b>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
+      `<b${(g.mark + g.inn).length > 8 ? ' class="long"' : ''}>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
       `${g.w.kind === 'planned' ? ` · ${t('planned')}` : ''}</span>${icon(picking ? 'chevronUp' : 'chevronDown', 14)}</small></button>`;
     const list = picking ? `<div class="cd-pick"><p>${t('countDownTo')}</p><div class="cd-list">${ahead.map(a => {
       const r = row(a), on = a === goal;
@@ -203,7 +215,11 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       `<div class="cd-names"><span>${esc(stationName(stops[0].station))}</span>` +
       `<b class="${goal.i === nextIdx ? 'goal' : ''}">${esc(nextName)}</b>` +
       `<span class="${isEnd ? 'goal' : ''}">${esc(stationName(stops.at(-1).station))}</span></div></div>`;
-    return { tiles: lateTile + stopTile, list, trip };
+    // The timeline's line where the train is: "In 4 min" to the next stop; standing there, "Leaves in 2 min".
+    const nx = row({ s: next, i: nextIdx }), soon = nx.w.at - tNow < 30000;
+    const nowLine = soon ? t(nx.here ? 'leavesNow' : 'arrivesNow')
+      : t(`${nx.here ? 'leaves' : 'arrives'}${nx.mark ? 'About' : 'In'}`, inText(nx.w.at - tNow));
+    return { tiles: lateTile + stopTile, list, trip, nowLine };
   }
   function wireGlance() {
     const b = el.querySelector('.cd-stop');
@@ -216,6 +232,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     const box = el.querySelector('.cd');
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
+    const line = el.querySelector('.tl-now-text');
+    if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
     const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}${g.trip}`;
     el.classList.toggle('picking', Boolean(g.list));   // the card grows while the stops ahead are listed
     if (html === glanceSeen) return;   // each second: only when something on it changed
@@ -248,12 +266,19 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       const seen = main.actual ?? main.estimated;
       const state = main.canceled ? 'canceled' : i < nextIdx || nextIdx === -1 ? 'passed' : i === nextIdx ? 'next' : '';
       const m = seen && main.planned ? Math.round((seen - main.planned) / 60000) : null;
+      // Passed: the minutes off ("+2"); ahead: the expected clock time (Max, 2026-11-15: "estimated time instead of +n
+      // on upcoming stations"), both in the lateness colour.
       const offText = main.canceled ? `<small class="m late">${t('cancelledStop')}</small>`
-        : m ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}${main.actual ? '' : ` ${t('est')}`}</small>` : '';
+        : !m ? '' : main.actual ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}</small>`
+        : `<small class="m ${lateClass(m)}">${time(main.estimated)}</small>`;
       const dwell = a && d && time(a.planned) !== time(d.planned) ? `<small>${t('arr')} ${time(a.planned)}</small>` : '';
-      const dot = state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
+      // Passed: an accent ring with a green ✓; cancelled: a red ring with ✕ (Max, 2026-11-15).
+      const dot = state === 'canceled' ? `<span class="tl-dot">${icon('close', 12, 3)}</span>`
+        : state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
+      // Where the train is: the minutes to the next stop (or till it leaves the one it stands at), each second
+      // (showGlance; Max, 2026-11-15: "Nu · nästa station X" said nothing new).
       const now = i === nextIdx && i > 0
-        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span>${esc(t('nowNext', stationName(s.station)))}</span></div>` : '';
+        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>` : '';
       return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
         `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
@@ -282,14 +307,26 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       }
     }
 
+    // On the small card, one red line with what matters for the rest of the trip (Max, 2026-11-15, VR 2047: "Ändrad
+    // väg · Elfel · Alingsås inställt"): Trafikverket's problem notes at the stops not yet passed (the end station
+    // too), each once, then every cancelled stop by name ("Inställt" itself is then said by the names). Problems at
+    // passed stops ("Spårändrat" at Herrljunga) stay on the full card only, with everything else.
+    const ahead = new Set();
+    if (nextIdx !== -1) for (let i = nextIdx; i < stops.length; i++) {
+      for (const x of [stops[i].arr, stops[i].dep]) for (const text of x?.problems ?? []) if (!/^inställ/i.test(text)) ahead.add(text);
+    }
+    const cancelled = stops.filter(s => (s.dep ?? s.arr).canceled).map(s => stationName(s.station));
+    const alert = [...ahead, ...(cancelled.length ? [t('stopsCancelled', cancelled)] : [])].join(' · ');
+
     glanceSeen = '';
     el.innerHTML =
       head(train, route.product) +
+      (alert ? `<p class="panel-alert">${esc(alert)}</p>` : '') +
       (stops.length
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
-          `<div class="panel-table tl">${rows}</div>`
+          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${rows}</div>`
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');

@@ -102,6 +102,9 @@ const panel = createPanel(document.getElementById('panel'), {
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
+      // A trip split over several internal numbers (a diversion): its cancelled stops are often the old way (VR 2047,
+      // 2026-11-15: Alingsås cancelled, the train went Herrljunga → Fristad → Göteborg), so the path leaves them out.
+      if (route.pieces > 1 && s.canceled) continue;
       const st = stations.get(s.station);
       if (!st || st.lon === null) continue;
       const last = places[places.length - 1];
@@ -671,7 +674,9 @@ if (hasKey && !replay) {
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusCount = statusEl.querySelector('.count');
-document.querySelector('.searchbar .logo').innerHTML = logoSvg({ small: true });
+const barLogo = document.querySelector('.searchbar .logo');
+barLogo.innerHTML = logoSvg({ small: true });
+barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
 const statusFullEl = document.getElementById('status-full');
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)

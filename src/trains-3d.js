@@ -179,11 +179,18 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
     },
 
     // The layer is taken off the map (a settings change): its trains leave the scene. The renderer and the built
-    // models stay for the next layer.
+    // models stay for the next layer. The ring is this layer's own, so its shape and paint are let go.
     onRemove() {
       for (const entry of shown.values()) scene.remove(entry.object);
       shown.clear();
       outlines.clear();
+      if (ring) {
+        scene.remove(ring);
+        ring.geometry.dispose();
+        ring = null;
+        ringShare = null;
+      }
+      ringPaint.dispose();
     },
 
     render(gl, args) {
