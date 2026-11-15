@@ -153,7 +153,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     fadeDuration: 0,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
-  map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
   // + and − only with a mouse; the compass only while the map is turned or tilted (index.html, the Soft look 2026-11-15).
   const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
   const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
@@ -170,7 +170,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // a blue dot there; it stops following a train. Browsers give the place only on a secure address (https, or the
   // computer itself), so over the home wifi (http://192.168.x.x) the button is grey, and a tap on it says why.
   const geolocate = new GeolocateControl({ positionOptions: { enableHighAccuracy: true }, fitBoundsOptions: { maxZoom: 14 } });
-  map.addControl(geolocate, 'top-right');
+  map.addControl(geolocate, 'bottom-right');
   const geoBox = geolocate._container;   // the control's own box (its button is inside)
   geoBox?.addEventListener('click', () => { if (following) stopFollowing(); }, true);
   const note = document.createElement('div');
@@ -716,15 +716,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.on('resize', () => { size = { w: box.clientWidth, h: box.clientHeight }; });
   const GAP = 10, CARD_W = 420;
   const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
-  // Does the card reach the screen's middle (a phone), or leave it free (a wider window)?
+  // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
+  // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
+  // needs, so the free map is to its right.
+  const NARROW_PX = 440, TOP_BAR = 62;
+  const narrow = () => size.w < NARROW_PX;
+  // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
-  // The card's top edge, with a margin.
+  // The bottom card's top edge (a phone), with a margin.
   const panelTop = () => size.h - (Math.round(size.h * 0.45) + 20);
   // Where a train is held: the middle of the screen when the card leaves it free (Max, 2026-11-15: "the default set
   // position for following does not have the train centered in view"), otherwise the middle of the map above it.
-  const defaultFocus = () => (cardInMiddle() ? { x: size.w / 2, y: panelTop() / 2 } : { x: size.w / 2, y: size.h / 2 });
+  const defaultFocus = () => (narrow() ? { x: size.w / 2, y: panelTop() / 2 }
+    : cardInMiddle() ? { x: (cardRight() + size.w) / 2, y: size.h / 2 } : { x: size.w / 2, y: size.h / 2 });
   // Is a screen point behind the card?
-  const behindCard = (at, margin = 0) => at.y > size.h - Math.round(size.h * 0.45) - 10 - margin && at.x < cardRight() + margin;
+  const behindCard = (at, margin = 0) => at.x < cardRight() + margin &&
+    (narrow() ? at.y > size.h - Math.round(size.h * 0.45) - 10 - margin : at.y > TOP_BAR - margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -800,8 +807,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const { w, h } = size, at = map.project([p.lon, p.lat]);
     if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > h + LET_GO_PX || behindCard(at, -LET_GO_PX)) return stopFollowing(true);
     // Kept 30 px inside the edges, and 30 px clear of the card.
-    const x = Math.max(30, Math.min(w - 30, at.x));
-    following.focus = { x, y: Math.max(70, Math.min((behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    const x0 = Math.max(30, Math.min(w - 30, at.x)), x = narrow() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
+    following.focus = { x, y: Math.max(70, Math.min((narrow() && behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.glide = null;
   });
@@ -1015,7 +1022,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const h = map.getContainer().clientHeight;
       flying = true;
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
+        { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
+          duration: 1000, maxZoom: 13 });
     },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
