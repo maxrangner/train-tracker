@@ -112,6 +112,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
   let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
   let pathProgress = 0;   // how far along the shown path the train is (setPathProgress)
+  let pathMetres = 0;     // the shown path's length
   // The path's colours now: the line by its line progress, its stops by their share of the way (f).
   const pathColours = () => {
     const C = colours(dark);
@@ -129,6 +130,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     maxPitch: 70,
     // The map credits are in Help (the ? button at the top, index.html); see main.js for the public version.
     attributionControl: false,
+    // Labels appear and go at once. Their 0.3 s fade kept the map drawing after every refresh of the dots: 27 frames
+    // a second over all of Sweden with nothing moving on screen (measured 2026-11-15; Max: "Optimization is KEY").
+    fadeDuration: 0,
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
@@ -228,7 +232,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
     add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
     add('stations');
-    add('trains');
+    // The dots' tiles are made no finer than zoom 12 (about a metre's precision; closer in they are enlarged): the
+    // default 18 cut the view into many small tiles, each one redrawing the map when it arrived (about 6 draws per
+    // refresh of the dots at zoom 11; measured 2026-11-15).
+    add('trains', { maxzoom: 12 });
     add('disruptions');
   }
 
@@ -800,6 +807,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const loaded = new Set();
 
   let isReady = false;
+  let lastDrawnPlace = null;   // drawIfMoved
+  let lastTrainsSent = 0;      // setTrains
   ready.then(() => { isReady = true; });
 
   // The first view with only Sweden (Max, 2026-11-13: "the whole world shows first, then the Sweden mask kicks
@@ -830,10 +839,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
     // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and from just before the models show.
-    trainsEvery() {
+    // following: the camera follows a train among the models, so the map is drawn in every frame anyway; the others
+    // are then moved on as soon as the fastest could have gone half a pixel (every frame from about zoom 16).
+    trainsEvery(following = false) {
       const z = map.getZoom();
-      if (map.isMoving() || z >= modelZoom() - 1) return 33;
       const metresPerPx = 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** z);
+      if (following && modelsAt(z)) return Math.min(33, 1000 * 0.5 * metresPerPx / FASTEST_MS);
+      if (map.isMoving() || z >= modelZoom() - 1) return 33;
       return Math.max(33, Math.min(1000, 1000 * 0.25 * metresPerPx / FASTEST_MS));
     },
     // Is a place in the view, or within half a view's width or height outside it? (lon, lat) -> true / false.
@@ -850,6 +862,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       data.trains = geojson;
       nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
+      // From the model zoom the dots are unseen; they only help a tap find a train. They are sent twice a second
+      // there, and in between the map is only drawn again (the models move); every refresh used to cost two draws.
+      const t = performance.now();
+      if (modelsAt(map.getZoom()) && t - lastTrainsSent < 500) { map.triggerRepaint(); return; }
+      lastTrainsSent = t;
       map.getSource('trains').setData(geojson);
     },
     // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
@@ -866,6 +883,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     },
     unfollow() { following = null; zoomAroundCenter(false); followRotation(false); map.setTransformCameraUpdate(null); },
     get following() { return Boolean(following); },
+    // Whether trains are drawn as models at the zoom shown now.
+    get modelsShown() { return modelsAt(map.getZoom()); },
     // Called every drawing frame: move the camera along with the followed train.
     tick(now) {
       const dt = Math.min(now - lastTick, 200);
@@ -884,7 +903,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         if (!busy) map.jumpTo({ center: centre });
         else if (!centerDuringGesture(centre)) following.locked = false;
       };
-      const off = offFocus(p), target = centreHolding(p, following.focus);
+      const off = offFocus(p);
+      if (following.locked && off < 0.05) return;   // already there: moving the camera would only draw the map again
+      const target = centreHolding(p, following.focus);
       if (following.locked && off < 30) return moveTo(target);
       // Not on it yet (just tapped, a drag left it outside the edges, or the train jumped): the gap closes in about
       // half a second, then it stays locked on. The gap is kept against the moving train, so a fast train is caught
@@ -919,12 +940,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { f: share(path.stopAt[i], path.stopF?.[i]) },
           geometry: { type: 'Point', coordinates: c } }));
       }
+      pathMetres = 0;
+      if (path) for (let i = 1; i < path.coords.length; i++) {
+        const [a, b] = [path.coords[i - 1], path.coords[i]], k = Math.cos(a[1] * Math.PI / 180);
+        pathMetres += Math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * 111195;
+      }
       data.path = { type: 'FeatureCollection', features };
       await ready;
       if (isReady) map.getSource('path').setData(data.path);
     },
     // How far along the shown path the train is (0 to 1, as path.js progressAt): the darker green ends there.
     setPathProgress(f) {
+      // Only when the change shows: half a pixel along the path at this zoom. The colours were set again in every
+      // frame, each time making the line's colour ramp anew.
+      const metresPerPx = 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** map.getZoom());
+      if (Math.abs(f - pathProgress) * pathMetres < 0.5 * metresPerPx && !(f === 0 || f === 1)) return;
       if (Math.abs(f - pathProgress) < 1e-6) return;
       pathProgress = f;
       if (!isReady || !map.getLayer('path-line')) return;
@@ -968,7 +998,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         if (selShown) { selMarker.remove(); selShown = false; }
         return;
       }
-      selMarker.setLngLat([place.lon, place.lat]);
+      // Moved only when the train moved (the map moves it with the camera itself).
+      const ll = selMarker.getLngLat();
+      if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
       if (!selShown) { selMarker.addTo(map); selShown = true; }
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
@@ -986,6 +1018,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     },
     // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
     drawNow() { if (isReady) map.redraw(); },
+    // Draw now when this place ({ lon, lat }: the open train) has moved a tenth of a pixel or more since it was last
+    // drawn here. A standing train then costs no drawing at all; a moving camera makes the map draw itself.
+    drawIfMoved(place) {
+      if (!isReady) return;
+      const metresPerPx = 40075016.686 * Math.cos(place.lat * Math.PI / 180) / (512 * 2 ** map.getZoom());
+      const was = lastDrawnPlace;
+      const moved = !was || Math.hypot((place.lon - was.lon) * Math.cos(place.lat * Math.PI / 180), place.lat - was.lat) * 111195 >= 0.1 * metresPerPx;
+      if (!moved) return;
+      lastDrawnPlace = { lon: place.lon, lat: place.lat };
+      map.redraw();
+    },
     // Show one set of rail lines (a key of RAIL_SOURCES), or none (null).
     async showRail(id) {
       await ready;
