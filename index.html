@@ -68,7 +68,7 @@
     #menu-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #menu-button[aria-expanded="true"] { color: var(--accent); }
     #menu-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
-    #status { flex: none; display: flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 8px 11px; cursor: pointer;
+    #status { flex: none; display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 8px 14px 8px 13px; cursor: pointer;
       font: 700 14px/1 var(--font); font-variant-numeric: tabular-nums; background: var(--t-ontime-bg); color: var(--t-ontime); white-space: nowrap; }
     #status .live { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
     #status.slow { background: var(--t-some-bg); color: var(--t-some); }
@@ -185,10 +185,10 @@
     .maplibregl-ctrl-top-right .maplibregl-ctrl { margin: 10px 10px 0 0; }
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
     .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
-    .maplibregl-ctrl-group button { width: 48px; height: 46px; }
+    .maplibregl-ctrl.maplibregl-ctrl-group button { width: 46px; height: 46px; }
     .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
     .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
-    .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { height: 48px; }
+    .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { width: 48px; height: 48px; }
     .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
     .maplibregl-map:not(.turned) .maplibregl-ctrl-compass { display: none; }
     .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
@@ -200,19 +200,6 @@
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-active .maplibregl-ctrl-icon,
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-waiting .maplibregl-ctrl-icon,
     :root[data-theme="dark"] .maplibregl-ctrl-geolocate-error .maplibregl-ctrl-icon { filter: none; }
-    /* The zoom slider (src/map.js): next to + and −, while zooming. The bar's ends are the closest and furthest zoom. */
-    .zoom-bar { position: absolute; z-index: 2; pointer-events: none; opacity: 0; transition: opacity .35s;
-      top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(66px + env(safe-area-inset-right, 0px));
-      width: 6px; height: 150px; border-radius: 3px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 0 1px 4px rgba(0, 0, 0, 0.18); }
-    .zoom-bar.shown { opacity: 1; transition: opacity .15s; pointer-events: auto; }
-    /* The grip: an invisible area round the bar, wide enough for a finger, clear of the + and − buttons. */
-    .zoom-grip { position: absolute; left: -18px; right: -8px; top: -12px; bottom: -12px; cursor: ns-resize; touch-action: none; }
-    .zoom-bar.held .zoom-knob { transform: scale(1.25); }
-    .zoom-bar::before, .zoom-bar::after { content: ''; position: absolute; left: -4px; width: 14px; height: 2px; border-radius: 1px; background: var(--muted); }
-    .zoom-bar::before { top: 0; }
-    .zoom-bar::after { bottom: 0; }
-    .zoom-knob { position: absolute; left: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%;
-      background: var(--accent); border: 2px solid var(--bg); box-sizing: border-box; }
 
     /* The selected train: a ring with its dot (hidden from zoom 13, where the 3D train shows) and its label. */
     .sel-train { width: 22px; height: 22px; border: 2.5px solid var(--ink); border-radius: 50%; box-sizing: border-box;
@@ -258,6 +245,7 @@
     .near-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .near-label b { font-weight: 800; }
     .near-label i { font-style: normal; color: var(--muted); }
+    .near-label .m, .sel-label .m { margin-left: 5px; }
     .near-label .m.ontime { color: var(--t-ontime); } .near-label .m.some { color: var(--t-some); }
     .near-label .m.late { color: var(--t-late); } .near-label .m.unknown { color: var(--t-unknown); }
     .near-label.stale { opacity: 0.5; }
@@ -334,17 +322,17 @@
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }
-    .panel-table { overflow: auto; min-height: 0; position: relative; }
+    .panel-table { overflow: auto; min-height: 0; position: relative; padding-right: 10px; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable; }
     /* The trip as a timeline (src/panel.js; the Soft look, 2026-11-15). Columns: time, the line with its dot, the
        station, the track. The line is the accent up to the train, then grey. */
     .tl { margin-top: 8px; font-variant-numeric: tabular-nums; }
-    .tl-row, .tl-now { display: grid; grid-template-columns: 50px 28px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
+    .tl-row, .tl-now { display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
     .tl-time { text-align: right; font-weight: 700; font-size: 15px; line-height: 1.15; }
     .tl-time small, .tl-name small { display: block; font-size: 11.5px; font-weight: 700; }
     .tl-name small { color: var(--muted); font-weight: 500; }
     .m.ontime { color: var(--t-ontime); } .m.some { color: var(--t-some); } .m.late { color: var(--t-late); } .m.unknown { color: var(--t-unknown); }
     .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
-    .tl-node::before { content: ''; position: absolute; left: 12px; top: 0; bottom: 0; width: 4px; border-radius: 2px; background: var(--line); }
+    .tl-node::before { content: ''; position: absolute; left: calc(50% - 2px); top: -1px; bottom: -1px; width: 4px; background: var(--line); }
     .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
     .tl-row:first-child .tl-node::before { top: 50%; }
     .tl-row:last-child .tl-node::before { bottom: 50%; }
@@ -465,7 +453,7 @@
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
-      <div class="set-row model-only"><span data-t="trueSize">Realistic size</span>
+      <div class="set-row real-only"><span data-t="trueSize">Realistic size</span>
         <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
