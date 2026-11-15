@@ -358,6 +358,9 @@
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
+    /* The stops to count down to, opened on the full card: the notes and timeline step aside so the list gets the room
+       (Max, 2026-11-16: "a super small area with a tiny scrollbar"; measured 129 px, 451 on the compact card). */
+    #panel.full.picking .panel-tvnotes, #panel.full.picking .panel-table { display: none; }
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
        disruption's card too (his answer 2A). */
     @media (max-width: 439px) { #panel .panel-close, #board .panel-close, #disruption .panel-close { display: none; } }
