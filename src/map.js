@@ -127,12 +127,12 @@ function addTriangles(map, dark) {
   }
 }
 
-// A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
-// With Settings → Trains → Symbol there are no models: the dots show at every zoom.
-const dotOpacity = sel => {
-  const seen = ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1];
-  return symbolOnly() ? seen : ['step', ['zoom'], seen, modelZoom(), 0];
-};
+// A dot's opacity: grey trains faded; none while models show (models: modelsAt the camera's zoom) or for the selected
+// train (its marker). With Settings → Trains → Symbol there are no models: the dots show at every zoom.
+// Switched by the camera's zoom, not in the expression: the map works a zoom step out per tile, at the tile's own zoom,
+// and a tilted view loads closer tiles at a higher zoom, so near the bottom of the screen the drops vanished while the
+// camera was still too far out for models (Max, 2026-11-15, pic 9-10 and #view=11.14/59.3328/17.9924/0/70).
+const dotOpacity = (sel, models) => (models ? 0 : ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1]);
 
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
@@ -364,8 +364,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
         // The selected train's dot is invisible too: it is drawn by the selection marker (below).
-        'circle-opacity': dotOpacity(selected ?? ''),
-        'circle-stroke-opacity': dotOpacity(selected ?? ''),
+        'circle-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())),
+        'circle-stroke-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())),
       },
     });
     // Triangles instead of circles (Settings → Train symbol): the circles stay, unseen, so taps still find the trains.
@@ -386,7 +386,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         // About as big as the circle: 9 px tall far out, 20 px from zoom 10.
         'icon-size': symbolSize(),
       },
-      paint: { 'icon-opacity': dotOpacity(selected ?? '') },
+      paint: { 'icon-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())) },
     });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
       selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) }); map.addLayer(layer3d); }
@@ -396,8 +396,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       type: 'symbol',
       source: 'train-groups',
       minzoom: 6,
-      maxzoom: MODEL_ZOOM,
+      // Hidden while models show, by the camera's zoom (switchModels), not by a maxzoom (that goes by each tile's zoom).
       layout: {
+        visibility: modelsAt(map.getZoom()) ? 'none' : 'visible',
         // Written like the bubbles close in (round 4, Max 2026-11-15: "Fix"): "2311 +1 min", the minutes in their
         // lateness colour (the tags' text colour, readable on the halo); a group "3 trains", in the accent.
         'text-field': ['case', ['has', 'point_count'], ['format', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')], {}],
@@ -406,9 +407,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
             ['get', 'rest'], {}]],
         'text-font': ['Outfit Bold'],
         'text-size': 11,
-        // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,
-        // option A: the label is the only place a toy shows its lateness). Further out, overlapping labels are left out.
-        'text-overlap': ['step', ['zoom'], 'never', MODEL_ZOOM, 'always'],
+        // Overlapping labels are left out (where models show, the labels are page elements: placeNearLabels).
+        'text-overlap': 'never',
         // Under the train; where that is taken (a station's name, another label), above it or to a side, rather than
         // left out (Max, 2026-11-15: labels lost near Älvsjö).
         'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
@@ -431,8 +431,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       type: 'symbol',
       source: 'stations',
       minzoom: 11,
-      maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
+        visibility: namesOnPage() ? 'none' : 'visible',   // page elements from there (switchModels)
         'text-field': ['get', 'name'],
         'text-font': ['Outfit Medium'],
         'text-size': 14,
@@ -449,8 +449,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       id: 'route-names',
       type: 'symbol',
       source: 'route-names',
-      maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
+        visibility: namesOnPage() ? 'none' : 'visible',
         'text-field': ['get', 'name'],
         'text-font': ['Outfit SemiBold'],
         'text-size': 13,
@@ -519,13 +519,28 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     for (const id of OUR_LAYERS) if (map.getLayer(id)) map.removeLayer(id);
   }
 
+  // Where models show and where the stations' names are page elements, by the camera's zoom for the whole screen.
+  const namesOnPage = () => map.getZoom() >= Math.max(11, modelZoom());
+  let switched = null;
+  function switchModels() {
+    if (!isReady) return;
+    const now = `${modelsAt(map.getZoom())}|${namesOnPage()}`;
+    if (now === switched) return;
+    switched = now;
+    if (!map.getLayer('train-labels')) return;
+    applySelectionFilters();
+    map.setLayoutProperty('train-labels', 'visibility', modelsAt(map.getZoom()) ? 'none' : 'visible');
+    for (const id of ['station-names', 'route-names']) map.setLayoutProperty(id, 'visibility', namesOnPage() ? 'none' : 'visible');
+  }
+
   // The selected train's own dot and label are drawn by its marker, so the layers leave it out.
   function applySelectionFilters() {
     const id = selected ?? '';
-    const dots = triangles() ? 0 : dotOpacity(id);   // with triangles the circles are only there for taps
+    const models = modelsAt(map.getZoom());
+    const dots = triangles() ? 0 : dotOpacity(id, models);   // with triangles the circles are only there for taps
     map.setPaintProperty('train-dots', 'circle-opacity', dots);
     map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
-    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id));
+    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id, models));
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
   }
 
@@ -533,6 +548,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     restyleBase(map, dark);
     addSources();
     addLayers();
+    map.on('zoom', switchModels);   // drops, far-out labels and names switch with the camera's zoom (switchModels)
 
     // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
     // are small on a phone). The nearest wins.

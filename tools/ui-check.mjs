@@ -167,6 +167,32 @@ try {
   }
   expect(farGroups > 0, 'far out, no "N trains" label could be tapped');
 
+  // ---- Tilted far, the trains near the bottom of the screen are drawn (2026-11-15: closer tiles load at a higher
+  // zoom, and the drops vanished there below the model zoom). Checked by pixels, since the map counts an invisible
+  // drop as placed: a drop is a strong colour, the map round it pale. ----
+  await page.evaluate(() => window.__map.jumpTo({ center: [17.99, 59.333], zoom: 11.14, pitch: 70, bearing: 0 }));
+  await sleep(3500);
+  const low = await page.evaluate(() => {
+    const m = window.__map, W = m.getCanvas().clientWidth, H = m.getCanvas().clientHeight;
+    return (window.__last3d ?? []).map(x => m.project([x.lon, x.lat])).filter(q => q.x > 30 && q.x < W - 30 && q.y > H * 0.6 && q.y < H - 40)
+      .slice(0, 4).map(q => ({ x: Math.round(q.x) - 12, y: Math.round(q.y) - 12, width: 24, height: 24 }));
+  });
+  let lowSeen = 0;
+  const shots = [];
+  for (const clip of low) shots.push(Buffer.from(await page.screenshot({ clip })).toString('base64'));
+  if (shots.length) {
+    lowSeen = await page.evaluate(async list => {
+      const strong = await Promise.all(list.map(b => new Promise(r => { const im = new Image(); im.onload = () => {
+        const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+        const d = g.getImageData(0, 0, im.width, im.height).data; let n = 0;
+        for (let k = 0; k < d.length; k += 4) if (Math.max(d[k], d[k + 1], d[k + 2]) - Math.min(d[k], d[k + 1], d[k + 2]) > 90) n++;
+        r(n); }; im.src = 'data:image/png;base64,' + b; })));
+      return strong.filter(n => n >= 6).length;
+    }, shots);
+  }
+  expect(!low.length || lowSeen === low.length, `tilted far, ${low.length - lowSeen} of ${low.length} trains near the bottom of the screen not drawn`);
+  await page.evaluate(() => window.__map.jumpTo({ pitch: 0 }));
+
   // ---- Search lists every matching train, in a list that scrolls ----
   await page.click('#menu-button');
   await sleep(400);
@@ -225,7 +251,7 @@ try {
   expect(models.compact === 0 && models.realistic === 0, `model surfaces on top of each other: compact ${models.compact}, realistic ${models.realistic}`);
 
   console.log(problems.length ? `UI check FAILED (${replay ? 'rush-hour replay' : 'live'}):` : `UI check ok (${replay ? 'rush-hour replay' : 'live'}): ` +
-    `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists (${farGroups} far out), ` +
+    `both languages and looks start clean, a tap opens train ${tapped}, ${groups} group labels match their lists (${farGroups} far out), tilted: ${lowSeen} of ${low.length} near trains drawn, ` +
     `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), filter ${filtered}, model surfaces 0`);
   for (const p of problems) console.log('  -', p);
 } finally {
