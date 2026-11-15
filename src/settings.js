@@ -12,7 +12,8 @@ const DEFAULTS = {
   toyZoom: 11,          // toys from this zoom in (further out: dots)
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
   // A train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting; the
-  // triangle the default since 2026-11-14, Max: "make triangles default").
+  // triangle the default since 2026-11-14, Max: "make triangles default"); 'dart', a wide arrow with a notch at the
+  // back, to try (Max, 2026-11-15: option C of the arrow sketches, under Debug).
   trainSymbol: 'triangle',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
@@ -38,7 +39,7 @@ const valid = {
   toySize: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(30, Math.min(150, Number(v))) : undefined),
   toyZoom: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(8, Math.min(16, Number(v))) : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
-  trainSymbol: v => (['circle', 'triangle'].includes(v) ? v : undefined),
+  trainSymbol: v => (['circle', 'triangle', 'dart'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
