@@ -79,6 +79,8 @@ const propsFor = (r, sim) => ({
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
+// A short buzz when a train is opened or followed (round 4; Android: iPhones don't let a web page vibrate).
+const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
@@ -123,6 +125,7 @@ const panel = createPanel(document.getElementById('panel'), {
     });
   },
   onFollow(id, on) {
+    buzz();
     if (on) follow(id); else map.unfollow();
   },
 });
@@ -216,6 +219,7 @@ function pickTrain(t) {
 function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
+  buzz();
   board.close();
   pickerEl.hidden = true;
   disruptionEl.hidden = true;
@@ -680,6 +684,7 @@ function statusLine(st, noData) {
   return '';
 }
 
+let beatSeen = null, beatAt = 0;
 setInterval(() => {
   const tNow = now();
   const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
@@ -695,6 +700,11 @@ setInterval(() => {
   statusEl.title = short;
   statusEl.ariaLabel = short;
   statusEl.classList.toggle('slow', status.positions !== 'live' && !replay);
+  // A pulse of the live dot when fresh data has come, at most every 10 s (round 4: a sign of life without drawing all the time).
+  if (trains.lastReport && trains.lastReport !== beatSeen && tNow - beatAt > 10000 && !noData && !error) {
+    beatSeen = trains.lastReport; beatAt = tNow;
+    statusEl.classList.remove('beat'); void statusEl.offsetWidth; statusEl.classList.add('beat');
+  }
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
