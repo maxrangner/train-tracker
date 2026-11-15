@@ -547,23 +547,45 @@ export function createTrains(options = {}) {
   }
 
   // Bring every simulation to time t (called with each drawing moment; earlier moments are ignored), in steps of
-  // at most 0.1 s.
+  // at most 0.1 s (after a pause of over a second: 10 steps, moveOn).
+  // A train moved on by itself (advanceOne, for the open train between two drawings of every train) has its own
+  // moment, tr.at; the next advance takes it on from there. Otherwise every train is at simTime, as before.
   function advance(t) {
     const from = simTime ?? t;
-    if (t < from - 5000) { simTime = t; return; }   // the clock was set back (a replay starting): start from there
+    if (t < from - 5000) {   // the clock was set back (a replay starting): start from there
+      simTime = t;
+      for (const tr of byId.values()) tr.at = undefined;
+      return;
+    }
     if (t < from) return;
     simTime = t;
-    const dt = (t - from) / 1000, n = Math.max(1, Math.ceil(dt / 0.1));
     for (const tr of byId.values()) {
       if (!tr.hist.length) continue;
-      // A train seen only at fixed places is drawn further behind (NO_GPS_EXTRA_MS), sliding there and back.
-      const goal = tr.nullRun >= NO_GPS_RUN ? NO_GPS_EXTRA_MS : 0;
-      tr.extra = tr.extra === undefined || dt > 5 ? goal : tr.extra + Math.max(-1000 * NO_GPS_SLIDE * dt, Math.min(1000 * NO_GPS_SLIDE * dt, goal - tr.extra));
-      const ex = tr.extra;
-      if (!tr.sim || dt > 5) { step(tr, t - ex, dt); continue; }
-      if (dt === 0) continue;
-      for (let i = 1; i <= n; i++) step(tr, from + (t - from) * i / n - ex, dt / n);
+      moveOn(tr, tr.at !== undefined && tr.at > from ? tr.at : from, t);
     }
+  }
+  // Only train id to time t (the open train, followed by the camera, between two drawings of every train).
+  function advanceOne(id, t) {
+    const tr = byId.get(id);
+    if (!tr?.hist.length) return tr;
+    const from = Math.max(tr.at ?? -Infinity, simTime ?? t);
+    if (t > from) moveOn(tr, from, t);
+    return tr;
+  }
+  // Move one train's simulation from time `from` to t, in steps of at most 0.1 s.
+  function moveOn(tr, from, t) {
+    tr.at = t;
+    // At most 10 steps: after a pause (the page hidden for a few seconds, a window switch) every train caught up in
+    // 0.1 s steps, up to 50 each, all in one frame (85 ms for 3 s away, measured 2026-11-15). A normal frame is
+    // well under a second, so its steps stay 0.1 s or shorter.
+    const dt = (t - from) / 1000, n = Math.max(1, Math.ceil(Math.min(dt, 1) / 0.1));
+    // A train seen only at fixed places is drawn further behind (NO_GPS_EXTRA_MS), sliding there and back.
+    const goal = tr.nullRun >= NO_GPS_RUN ? NO_GPS_EXTRA_MS : 0;
+    tr.extra = tr.extra === undefined || dt > 5 ? goal : tr.extra + Math.max(-1000 * NO_GPS_SLIDE * dt, Math.min(1000 * NO_GPS_SLIDE * dt, goal - tr.extra));
+    const ex = tr.extra;
+    if (!tr.sim || dt > 5) { step(tr, t - ex, dt); return; }
+    if (dt === 0) return;
+    for (let i = 1; i <= n; i++) step(tr, from + (t - from) * i / n - ex, dt / n);
   }
 
   // Whether the way behind train tr doubles back toward its front, so its cars behind would be laid over its cars ahead
@@ -571,7 +593,7 @@ export function createTrains(options = {}) {
   // Max 2026-11-13; 6 trains in 3 minutes of the rush-hour replay, mostly standing at line ends). Tested once per
   // drawing moment: 20 to 80 m behind, the place is less than 60 % of that away, or lies on the front's side.
   function foldsBack(tr) {
-    if (tr.foldAt === simTime) return tr.folded;
+    if (tr.at !== undefined && tr.foldAt === tr.at) return tr.folded;
     const s = tr.sim.s, m = pointAt(tr, s), k = Math.cos(m.lat * R);
     let folded = false;
     for (const d of [20, 40, 60, 80]) {
@@ -580,7 +602,7 @@ export function createTrains(options = {}) {
       const toBack = [(b.lon - m.lon) * k, b.lat - m.lat], toFront = [(f.lon - m.lon) * k, f.lat - m.lat];
       if (metres(m, b) < 0.6 * d || toBack[0] * toFront[0] + toBack[1] * toFront[1] > 0) { folded = true; break; }
     }
-    tr.foldAt = simTime;
+    tr.foldAt = tr.at;
     tr.folded = folded;
     return folded;
   }
@@ -588,7 +610,7 @@ export function createTrains(options = {}) {
   // How far ahead of train tr the known track runs, in metres (Infinity: further than 400 m), and the place and
   // direction where it ends: past its end every place is the end itself (a buffer stop). Once per drawing moment.
   function trackEnd(tr) {
-    if (tr.endAt === simTime) return tr.end;
+    if (tr.at !== undefined && tr.endAt === tr.at) return tr.end;
     const s = tr.sim.s;
     let end = { at: Infinity };
     for (let e = 10; e <= 400; e += 10) {
@@ -599,9 +621,16 @@ export function createTrains(options = {}) {
       end = { at: lo, place: p, heading: metres(p, q) > 2 ? headingOf(q, p) : tr.sim.heading ?? tr.latest.bearing ?? 0 };
       break;
     }
-    tr.endAt = simTime;
+    tr.endAt = tr.at;
     tr.end = end;
     return end;
+  }
+
+  // Train tr as placedAt and placedOne give it.
+  function placed(tr, t) {
+    const p = drawn(tr);
+    return { id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t), v: tr.sim.v,
+      extra: tr.extra ?? 0 };
   }
 
   // Where train tr is drawn now, with its heading.
@@ -763,13 +792,14 @@ export function createTrains(options = {}) {
     placedAt(t) {
       advance(t);
       const out = [];
-      for (const tr of byId.values()) {
-        if (!tr.sim) continue;
-        const p = drawn(tr);
-        out.push({ id: tr.latest.id, lon: p.lon, lat: p.lat, bearing: p.heading, syncing: tr.sim.syncing, stale: staleAt(tr, t), v: tr.sim.v,
-          extra: tr.extra ?? 0 });
-      }
+      for (const tr of byId.values()) if (tr.sim) out.push(placed(tr, t));
       return out;
+    },
+    // Only train id as drawn at time t (as one of placedAt's), moving only its simulation on; null when not drawn.
+    // For the open train between two drawings of every train (main.js frame: Max, 2026-11-15, "Optimization is KEY").
+    placedOne(id, t) {
+      const tr = advanceOne(id, t);
+      return tr?.sim ? placed(tr, t) : null;
     },
     // Where the cleaned reports put train id at time t (no simulation): { lon, lat, kmh }, for checks.
     reportedAt(id, t) {
@@ -787,7 +817,7 @@ export function createTrains(options = {}) {
     simOf(id) {
       const tr = byId.get(id), sim = tr?.sim;
       if (!sim) return null;
-      const simT = simTime === null ? null : simTime - (tr.extra ?? 0);   // the moment this train is drawn for
+      const at = tr.at ?? simTime, simT = at === null ? null : at - (tr.extra ?? 0);   // the moment this train is drawn for
       const silentFor = simT === null ? 0 : (simT - tr.hist[tr.hist.length - 1].time) / 1000;
       const ext = tr.ext?.last === tr.hist[tr.hist.length - 1] ? tr.ext : null;
       const past = simT >= tr.hist[tr.hist.length - 1].time ? aheadOf(tr, simT) : { cap: Infinity, o: {} };

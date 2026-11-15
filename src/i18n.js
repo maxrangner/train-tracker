@@ -35,6 +35,11 @@ const EN = {
   language: 'Language',
   toySize: 'Compact size',
   toyZoom: 'Compact from zoom',
+  trueSize: 'Realistic size',    // every model at its real size (Max, 2026-11-15)
+  off: 'Off',
+  on: 'On',
+  modelSize: 'Realistic model size',
+  closeSize: 'Size zoomed in',
   debug: 'Debug',                // the settings for trying things out (Max, 2026-11-13)
   boardRows: 'Station board',
   boardRowsAria: 'Trains on a station board',
@@ -200,6 +205,11 @@ const SV = {
   language: 'Språk',
   toySize: 'Storlek, kompakt',
   toyZoom: 'Kompakt från zoom',
+  trueSize: 'Verklig storlek',
+  off: 'Av',
+  on: 'På',
+  modelSize: 'Storlek, realistisk',
+  closeSize: 'Storlek inzoomad',
   debug: 'Felsökning',
   boardRows: 'Stationstavla',
   boardRowsAria: 'Antal tåg på en stationstavla',

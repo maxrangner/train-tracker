@@ -96,14 +96,19 @@ const panel = createPanel(document.getElementById('panel'), {
       places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
-    shownPath = { id, path: pathOf(places, net), places };
-    const here = placeNow(id);
-    let done = 0;
-    if (here) done = progressAt(shownPath.path, here);
-    else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
-    map.setPathProgress(done);
-    map.setPath(shownPath.path);
-    if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
+    // Worked out once the camera has come to the train: finding the way over the rail network takes about 45 ms,
+    // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
+    map.whenSettled().then(() => {
+      if (panel.openId !== id) return;   // closed, or another train opened meanwhile
+      shownPath = { id, path: pathOf(places, net), places };
+      const here = placeNow(id);
+      let done = 0;
+      if (here) done = progressAt(shownPath.path, here);
+      else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
+      map.setPathProgress(done);
+      map.setPath(shownPath.path);
+      if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
+    });
   },
   onFollow(id, on) {
     if (on) follow(id); else map.unfollow();
@@ -256,17 +261,32 @@ const menu = createMenu({
 // second close in, once a second far out): only the trains in or near the view (map.nearView), made
 // from the places this frame already worked out (every train in Sweden used to be worked through a second time and
 // sent, also when five of them were on screen).
-let lastDraw = 0;
+// Every train is worked out only when the dots are due (map.trainsEvery: while the camera follows a train among the
+// models, as soon as the fastest could have moved half a pixel). Between, only the open train moves on (trains.placedOne): the
+// camera and its marker need it every frame. Until 2026-11-15 every train was worked out in every frame, 60 times a
+// second, for dots refreshed 7 times a second at zoom 11 (Max: "Optimization is KEY here").
+let lastDraw = 0, lastProgress = 0;
 // frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
 function frame(ts) {
   const t = now() - DELAY_MS;
-  frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
-  frameTrains = filter.active ? frameAll.filter(x => x.id === panel.openId || filter.shows(x.brand)) : frameAll;
-  frameById = new Map(frameAll.map(x => [x.id, x]));
+  const openId = panel.openId;
+  const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
+  if (due || !frameAll.length) {
+    frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+    frameTrains = filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
+    frameById = new Map(frameAll.map(x => [x.id, x]));
+  } else if (openId && frameById.has(openId)) {
+    const x = trains.placedOne(openId, t);
+    if (x) {
+      const one = { ...x, brand: lateness.brand(x.id) }, old = frameById.get(openId);
+      frameById.set(openId, one);
+      for (const list of [frameAll, frameTrains]) { const i = list.indexOf(old); if (i >= 0) list[i] = one; }
+    }
+  }
   if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
-  if (ts - lastDraw >= map.trainsEvery()) {
+  if (due) {
     lastDraw = ts;
     const near = map.nearView(), features = [];
     for (const x of frameTrains) {
@@ -277,11 +297,17 @@ function frame(ts) {
     map.setTrains({ type: 'FeatureCollection', features });
   }
   map.tick(ts);
-  const sel = panel.openId && frameById.get(panel.openId);
+  const sel = openId && frameById.get(openId);
   const r = sel && trains.get(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
-  if (sel && shownPath?.id === sel.id) map.setPathProgress(progressAt(shownPath.path, sel));
-  if (sel) map.drawNow();
+  // How far along its route the open train is: at most 10 times a second (it took a fifth of the frame's time).
+  if (sel && shownPath?.id === sel.id && ts - lastProgress >= 100) {
+    lastProgress = ts;
+    map.setPathProgress(progressAt(shownPath.path, sel));
+  }
+  // Drawn in this frame only when the open train moved a tenth of a pixel or more (a standing train draws nothing; a
+  // moving camera draws itself).
+  if (sel) map.drawIfMoved(sel);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -316,14 +342,24 @@ onSettingChange((key) => {
     if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
   }
   if (key === 'boardRows') board.relabel();
+  // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
+  if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
 });
 function showSettings() {
   for (const seg of settingsEl.querySelectorAll('.seg'))
     for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
   settingsEl.classList.toggle('real', settings.trainStyle !== 'toy');
+  settingsEl.classList.toggle('style-real', settings.trainStyle === 'real');
+  settingsEl.classList.toggle('symbol', settings.trainStyle === 'symbol');
   sizeEl.value = settings.toySize;
   sizeOut.textContent = `${settings.toySize} px`;
+  realSizeEl.value = settings.modelSize;
+  realSizeOut.textContent = `×${settings.modelSize}`;
+  // One slider, for the kind of train chosen (Compact or Realistic).
+  const close = settings[closeKey()];
+  closeSizeEl.value = close;
+  closeSizeOut.textContent = `×${close}`;
 }
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
@@ -332,6 +368,11 @@ for (const seg of settingsEl.querySelectorAll('.seg')) {
 }
 const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');
 sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
+const realSizeEl = document.getElementById('set-realsize'), realSizeOut = document.getElementById('set-realsize-out');
+realSizeEl.oninput = () => { setSetting('modelSize', realSizeEl.value); showSettings(); };
+const closeSizeEl = document.getElementById('set-closesize'), closeSizeOut = document.getElementById('set-closesize-out');
+const closeKey = () => (settings.trainStyle === 'toy' ? 'toyClose' : 'realClose');
+closeSizeEl.oninput = () => { setSetting(closeKey(), closeSizeEl.value); showSettings(); };
 showSettings();
 
 // ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----
