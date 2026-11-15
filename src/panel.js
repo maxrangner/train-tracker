@@ -1,5 +1,6 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 import { fetchRoute } from './trafikverket.js';
+import { lateClass } from './lateness.js';
 import { splitLabel, tagHtml } from './tag.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
@@ -8,11 +9,6 @@ import { hhmm } from './clock.js';
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const time = t => (t ? hhmm(t) : '');
-const off = (planned, at) => {
-  if (!at) return '';
-  const m = Math.round((at - planned) / 60000);
-  return m === 0 ? '' : `${m > 0 ? '+' : ''}${m}`;
-};
 
 // The favourite star (☆ / ★), used by the train panel and the station board.
 export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
@@ -120,18 +116,24 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     // stop after it stayed "not passed": 1141 on 13 Nov, Ronneby cancelled, Max's note).
     const nextIdx = stops.findIndex(s => { const m = s.dep ?? s.arr; return !m.actual && !m.canceled; });
 
+    // The trip as a timeline (the Soft look, 2026-11-15): the planned time with the minutes off under it (in their
+    // colour; "est." while only expected), a dot on a line (passed: ✓; next: a ring), the station (arrival under it
+    // when the train stands a while), its track; "Now · next stop X" where the train is.
     const rows = stops.map((s, i) => {
       const a = s.arr, d = s.dep;
       const main = d ?? a;
       const seen = main.actual ?? main.estimated;
       const state = main.canceled ? 'canceled' : i < nextIdx || nextIdx === -1 ? 'passed' : i === nextIdx ? 'next' : '';
-      return `<tr class="${state}">` +
-        `<td class="st">${stationName(s.station)}</td>` +
-        `<td class="t">${a ? time(a.planned) : ''}</td>` +
-        `<td class="t">${d ? time(d.planned) : ''}</td>` +
-        `<td class="t act">${main.canceled ? t('cancelledStop') : time(seen)}${main.actual ? '' : seen ? `<span class="est">${t('est')}</span>` : ''}</td>` +
-        `<td class="t dev">${off(main.planned, seen)}</td>` +
-        `<td class="trk">${esc(d?.track || a?.track || '')}</td></tr>`;
+      const m = seen && main.planned ? Math.round((seen - main.planned) / 60000) : null;
+      const offText = main.canceled ? `<small class="m late">${t('cancelledStop')}</small>`
+        : m ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}${main.actual ? '' : ` ${t('est')}`}</small>` : '';
+      const dwell = a && d && time(a.planned) !== time(d.planned) ? `<small>${t('arr')} ${time(a.planned)}</small>` : '';
+      const dot = state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
+      const now = i === nextIdx && i > 0
+        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span>${esc(t('nowNext', stationName(s.station)))}</span></div>` : '';
+      return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
+        `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
+        `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
     }).join('');
 
     // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
@@ -164,12 +166,12 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       `<p class="panel-note">${[route.product, from && to ? `${from} → ${to}` : ''].filter(Boolean).join(' · ')}</p>` +
       (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
       (stops.length
-        ? `<div class="panel-table"><table><thead><tr><th>${t('station')}</th><th>${t('arr')}</th><th>${t('dep')}</th><th>${t('actual')}</th><th></th><th class="trk">${t('track')}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        ? `<div class="panel-table tl">${rows}</div>`
         : `<p class="panel-note">${t('noStops')}</p>`);
     wireHead();
     if (status) setStatus(status);   // the line on how its place is known stays (main.js updates it each second)
     // Scroll the table (only the table) so the next stop is in view.
-    const box = el.querySelector('.panel-table'), next = el.querySelector('tr.next');
+    const box = el.querySelector('.panel-table'), next = el.querySelector('.tl-now') ?? el.querySelector('.tl-row.next');
     if (box && scrolled !== undefined) box.scrollTop = scrolled;
     else if (box && next) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }

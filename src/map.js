@@ -1092,8 +1092,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const ll = selMarker.getLngLat();
       if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
       if (!selShown) { selMarker.addTo(map); selShown = true; }
-      const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
-      if (text !== selText) selLabel.textContent = selText = text;
+      // The same bubble as the others (company small above, the number, the minutes in their colour), ringed in the accent.
+      const company = props.company && map.getZoom() >= modelZoom() ? props.company : '';
+      const text = `${company}|${props.label}`;
+      if (text !== selText) {
+        selText = text;
+        const { number, minutes, rest } = splitLabel(props.label);
+        const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+        selLabel.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
+          ...(minutes === null ? [] : [el('i', '', ' · '), el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      }
       const tri = triangles();
       const shape = arrow();   // the selected train's symbol: the same shape as the map's
       if (selShape.getAttribute('d') !== shape) selShape.setAttribute('d', shape);
