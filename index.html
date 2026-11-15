@@ -381,7 +381,9 @@
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
-    @media (max-width: 439px) { #panel .panel-close { display: none; } }
+    /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
+       disruption's card too (his answer 2A). */
+    @media (max-width: 439px) { #panel .panel-close, #board .panel-close, #disruption .panel-close { display: none; } }
     .cd { display: contents; }
     .cd-tiles { display: grid; grid-template-columns: 3fr 2fr; gap: 8px; margin-top: 12px; flex: none; }
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
