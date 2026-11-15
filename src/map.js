@@ -358,7 +358,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       },
       paint: { 'icon-opacity': dotOpacity(selected ?? '') },
     });
-    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack }); map.addLayer(layer3d); }
+    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
+      selection: () => (selected ? { id: selected, colour: dark ? '#e6edf3' : '#1b1f24', faded: selStale } : null) }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
@@ -823,6 +824,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
   let isReady = false;
   let lastDrawnPlace = null;   // drawIfMoved
+  let selStale = false;        // the selected train is grey (its ring under the model is faded too)
   let lastTrainsSent = 0;      // setTrains
   ready.then(() => { isReady = true; warmRoute(); });
   // The first route shown made the map prepare its drawing programs for the route's line and stop dots: about 75 ms,
@@ -1052,6 +1054,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const tri = triangles();
       const shape = arrow().join(' ');   // the selected train's arrow: the same shape as the map's
       if (selShape.getAttribute('points') !== shape) selShape.setAttribute('points', shape);
+      selStale = Boolean(props.stale);
       const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
