@@ -6,7 +6,7 @@ const phoneLang = () => (String(globalThis.navigator?.languages?.[0] ?? globalTh
 const DEFAULTS = {
   theme: 'auto',        // 'auto': as the phone is set; 'light'; 'dark' (Max, 2026-11-12)
   language: phoneLang(), // 'sv' or 'en'
-  trainStyle: 'real',   // 'toy': each company's usual train as a toy, bigger than real; 'real': real size;
+  trainStyle: 'toy',    // 'toy': each company's usual train as a toy, bigger than real (the default, Max 2026-11-15); 'real': real size;
                         // 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14)
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
   toyZoom: 12,          // toys from this zoom in (further out: dots; Max, 2026-11-15: 12)
