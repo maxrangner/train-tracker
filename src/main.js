@@ -92,7 +92,8 @@ const panel = createPanel(document.getElementById('panel'), {
       if (!st || st.lon === null) continue;
       const last = places[places.length - 1];
       if (last && last.sig === s.station) { last.stop ||= s.advertised; last.actual ||= s.actual; continue; }
-      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual });
+      // mark: where the station's ring is (shownAt), so the route's stop dot sits next to it (Max, 2026-11-15).
+      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
     shownPath = { id, path: pathOf(places, net), places };

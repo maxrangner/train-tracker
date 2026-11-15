@@ -910,7 +910,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (path && path.coords.length > 1) {
         features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path.coords } });
         const along = progressAlong(path);
-        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { f: along[path.stopAt[i]] },
+        const share = (k, f) => along[k] + ((along[k + 1] ?? along[k]) - along[k]) * (f ?? 0);
+        path.stops.forEach((c, i) => features.push({ type: 'Feature', properties: { f: share(path.stopAt[i], path.stopF?.[i]) },
           geometry: { type: 'Point', coordinates: c } }));
       }
       data.path = { type: 'FeatureCollection', features };
