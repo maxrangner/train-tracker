@@ -17,7 +17,7 @@ page.on('console', m => { if (m.type() === 'warn' || m.type() === 'error') conso
 
 await page.goto(PAGE, { waitUntil: 'domcontentloaded' });
 const end = Date.now() + Number(minutes) * 60000;
-const line = async () => console.log(`${new Date().toTimeString().slice(0, 8)} ${await page.$eval('#status', el => el.textContent)}`);
+const line = async () => console.log(`${new Date().toTimeString().slice(0, 8)} ${await page.$eval('#status', el => el.title || el.textContent)}`);
 await new Promise(r => setTimeout(r, 20000));
 await line();
 while (Date.now() < end) {

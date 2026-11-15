@@ -7,6 +7,7 @@
 //   place (src/map.js setDisruptions);
 // - the card: where a train's panel opens, with the header, places, times and the whole text.
 import { pathOf, progressAlong } from './path.js';
+import { icon } from './icons.js';
 import { t, lang } from './i18n.js';
 import { hhmm } from './clock.js';
 
@@ -113,7 +114,7 @@ export function rowHtml(d, stationName, now) {
 // The card's contents.
 export function cardHtml(d, stationName, now) {
   return `<div class="panel-head"><strong><span class="dis-dot ${levelName(d.level)}" aria-hidden="true"></span> ${esc(d.header)}</strong>` +
-    `<button class="panel-close" type="button" aria-label="${esc(t('close'))}">×</button></div>` +
+    `<button class="panel-close" type="button" aria-label="${esc(t('close'))}">${icon('close')}</button></div>` +
     `<p class="panel-note">${esc(d.kind)} · ${esc(placesText(d, stationName))}<br>${esc(timesText(d, now))}</p>` +
     `<div class="dis-text">${esc(d.text)}</div><p class="panel-note dis-source">${esc(t('disruptionSource'))}</p>`;
 }

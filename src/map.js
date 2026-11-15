@@ -2,11 +2,14 @@
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
 import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
+import { splitLabel, minutesText } from './tag.js';
+import { lateClass } from './lateness.js';
 import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trains-3d.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
-import { LOOK, restyleBase } from './map-look.js';
+import { restyleBase } from './map-look.js';
+import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -19,13 +22,20 @@ const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' :
 // The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
 // The rails and stations follow the map's look (Max, 2026-11-14: "Paper" light, dark rails with a white edge;
 // "Night" dark, rails in warm light; src/map-look.js).
-const colours = dark => (dark
-  ? { label: '#ffffff', halo: LOOK.dark.water, station: '#d6deea', ring: '#e8c170', ringFill: LOOK.dark.land, group: '#58a6ff',
-      rail: '#e8c170', railEdge: null, railK: 1.3, nameHalo: LOOK.dark.land, dis: ['#e3b341', '#f0883e', '#ff6b61'], disEdge: LOOK.dark.land, disDash: true,
-      casing: '#000000', route: '#3fb950', routeDone: '#238636', stopFill: '#161b22' }
-  : { label: '#1b1f24', halo: '#ffffff', station: '#33373d', ring: '#33373d', ringFill: '#ffffff', group: '#1f6feb',
-      rail: '#33373d', railEdge: '#ffffff', railK: 1.25, nameHalo: LOOK.light.land, dis: ['#d4a017', '#e8701a', '#d1242f'], disEdge: '#ffffff', disDash: false,
-      casing: '#ffffff', route: '#2da44e', routeDone: '#116329', stopFill: '#ffffff' });
+// The route, its travelled part and the "N trains" labels take the accent colour (Settings → Accent colour, Max
+// 2026-11-15); lateness and disruption colours come from src/colours.js.
+const accentOf = dark => (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT])[dark ? 'dark' : 'light'];
+const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: accentOf(dark).c, routeDone: accentOf(dark).done,
+  dis: DISRUPTION[dark ? 'dark' : 'light'] });
+// Soft (2026-11-15): pale, thin rails (pushed back, so the trains stand out), no white rail edge; rings and names in the
+// page's colours (src/colours.js).
+const colourBase = dark => (dark
+  ? { label: PAGE.dark.label, halo: PAGE.dark.halo, station: PAGE.dark.station, ring: '#8a93a8', ringFill: MAP.dark.land,
+      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: MAP.dark.land, disDash: true,
+      casing: MAP.dark.land, stopFill: MAP.dark.land }
+  : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
+      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: '#ffffff', disDash: false,
+      casing: '#ffffff', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
@@ -41,8 +51,12 @@ export const RAIL_SOURCES = {
 // the base map's own sea colour, over the base map, under our rail lines and trains (trains abroad still show), and
 // the base map's names outside Sweden are left out. Panning stays round Sweden.
 const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
-const MAX_BOUNDS = [[-2, 52], [42, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// Wide east-west: on a wide screen at the furthest zoom (Sweden's height decides it) the map can still be panned
+// sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
+const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
 const MASK_URL = '/sweden-mask.json';
+// The ranges of Outfit letters in public/glyphs/ (tools/glyphs.mjs GLYPH_RANGES).
+const GLYPH_RANGES = new Set(['0-255', '8192-8447', '8704-8959']);
 // The zoom's limits (Max, 2026-11-13: the zoom slider shows the absolute minimum and maximum): furthest out, all of
 // Sweden on the screen (worked out for the screen's size); closest in, 19 (a street; the map's tiles end at 14 and
 // are only enlarged after that, the default limit 22 was empty enlargement).
@@ -60,48 +74,71 @@ const FIRST_VIEW_MAX_MS = 8000;
 const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
+// Far out, the map groups labels of trains closer than this (smaller than close in: a label there is one short line,
+// and trains whose labels fit are better shown one by one; measured 2026-11-15, see docs/look-1115/notes/notes.md).
+const LABEL_GROUP_PX = 22;
 
 // A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
 // (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
-const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
+const dotColours = dark => LATE[dark ? 'dark' : 'light'];   // src/colours.js
 // The arrow's shape in a 64 x 64 picture, pointing up (north); middle (32, 32). Max, 2026-11-15, from four sketches
 // ("Change to A, but put a toggle under debug to toggle to C"): 'triangle' wider than before (base 44, was 34: hard
 // to read), 'dart' (Settings → Debug → Train symbol → Dart) wide with a notch at the back.
-const ARROWS = { triangle: [[32, 3], [54, 61], [10, 61]], dart: [[32, 3], [59, 61], [32, 48], [5, 61]] };
-const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.triangle;
+// Since 2026-11-15 (the Soft look, Max: "Drops") the default is 'drop': a circle on the train's place with a point
+// showing the way it goes. Each shape is an SVG path (the map's pictures and the selected train's marker use the same).
+// The drop's circle is centred in the picture (the picture turns round its middle), r 16, its point 27 ahead.
+const ARROWS = { triangle: 'M32 3L54 61L10 61Z', dart: 'M32 3L59 61L32 48L5 61Z', drop: 'M32 5L44.88 22.52A16 16 0 1 1 19.12 22.52Z' };
+const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.drop;
+// The symbol's size on the map: the drop a little bigger far out, so all of Sweden reads at a glance (Max's note).
+const symbolSize = () => (settings.trainSymbol === 'drop'
+  ? ['interpolate', ['linear'], ['zoom'], 4, 1.0, 7, 1.2, 10, 1.5, 13, 1.7]
+  : ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25]);
 const triangles = () => settings.trainSymbol !== 'circle';
-function addTriangles(map) {
-  for (const [name, colour] of Object.entries(DOT_COLOURS)) {
+// The pill behind a name of the open train's stations (Max, 2026-11-15: white name pills): a rounded box in the card's
+// colour with a thin edge, stretched round the text (icon-text-fit).
+function addPill(map, dark) {
+  const c = document.createElement('canvas');
+  c.width = 48; c.height = 32;
+  const g = c.getContext('2d');
+  g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
+  g.fillStyle = PAGE[dark ? 'dark' : 'light'].card; g.fill();
+  g.lineWidth = 1.5; g.strokeStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'; g.stroke();
+  if (map.hasImage('pill')) map.removeImage('pill');
+  map.addImage('pill', g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+}
+function addTriangles(map, dark) {
+  for (const [name, colour] of Object.entries(dotColours(dark))) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const g = c.getContext('2d');
-    g.beginPath();
-    arrow().forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
+    const shape = new Path2D(arrow());
+    const drop = settings.trainSymbol === 'drop';
     g.lineJoin = 'round';
-    g.lineWidth = 8;
+    g.lineWidth = drop ? 7 : 8;
     g.strokeStyle = '#ffffff';
-    g.stroke();
+    if (drop) { g.shadowColor = 'rgba(40, 30, 20, 0.35)'; g.shadowBlur = 5; g.shadowOffsetY = 2; }   // a soft shadow, drawn once
+    g.stroke(shape);
+    g.shadowColor = 'transparent';
     g.fillStyle = colour;
-    g.fill();
+    g.fill(shape);
     // Drawn again on a settings change: the shape may have changed.
     if (map.hasImage(`tri-${name}`)) map.updateImage(`tri-${name}`, g.getImageData(0, 0, 64, 64));
     else map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
   }
 }
 
-// A dot's opacity: grey trains faded; none from the model zoom in (3D trains) or for the selected train (its marker).
-// With Settings → Trains → Symbol there are no models: the dots show at every zoom.
-const dotOpacity = sel => {
-  const seen = ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1];
-  return symbolOnly() ? seen : ['step', ['zoom'], seen, modelZoom(), 0];
-};
+// A dot's opacity: grey trains faded; none while models show (models: modelsAt the camera's zoom) or for the selected
+// train (its marker). With Settings → Trains → Symbol there are no models: the dots show at every zoom.
+// Switched by the camera's zoom, not in the expression: the map works a zoom step out per tile, at the tile's own zoom,
+// and a tilted view loads closer tiles at a higher zoom, so near the bottom of the screen the drops vanished while the
+// camera was still too far out for models (Max, 2026-11-15, pic 9-10 and #view=11.14/59.3328/17.9924/0/70).
+const dotOpacity = (sel, models) => (models ? 0 : ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1]);
 
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
 const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'train-dots', 'train-triangles',
-  'trains-3d', 'train-labels', 'station-names'];
+  'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
@@ -133,15 +170,36 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Labels appear and go at once. Their 0.3 s fade kept the map drawing after every refresh of the dots: 27 frames
     // a second over all of Sweden with nothing moving on screen (measured 2026-11-15; Max: "Optimization is KEY").
     fadeDuration: 0,
+    // Our labels' letters in Outfit (round 4): cut by tools/glyphs.mjs into public/glyphs/; a range not cut there
+    // (letters Outfit hasn't) comes from OpenFreeMap's Noto Sans. The base map's own names stay Noto Sans.
+    transformRequest: (url, type) => {
+      if (type !== 'Glyphs') return undefined;
+      const m = /\/fonts\/([^/]+)\/(\d+-\d+)\.pbf/.exec(url);
+      const stack = m && decodeURIComponent(m[1]);
+      if (!stack?.startsWith('Outfit')) return undefined;
+      if (GLYPH_RANGES.has(m[2])) return { url: new URL(`/glyphs/${stack.replace(/ /g, '-')}/${m[2]}.pbf`, location.href).href };
+      return { url: url.replace(m[1], encodeURIComponent(stack.endsWith('Bold') ? 'Noto Sans Bold' : 'Noto Sans Regular')) };
+    },
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
-  map.addControl(new NavigationControl({ visualizePitch: true }), 'top-right');
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
+  // + and − only with a mouse; the compass only while the map is turned or tilted (index.html, the Soft look 2026-11-15).
+  const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
+  const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
+  showPointer();
+  mouse?.addEventListener('change', showPointer);
+  const showTurned = () => {
+    const turned = Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
+    if (turned !== map.getContainer().classList.contains('turned')) map.getContainer().classList.toggle('turned', turned);
+  };
+  map.on('rotate', showTurned);
+  map.on('pitch', showTurned);
 
   // My location (Max, 2026-11-13), under + and −: a tap flies the map to where this phone or computer is and shows
   // a blue dot there; it stops following a train. Browsers give the place only on a secure address (https, or the
   // computer itself), so over the home wifi (http://192.168.x.x) the button is grey, and a tap on it says why.
   const geolocate = new GeolocateControl({ positionOptions: { enableHighAccuracy: true }, fitBoundsOptions: { maxZoom: 14 } });
-  map.addControl(geolocate, 'top-right');
+  map.addControl(geolocate, 'bottom-right');
   const geoBox = geolocate._container;   // the control's own box (its button is inside)
   geoBox?.addEventListener('click', () => { if (following) stopFollowing(); }, true);
   const note = document.createElement('div');
@@ -155,6 +213,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => { note.hidden = true; }, 5000);
   }
+  // Not on a secure address: the button greyed (round 4: a plain grey icon, not MapLibre's red slash), a tap explains.
+  if (!window.isSecureContext) map.getContainer().classList.add('geo-off');
   geoBox?.addEventListener('pointerdown', () => { if (!window.isSecureContext) showNote(t('noLocation')); }, true);
   geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); });
   // The button's words in the page's language (again after a change of language: relabel).
@@ -170,61 +230,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   function setZoomLimits() {
     const cam = map.cameraForBounds(SWEDEN_BOUNDS, { padding: 20, bearing: 0 });
     if (cam && Number.isFinite(cam.zoom)) map.setMinZoom(Math.max(0, Math.min(MAX_ZOOM - 1, cam.zoom)));
-    showZoom(false);
   }
-  // The zoom slider (Max, 2026-11-13): a bar next to + and −, its top the closest zoom and its bottom the furthest,
-  // a knob at the zoom now. It fades in while the zoom changes (wheel, pinch, buttons, a double tap, a fly-to) and
-  // out 1.5 s after. While it shows it can be grabbed (Max, 2026-11-13 evening): a press or drag on it sets the zoom,
-  // around the screen's middle (while following, the train), and it stays while held. An invisible grip round the
-  // thin bar makes it easy to hit with a finger.
-  const zoomBar = document.createElement('div');
-  zoomBar.className = 'zoom-bar';
-  zoomBar.setAttribute('aria-hidden', 'true');
-  zoomBar.innerHTML = '<div class="zoom-knob"></div><div class="zoom-grip"></div>';
-  map.getContainer().appendChild(zoomBar);
-  const knob = zoomBar.firstChild, grip = zoomBar.lastChild;
-  let zoomBarTimer = null;
-  let held = null;   // the finger or mouse holding the slider
-  function zoomFromY(clientY) {
-    const r = zoomBar.getBoundingClientRect();
-    const f = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    map.jumpTo({ zoom: min + f * (max - min) });
-  }
-  grip.addEventListener('pointerdown', (e) => {
-    if (!zoomBar.classList.contains('shown')) return;
-    e.preventDefault();
-    held = e.pointerId;
-    grip.setPointerCapture(e.pointerId);
-    zoomBar.classList.add('held');
-    zoomFromY(e.clientY);
-  });
-  grip.addEventListener('pointermove', (e) => { if (e.pointerId === held) zoomFromY(e.clientY); });
-  const letGo = (e) => {
-    if (e.pointerId !== held) return;
-    held = null;
-    zoomBar.classList.remove('held');
-    showZoom();   // fades 1.5 s after letting go
-  };
-  grip.addEventListener('pointerup', letGo);
-  grip.addEventListener('pointercancel', letGo);
-  function showZoom(reveal = true) {
-    const min = map.getMinZoom(), max = map.getMaxZoom();
-    const f = max > min ? Math.max(0, Math.min(1, (map.getZoom() - min) / (max - min))) : 0;
-    knob.style.top = `${(1 - f) * 100}%`;
-    if (!reveal) return;
-    zoomBar.classList.add('shown');
-    clearTimeout(zoomBarTimer);
-    zoomBarTimer = setTimeout(() => { if (held === null) zoomBar.classList.remove('shown'); }, 1500);
-  }
-  map.on('zoom', () => showZoom());
+  // (The zoom slider was removed 2026-11-15, Max: "Remove the zoom bar".)
   map.on('resize', setZoomLimits);
   setZoomLimits();
 
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty() };
+  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
+  let routeSigs = [];   // the open train's stations (setRouteStations): their names in pills
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
@@ -236,12 +251,27 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // default 18 cut the view into many small tiles, each one redrawing the map when it arrived (about 6 draws per
     // refresh of the dots at zoom 11; measured 2026-11-15).
     add('trains', { maxzoom: 12 });
+    // The far-out labels: the same trains, those close together on the screen grouped by the map into one "N trains"
+    // label (Max, 2026-11-15: far out only some labels showed where trains were close; close in they were grouped).
+    // The open train is left out (its own marker has its label).
+    add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, clusterMaxZoom: 16, maxzoom: 12 });
     add('disruptions');
+    add('route-names');
+  }
+  // The open train's stations: names in pills (route-names), left out of the plain names (station-names), first stop
+  // and last placed first where they collide.
+  function routeNames() {
+    const at = new globalThis.Map(routeSigs.map((sig, i) => [sig, i === 0 || i === routeSigs.length - 1 ? 0 : 1]));
+    data['route-names'] = { type: 'FeatureCollection', features: data.stations.features.filter(f => at.has(f.properties.sig))
+      .map(f => ({ ...f, properties: { ...f.properties, rank: at.get(f.properties.sig) } })) };
+    if (!isReady) return;
+    map.getSource('route-names')?.setData(data['route-names']);
+    if (map.getLayer('station-names')) map.setFilter('station-names', routeSigs.length ? ['!', ['in', ['get', 'sig'], ['literal', routeSigs]]] : null);
   }
 
   // Our layers, with the colours, model zoom and language as they are now.
   function addLayers() {
-    const C = colours(dark), MODEL_ZOOM = modelZoom();
+    const C = colours(dark), MODEL_ZOOM = modelZoom(), T = TAG[dark ? 'dark' : 'light'];
     // Outside Sweden, the sea's colour: over the base map's land, roads and borders, under its names after them, so
     // a Swedish name at the coast isn't cut (the names outside Sweden are left out, below). The dark map draws roads
     // and borders after some names, so the place is after its last layer that isn't names.
@@ -328,18 +358,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3, 10, 7],
         // Minutes off timetable: green on time (+2 or less), yellow +3 to +5, red +6 or more, grey not known yet.
         // A stale train (silent for 2 minutes, or no data at all) is grey and faded.
-        'circle-color': ['case', ['get', 'stale'], '#8c959f',
-          ['match', ['get', 'late'], 'ontime', '#1a7f37', 'some', '#d4a72c', 'late', '#d1242f', '#8c959f']],
+        'circle-color': ['case', ['get', 'stale'], dotColours(dark).unknown,
+          ['match', ['get', 'late'], 'ontime', dotColours(dark).ontime, 'some', dotColours(dark).some, 'late', dotColours(dark).late, dotColours(dark).unknown]],
         'circle-stroke-color': '#ffffff',
         'circle-stroke-width': 1,
         // From MODEL_ZOOM in, the 3D trains take over; the dots stay (invisible) so a tap still finds the train.
         // The selected train's dot is invisible too: it is drawn by the selection marker (below).
-        'circle-opacity': dotOpacity(selected ?? ''),
-        'circle-stroke-opacity': dotOpacity(selected ?? ''),
+        'circle-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())),
+        'circle-stroke-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())),
       },
     });
     // Triangles instead of circles (Settings → Train symbol): the circles stay, unseen, so taps still find the trains.
-    addTriangles(map);
+    addTriangles(map, dark);
     map.addLayer({
       id: 'train-triangles',
       type: 'symbol',
@@ -354,36 +384,38 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
         // About as big as the circle: 9 px tall far out, 20 px from zoom 10.
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25],
+        'icon-size': symbolSize(),
       },
-      paint: { 'icon-opacity': dotOpacity(selected ?? '') },
+      paint: { 'icon-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())) },
     });
     if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
-      selection: () => (selected ? { id: selected, colour: dark ? '#e6edf3' : '#1b1f24', faded: selStale } : null) }); map.addLayer(layer3d); }
+      selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) }); map.addLayer(layer3d); }
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
       type: 'symbol',
-      source: 'trains',
+      source: 'train-groups',
       minzoom: 6,
-      maxzoom: MODEL_ZOOM,
+      // Hidden while models show, by the camera's zoom (switchModels), not by a maxzoom (that goes by each tile's zoom).
       layout: {
-        // From the zoom where the trains are drawn as models, the company goes above the number and lateness
-        // (Max, 2026-11-12: a label is company, train number and on time). Further out just the number.
-        'text-field': ['step', ['zoom'], ['get', 'label'], MODEL_ZOOM,
-          ['case', ['!=', ['get', 'company'], ''],
-            ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
-            ['get', 'label']]],
-        'text-font': ['Noto Sans Bold'],
+        visibility: modelsAt(map.getZoom()) ? 'none' : 'visible',
+        // Written like the bubbles close in (round 4, Max 2026-11-15: "Fix"): "2311 +1 min", the minutes in their
+        // lateness colour (the tags' text colour, readable on the halo); a group "3 trains", in the accent.
+        'text-field': ['case', ['has', 'point_count'], ['format', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')], {}],
+          ['format', ['get', 'num'], {}, ['case', ['==', ['get', 'mins'], ''], '', ' '], {},
+            ['get', 'mins'], { 'text-color': ['match', ['get', 'late'], 'ontime', T.ontime[1], 'some', T.some[1], 'late', T.late[1], T.unknown[1]] },
+            ['get', 'rest'], {}]],
+        'text-font': ['Outfit Bold'],
         'text-size': 11,
-        // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,
-        // option A: the label is the only place a toy shows its lateness). Further out, overlapping labels are left out.
-        'text-overlap': ['step', ['zoom'], 'never', MODEL_ZOOM, 'always'],
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
+        // Overlapping labels are left out (where models show, the labels are page elements: placeNearLabels).
+        'text-overlap': 'never',
+        // Under the train; where that is taken (a station's name, another label), above it or to a side, rather than
+        // left out (Max, 2026-11-15: labels lost near Älvsjö).
+        'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+        'text-radial-offset': 1.0,
       },
-      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
-        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
+      paint: { 'text-color': ['case', ['has', 'point_count'], C.group, C.label], 'text-halo-color': C.halo, 'text-halo-width': 1.5,
+        'text-opacity': ['case', ['==', ['get', 'stale'], true], 0.45, 1] },
     });
 
     // Close in, where the models show, the labels are page elements placed every frame (placeNearLabels, below).
@@ -399,10 +431,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       type: 'symbol',
       source: 'stations',
       minzoom: 11,
-      maxzoom: Math.max(11, MODEL_ZOOM),
       layout: {
+        visibility: namesOnPage() ? 'none' : 'visible',   // page elements from there (switchModels)
         'text-field': ['get', 'name'],
-        'text-font': ['Noto Sans Regular'],
+        'text-font': ['Outfit Medium'],
         'text-size': 14,
         'text-offset': [0, -1.1],
         'text-anchor': 'bottom',
@@ -410,6 +442,29 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       },
       paint: { 'text-color': C.station, 'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
     });
+    // The open train's stations: their names in pills, at every zoom up to where names are page elements (there the
+    // page's names get the pill: placeStationNames).
+    addPill(map, dark);
+    map.addLayer({
+      id: 'route-names',
+      type: 'symbol',
+      source: 'route-names',
+      layout: {
+        visibility: namesOnPage() ? 'none' : 'visible',
+        'text-field': ['get', 'name'],
+        'text-font': ['Outfit SemiBold'],
+        'text-size': 13,
+        'text-offset': [0, -1.25],
+        'text-anchor': 'bottom',
+        'icon-image': 'pill',
+        'icon-text-fit': 'both',
+        'icon-text-fit-padding': [2, 7, 2, 7],
+        'symbol-sort-key': ['get', 'rank'],
+        'text-padding': 3,
+      },
+      paint: { 'text-color': C.station },
+    });
+    routeNames();
 
     applySelectionFilters();
     relabelControls();
@@ -464,13 +519,28 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     for (const id of OUR_LAYERS) if (map.getLayer(id)) map.removeLayer(id);
   }
 
+  // Where models show and where the stations' names are page elements, by the camera's zoom for the whole screen.
+  const namesOnPage = () => map.getZoom() >= Math.max(11, modelZoom());
+  let switched = null;
+  function switchModels() {
+    if (!isReady) return;
+    const now = `${modelsAt(map.getZoom())}|${namesOnPage()}`;
+    if (now === switched) return;
+    switched = now;
+    if (!map.getLayer('train-labels')) return;
+    applySelectionFilters();
+    map.setLayoutProperty('train-labels', 'visibility', modelsAt(map.getZoom()) ? 'none' : 'visible');
+    for (const id of ['station-names', 'route-names']) map.setLayoutProperty(id, 'visibility', namesOnPage() ? 'none' : 'visible');
+  }
+
   // The selected train's own dot and label are drawn by its marker, so the layers leave it out.
   function applySelectionFilters() {
     const id = selected ?? '';
-    const dots = triangles() ? 0 : dotOpacity(id);   // with triangles the circles are only there for taps
+    const models = modelsAt(map.getZoom());
+    const dots = triangles() ? 0 : dotOpacity(id, models);   // with triangles the circles are only there for taps
     map.setPaintProperty('train-dots', 'circle-opacity', dots);
     map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
-    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id));
+    map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id, models));
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
   }
 
@@ -478,6 +548,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     restyleBase(map, dark);
     addSources();
     addLayers();
+    map.on('zoom', switchModels);   // drops, far-out labels and names switch with the camera's zoom (switchModels)
 
     // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
     // are small on a phone). The nearest wins.
@@ -494,7 +565,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // A train's label further out (Max, 2026-11-12: "it should be the entire train model, and the label").
       const lp = 3;
       const label = map.queryRenderedFeatures([[e.point.x - lp, e.point.y - lp], [e.point.x + lp, e.point.y + lp]],
-        { layers: ['train-labels'] }).find(f => f.properties.id);
+        { layers: ['train-labels'] }).find(f => f.properties.id || f.properties.cluster_id !== undefined);
+      if (label?.properties.cluster_id !== undefined && onGroupTap) {
+        map.getSource('train-groups').getClusterLeaves(label.properties.cluster_id, 200, 0)
+          .then(leaves => onGroupTap(leaves.map(f => nearProps.get(f.properties.id)).filter(Boolean))).catch(() => {});
+        return;
+      }
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
       const onModel = modelsAt(map.getZoom()) ? modelAt(e.point) : null;
@@ -578,13 +654,31 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // the camera (setSelectedPlace), so it can't lag.
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
-  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="" ' +
+  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="" ' +
     'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
-  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('polygon');
+  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('path');
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
+  // The selected label held on whole screen (device) pixels: the marker sits at the exact fraction (the ring needs it),
+  // and a followed train hovering at a pixel's edge made the text snap back and forth (Max, 2026-11-15: far out "the
+  // label pill vibrates"; measured at 125 % scaling: 6-11 jumps of ~200 pixels in 59 frames). Read after the map has
+  // placed the marker (each camera move and each new place); it moves on when the label's own place has gone 0.75 of a
+  // device pixel from where it is held. Its own place: where it is now, less the shift it has (its offsets inside the
+  // marker can land on half a device pixel, e.g. at 150 % scaling).
+  let labelHeld = null, shiftX = 0, shiftY = 0;
+  function holdLabel() {
+    if (!selShown) return;
+    const r = selLabel.getBoundingClientRect();
+    if (!r.width) return;
+    const x = r.left - shiftX, y = r.top - shiftY, dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
+    if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
+      labelHeld = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
+    }
+    const sx = Number((labelHeld.x - x).toFixed(3)), sy = Number((labelHeld.y - y).toFixed(3));
+    if (sx !== shiftX || sy !== shiftY) { shiftX = sx; shiftY = sy; selLabel.style.translate = `${sx}px ${sy}px`; }
+  }
 
   // ---- Close in, the trains' labels ----
   // From the zoom where the models show, each train's label (company above number and lateness) and the "3 trains"
@@ -609,8 +703,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (nameEls.size) { namesBox.replaceChildren(); nameEls.clear(); }
       return;
     }
-    const placed = [], keep = new Set();
-    for (const f of data.stations.features) {
+    const placed = [], keep = new Set(), onRoute = new Set(routeSigs);
+    const order = onRoute.size ? [...data['route-names'].features, ...data.stations.features.filter(f => !onRoute.has(f.properties.sig))] : data.stations.features;
+    for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
       const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
@@ -624,9 +719,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         namesBox.appendChild(el);
         nameEls.set(sig, el);
       }
+      el.classList.toggle('pill', onRoute.has(sig));
       el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
+    nameBoxes = placed;
   }
   // The station whose name (close in) is under a point of the map, or null.
   function stationNameAt(pt) {
@@ -640,7 +737,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   }
   let nearProps = new globalThis.Map();   // id -> the properties setTrains got for each train near the view
   const nearEls = new globalThis.Map();   // key -> { el, text, ids }
-  const LABEL_DY = 12;   // the label's top below the train's point (the map's labels: 1.1 em of 11 px)
+  const LABEL_DY = 16;   // the bubble's top (its pointer's tip) below the train's point
+  // A bubble never covers a station's name (they are placed first: placeStationNames; the Soft look, 2026-11-15).
+  let nameBoxes = [];
   function placeNearLabels() {
     if (!isReady) return;
     const { clientWidth: W, clientHeight: H } = box, pts = [];
@@ -675,17 +774,30 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         n.text = text;
         if (one) {
           const { company, label, stale } = g[0].pr;
+          const { number, minutes, rest } = splitLabel(label);
           n.el.className = `near-label${stale ? ' stale' : ''}`;
-          n.el.replaceChildren(...(company ? [Object.assign(document.createElement('span'), { className: 'co', textContent: company }), '\n'] : []), String(label));
+          const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+          n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
+            ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = 'near-label group';
           n.el.textContent = text;
         }
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
-      n.el.style.transform = `translate(${x.toFixed(1)}px, ${(y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
+      const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
+      const h = one && g[0].pr.company ? 40 : 26;
+      // Under its train; over a station's name there, above its train instead; if a name is in the way there too, under
+      // it anyway (Max, 2026-11-15: bubbles pushed down past a name ended up far from their trains).
+      const covers = top => nameBoxes.some(o => o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt);
+      const up = covers(y + LABEL_DY) && !covers(y - LABEL_DY - h);
+      if (up !== n.el.classList.contains('up')) n.el.classList.toggle('up', up);
+      const top = up ? y - LABEL_DY - h : y + LABEL_DY;
+      n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
     }
-    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
+    // A bubble that goes fades out (round 4; it fades in by CSS), then is removed.
+    for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.classList.add('out'); setTimeout(() => n.el.remove(), 160); nearEls.delete(key); }
   }
   // The close-in label under a point of the map (screen pixels), with 3 px to spare, or null.
   function nearLabelAt(pt) {
@@ -716,18 +828,31 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // (index.html). Worked out from the window's size, kept from the last resize: reading the page's own sizes here
   // made the browser lay the page out again, 21 ms on the first frame after a tap (measured 2026-11-15).
   let size = { w: box.clientWidth, h: box.clientHeight };
-  map.on('resize', () => { size = { w: box.clientWidth, h: box.clientHeight }; });
+  // A new size (the phone's keyboard closing, a turned phone, a resized window): a followed train still held where it
+  // was put at first (not dragged elsewhere) is held at the new size's place for it (Max, 2026-11-15: a train picked in
+  // the search, with the keyboard still up, stayed too high once the keyboard had gone).
+  map.on('resize', () => {
+    size = { w: box.clientWidth, h: box.clientHeight };
+    if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
+  });
   const GAP = 10, CARD_W = 420;
   const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
-  // Does the card reach the screen's middle (a phone), or leave it free (a wider window)?
+  // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
+  // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
+  // needs, so the free map is to its right.
+  const NARROW_PX = 440, TOP_BAR = 62;
+  const narrow = () => size.w < NARROW_PX;
+  // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
-  // The card's top edge, with a margin.
+  // The bottom card's top edge (a phone), with a margin.
   const panelTop = () => size.h - (Math.round(size.h * 0.45) + 20);
   // Where a train is held: the middle of the screen when the card leaves it free (Max, 2026-11-15: "the default set
   // position for following does not have the train centered in view"), otherwise the middle of the map above it.
-  const defaultFocus = () => (cardInMiddle() ? { x: size.w / 2, y: panelTop() / 2 } : { x: size.w / 2, y: size.h / 2 });
+  const defaultFocus = () => (narrow() ? { x: size.w / 2, y: panelTop() / 2 }
+    : cardInMiddle() ? { x: (cardRight() + size.w) / 2, y: size.h / 2 } : { x: size.w / 2, y: size.h / 2 });
   // Is a screen point behind the card?
-  const behindCard = (at, margin = 0) => at.y > size.h - Math.round(size.h * 0.45) - 10 - margin && at.x < cardRight() + margin;
+  const behindCard = (at, margin = 0) => at.x < cardRight() + margin &&
+    (narrow() ? at.y > size.h - Math.round(size.h * 0.45) - 10 - margin : at.y > TOP_BAR - margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -803,8 +928,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const { w, h } = size, at = map.project([p.lon, p.lat]);
     if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > h + LET_GO_PX || behindCard(at, -LET_GO_PX)) return stopFollowing(true);
     // Kept 30 px inside the edges, and 30 px clear of the card.
-    const x = Math.max(30, Math.min(w - 30, at.x));
-    following.focus = { x, y: Math.max(70, Math.min((behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    const x0 = Math.max(30, Math.min(w - 30, at.x)), x = narrow() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
+    following.focus = { x, y: Math.max(70, Math.min((narrow() && behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    following.moved = true;     // put there by a drag: kept when the screen's size changes
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.glide = null;
   });
@@ -825,6 +951,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let isReady = false;
   let lastDrawnPlace = null;   // drawIfMoved
   let selStale = false;        // the selected train is grey (its ring under the model is faded too)
+  let selLate = 'unknown';     // its lateness: the ring's colour, zoomed in as zoomed out (Max, 2026-11-15)
   let lastTrainsSent = 0;      // setTrains
   ready.then(() => { isReady = true; warmRoute(); });
   // The first route shown made the map prepare its drawing programs for the route's line and stop dots: about 75 ms,
@@ -896,6 +1023,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       data.trains = geojson;
       nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
+      if (!modelsAt(map.getZoom())) {
+        data['train-groups'] = selected ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
+        map.getSource('train-groups')?.setData(data['train-groups']);
+      }
       // From the model zoom the dots are unseen; they only help a tap find a train. They are sent twice a second
       // there, and in between the map is only drawn again (the models move); every refresh used to cost two draws.
       const t = performance.now();
@@ -910,7 +1041,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     async follow(getPlace, onEnd) {
       await ready;
       dragged = false;
-      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), place: null, glide: null };
+      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), moved: false, place: null, glide: null };
       zoomAroundCenter(true);
       followRotation(true);
       map.setTransformCameraUpdate(holdTrain);
@@ -976,6 +1107,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
+      if (routeSigs.length) routeNames();
+    },
+    // The open train's stations (signatures, in order) get their names in pills; null: none.
+    async setRouteStations(sigs) {
+      routeSigs = sigs ?? [];
+      await ready;
+      routeNames();
     },
     // Draw a train's whole path (path.js) and its stops; null: none.
     async setPath(path) {
@@ -1017,7 +1155,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const h = map.getContainer().clientHeight;
       flying = true;
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 }, duration: 1000, maxZoom: 13 });
+        { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
+          duration: 1000, maxZoom: 13 });
     },
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
@@ -1036,26 +1175,37 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       selected = id;
       await ready;
       if (isReady) applySelectionFilters();
-      if (!id && selShown) { selMarker.remove(); selShown = false; }
+      if (!id && selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
     },
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
     // ({ label, late, stale }), or null.
     setSelectedPlace(place, props) {
-      if (!isReady || !selected || !place) {
-        if (selShown) { selMarker.remove(); selShown = false; }
+      // No details (props): the train has just left the map (arrived, or silent too long) while its last place is still
+      // known; the marker goes too (Max, 2026-11-15: "props is null" with 2047 after Herrljunga).
+      if (!isReady || !selected || !place || !props) {
+        if (selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
         return;
       }
       // Moved only when the train moved (the map moves it with the camera itself).
       const ll = selMarker.getLngLat();
       if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
-      if (!selShown) { selMarker.addTo(map); selShown = true; }
-      const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
-      if (text !== selText) selLabel.textContent = selText = text;
+      if (!selShown) { selMarker.addTo(map); selShown = true; map.on('move', holdLabel); }
+      // The same bubble as the others (company small above, the number, the minutes in their colour), ringed in the accent.
+      const company = props.company && map.getZoom() >= modelZoom() ? props.company : '';
+      const text = `${company}|${props.label}`;
+      if (text !== selText) {
+        selText = text;
+        const { number, minutes, rest } = splitLabel(props.label);
+        const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+        selLabel.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
+          ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      }
       const tri = triangles();
-      const shape = arrow().join(' ');   // the selected train's arrow: the same shape as the map's
-      if (selShape.getAttribute('points') !== shape) selShape.setAttribute('points', shape);
+      const shape = arrow();   // the selected train's symbol: the same shape as the map's
+      if (selShape.getAttribute('d') !== shape) selShape.setAttribute('d', shape);
       selStale = Boolean(props.stale);
-      const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
+      selLate = props.late;
+      const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
       const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
@@ -1063,6 +1213,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
       const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
       if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }
+      holdLabel();
     },
     // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
     drawNow() { if (isReady) map.redraw(); },

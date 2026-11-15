@@ -609,6 +609,22 @@ export function createTrains(options = {}) {
 
   // How far ahead of train tr the known track runs, in metres (Infinity: further than 400 m), and the place and
   // direction where it ends: past its end every place is the end itself (a buffer stop). Once per drawing moment.
+  // The tracks behind a train's first report, walked back along the rail network (for drawing its cars: along), kept
+  // until the first report changes; null without a network or a place on it.
+  const BACK_M = 800;
+  function backTrack(tr) {
+    const first = tr.hist[0];
+    if (tr.back?.first === first) return tr.back.poly;
+    let poly = null;
+    if (NET && first.snap) {
+      const next = tr.hist.find(e => metres(e, first) > 5);
+      const hd = next ? headingOf(first, next) : (tr.sim?.heading ?? first.bearing ?? tr.latest?.bearing);
+      if (hd !== null && hd !== undefined) poly = NET.ahead(first.snap, (hd + 180) % 360, BACK_M);
+    }
+    tr.back = { first, poly };
+    return poly;
+  }
+
   function trackEnd(tr) {
     if (tr.at !== undefined && tr.endAt === tr.at) return tr.end;
     const s = tr.sim.s;
@@ -780,8 +796,14 @@ export function createTrains(options = {}) {
       let p;
       if (d >= 0) p = front(d);
       else if (foldsBack(tr)) { const f = front(-d); p = { lon: 2 * m.lon - f.lon, lat: 2 * m.lat - f.lat }; }
-      else if (sim.s + d < tr.hist[0].s) return null;
-      else p = pointAt(tr, sim.s + d);
+      else if (sim.s + d < tr.hist[0].s) {
+        // Behind its first report (a train that has just appeared): the tracks behind it, walked back along the rail
+        // network from its first place, so its cars bend at once (Max, 2026-11-15: 2246 was drawn straight across a
+        // curve until it had moved a train's length). Only for drawing; the movement doesn't use this.
+        const back = backTrack(tr);
+        if (!back) return null;
+        p = polyAt(back, tr.hist[0].s - (sim.s + d));
+      } else p = pointAt(tr, sim.s + d);
       return { lon: p.lon + sim.off.lon, lat: p.lat + sim.off.lat };
     },
     get count() { return byId.size; },

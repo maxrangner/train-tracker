@@ -1,4 +1,6 @@
 import { startTrainSource } from './trains-source.js';
+import { icon } from './icons.js';
+import { splitLabel, tagHtml, minutesText } from './tag.js';
 import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap } from './map.js';
@@ -8,7 +10,11 @@ import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
-import { t, translatePage } from './i18n.js';
+import { t, translatePage, lang } from './i18n.js';
+import { ACCENTS } from './colours.js';
+import { initSheets } from './sheet.js';
+import { logoSvg } from './logo.js';
+import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -67,20 +73,27 @@ const labelFor = r => label(r.number, minutesOf(r));
 const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
   company: lateness.brand(r.id) ?? '',
+  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4).
+  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined ? '' : minutesText(minutesOf(r)),
+  rest: sim?.syncing && !sim.stale ? ' »»' : '',
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
+// A short buzz when a train is opened or followed (round 4; Android: iPhones don't let a web page vibrate).
+const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   isStarred: number => favourites.has('train', number),
+  lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
     if (!id) map.unfollow();   // the map stays exactly as it is
     if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
+    map.setRouteStations(null);   // the new train's come with its route
   },
   // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
   // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
@@ -107,10 +120,12 @@ const panel = createPanel(document.getElementById('panel'), {
       else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
       map.setPathProgress(done);
       map.setPath(shownPath.path);
+      map.setRouteStations(places.filter(p => p.stop).map(p => p.sig));   // their names in pills (Max, 2026-11-15)
       if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
     });
   },
   onFollow(id, on) {
+    buzz();
     if (on) follow(id); else map.unfollow();
   },
 });
@@ -143,7 +158,15 @@ const map = createMap('map', {
 
 // The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
 const splash = document.getElementById('splash');
-map.shown.then(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); });
+// The start screen's logo draws itself in about 1.3 s (index.html): the screen stays at least that long.
+const SPLASH_MIN_MS = 1300;
+map.shown.then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
+  Math.max(0, SPLASH_MIN_MS - performance.now())));
+
+// ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
+const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
+  .map(id => document.getElementById(id)));
+const raise = id => sheets.raise(document.getElementById(id));
 
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
@@ -154,9 +177,10 @@ function showPicker(list) {
   disruptionEl.hidden = true;
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div><ul class="pick-list">` +
-    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(r.label)}</b> <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
+    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
+    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
+  raise('picker');
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
   for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
 }
@@ -178,6 +202,7 @@ async function openStation(sig, { go = false } = {}) {
   map.unfollow();
   disruptionEl.hidden = true;
   board.open(st);
+  raise('board');
   if (go) map.goTo(shownAt(st), 13);   // lands above the board
 }
 
@@ -187,16 +212,19 @@ function pickTrain(t) {
   if (t.onMap && openTrain(t.id, { go: true })) return;
   map.unfollow();
   panel.open({ id: t.id, operational: t.operational, date: t.date, number: t.number, label: String(t.number) }, { follow: false });
+  raise('panel');
 }
 
 // Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
 function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
+  buzz();
   board.close();
   pickerEl.hidden = true;
   disruptionEl.hidden = true;
   panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
+  raise('panel');
   const following = follow(id);
   const p = go && placeNow(id);
   if (p) following.then(() => map.goTo(p, 13, true));
@@ -210,8 +238,22 @@ function openTrain(id, { go = false } = {}) {
 const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = () => (helpEl.hidden ? openHelp() : (helpEl.hidden = true));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; disruptionsPage.hidden = true; } });
+document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
+// About (round 4): the logo, Buy me a coffee (Max's Ko-fi link, when he gives it: until then the button does nothing)
+// and Report a bug (does nothing yet: "Leave non functional for now").
+const KOFI_URL = '';
+helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
+document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
+document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
+document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
+helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL);
+// Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const pages = [helpEl, settingsPage, statsPage, disruptionsPage];
+  if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
+  if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
+});
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -328,9 +370,10 @@ settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden
 document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent') map.applySettings();
   if (key === 'language') {
     translatePage();
+    nameSwatches();
     map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
@@ -361,6 +404,13 @@ function showSettings() {
   closeSizeEl.value = close;
   closeSizeOut.textContent = `×${close}`;
 }
+// Settings → Accent colour: one round swatch per curated colour (src/colours.js; Max, 2026-11-15), each in the light
+// and the dark shade (the page's style picks one).
+const swatchesEl = settingsEl.querySelector('.seg.swatches');
+swatchesEl.innerHTML = Object.entries(ACCENTS).map(([k, a]) =>
+  `<button type="button" data-v="${k}" style="--sw-l:${a.light.c};--sw-d:${a.dark.c}"></button>`).join('');
+const nameSwatches = () => { for (const b of swatchesEl.children) b.title = b.ariaLabel = ACCENTS[b.dataset.v].name[lang()]; };
+nameSwatches();
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
     setSetting(seg.dataset.key, b.dataset.v);
@@ -438,7 +488,7 @@ if (!replay && hasKey) {
 }
 function drawDisruptions() {
   const list = disruptions.list;
-  document.getElementById('disruptions-body').innerHTML = `<p class="panel-note">${t(list.length ? 'disruptionsNote' : 'noDisruptions')}</p>` +
+  document.getElementById('disruptions-body').innerHTML = (list.length ? `<p class="panel-note">${t('disruptionsNote')}</p>` : stateHtml('empty', t('noDisruptions'))) +
     list.map(d => rowHtml(d, stationName, now())).join('');
   for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
 }
@@ -459,6 +509,7 @@ function openDisruption(id, { go = false } = {}) {
   map.unfollow();
   drawDisruption(id);
   disruptionEl.hidden = false;
+  raise('disruption');
   const p = disruptions.placeOf(d);
   if (go && p) map.goTo(p, 9);
 }
@@ -606,6 +657,10 @@ if (hasKey && !replay) {
 
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
+const statusCount = statusEl.querySelector('.count');
+const barLogo = document.querySelector('.searchbar .logo');
+barLogo.innerHTML = logoSvg({ small: true });
+barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
 const statusFullEl = document.getElementById('status-full');
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
@@ -631,6 +686,7 @@ function statusLine(st, noData) {
   return '';
 }
 
+let beatSeen = null, beatAt = 0;
 setInterval(() => {
   const tNow = now();
   const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
@@ -640,8 +696,17 @@ setInterval(() => {
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
-  statusEl.textContent = `${t('trainsCount', trains.count)} · ` +
-    (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
+  // The search bar's chip: the count (and the replay's time); the whole short line as its label (2026-11-15).
+  const short = `${t('trainsCount', trains.count)} · ` + (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
+  statusCount.textContent = noData || error ? short : `${trains.count}${replay ? ` · ${hhmm(tNow)}` : ''}`;
+  statusEl.title = short;
+  statusEl.ariaLabel = short;
+  statusEl.classList.toggle('slow', status.positions !== 'live' && !replay);
+  // A pulse of the live dot when fresh data has come, at most every 10 s (round 4: a sign of life without drawing all the time).
+  if (trains.lastReport && trains.lastReport !== beatSeen && tNow - beatAt > 10000 && !noData && !error) {
+    beatSeen = trains.lastReport; beatAt = tNow;
+    statusEl.classList.remove('beat'); void statusEl.offsetWidth; statusEl.classList.add('beat');
+  }
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
     (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +

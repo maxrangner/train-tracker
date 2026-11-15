@@ -10,6 +10,10 @@ const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
 import { star } from './panel.js';
+import { tagHtml } from './tag.js';
+import { stateHtml } from './state.js';
+import { lateClass } from './lateness.js';
+import { icon } from './icons.js';
 import { hhmm } from './clock.js';
 import { t } from './i18n.js';
 
@@ -19,7 +23,15 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
   let timer = null, msgTimer = null;
   let asked = 0;
   let msgs = [];          // the station's own messages
-  const msgsHtml = () => (msgs.length ? `<div class="board-msgs">${msgs.map(m => `<div class="board-msg">${esc(m.text)}</div>`).join('')}</div>` : '');
+  let msgsOpen = false;   // they are folded into one line (Max, 2026-11-15: they pushed the departures out of sight)
+  const msgsHtml = () => (msgs.length ? `<div class="board-msgs"><button type="button" class="board-msgs-toggle" aria-expanded="${msgsOpen}">` +
+    `${icon('warning', 17)}<span>${t('messagesCount', msgs.length)}</span>${icon(msgsOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` +
+    `<div class="board-msg-list"${msgsOpen ? '' : ' hidden'}>${msgs.map(m => `<div class="board-msg">${esc(m.text)}</div>`).join('')}</div></div>` : '');
+  function wireMsgs() {
+    const b = el.querySelector('.board-msgs-toggle');
+    // Opened, the card goes full height so departures still show under them; folded again, back to its size.
+    if (b) b.onclick = () => { msgsOpen = !msgsOpen; el.classList.toggle('full', msgsOpen); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); };
+  }
   async function askMessages() {
     if (!station || !messages) return;
     const sig = station.sig;
@@ -30,6 +42,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
       const box = el.querySelector('.board-msgs');
       if (box) box.outerHTML = msgsHtml() || '<div class="board-msgs" hidden></div>';
       else if (msgs.length) el.querySelector('.panel-head')?.insertAdjacentHTML('afterend', msgsHtml());
+      wireMsgs();
     } catch (e) { console.warn('station messages:', e.message); }
   }
 
@@ -49,14 +62,23 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     el.innerHTML =
       `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
       (isStarred ? star(isStarred(station.sig)) : '') +
-      `<button class="panel-close" type="button" aria-label="${t('close')}">×</button></span></div>` + msgsHtml() +
-      `<div class="board-tabs" role="group" aria-label="${t('depOrArr')}">` +
+      `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>` + msgsHtml() +
+      `<div class="seg board-tabs" role="group" aria-label="${t('depOrArr')}">` +
       `<button type="button" data-act="Avgang" aria-pressed="${dep}">${t('departures')}</button>` +
       `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">${t('arrivals')}</button></div>` + body;
     el.querySelector('.panel-close').onclick = close;
     const s = el.querySelector('.panel-star');
     if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
-    for (const b of el.querySelectorAll('[data-act]')) b.onclick = () => { if (b.dataset.act !== activity) { activity = b.dataset.act; refresh(true); } };
+    // Departures ⇄ Arrivals: the old rows stay, dimmed, until the new ones are there (Max, 2026-11-15: emptied to
+    // "Loading…" and filled again, the card flickered).
+    for (const b of el.querySelectorAll('[data-act]')) b.onclick = () => {
+      if (b.dataset.act === activity) return;
+      activity = b.dataset.act;
+      for (const x of el.querySelectorAll('[data-act]')) x.setAttribute('aria-pressed', String(x.dataset.act === activity));
+      el.querySelector('.panel-table, .state')?.classList.add('busy');
+      refresh(false, { top: true });
+    };
+    wireMsgs();
   }
 
   function frameWire() {
@@ -64,38 +86,41 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
   }
 
-  async function refresh(showLoading = false) {
+  // top: start at the top of the list (a switch to the other tab).
+  async function refresh(showLoading = false, { top = false } = {}) {
     if (!station) return;
     const n = ++asked;
-    if (showLoading) frame(`<p class="panel-note">${t('loading')}</p>`);
+    if (showLoading) frame(stateHtml('loading', t('loading')));
     let rows;
     try {
       rows = await load(station.sig, activity);
     } catch (e) {
-      if (n === asked && station) frame(`<p class="panel-note">${esc(t('boardFailed', e.message))}</p>`);
+      if (n === asked && station) frame(stateHtml('error', t('boardFailed', e.message)));
       return;
     }
     if (n !== asked || !station) return;
     const dep = activity === 'Avgang';
-    const scroll = el.querySelector('.panel-table')?.scrollTop ?? 0;
-    if (!rows.length) { frame(`<p class="panel-note">${t(dep ? 'noDepartures' : 'noArrivals')}</p>`); return; }
+    const scroll = top ? 0 : el.querySelector('.panel-table')?.scrollTop ?? 0;
+    if (!rows.length) { frame(stateHtml('empty', t(dep ? 'noDepartures' : 'noArrivals'))); return; }
+    // One row per train, in the train card's style (round 4, 2026-11-15): the planned time (the new one under it in
+    // the lateness colour), where it goes (or comes from) with its number and kind, the lateness tag, the track.
     const body = rows.map((r, i) => {
       const seen = r.actual ?? r.estimated;
       const late = seen ? Math.round((seen - r.planned) / 60000) : 0;
-      const when = r.canceled ? `<span class="late">${t('cancelled')}</span>`
-        : late > 0 ? `<span class="late">${time(seen)}</span>` : '';
+      const when = r.canceled ? '' : late > 0 ? `<small class="m ${lateClass(late)}">${time(seen)}</small>` : '';
       const place = dep ? r.to : r.from;
-      return `<tr data-i="${i}" class="${r.canceled ? 'canceled' : ''}"><td class="t">${time(r.planned)}${when ? `<br>${when}` : ''}</td>` +
-        `<td class="st">${esc(place ? stationName(place) : '')}<div class="sub">${esc(r.number)} ${esc(r.product ?? '')}</div></td>` +
-        `<td class="trk">${esc(r.track)}</td></tr>`;
+      return `<button type="button" data-i="${i}" class="bd-row${r.canceled ? ' canceled' : ''}"><span class="bd-time">${time(r.planned)}${when}</span>` +
+        `<span class="bd-name"><b>${esc(place ? stationName(place) : '')}</b><small>${esc(r.number)} ${esc(r.product ?? '')}</small></span>` +
+        `<span class="bd-tag">${r.canceled ? `<span class="tag late">${t('cancelled')}</span>` : late > 0 ? tagHtml(late, { short: true }) : ''}</span>` +
+        `<span class="tl-trk">${esc(r.track)}</span></button>`;
     }).join('');
-    frame(`<div class="panel-table"><table class="board"><thead><tr><th>${t('time')}</th><th>${t(dep ? 'to' : 'from')}</th><th>${t('track')}</th></tr></thead>` +
-      `<tbody>${body}</tbody></table></div>`);
+    frame(`<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
+      `<div class="panel-table bd">${body}</div>`);
     const box = el.querySelector('.panel-table');
     box.scrollTop = scroll;
-    for (const tr of el.querySelectorAll('tr[data-i]')) {
-      const r = rows[Number(tr.dataset.i)];
-      tr.onclick = () => onPickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number });
+    for (const b of el.querySelectorAll('.bd-row')) {
+      const r = rows[Number(b.dataset.i)];
+      b.onclick = () => onPickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number });
     }
   }
 
@@ -103,6 +128,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     station = { sig: st.sig, name: st.name };
     activity = 'Avgang';
     msgs = [];
+    msgsOpen = false;
     el.hidden = false;
     refresh(true);
     clearInterval(timer);
