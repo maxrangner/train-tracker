@@ -388,7 +388,7 @@
     #panel .panel-title { align-items: baseline; gap: 8px; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip,
+    #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
        disruption's card too (his answer 2A). */
@@ -396,6 +396,7 @@
     .cd { display: contents; }
     .cd-tiles { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; margin-top: 12px; flex: none; }
     .tile b.long { font-size: 18px; line-height: 1.4; }   /* "≈ 1 h 43 min": smaller, inside its tile (Max, 2026-11-15) */
+    .tile b.wrap { font-size: 18px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }   /* "Mot Göteborg C": two lines when it must */
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
     .tile b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .tile small { display: flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 500; color: var(--muted); margin-top: 2px; }
@@ -450,6 +451,9 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
     .panel-status { margin: 4px 0 0; color: var(--late); }
+    /* The trip's problems on the small card ("Ändrad väg · Elfel · Alingsås inställt"): at most two lines. */
+    .panel-alert { margin: 4px 0 0; color: var(--late); font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2;
+      line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
     .panel-tvnotes { margin: 0 0 6px; display: grid; gap: 2px; }
     .panel-tvnote { margin: 0; }
