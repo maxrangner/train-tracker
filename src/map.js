@@ -672,14 +672,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         }
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
-      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again). Over a
-      // station's name it moves down below the name; hidden only if that is far from its train.
+      // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
       const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
       const h = one && g[0].pr.company ? 40 : 26;
-      let top = y + LABEL_DY;
-      for (const o of nameBoxes) if (o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt) top = o.bt + 6;
-      const hide = top - (y + LABEL_DY) > 60;
-      if (hide !== n.el.classList.contains('tucked')) n.el.classList.toggle('tucked', hide);
+      // Under its train; over a station's name there, above its train instead; if a name is in the way there too, under
+      // it anyway (Max, 2026-11-15: bubbles pushed down past a name ended up far from their trains).
+      const covers = top => nameBoxes.some(o => o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt);
+      const up = covers(y + LABEL_DY) && !covers(y - LABEL_DY - h);
+      if (up !== n.el.classList.contains('up')) n.el.classList.toggle('up', up);
+      const top = up ? y - LABEL_DY - h : y + LABEL_DY;
       n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
     }
     for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.remove(); nearEls.delete(key); }
