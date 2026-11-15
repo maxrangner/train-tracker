@@ -4,7 +4,7 @@
 // Checked: the page starts without errors in English/light and Swedish/dark; a tap opens a train's card; every
 // "N trains" label lists exactly N; a search lists every matching train and scrolls; a setting changes without the
 // page reloading; no model has surfaces on top of each other (tools/models-check.mjs); a tap on the banner opens the
-// stats page in each language, filled in, and × closes it; a tap on a company there shows only its trains, and × on
+// stats page in each language, filled in, and × closes it; the compact train card (tiles, the stop list, "All stops"); a tap on a company there shows only its trains, and × on
 // the bar that appears shows them all again.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
 import { existsSync } from 'node:fs';
@@ -85,6 +85,41 @@ try {
   await sleep(1500);
   const head = await page.evaluate(() => (document.getElementById('panel').hidden ? null : document.querySelector('#panel .panel-head strong')?.textContent));
   expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'}`);
+
+  // ---- The compact card (2026-11-15): two tiles; the stop tile lists the stops ahead and counts down to the one
+  // picked; "All stops" opens it full; no × on a phone; Settings → Train card: Expanded opens it full ----
+  if (head) {
+    await sleep(2000);   // the route
+    const card = () => page.evaluate(() => {
+      const el = document.getElementById('panel'), stop = el.querySelector('.cd-stop');
+      return { tiles: el.querySelectorAll('.tile').length, late: el.querySelector('.cd-late b')?.textContent ?? '', stop: stop?.innerText.replace(/\n/g, ' ') ?? '',
+        button: stop?.tagName === 'BUTTON', rows: [...el.querySelectorAll('.cd-row .cd-name b')].map(b => b.textContent),
+        full: el.classList.contains('full'), close: el.querySelector('.panel-close')?.getBoundingClientRect().width ?? -1,
+        timeline: el.querySelector('.panel-table')?.getBoundingClientRect().height ?? -1 };
+    });
+    let c = await card();
+    expect(c.tiles === 2 && c.late, `the card shows ${c.tiles} tiles, lateness "${c.late}"`);
+    expect(c.close === 0, 'the card shows a × on a phone');
+    expect(!c.full && c.timeline === 0, 'the card opened full, or shows its timeline, though Compact is the default');
+    // In the replay a train's route is a past day's, every stop passed: "Arrived". Live, the stops ahead.
+    if (c.button) {
+      await page.click('#panel .cd-stop');
+      await sleep(300);
+      c = await card();
+      expect(c.rows.length > 0, 'the stop tile listed no stops');
+      if (c.rows.length > 1) {
+        await page.evaluate(() => document.querySelectorAll('#panel .cd-row')[0].click());
+        await sleep(300);
+        const picked = c.rows[0];
+        c = await card();
+        expect(c.stop.includes(picked) && c.rows.length === 0, `picking ${picked}: the tile says "${c.stop}"`);
+      }
+    } else expect(/Arrived/.test(c.stop), `the stop tile isn't a button and says "${c.stop}"`);
+    await page.click('#panel .panel-more');
+    await sleep(500);
+    c = await card();
+    expect(c.full && c.timeline > 0, '"All stops" did not open the full card with its timeline');
+  }
   await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
   await sleep(500);
 

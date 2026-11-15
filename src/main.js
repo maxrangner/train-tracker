@@ -81,6 +81,7 @@ const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(fal
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   isStarred: number => favourites.has('train', number),
+  lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
@@ -228,7 +229,13 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { helpEl.hidden = true; settingsPage.hidden = true; statsPage.hidden = true; disruptionsPage.hidden = true; } });
+// Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const pages = [helpEl, settingsPage, statsPage, disruptionsPage];
+  if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
+  if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
+});
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
