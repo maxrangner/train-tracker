@@ -338,7 +338,7 @@ onSettingChange((key) => {
   }
   if (key === 'boardRows') board.relabel();
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
-  if (key === 'toySize' || key === 'modelSize' || key === 'closeSize' || key === 'trueSize') map.drawNow();
+  if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
 });
 function showSettings() {
@@ -351,8 +351,10 @@ function showSettings() {
   sizeOut.textContent = `${settings.toySize} px`;
   realSizeEl.value = settings.modelSize;
   realSizeOut.textContent = `×${settings.modelSize}`;
-  closeSizeEl.value = settings.closeSize;
-  closeSizeOut.textContent = `×${settings.closeSize}`;
+  // One slider, for the kind of train chosen (Compact or Realistic).
+  const close = settings[closeKey()];
+  closeSizeEl.value = close;
+  closeSizeOut.textContent = `×${close}`;
 }
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
@@ -364,7 +366,8 @@ sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
 const realSizeEl = document.getElementById('set-realsize'), realSizeOut = document.getElementById('set-realsize-out');
 realSizeEl.oninput = () => { setSetting('modelSize', realSizeEl.value); showSettings(); };
 const closeSizeEl = document.getElementById('set-closesize'), closeSizeOut = document.getElementById('set-closesize-out');
-closeSizeEl.oninput = () => { setSetting('closeSize', closeSizeEl.value); showSettings(); };
+const closeKey = () => (settings.trainStyle === 'toy' ? 'toyClose' : 'realClose');
+closeSizeEl.oninput = () => { setSetting(closeKey(), closeSizeEl.value); showSettings(); };
 showSettings();
 
 // ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----

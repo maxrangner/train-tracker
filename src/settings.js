@@ -1,4 +1,4 @@
-// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&realsize=2&closesize=3&truesize=1&boardrows=20&symbol=triangle&theme=dark&lang=en),
+// The settings, in one place. A value comes from the address (#train=toy&toysize=80&toyzoom=12&realsize=2&toyclose=6&realclose=2.5&truesize=1&boardrows=20&symbol=triangle&theme=dark&lang=en),
 // else from what was chosen in the menu's Settings (remembered on this phone/browser), else these defaults.
 // Read them where they are used, each time, so a change takes effect without a reload where the code allows it.
 // The phone's language at first start: Swedish if it is Swedish, otherwise English (Max, 2026-11-12).
@@ -9,10 +9,13 @@ const DEFAULTS = {
   trainStyle: 'real',   // 'toy': each company's usual train as a toy, bigger than real; 'real': real size;
                         // 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14)
   toySize: 70,          // a toy is at least this long on the screen, in pixels (Max, 2026-11-12: 70)
-  toyZoom: 11,          // toys from this zoom in (further out: dots)
+  toyZoom: 12,          // toys from this zoom in (further out: dots; Max, 2026-11-15: 12)
   // How big the models are drawn (src/model-size.js; Max, 2026-11-15, debug settings except trueSize):
   modelSize: 1,         // realistic models at zoom 13, times real size (1 to 4); further in the same length on screen
-  closeSize: 1,         // zooming in, models stop shrinking at this, times real size (1 to 6)
+  // Zooming in, models stop shrinking at this, times real size (1 to 6), one for each kind (Max, 2026-11-15: compact
+  // ×6, realistic ×2.5).
+  toyClose: 6,
+  realClose: 2.5,
   trueSize: false,      // "Realistic size": real size at every zoom, the sizes above not used
   boardRows: 12,        // trains on a station's board (Max, 2026-11-12: "a certain amount of trains")
   // A train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting; the
@@ -29,7 +32,8 @@ const KEYS = {
   toySize: { param: 'toysize' },
   toyZoom: { param: 'toyzoom' },
   modelSize: { param: 'realsize' },
-  closeSize: { param: 'closesize' },
+  toyClose: { param: 'toyclose' },
+  realClose: { param: 'realclose' },
   trueSize: { param: 'truesize' },
   boardRows: { param: 'boardrows' },
   trainSymbol: { param: 'symbol' },
@@ -49,7 +53,8 @@ const valid = {
   toySize: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(30, Math.min(150, Number(v))) : undefined),
   toyZoom: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(8, Math.min(16, Number(v))) : undefined),
   modelSize: halves(1, 4),
-  closeSize: halves(1, 6),
+  toyClose: halves(1, 6),
+  realClose: halves(1, 6),
   trueSize: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
   trainSymbol: v => (['circle', 'triangle', 'dart'].includes(v) ? v : undefined),
