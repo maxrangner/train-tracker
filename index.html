@@ -239,6 +239,9 @@
     .sel-dot svg { display: none; width: 100%; height: 100%; overflow: visible; }
     .sel-train.tri .sel-dot { width: 15px; height: 15px; border: 0; border-radius: 0; background: none !important; color: var(--c-unknown); }
     .sel-train.tri .sel-dot svg { display: block; }
+    /* The drop (the default since 2026-11-15): a bigger ring, the drop as on the map. */
+    .sel-train.drop:not(.model) { width: 30px; height: 30px; }
+    .sel-train.drop .sel-dot { width: 26px; height: 26px; }
     .sel-train.tri.late-ontime .sel-dot { color: var(--c-ontime); }
     .sel-train.tri.late-some .sel-dot { color: var(--c-some); }
     .sel-train.tri.late-late .sel-dot { color: var(--c-late); }
@@ -443,7 +446,7 @@
       <div class="set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
       <div class="set-row"><span data-t="trainSymbol">Train symbol</span>
-        <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
+        <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
     </div>
   </div>
   <div id="settings-backdrop"></div>

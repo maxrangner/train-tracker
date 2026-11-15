@@ -48,6 +48,7 @@ const EN = {
   circle: 'Circle',
   triangle: 'Triangle',
   dart: 'Dart',                  // the wide arrow with a notch at the back (Max, 2026-11-15)
+  drop: 'Drop',                  // a circle with a point showing the way (the default since 2026-11-15)
   // Map and picker
   nTrains: ' trains',
   trainsHere: n => `${n} trains here`,
@@ -219,6 +220,7 @@ const SV = {
   circle: 'Cirkel',
   triangle: 'Triangel',
   dart: 'Pil',
+  drop: 'Droppe',
   nTrains: ' tåg',
   trainsHere: n => `${n} tåg här`,
   train: 'Tåg',

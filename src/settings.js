@@ -23,7 +23,8 @@ const DEFAULTS = {
   // A train further out: 'circle', or 'triangle' pointing the way it goes (Max, 2026-11-13, a debug setting; the
   // triangle the default since 2026-11-14, Max: "make triangles default"); 'dart', a wide arrow with a notch at the
   // back, to try (Max, 2026-11-15: option C of the arrow sketches, under Debug).
-  trainSymbol: 'triangle',
+  // Since 2026-11-15 'drop' (the Soft look, Max: "Drops"): a circle with a point showing the way.
+  trainSymbol: 'drop',
   // The accent colour: buttons, the chosen train's route (Max, 2026-11-15: a setting, a few curated colours;
   // src/colours.js ACCENTS).
   accent: DEFAULT_ACCENT,
@@ -63,7 +64,7 @@ const valid = {
   realClose: halves(1, 6),
   trueSize: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
-  trainSymbol: v => (['circle', 'triangle', 'dart'].includes(v) ? v : undefined),
+  trainSymbol: v => (['circle', 'triangle', 'dart', 'drop'].includes(v) ? v : undefined),
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
 };
 

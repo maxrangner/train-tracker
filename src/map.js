@@ -75,23 +75,31 @@ const dotColours = dark => LATE[dark ? 'dark' : 'light'];   // src/colours.js
 // The arrow's shape in a 64 x 64 picture, pointing up (north); middle (32, 32). Max, 2026-11-15, from four sketches
 // ("Change to A, but put a toggle under debug to toggle to C"): 'triangle' wider than before (base 44, was 34: hard
 // to read), 'dart' (Settings → Debug → Train symbol → Dart) wide with a notch at the back.
-const ARROWS = { triangle: [[32, 3], [54, 61], [10, 61]], dart: [[32, 3], [59, 61], [32, 48], [5, 61]] };
-const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.triangle;
+// Since 2026-11-15 (the Soft look, Max: "Drops") the default is 'drop': a circle on the train's place with a point
+// showing the way it goes. Each shape is an SVG path (the map's pictures and the selected train's marker use the same).
+// The drop's circle is centred in the picture (the picture turns round its middle), r 16, its point 27 ahead.
+const ARROWS = { triangle: 'M32 3L54 61L10 61Z', dart: 'M32 3L59 61L32 48L5 61Z', drop: 'M32 5L44.88 22.52A16 16 0 1 1 19.12 22.52Z' };
+const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.drop;
+// The symbol's size on the map: the drop a little bigger far out, so all of Sweden reads at a glance (Max's note).
+const symbolSize = () => (settings.trainSymbol === 'drop'
+  ? ['interpolate', ['linear'], ['zoom'], 4, 1.0, 7, 1.2, 10, 1.5, 13, 1.7]
+  : ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25]);
 const triangles = () => settings.trainSymbol !== 'circle';
 function addTriangles(map, dark) {
   for (const [name, colour] of Object.entries(dotColours(dark))) {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const g = c.getContext('2d');
-    g.beginPath();
-    arrow().forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-    g.closePath();
+    const shape = new Path2D(arrow());
+    const drop = settings.trainSymbol === 'drop';
     g.lineJoin = 'round';
-    g.lineWidth = 8;
+    g.lineWidth = drop ? 7 : 8;
     g.strokeStyle = '#ffffff';
-    g.stroke();
+    if (drop) { g.shadowColor = 'rgba(40, 30, 20, 0.35)'; g.shadowBlur = 5; g.shadowOffsetY = 2; }   // a soft shadow, drawn once
+    g.stroke(shape);
+    g.shadowColor = 'transparent';
     g.fillStyle = colour;
-    g.fill();
+    g.fill(shape);
     // Drawn again on a settings change: the shape may have changed.
     if (map.hasImage(`tri-${name}`)) map.updateImage(`tri-${name}`, g.getImageData(0, 0, 64, 64));
     else map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
@@ -362,7 +370,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
         // About as big as the circle: 9 px tall far out, 20 px from zoom 10.
-        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25],
+        'icon-size': symbolSize(),
       },
       paint: { 'icon-opacity': dotOpacity(selected ?? '') },
     });
@@ -586,9 +594,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // the camera (setSelectedPlace), so it can't lag.
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
-  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="" ' +
+  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="" ' +
     'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
-  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('polygon');
+  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('path');
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
@@ -1060,10 +1068,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
       const tri = triangles();
-      const shape = arrow().join(' ');   // the selected train's arrow: the same shape as the map's
-      if (selShape.getAttribute('points') !== shape) selShape.setAttribute('points', shape);
+      const shape = arrow();   // the selected train's symbol: the same shape as the map's
+      if (selShape.getAttribute('d') !== shape) selShape.setAttribute('d', shape);
       selStale = Boolean(props.stale);
-      const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
+      const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
       const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
