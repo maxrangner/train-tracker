@@ -41,6 +41,7 @@ const EN = {
   trainSymbol: 'Train symbol',
   circle: 'Circle',
   triangle: 'Triangle',
+  dart: 'Dart',                  // the wide arrow with a notch at the back (Max, 2026-11-15)
   // Map and picker
   nTrains: ' trains',
   trainsHere: n => `${n} trains here`,
@@ -205,6 +206,7 @@ const SV = {
   trainSymbol: 'Tågsymbol',
   circle: 'Cirkel',
   triangle: 'Triangel',
+  dart: 'Pil',
   nTrains: ' tåg',
   trainsHere: n => `${n} tåg här`,
   train: 'Tåg',

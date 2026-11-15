@@ -64,16 +64,19 @@ const GROUP_PX = 40;
 // A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
 // (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
 const DOT_COLOURS = { ontime: '#1a7f37', some: '#d4a72c', late: '#d1242f', unknown: '#8c959f' };
-const TRIANGLE = [[32, 3], [49, 61], [15, 61]];   // in a 64 x 64 picture, pointing up (north), slim so the tip shows; middle (32, 32)
-const triangles = () => settings.trainSymbol === 'triangle';
+// The arrow's shape in a 64 x 64 picture, pointing up (north); middle (32, 32). Max, 2026-11-15, from four sketches
+// ("Change to A, but put a toggle under debug to toggle to C"): 'triangle' wider than before (base 44, was 34: hard
+// to read), 'dart' (Settings → Debug → Train symbol → Dart) wide with a notch at the back.
+const ARROWS = { triangle: [[32, 3], [54, 61], [10, 61]], dart: [[32, 3], [59, 61], [32, 48], [5, 61]] };
+const arrow = () => ARROWS[settings.trainSymbol] ?? ARROWS.triangle;
+const triangles = () => settings.trainSymbol !== 'circle';
 function addTriangles(map) {
   for (const [name, colour] of Object.entries(DOT_COLOURS)) {
-    if (map.hasImage(`tri-${name}`)) continue;
     const c = document.createElement('canvas');
     c.width = c.height = 64;
     const g = c.getContext('2d');
     g.beginPath();
-    TRIANGLE.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    arrow().forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
     g.closePath();
     g.lineJoin = 'round';
     g.lineWidth = 8;
@@ -81,7 +84,9 @@ function addTriangles(map) {
     g.stroke();
     g.fillStyle = colour;
     g.fill();
-    map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
+    // Drawn again on a settings change: the shape may have changed.
+    if (map.hasImage(`tri-${name}`)) map.updateImage(`tri-${name}`, g.getImageData(0, 0, 64, 64));
+    else map.addImage(`tri-${name}`, g.getImageData(0, 0, 64, 64), { pixelRatio: 4 });
   }
 }
 
@@ -565,9 +570,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // the camera (setSelectedPlace), so it can't lag.
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
-  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="32,3 49,61 15,61" ' +
+  selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><polygon points="" ' +
     'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
-  const selDot = selEl.firstChild, selLabel = selEl.lastChild;
+  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('polygon');
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
@@ -968,7 +973,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const text = props.company && map.getZoom() >= modelZoom() ? `${props.company}\n${props.label}` : props.label;
       if (text !== selText) selLabel.textContent = selText = text;
       const tri = triangles();
-      const cls = `sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
+      const shape = arrow().join(' ');   // the selected train's arrow: the same shape as the map's
+      if (selShape.getAttribute('points') !== shape) selShape.setAttribute('points', shape);
+      const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}`;
       if (cls !== selClass) selEl.className = selClass = cls;
       // The triangle turned the way the train goes, on the screen (the map may be turned).
       const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
