@@ -74,6 +74,9 @@ const FIRST_VIEW_MAX_MS = 8000;
 const FASTEST_MS = 70;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
+// Far out, the map groups labels of trains closer than this (smaller than close in: a label there is one short line,
+// and trains whose labels fit are better shown one by one; measured 2026-11-15, see docs/look-1115/notes/notes.md).
+const LABEL_GROUP_PX = 22;
 
 // A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
 // (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
@@ -235,7 +238,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty() };
+  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
   let routeSigs = [];   // the open train's stations (setRouteStations): their names in pills
 
   function addSources() {
@@ -248,6 +251,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // default 18 cut the view into many small tiles, each one redrawing the map when it arrived (about 6 draws per
     // refresh of the dots at zoom 11; measured 2026-11-15).
     add('trains', { maxzoom: 12 });
+    // The far-out labels: the same trains, those close together on the screen grouped by the map into one "N trains"
+    // label (Max, 2026-11-15: far out only some labels showed where trains were close; close in they were grouped).
+    // The open train is left out (its own marker has its label).
+    add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, clusterMaxZoom: 16, maxzoom: 12 });
     add('disruptions');
     add('route-names');
   }
@@ -387,25 +394,28 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     map.addLayer({
       id: 'train-labels',
       type: 'symbol',
-      source: 'trains',
+      source: 'train-groups',
       minzoom: 6,
       maxzoom: MODEL_ZOOM,
       layout: {
         // Written like the bubbles close in (round 4, Max 2026-11-15: "Fix"): "2311 +1 min", the minutes in their
-        // lateness colour (the tags' text colour, readable on the halo).
-        'text-field': ['format', ['get', 'num'], {}, ['case', ['==', ['get', 'mins'], ''], '', ' '], {},
-          ['get', 'mins'], { 'text-color': ['match', ['get', 'late'], 'ontime', T.ontime[1], 'some', T.some[1], 'late', T.late[1], T.unknown[1]] },
-          ['get', 'rest'], {}],
+        // lateness colour (the tags' text colour, readable on the halo); a group "3 trains", in the accent.
+        'text-field': ['case', ['has', 'point_count'], ['format', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')], {}],
+          ['format', ['get', 'num'], {}, ['case', ['==', ['get', 'mins'], ''], '', ' '], {},
+            ['get', 'mins'], { 'text-color': ['match', ['get', 'late'], 'ontime', T.ontime[1], 'some', T.some[1], 'late', T.late[1], T.unknown[1]] },
+            ['get', 'rest'], {}]],
         'text-font': ['Outfit Bold'],
         'text-size': 11,
         // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,
         // option A: the label is the only place a toy shows its lateness). Further out, overlapping labels are left out.
         'text-overlap': ['step', ['zoom'], 'never', MODEL_ZOOM, 'always'],
-        'text-offset': [0, 1.1],
-        'text-anchor': 'top',
+        // Under the train; where that is taken (a station's name, another label), above it or to a side, rather than
+        // left out (Max, 2026-11-15: labels lost near Älvsjö).
+        'text-variable-anchor': ['top', 'bottom', 'left', 'right'],
+        'text-radial-offset': 1.0,
       },
-      paint: { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 1.5,
-        'text-opacity': ['case', ['get', 'stale'], 0.45, 1] },
+      paint: { 'text-color': ['case', ['has', 'point_count'], C.group, C.label], 'text-halo-color': C.halo, 'text-halo-width': 1.5,
+        'text-opacity': ['case', ['==', ['get', 'stale'], true], 0.45, 1] },
     });
 
     // Close in, where the models show, the labels are page elements placed every frame (placeNearLabels, below).
@@ -539,7 +549,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // A train's label further out (Max, 2026-11-12: "it should be the entire train model, and the label").
       const lp = 3;
       const label = map.queryRenderedFeatures([[e.point.x - lp, e.point.y - lp], [e.point.x + lp, e.point.y + lp]],
-        { layers: ['train-labels'] }).find(f => f.properties.id);
+        { layers: ['train-labels'] }).find(f => f.properties.id || f.properties.cluster_id !== undefined);
+      if (label?.properties.cluster_id !== undefined && onGroupTap) {
+        map.getSource('train-groups').getClusterLeaves(label.properties.cluster_id, 200, 0)
+          .then(leaves => onGroupTap(leaves.map(f => nearProps.get(f.properties.id)).filter(Boolean))).catch(() => {});
+        return;
+      }
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
       const onModel = modelsAt(map.getZoom()) ? modelAt(e.point) : null;
@@ -974,6 +989,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       data.trains = geojson;
       nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
+      if (!modelsAt(map.getZoom())) {
+        data['train-groups'] = selected ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
+        map.getSource('train-groups')?.setData(data['train-groups']);
+      }
       // From the model zoom the dots are unseen; they only help a tap find a train. They are sent twice a second
       // there, and in between the map is only drawn again (the models move); every refresh used to cost two draws.
       const t = performance.now();
