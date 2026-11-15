@@ -9,7 +9,7 @@ import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
 import { restyleBase } from './map-look.js';
-import { LATE, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
+import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -250,7 +250,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
   // Our layers, with the colours, model zoom and language as they are now.
   function addLayers() {
-    const C = colours(dark), MODEL_ZOOM = modelZoom();
+    const C = colours(dark), MODEL_ZOOM = modelZoom(), T = TAG[dark ? 'dark' : 'light'];
     // Outside Sweden, the sea's colour: over the base map's land, roads and borders, under its names after them, so
     // a Swedish name at the coast isn't cut (the names outside Sweden are left out, below). The dark map draws roads
     // and borders after some names, so the place is after its last layer that isn't names.
@@ -377,12 +377,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       minzoom: 6,
       maxzoom: MODEL_ZOOM,
       layout: {
-        // From the zoom where the trains are drawn as models, the company goes above the number and lateness
-        // (Max, 2026-11-12: a label is company, train number and on time). Further out just the number.
-        'text-field': ['step', ['zoom'], ['get', 'label'], MODEL_ZOOM,
-          ['case', ['!=', ['get', 'company'], ''],
-            ['format', ['get', 'company'], { 'font-scale': 0.85 }, '\n', {}, ['get', 'label'], {}],
-            ['get', 'label']]],
+        // Written like the bubbles close in (round 4, Max 2026-11-15: "Fix"): "2311 +1 min", the minutes in their
+        // lateness colour (the tags' text colour, readable on the halo).
+        'text-field': ['format', ['get', 'num'], {}, ['case', ['==', ['get', 'mins'], ''], '', ' '], {},
+          ['get', 'mins'], { 'text-color': ['match', ['get', 'late'], 'ontime', T.ontime[1], 'some', T.some[1], 'late', T.late[1], T.unknown[1]] },
+          ['get', 'rest'], {}],
         'text-font': ['Noto Sans Bold'],
         'text-size': 11,
         // From the zoom where the trains are drawn as models every label shows, even over another (Max, 2026-11-12,

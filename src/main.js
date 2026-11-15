@@ -1,6 +1,6 @@
 import { startTrainSource } from './trains-source.js';
 import { icon } from './icons.js';
-import { splitLabel, tagHtml } from './tag.js';
+import { splitLabel, tagHtml, minutesText } from './tag.js';
 import { createTrains, DELAY_MS } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap } from './map.js';
@@ -72,6 +72,9 @@ const labelFor = r => label(r.number, minutesOf(r));
 const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
   company: lateness.brand(r.id) ?? '',
+  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4).
+  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined ? '' : minutesText(minutesOf(r)),
+  rest: sim?.syncing && !sim.stale ? ' »»' : '',
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
