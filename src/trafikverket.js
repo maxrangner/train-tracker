@@ -180,24 +180,29 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
         `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Deleted</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
         `<INCLUDE>ActivityType</INCLUDE></QUERY>`;
     },
-    onResult: (r) => {
-      const list = [];
-      for (const a of r.TrainAnnouncement ?? []) {
-        if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
-        list.push({
-          key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
-          minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
-          station: a.LocationSignature,
-          time: Date.parse(a.TimeAtLocation),
-          brand: a.ProductInformation?.[0]?.Description ?? null,   // e.g. "Pågatågen"; a second entry is a line
-          activity: a.ActivityType ?? null,                         // "Ankomst" arrival / "Avgang" departure
-        });
-      }
-      if (list.length) onPassings(list);
+    onResult: (r, { first = false } = {}) => {
+      const list = passingsOf(r.TrainAnnouncement);
+      if (list.length) onPassings(list, { first });   // first: the first answer (the last 90 minutes at once)
     },
     onStatus,
     silentMs: 120000,   // passings are rarer than positions at quiet hours
   });
+}
+// Timetable rows -> the actual passings among them (also used by the fetcher's replay check).
+export function passingsOf(rows) {
+  const list = [];
+  for (const a of rows ?? []) {
+    if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
+    list.push({
+      key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
+      minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
+      station: a.LocationSignature,
+      time: Date.parse(a.TimeAtLocation),
+      brand: a.ProductInformation?.[0]?.Description ?? null,   // e.g. "Pågatågen"; a second entry is a line
+      activity: a.ActivityType ?? null,                         // "Ankomst" arrival / "Avgang" departure
+    });
+  }
+  return list;
 }
 
 // ---------- A train's route for today ----------
