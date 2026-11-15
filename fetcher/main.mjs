@@ -42,7 +42,8 @@ setKey(KEY);
 const servePort = arg('--serve') ? Number(arg('--serve')) : null;
 const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 
-const log = (...a) => console.log(new Date().toISOString().slice(0, 19).replace('T', ' '), ...a);
+// Times in the log are this computer's local time (as the Linux journal shows them).
+const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
 
 // ---------- load on Trafikverket, counted ----------
 const load = { asks: 0, streams: 0, since: Date.now() };
