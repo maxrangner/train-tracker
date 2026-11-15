@@ -89,14 +89,16 @@ function dragging(el) {
   });
   const end = (e) => {
     if (!start || e.pointerId !== start.id) return;
-    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle } = start;
+    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH } = start;
     start = null;
     el.classList.remove('dragging');   // from here it moves to where it settles (CSS transition)
     el.style.maxHeight = '';
     const page = el.classList.contains('page'), full = el.classList.contains('full');
     if (tap) { if (handle && !page) el.classList.toggle('full'); el.style.transform = ''; return; }
     if (dy < -SNAP_PX) { el.classList.add('full'); el.style.transform = ''; return; }
-    if (dy > SNAP_PX && full && !page) { el.classList.remove('full'); el.style.transform = ''; return; }
+    // From full: a short drag down goes back to compact, a long one (past half its height) closes it (Max, 2026-11-15:
+    // "a swipe all the way down should close it. But a small swipe only minimize it").
+    if (dy > SNAP_PX && full && !page && dy < Math.max(2 * CLOSE_PX, startH / 2)) { el.classList.remove('full'); el.style.transform = ''; return; }
     if (dy > CLOSE_PX) {   // slides away, then closes
       el.classList.add('leaving');
       el.style.transform = 'translateY(100%)';
