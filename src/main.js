@@ -101,6 +101,9 @@ const panel = createPanel(document.getElementById('panel'), {
   onRoute(id, route) {
     const places = [];
     for (const s of route.stops) {
+      // A trip split over several internal numbers (a diversion): its cancelled stops are often the old way (VR 2047,
+      // 2026-11-15: Alingsås cancelled, the train went Herrljunga → Fristad → Göteborg), so the path leaves them out.
+      if (route.pieces > 1 && s.canceled) continue;
       const st = stations.get(s.station);
       if (!st || st.lon === null) continue;
       const last = places[places.length - 1];

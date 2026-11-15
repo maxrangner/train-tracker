@@ -95,7 +95,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     refreshTimer = setTimeout(async () => {
       if (openId !== train.id) return;
       try {
-        const route = await fetchRoute(train.operational, train.date);
+        const route = await fetchRoute(train.operational, train.date, train.number);
         if (openId !== train.id) return;
         const first = !shown?.route;
         shown = { train, route };
@@ -133,7 +133,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
 
     let route;
     try {
-      route = await fetchRoute(train.operational, train.date);
+      route = await fetchRoute(train.operational, train.date, train.number);
     } catch (e) {
       if (openId === train.id) { el.querySelector('.state').outerHTML = stateHtml('error', t('routeFailed', e.message)); refreshLater(train); }
       return;
