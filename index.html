@@ -181,9 +181,10 @@
     #top { right: calc(var(--gap) + env(safe-area-inset-right, 0px)); }
     /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15),
        the compass only while the map is turned or tilted (src/map.js sets .touch and .turned on the map). */
-    .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: min(calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)), calc(100% - 200px)); right: env(safe-area-inset-right, 0px);
+    .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
+    .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
     .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
     .maplibregl-ctrl.maplibregl-ctrl-group button { width: 46px; height: 46px; }

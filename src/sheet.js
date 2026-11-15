@@ -28,6 +28,7 @@ export function initSheets(els) {
     const top = order.at(-1);
     const h = top && bottomSheet(top) ? Math.round(top.getBoundingClientRect().height) : 0;
     root.style.setProperty('--sheet-h', `${h}px`);
+    root.classList.toggle('sheet-tall', h > window.innerHeight - 260);   // the map's buttons hide behind a tall sheet
   }
   function show() {
     const top = order.at(-1);
