@@ -6,7 +6,7 @@
 // - the map: each one's stretch along our tracks (src/path.js over its from / via / to stations) and a mark at its
 //   place (src/map.js setDisruptions);
 // - the card: where a train's panel opens, with the header, places, times and the whole text.
-import { pathOf } from './path.js';
+import { pathOf, progressAlong } from './path.js';
 import { t, lang } from './i18n.js';
 import { hhmm } from './clock.js';
 
@@ -14,6 +14,20 @@ const ASK_EVERY_MS = 5 * 60 * 1000;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Trafikverket's level 1 is "green", but each of these has a message for travellers: shown as yellow (1-2), orange, red.
 export const levelName = level => (level >= 4 ? 'red' : level === 3 ? 'orange' : 'yellow');
+
+// A path's ({ coords }) length, in degrees of latitude (enough to compare two stretches).
+function length({ coords: c }) {
+  let s = 0;
+  for (let i = 1; i < c.length; i++) s += Math.hypot((c[i][0] - c[i - 1][0]) * Math.cos(c[i][1] * Math.PI / 180), c[i][1] - c[i - 1][1]);
+  return s;
+}
+// The point halfway along a path ({ coords }), as { lon, lat }.
+function halfway(path) {
+  const c = path.coords, share = progressAlong(path);
+  const i = Math.max(1, share.findIndex(f => f >= 0.5));
+  const f = (0.5 - share[i - 1]) / ((share[i] - share[i - 1]) || 1);
+  return { lon: c[i - 1][0] + (c[i][0] - c[i - 1][0]) * f, lat: c[i - 1][1] + (c[i][1] - c[i - 1][1]) * f };
+}
 
 // load(at) -> Promise of disruptions (fetchDisruptions); now() -> ms; station(sig) -> { name, lon, lat } or undefined;
 // net() -> the rail network or null; onData({ list, geojson }) after each answer.
@@ -30,23 +44,30 @@ export function createDisruptions({ load, now, station, net, onData }) {
     geoCache.set(key, coords);
     return coords;
   }
+  // A disruption's drawn stretches (coordinate lists of 2 or more points).
+  const stretchesOf = d => d.sections.map(stretch).filter(c => c && c.length >= 2);
+  // The map shows a stretch as its line only; a mark (a ring, src/map.js) only for a disruption with no stretch
+  // drawn, i.e. one station (Max, 2026-11-15, picked "B, line only" from sketches: "The smaller sections will show
+  // when you zoom in. Or you just use the list").
   function geojson() {
     const features = [];
     for (const d of list) {
-      for (const sigs of d.sections) {
-        const coords = stretch(sigs);
-        if (coords && coords.length >= 2) features.push({ type: 'Feature', properties: { id: d.id, level: d.level }, geometry: { type: 'LineString', coordinates: coords } });
-      }
-      const p = placeOf(d);
+      const lines = stretchesOf(d);
+      for (const coords of lines) features.push({ type: 'Feature', properties: { id: d.id, level: d.level }, geometry: { type: 'LineString', coordinates: coords } });
+      const p = !lines.length && placeOf(d);
       if (p) features.push({ type: 'Feature', properties: { id: d.id, level: d.level }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } });
     }
     return { type: 'FeatureCollection', features };
   }
-  // Where a disruption is: its own point, else its first station.
+  // Where a disruption is (the list's "fly to"): halfway along its longest drawn stretch, else its first station,
+  // else Trafikverket's own point. Not that point first: it is the middle of a straight line between the stretch's
+  // end stations, beside the track, once 11 km out (measured 2026-11-15, docs/data.md).
   function placeOf(d) {
-    if (d.point) return d.point;
+    const longest = stretchesOf(d).map(coords => ({ coords })).sort((a, b) => length(b) - length(a))[0];
+    if (longest) return halfway(longest);
     const st = d.sections.flat().map(station).find(s => s?.lon !== null && s?.lon !== undefined);
-    return st ? { lon: st.lon, lat: st.lat } : null;
+    if (st) return { lon: st.lon, lat: st.lat };
+    return d.point ?? null;
   }
 
   async function ask() {
