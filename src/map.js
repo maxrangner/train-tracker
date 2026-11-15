@@ -645,6 +645,24 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
+  // The selected label held on whole screen (device) pixels: the marker sits at the exact fraction (the ring needs it),
+  // and a followed train hovering at a pixel's edge made the text snap back and forth (Max, 2026-11-15: far out "the
+  // label pill vibrates"; measured at 125 % scaling: 6-11 jumps of ~200 pixels in 59 frames). Read after the map has
+  // placed the marker (each camera move and each new place); it moves on when the label's own place has gone 0.75 of a
+  // device pixel from where it is held. Its own place: where it is now, less the shift it has (its offsets inside the
+  // marker can land on half a device pixel, e.g. at 150 % scaling).
+  let labelHeld = null, shiftX = 0, shiftY = 0;
+  function holdLabel() {
+    if (!selShown) return;
+    const r = selLabel.getBoundingClientRect();
+    if (!r.width) return;
+    const x = r.left - shiftX, y = r.top - shiftY, dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
+    if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
+      labelHeld = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
+    }
+    const sx = Number((labelHeld.x - x).toFixed(3)), sy = Number((labelHeld.y - y).toFixed(3));
+    if (sx !== shiftX || sy !== shiftY) { shiftX = sx; shiftY = sy; selLabel.style.translate = `${sx}px ${sy}px`; }
+  }
 
   // ---- Close in, the trains' labels ----
   // From the zoom where the models show, each train's label (company above number and lateness) and the "3 trains"
@@ -1141,19 +1159,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       selected = id;
       await ready;
       if (isReady) applySelectionFilters();
-      if (!id && selShown) { selMarker.remove(); selShown = false; }
+      if (!id && selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
     },
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
     // ({ label, late, stale }), or null.
     setSelectedPlace(place, props) {
       if (!isReady || !selected || !place) {
-        if (selShown) { selMarker.remove(); selShown = false; }
+        if (selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
         return;
       }
       // Moved only when the train moved (the map moves it with the camera itself).
       const ll = selMarker.getLngLat();
       if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
-      if (!selShown) { selMarker.addTo(map); selShown = true; }
+      if (!selShown) { selMarker.addTo(map); selShown = true; map.on('move', holdLabel); }
       // The same bubble as the others (company small above, the number, the minutes in their colour), ringed in the accent.
       const company = props.company && map.getZoom() >= modelZoom() ? props.company : '';
       const text = `${company}|${props.label}`;
@@ -1177,6 +1195,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
       const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
       if (selEl.style.width !== ring) { selEl.style.width = ring; selEl.style.height = ring; }
+      holdLabel();
     },
     // Draw the map now, in this frame (camera, 3D trains and the selection marker all from the same moment).
     drawNow() { if (isReady) map.redraw(); },
