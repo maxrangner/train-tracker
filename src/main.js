@@ -515,7 +515,7 @@ function drawDisruption(id) {
   disruptionEl.innerHTML = cardHtml(d, stationName, now());
   disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
 }
-// Open a disruption's card where a train's panel sits; go: fly to it.
+// Open a disruption's card where a train's panel sits; go: show all of its stretches (one station: fly to it).
 function openDisruption(id, { go = false } = {}) {
   const d = disruptions.byId(id);
   if (!d) return;
@@ -526,8 +526,10 @@ function openDisruption(id, { go = false } = {}) {
   drawDisruption(id);
   disruptionEl.hidden = false;
   raise('disruption');
-  const p = disruptions.placeOf(d);
-  if (go && p) map.goTo(p, 9);
+  if (!go) return;
+  const box = disruptions.boundsOf(d), p = !box && disruptions.placeOf(d);
+  if (box) map.fitBox(box);
+  else if (p) map.goTo(p, 9);
 }
 document.getElementById('open-disruptions').onclick = () => {
   menu.close();

@@ -70,6 +70,14 @@ export function createDisruptions({ load, now, station, net, onData }) {
     if (st) return { lon: st.lon, lat: st.lat };
     return d.point ?? null;
   }
+  // The box round all of a disruption's drawn stretches ([[west, south], [east, north]]), or null when none is
+  // drawn (one station): the list's "fly to" shows all of it (Max, 2026-11-16, "Show everything").
+  function boundsOf(d) {
+    const pts = stretchesOf(d).flat();
+    if (!pts.length) return null;
+    const lons = pts.map(c => c[0]), lats = pts.map(c => c[1]);
+    return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+  }
 
   async function ask() {
     if (asking || document.hidden) return;
@@ -90,7 +98,7 @@ export function createDisruptions({ load, now, station, net, onData }) {
     document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - last > ASK_EVERY_MS) ask(); });
   }
 
-  return { start, get list() { return list; }, byId: id => list.find(d => d.id === id) ?? null, placeOf };
+  return { start, get list() { return list; }, byId: id => list.find(d => d.id === id) ?? null, placeOf, boundsOf };
 }
 
 // The places of a disruption in words: "Göteborg C – Alingsås".
