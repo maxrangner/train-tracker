@@ -155,7 +155,7 @@ const med = a => { const s = a.filter(x => x !== null && x !== undefined).sort((
 const max = a => { const s = a.filter(x => x !== null && x !== undefined); return s.length ? Math.max(...s) : null; };
 const sum = (rows, f) => rows.reduce((n, x) => n + (f(x) ?? 0), 0);
 const kB = b => b < 1000 ? `${Math.round(b)} B` : `${(b / 1000).toFixed(1)} kB`;
-const KIND_ORDER = ['live', 'passings', 'planned', 'planned-add', 'disruptions', 'stats', 'arrivals', 'arrivals-add', 'stations'];
+const KIND_ORDER = ['live', 'passings', 'passings-add', 'planned', 'planned-add', 'disruptions', 'stats', 'arrivals', 'arrivals-add', 'stations'];
 const MB = b => `${(b / 1e6).toFixed(1)} MB`;
 
 // One day's (or the last 24 hours') numbers: for the summary mail and the day file.

@@ -130,7 +130,13 @@ function liveTick() {
 }
 later(LIVE_MS - (Date.now() % LIVE_MS) + 50, liveTick);
 
-every('passings file', MIN, 15000, () => { shelf.put('passings', Date.now(), buildPassings(state, Date.now())); });
+// Passings: the whole 90 minutes every 10 minutes, and every minute only what came since (fetcher/files.mjs KINDS).
+let passingsBaseAt = null;
+every('passings file', 10 * MIN, 15000, () => { const t = Date.now(); shelf.put('passings', t, buildPassings(state, t)); passingsBaseAt = t; });
+every('passings-add file', MIN, 75000, () => {
+  const t = Date.now();
+  if (passingsBaseAt !== null) shelf.put('passings-add', t, buildPassings(state, t, passingsBaseAt));
+});
 
 // Planned routes, asked once for everyone the way the page asks for its own trains (src/main.js askRoutes): trains on
 // the map whose known route ends within 30 minutes (or isn't known), at most every 5 minutes per train, 30 minutes back
