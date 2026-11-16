@@ -20,3 +20,15 @@ export function serve(shelf, port, status) {
   server.listen(port);
   return server;
 }
+
+// Only the status (counts, feeds, sizes), only to this computer: 127.0.0.1 can't be reached from any other device.
+// The monitor (monitor/main.mjs) reads it.
+export function serveStatus(port, status) {
+  const server = createServer((req, res) => {
+    if (new URL(req.url, 'http://x').pathname !== '/status') { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(status()));
+  });
+  server.listen(port, '127.0.0.1');
+  return server;
+}

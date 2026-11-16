@@ -12,7 +12,7 @@ After=network-online.target
 Type=simple
 User=sparat
 WorkingDirectory=/opt/sparat
-ExecStart=/usr/bin/node fetcher/main.mjs --env /etc/sparat/fetcher.env --upload
+ExecStart=/usr/bin/node fetcher/main.mjs --env /etc/sparat/fetcher.env --upload --status 8091
 Restart=always
 RestartSec=5
 # A runaway would be stopped here (it uses about 100 MB).
