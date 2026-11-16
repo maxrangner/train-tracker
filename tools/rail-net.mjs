@@ -15,6 +15,13 @@
 //   tools/rail-trv.mjs): 3 for a slow (40 km/h or less) or not public track, else 0; plus its traffic direction (0 both
 //   ways, 1 along the line's points, 2 against them). src/rail-net.js makes routes prefer main tracks and the right
 //   track of a double track with it. Without the properties file the network is written without `c`.
+// - Straight corners get a curve beside them: a straight two-point line of at least CORNER_MIN_M on a normal track
+//   whose every way on, at both ends, turns more than the trains' MAX_TURN (but not over SHARP_TURN, src/path.js).
+//   Trafikverket draws the horseshoe north of Borås C (Kust till kust-banan, about 1.3 km) as one straight 845 m link
+//   (SE454618e6-…): it meets the tracks at 62° and ~113°, so no train could leave Borås C westwards and Borås C →
+//   Göteborg C was drawn 122 km via Herrljunga instead of 71 km (2026-11-16, docs/split-1116/a11-report.md). The
+//   straight line stays (some reports sit on it); a smooth curve (a cubic Bézier, leaving each end along the
+//   straightest neighbour) is added between its ends with its digit. Only that one in Sweden today; each is printed.
 // Run: node tools/rail-net.mjs
 import { readFileSync, writeFileSync, statSync, existsSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
@@ -23,6 +30,9 @@ import { joinTinyPieces } from '../src/rail-net.js';
 const JOIN_M = 2;
 const OVERLAP_M = 60;
 const SIMPLIFY_M = 0.5;
+const CORNER_MIN_M = 300;
+const MAX_TURN = 60, SHARP_TURN = 120;   // as src/rail-net.js MAX_TURN and src/path.js SHARP_TURN
+const CORNER_ARM = 0.65;                 // the curve's control arms, as a share of the straight line's length
 const src = new URL('../public/rail-trv.geojson', import.meta.url);
 const out = new URL('../public/rail-net.json', import.meta.url);
 
@@ -149,7 +159,9 @@ if (props) {
   const slow = [...c].filter(x => x >= '3').length, oneWay = [...c].filter(x => x % 3 !== 0).length;
   console.log(`track properties: ${slow} of ${c.length} lines slow or not public, ${oneWay} one-way`);
 } else console.log('no public/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
-const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: ready.n, d: ready.d, ...(c ? { c } : {}) });
+const curved = addCornerCurves(ready, c);
+c = curved.c;
+const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: curved.n, d: curved.d, ...(c ? { c } : {}) });
 writeFileSync(out, json);
 
 // ---- 4. Overlap pieces (see the top) ----
@@ -191,6 +203,57 @@ function removeOverlaps({ n: nn, d: dd }) {
   ls.forEach((l, i) => { if (!l) return; kept.push(i); n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } });
   console.log(`overlap pieces taken out: ${removed}`);
   return { n: n2, d: d2, kept };
+}
+
+// ---- 5. Straight corners (see the top) ----
+function addCornerCurves({ n: nn, d: dd }, digits) {
+  const ls = [];
+  let x = 0, y = 0, k = 0;
+  for (const cnt of nn) { const pts = []; for (let i = 0; i < cnt; i++) { x += dd[2 * k]; y += dd[2 * k + 1]; k++; pts.push([x, y]); } ls.push(pts); }
+  const mXY = (a, b) => Math.hypot((b[0] - a[0]) * kx(a[1]), (b[1] - a[1]) * KY);
+  const headXY = (a, b) => (Math.atan2((b[0] - a[0]) * kx(a[1]), (b[1] - a[1]) * KY) / R + 360) % 360;
+  const angle = (a, b) => { const v = Math.abs(a - b) % 360; return v > 180 ? 360 - v : v; };
+  const at = new Map();   // meeting point -> [[line, 0 start / 1 end]]
+  ls.forEach((l, li) => { for (const e of [0, 1]) { const kk = key(e ? l.at(-1) : l[0]); (at.get(kk) ?? at.set(kk, []).get(kk)).push([li, e]); } });
+  const leave = (li, e) => (e ? headXY(ls[li].at(-1), ls[li].at(-2)) : headXY(ls[li][0], ls[li][1]));
+  const turn = (a, b) => angle((leave(...a) + 180) % 360, leave(...b));
+  // The straightest way on from line li's end e: { nb, turn }, or null at a dead end.
+  const straightest = (li, e) => {
+    const pt = e ? ls[li].at(-1) : ls[li][0];
+    const others = at.get(key(pt)).filter(([lj]) => lj !== li);
+    return others.map(nb => ({ nb, turn: turn([li, e], nb) })).sort((p, q) => p.turn - q.turn)[0] ?? null;
+  };
+  let out = digits, added = 0;
+  const count = ls.length;
+  for (let li = 0; li < count; li++) {
+    const l = ls[li];
+    if (l.length !== 2 || (digits && digits[li] >= '3')) continue;
+    const len = mXY(l[0], l[1]);
+    if (len < CORNER_MIN_M) continue;
+    const a = straightest(li, 0), b = straightest(li, 1);
+    if (!a || !b || a.turn <= MAX_TURN || b.turn <= MAX_TURN || a.turn > SHARP_TURN || b.turn > SHARP_TURN) continue;
+    // Leave each end the way its straightest neighbour arrives there (straight on from it).
+    const [W, E] = l, arm = len * CORNER_ARM;
+    const step = (p, h) => [p[0] + Math.sin(h * R) * arm / kx(p[1]), p[1] + Math.cos(h * R) * arm / KY];
+    const P1 = step(W, (leave(...a.nb) + 180) % 360), P2 = step(E, (leave(...b.nb) + 180) % 360);
+    const N = Math.max(8, Math.ceil(len / 40));
+    const curve = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, w0 = (1 - t) ** 3, w1 = 3 * (1 - t) ** 2 * t, w2 = 3 * (1 - t) * t * t, w3 = t ** 3;
+      curve.push(i === 0 ? [...W] : i === N ? [...E] : [Math.round(w0 * W[0] + w1 * P1[0] + w2 * P2[0] + w3 * E[0]), Math.round(w0 * W[1] + w1 * P1[1] + w2 * P2[1] + w3 * E[1])]);
+    }
+    let curveLen = 0;
+    for (let i = 1; i < curve.length; i++) curveLen += mXY(curve[i - 1], curve[i]);
+    ls.push(curve);
+    if (out) out += out[li];
+    added++;
+    console.log(`straight corner of ${len.toFixed(0)} m (turns ${a.turn.toFixed(0)}° and ${b.turn.toFixed(0)}°) at ${(W[1] / 1e5).toFixed(5)},${(W[0] / 1e5).toFixed(5)}: curve of ${curveLen.toFixed(0)} m added`);
+  }
+  console.log(`straight corners with a curve added: ${added}`);
+  const n2 = [], d2 = [];
+  let px = 0, py = 0;
+  for (const l of ls) { n2.push(l.length); for (const [qx, qy] of l) { d2.push(qx - px, qy - py); px = qx; py = qy; } }
+  return { n: n2, d: d2, c: out };
 }
 
 const before = statSync(src).size;

@@ -99,17 +99,19 @@ async function pathProblems(trip) {
     places.push({ sig: a.LocationSignature, lon: st.lon, lat: st.lat, stop: a.Advertised === true });
   }
   const path = pathOf(places, net);
-  // Up to Borås C only: from there to Göteborg C the saved rows have no place in between, and one long jump makes the
-  // network's search take 122 km back via Herrljunga and Alingsås instead of 71 km via Hindås (measured 2026-11-15;
-  // with any place in between it is right; not part of this fix, docs/TODO.md 19).
-  const upTo = path.at[places.findIndex(p => p.sig === 'Bsc')];
-  if (upTo === undefined) return ['Borås C is not among the places'];
+  // The whole way: from Borås C to Göteborg C the saved rows have no place in between; until the straight corner north
+  // of Borås C got its curve (tools/rail-net.mjs, 2026-11-16) that one long jump went 122 km back via Herrljunga and
+  // Alingsås instead of 71 km via Hindås.
+  const at = path.at[places.findIndex(p => p.sig === 'Bsc')];
+  if (at === undefined) return ['Borås C is not among the places'];
   const R = Math.PI / 180;
-  const nearest = sig => { const s = stations.get(sig);
-    return Math.min(...path.coords.slice(0, upTo + 1).map(([lon, lat]) => Math.hypot((lon - s.lon) * Math.cos(s.lat * R), lat - s.lat) * R * 6371000)); };
+  const nearest = (sig, from, to) => { const s = stations.get(sig);
+    return Math.min(...path.coords.slice(from, to).map(([lon, lat]) => Math.hypot((lon - s.lon) * Math.cos(s.lat * R), lat - s.lat) * R * 6371000)); };
   const out = [];
-  if (nearest('Fra') > 1000) out.push(`the path misses Fristad (${Math.round(nearest('Fra'))} m)`);
-  if (nearest('A') < 5000) out.push(`the path goes by Alingsås before Borås C (${Math.round(nearest('A'))} m)`);
+  if (nearest('Fra', 0, at + 1) > 1000) out.push(`the path misses Fristad (${Math.round(nearest('Fra', 0, at + 1))} m)`);
+  if (nearest('A', 0, at + 1) < 5000) out.push(`the path goes by Alingsås before Borås C (${Math.round(nearest('A', 0, at + 1))} m)`);
+  if (nearest('Hås', at) > 1000) out.push(`the path misses Hindås after Borås C (${Math.round(nearest('Hås', at))} m)`);
+  if (nearest('A', at) < 5000) out.push(`the path goes by Alingsås after Borås C (${Math.round(nearest('A', at))} m)`);
   return out;
 }
 
