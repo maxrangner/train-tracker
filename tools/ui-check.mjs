@@ -146,7 +146,7 @@ try {
     await page.click('#panel .panel-more');
     await sleep(500);
     c = await card();
-    expect(c.full && c.timeline > 0, '"All stops" did not open the full card with its timeline');
+    expect(c.full && c.timeline > 0, '"More" did not open the full card with its timeline');
   }
   await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
   await sleep(500);
