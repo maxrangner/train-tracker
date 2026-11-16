@@ -162,6 +162,8 @@ const server = createServer((req, res) => {
   if (path === '/data.json') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify(data())); }
   res.writeHead(404); res.end();
 });
+// If the page's port is taken (another monitor still running), the watching and the mails go on without the page.
+server.on('error', e => log(`page: ${e.code === 'EADDRINUSE' ? `port ${PAGE_PORT} is taken (another monitor running?)` : e.message}; watching and mails go on without the page`));
 server.listen(PAGE_PORT, '127.0.0.1');
 
 // ---------- timers ----------
