@@ -38,4 +38,8 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The map's location button (Max, 2026-11-16): Capacitor's BridgeWebChromeClient asks Android for these two
+         when the page asks for the position; Android shows "Allow location?" the first time. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 </manifest>
