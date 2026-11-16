@@ -35,15 +35,17 @@ $at = $slot * KEEP_S;   // "now" for the questions that need it: the same for ev
 $TA = '<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"';
 
 switch ($kind) {
-  case 'route':   // src/trafikverket.js fetchRoute
-    $train = param('train', '/^\d{1,6}$/');
+  case 'route':   // src/trafikverket.js fetchRoute / routeQuery: by the public number (the whole trip) or the internal one
+    $by = param('by', '/^(number|train)$/');
+    $value = param('value', '/^\d{1,6}$/');
     $date = param('date', '/^\d{4}-\d{2}-\d{2}$/');
-    $params = [$train, $date];
-    $xml = "$TA orderby=\"AdvertisedTimeAtLocation\"><FILTER><EQ name=\"OperationalTrainNumber\" value=\"{$x($train)}\"/>" .
+    $params = [$by, $value, $date];
+    $field = $by === 'number' ? 'AdvertisedTrainIdent' : 'OperationalTrainNumber';
+    $xml = "$TA orderby=\"AdvertisedTimeAtLocation\"><FILTER><EQ name=\"$field\" value=\"{$x($value)}\"/>" .
       "<EQ name=\"ScheduledDepartureDateTime\" value=\"{$x($date)}\"/></FILTER>" .
-      $inc(['LocationSignature', 'ActivityType', 'Advertised', 'AdvertisedTimeAtLocation', 'EstimatedTimeAtLocation',
-        'TimeAtLocation', 'Canceled', 'TrackAtLocation', 'FromLocation', 'ToLocation', 'ProductInformation',
-        'Deviation', 'OtherInformation', 'Booking', 'Service', 'TrainComposition']) . '</QUERY>';
+      $inc(['OperationalTrainNumber', 'LocationSignature', 'ActivityType', 'Advertised', 'AdvertisedTimeAtLocation',
+        'EstimatedTimeAtLocation', 'TimeAtLocation', 'Canceled', 'Deleted', 'TrackAtLocation', 'FromLocation', 'ToLocation',
+        'ProductInformation', 'Deviation', 'OtherInformation', 'Booking', 'Service', 'TrainComposition']) . '</QUERY>';
     break;
   case 'board':   // fetchBoard
     $sig = param('sig', '/^[\p{L}0-9 ]{1,8}$/u');

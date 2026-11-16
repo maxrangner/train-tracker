@@ -125,7 +125,7 @@ await page.screenshot({ path: 'shots/follow-2.png' });
 await page.click('.panel-follow');
 await watch('after pressing Follow', 4);
 await page.screenshot({ path: 'shots/follow-3.png' });
-await page.click('#panel .panel-close');   // the train card's × (Help and Settings have one too)
+await page.evaluate(() => document.querySelector('#panel .panel-close').click());   // the train card's × (hidden on a phone since 2026-11-15: pressed directly)
 await sleep(1);
 console.log(`after × : panel ${await page.$eval('#panel', el => el.hidden ? 'hidden' : 'open')}, padding`,
   await page.evaluate(() => JSON.stringify(window.__map.getPadding())));

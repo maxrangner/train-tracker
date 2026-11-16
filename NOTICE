@@ -1,4 +1,4 @@
-Spårad: a live map of Sweden's trains
+Spårat: a live map of Sweden's trains
 Copyright (C) 2026 maxrangner
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General
@@ -18,6 +18,9 @@ Data and services used by the program, each under its own terms:
 - Sweden's border (public/sweden-mask.json, from OpenStreetMap): (c) OpenStreetMap contributors, Open Database
   License.
 - Drawn with MapLibre GL JS (BSD 3-Clause) and three.js (MIT).
+- The Outfit font (public/fonts/, and cut for the map in public/glyphs/ by tools/glyphs.mjs): (c) 2021 The Outfit
+  Project Authors, SIL Open Font License 1.1
+  (public/fonts/OFL-Outfit.txt).
 
 Train companies' names and liveries belong to their owners. This project is not affiliated with any of them, nor
 with Trafikverket.

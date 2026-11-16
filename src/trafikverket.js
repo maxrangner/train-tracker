@@ -1,6 +1,7 @@
 // Everything that talks to Trafikverket lives here (and in trains-source.js, which uses it).
 // Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
 // version, so the page and the fetcher ask Trafikverket the same things.
+import { joinPieces } from './trip.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 // In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
@@ -219,23 +220,31 @@ export function passingsOf(rows) {
 // problems, notes}]. problems: Trafikverket's problem notes at that stop ("Spårändrat", "Kort tåg"); notes: the other
 // notes (a bus instead, booking, a bistro, the carriage order). Their texts, in Swedish. In 600 rows (2026-11-13):
 // problem notes on 71, other notes on 26, booking 29, bistro or kiosk 11, carriage order 14.
-export async function fetchRoute(operationalNumber, departureDate) {
-  const r = await askTap('route', { train: operationalNumber, date: departureDate.slice(0, 10) },
-    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
-    `<FILTER><EQ name="OperationalTrainNumber" value="${operationalNumber}"/>` +
-    `<EQ name="ScheduledDepartureDateTime" value="${departureDate.slice(0, 10)}"/></FILTER>` +
-    `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>ActivityType</INCLUDE><INCLUDE>Advertised</INCLUDE>` +
-    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE>` +
-    `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>TrackAtLocation</INCLUDE>` +
-    `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
-    `<INCLUDE>Deviation</INCLUDE><INCLUDE>OtherInformation</INCLUDE><INCLUDE>Booking</INCLUDE><INCLUDE>Service</INCLUDE>` +
-    `<INCLUDE>TrainComposition</INCLUDE></QUERY>`);
+// number: the public number. Asked by it, the whole trip comes even when Trafikverket split it over several internal
+// numbers (a diversion, a border; src/trip.js joins the pieces). Without it (a freight train), the internal number only.
+// pieces: how many internal numbers the trip is made of (1: not split).
+const ROUTE_FIELDS = ['OperationalTrainNumber', 'LocationSignature', 'ActivityType', 'Advertised', 'AdvertisedTimeAtLocation',
+  'EstimatedTimeAtLocation', 'TimeAtLocation', 'Canceled', 'Deleted', 'TrackAtLocation', 'FromLocation', 'ToLocation',
+  'ProductInformation', 'Deviation', 'OtherInformation', 'Booking', 'Service', 'TrainComposition'];
+export const routeQuery = (field, value, day) =>
+  `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
+  `<FILTER><EQ name="${field}" value="${value}"/><EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
+  ROUTE_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`;
+export async function fetchRoute(operationalNumber, departureDate, number = null) {
+  const day = departureDate.slice(0, 10);
+  const publicNumber = String(number ?? '').replace(/\D/g, '');
+  let trip = null;
+  // Through the tap switch (setTapAsker): php/ask.php asks the same routeQuery, by the public or the internal number.
+  const askRoute = (by, field, value) => askTap('route', { by, value, date: day }, routeQuery(field, value, day));
+  if (publicNumber) trip = joinPieces((await askRoute('number', 'AdvertisedTrainIdent', publicNumber)).TrainAnnouncement ?? [], operationalNumber);
+  if (!trip) trip = joinPieces((await askRoute('train', 'OperationalTrainNumber', operationalNumber)).TrainAnnouncement ?? [], operationalNumber);
   const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
-  const rows = r.TrainAnnouncement ?? [];
+  const rows = trip?.rows ?? [];
   return {
-    from: rows[0]?.FromLocation?.[0]?.LocationName ?? null,
-    to: rows[0]?.ToLocation?.[0]?.LocationName ?? null,
-    product: rows[0]?.ProductInformation?.[0]?.Description ?? null,
+    from: trip?.from ?? null,
+    to: trip?.to ?? null,
+    product: rows.find(a => a.ProductInformation?.[0])?.ProductInformation[0].Description ?? null,
+    pieces: trip?.pieces ?? 1,
     stops: rows.map(a => ({
       station: a.LocationSignature,
       activity: a.ActivityType,          // "Ankomst" (arrival) or "Avgang" (departure)

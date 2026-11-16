@@ -20,7 +20,8 @@ const src = process.argv[2];
 if (!src) { console.log('usage: node tools/sweden-mask.mjs <sweden.geojson>'); process.exit(1); }
 const OUT = 'public/sweden-mask.json';
 // The area painted: everything the map can be panned to (map.js MAX_BOUNDS), with room to spare.
-const BOX = { w: -5, s: 50, e: 45, n: 74 };
+// Wide east-west (Max, 2026-11-15): on a wide screen, all of Sweden on it, the map can still be panned sideways.
+const BOX = { w: -25, s: 50, e: 65, n: 74 };
 const TOL_MASK = 0.0004, TOL_NAMES = 0.01;   // degrees
 
 const g = JSON.parse(fs.readFileSync(src, 'utf8'));
