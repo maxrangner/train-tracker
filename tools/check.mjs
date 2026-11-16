@@ -165,4 +165,15 @@ if (split.status !== 0) failed++;
 
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || ui.status === 1 ? 1 : 0);
+// The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into
+// its files on this computer (port 8095; with the key from .env, stations and disruptions are asked as well).
+let filesUi = { status: 0 };
+if (ui.status !== 2) {
+  const { spawn } = await import('node:child_process');
+  const { RUSH_HOUR } = await import('./lib/browser.mjs');
+  const fetcher = spawn('node', ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', '8095', '--minutes', '8'], { stdio: 'ignore' });
+  await new Promise(r => setTimeout(r, 75000));   // a minute in, as the page's own replay starts (the first batch taken in)
+  filesUi = spawnSync('node', ['tools/ui-check.mjs', '--files', 'http://localhost:8095/'], { stdio: 'inherit' });
+  fetcher.kill();
+}
+process.exit(failed || ui.status === 1 || filesUi.status === 1 ? 1 : 0);

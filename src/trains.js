@@ -174,6 +174,9 @@ export function createTrains(options = {}) {
   let NET = options.net ?? null;         // the rail network, when given (or later: useNet)
   let ROUTES = options.routes ?? null;   // the planned routes (src/routes.js), when given (or later: useRoutes)
   const COAST_MS = options.coastMs ?? COAST_DEFAULT_MS;
+  // How far behind real time the map is drawn: DELAY_MS, or more where reports come later (the public page reads the
+  // fetcher's files every 5 s: 30 s, public-plan step 3, measured 2026-11-16).
+  const DELAY = options.delayMs ?? DELAY_MS;
   // For the checks (tools/lib/branch.mjs): keepMs, a longer history (the "real way" keeps all of it); onWayChange(c),
   // called when a new report changes the way under a train drawn past its last report.
   const KEEP = options.keepMs ?? KEEP_MS;
@@ -275,7 +278,7 @@ export function createTrains(options = {}) {
   // position counts as something: it is still talking). t is the drawing moment (DELAY_MS behind).
   const silentLimit = tr => (ROUTES?.knows(tr.latest.id) ? SILENT_MS : SILENT_NO_ROUTE_MS);
   // (t is the common drawing moment; a train drawn further behind is judged at its own moment, t - tr.extra.)
-  const staleAt = (tr, t) => halted || t - (tr.extra ?? 0) + DELAY_MS - tr.heard > silentLimit(tr);
+  const staleAt = (tr, t) => halted || t - (tr.extra ?? 0) + DELAY - tr.heard > silentLimit(tr);
   // What the target needs past the last report: whether it stood still, is stale, and its timetable (trackAhead).
   // Dwell: a train whose last report is at a planned stop (within 300 m), and not moving fast there, stands until it
   // is reported leaving, a new position shows it moved, or 2 minutes after its planned departure (+ delay) or its
@@ -314,7 +317,7 @@ export function createTrains(options = {}) {
     const dwellS = dw && tr.dwellUp?.dw === dw && tr.dwellUp.up && ext?.atPlace && dw.sig === ext.sig ? ext.stopAt : null;
     return { cap: ext?.stopAt ?? Infinity,
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
-        frozen: t + DELAY_MS - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
+        frozen: t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
   const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
 
@@ -656,7 +659,7 @@ export function createTrains(options = {}) {
   }
 
   return {
-    DELAY_MS,
+    DELAY_MS: DELAY,
     // Follow the tracks of this rail network from now on (src/rail-net.js).
     useNet(net) { NET = net; },
     // No data arriving at all (true): every train brakes to a stop and is shown stale. false: back to normal (the
@@ -677,8 +680,8 @@ export function createTrains(options = {}) {
       const own = t - (tr.extra ?? 0);   // the moment this train is drawn for
       const h = tr.hist, past = own >= h[h.length - 1].time ? aheadOf(tr, own) : { cap: Infinity, o: {} };
       const T = targetAt(h, own, past.cap, past.o);
-      return { stale: staleAt(tr, t), silentFor: (t + DELAY_MS - tr.heard) / 1000,
-        gpsSilentFor: (t + DELAY_MS - tr.latest.time) / 1000, syncing: tr.sim?.syncing ?? false, mode: T.mode,
+      return { stale: staleAt(tr, t), silentFor: (t + DELAY - tr.heard) / 1000,
+        gpsSilentFor: (t + DELAY - tr.latest.time) / 1000, syncing: tr.sim?.syncing ?? false, mode: T.mode,
         waitingFor: T.mode === 'waiting' ? tr.ext?.sig ?? null : null, waitingAt: T.mode === 'waiting' && Boolean(tr.ext?.atPlace),
         lastPassing: ROUTES?.lastPassing(id) ?? null };
     },

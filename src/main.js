@@ -1,7 +1,7 @@
 import { startTrainSource } from './trains-source.js';
 import { icon } from './icons.js';
 import { splitLabel, tagHtml, minutesText } from './tag.js';
-import { createTrains, DELAY_MS } from './trains.js';
+import { createTrains } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap } from './map.js';
 import { createPanel } from './panel.js';
@@ -15,7 +15,8 @@ import { ACCENTS } from './colours.js';
 import { initSheets } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
+import { startFilesSource, tapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
@@ -30,6 +31,19 @@ import { createFilter } from './filter.js';
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
 // recording's start (src/clock.js).
 const replay = new URLSearchParams(location.hash.slice(1)).get('replay');
+// The public page reads the fetcher's files instead (public-plan step 3, src/files-source.js): VITE_DATA_URL in the
+// build, and VITE_TAP_URL for taps (php/ask.php on one.com); no key in the page. On the dev page also
+// #files=<address>&tap=<address> for tests (only there: a link can't point the public page elsewhere). Otherwise the
+// key, as before (the dev page, the Android dev app).
+const hashOpt = new URLSearchParams(location.hash.slice(1));
+const filesBase = replay ? null : (import.meta.env.DEV && hashOpt.get('files')) || import.meta.env.VITE_DATA_URL || null;
+const tapUrl = (import.meta.env.DEV && hashOpt.get('tap')) || import.meta.env.VITE_TAP_URL || null;
+const fromFiles = Boolean(filesBase);
+if (tapUrl) setTapAsker(tapAsker(tapUrl));
+const live = !replay && (hasKey || fromFiles);   // live data of some kind: stations, disruptions, stats, messages
+// The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement is as
+// good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).
+const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;   // index.html reports it on screen if this line is never reached
 translatePage();           // the page's own words in the chosen language (Settings → Language)
@@ -39,7 +53,8 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
   console.warn(`rail network: ${e.message} (run node tools/rail-net.mjs)`);
   return null;
 });
-const trains = createTrains();
+const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
+const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
 netReady.then((n) => { net = n; });
 let shownPath = null;   // { id, path, places }: the open train's path
@@ -53,8 +68,9 @@ const lateness = createLateness();
 const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
 // Which trains the map shows (src/filter.js): chosen by tapping companies and kinds on the stats page.
 const filter = createFilter();
-// Today's arrivals for the stats page's graph: asked for only while that page is open (live, with a key).
-const dayStats = !replay && hasKey ? createDayStats({ now }) : null;
+// Today's arrivals for the stats page's graph: asked for only while that page is open (live: with the key, or from
+// the fetcher's arrivals files).
+const dayStats = live ? createDayStats({ now, loadArrivals: fromFiles ? filesArrivals : fetchDayArrivals }) : null;
 let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
 const stationName = sig => stations.get(sig)?.name ?? sig;
 // Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs; 280 stations measured from the
@@ -82,7 +98,7 @@ const propsFor = (r, sim) => ({
 // Where a train is drawn in this frame (the camera follows exactly this place).
 // A short buzz when a train is opened or followed (round 4; Android: iPhones don't let a web page vibrate).
 const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
-const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DELAY_MS);
+const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
@@ -197,7 +213,7 @@ const board = createBoard(document.getElementById('board'), {
   isStarred: sig => favourites.has('station', sig),
   onStar: sig => favourites.toggle('station', sig),
   // The station's own messages (live only).
-  messages: !replay && hasKey ? sig => fetchStationMessages(sig, now()) : null,
+  messages: live ? sig => fetchStationMessages(sig, now()) : null,
 });
 async function openStation(sig, { go = false } = {}) {
   const st = stations.get(sig);
@@ -316,7 +332,7 @@ let lastDraw = 0, lastProgress = 0;
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
 function frame(ts) {
-  const t = now() - DELAY_MS;
+  const t = now() - DRAW_DELAY_MS;
   const openId = panel.openId;
   const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
   if (due || !frameAll.length) {
@@ -453,7 +469,7 @@ function openStats() {
   helpEl.hidden = true;
   settingsPage.hidden = true;
   statsPage.hidden = false;
-  if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(now())), now());
+  if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
   drawStats(true);
   statsPage.querySelector('.panel-close').focus();
@@ -490,7 +506,7 @@ let stationsLoaded;
 const stationsReady = new Promise((resolve) => { stationsLoaded = resolve; });
 let netNow = null;
 netReady.then((n) => { netNow = n; });
-const disruptions = createDisruptions({ load: fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
+const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disruptions').then(f => f.disruptions) : fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
   onData({ list, geojson }) {
     map.setDisruptions(geojson);
     document.getElementById('disruptions-count').textContent = `(${list.length})`;
@@ -498,7 +514,7 @@ const disruptions = createDisruptions({ load: fetchDisruptions, now, station: si
     const open = disruptionEl.dataset.id;
     if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
   } });
-if (!replay && hasKey) {
+if (live) {
   document.getElementById('disruptions-section').hidden = false;
   Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 }
@@ -547,7 +563,7 @@ map.showRail('trv');
 
 // ---- Live data ----
 // How each feed is doing, and its own problem if it has one (one feed's good news must not wipe the other's problem).
-const status = { positions: 'starting', passings: 'starting', errors: { positions: null, passings: null } };
+const status = { positions: 'starting', passings: 'starting', errors: { positions: null, passings: null }, pausedSince: null };
 const statusError = () => [status.errors.positions, status.errors.passings].filter(Boolean).join(' · ') || null;
 // When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a
 // stop and turns grey, and the status line says since when; when data returns they fast-forward to their places.
@@ -572,11 +588,18 @@ const positionHandlers = {
   onStatus(s) {
     status.positions = s.mode;
     status.errors.positions = s.error ?? null;
+    status.pausedSince = s.mode === 'paused' ? s.since ?? lastDataAt : null;
     if (s.error) console.warn('positions:', s.error);
   },
 };
 let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
+  // The public page: everything from the fetcher's files (positions, passings, planned routes, stations).
+  if (fromFiles) {
+    positionsFeed = startFilesSource(filesBase, { ...positionHandlers, onPassings, onPlanned: gotPlanned, onStations: gotStations,
+      onFile: () => { lastDataAt = now(); } });
+    return;
+  }
   if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
@@ -601,6 +624,28 @@ document.addEventListener('visibilitychange', () => {
   passingsFeed?.restart?.();
 });
 
+// Planned rows (from the fetcher's files; the key page asks for its own below): the routes, and each train's company.
+function gotPlanned(rows) {
+  routes.add(rows);
+  for (const row of rows) if (row.brand) lateness.setBrand(row.key, row.brand);
+}
+// The newest file of a kind from the fetcher (src/files-source.js); fails until it exists.
+async function fileOf(kind) {
+  const f = await positionsFeed?.latest?.(kind);
+  if (!f) throw new Error(`no ${kind} file yet`);
+  return f;
+}
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => f.cancelled) : fetchCancelledToday(swedishDay(now())); }
+// Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
+async function filesArrivals(midnight, since) {
+  const full = await fileOf('arrivals');
+  const add = await fileOf('arrivals-add').catch(() => null);
+  const day = swedishDay(now()), rows = [];
+  if (full.day === day && (since === null || since < full.t)) rows.push(...full.rows);
+  if (add && add.day === day && add.t >= full.t) rows.push(...add.rows);
+  return rows.map(([id, planned, actual]) => ({ id, planned, actual }));
+}
+
 function gotStations(m) {
   stations = m;
   stationsLoaded();
@@ -616,7 +661,7 @@ function loadStations(tries = 0) {
   });
 }
 if (hasKey && replay) loadStations();
-if (hasKey && !replay) {
+if (hasKey && !replay && !fromFiles) {
   passingsFeed = followPassings({
     onPassings,
     onStatus(s) {
@@ -662,16 +707,19 @@ if (hasKey && !replay) {
   setTimeout(askRoutes, 5000);
   setInterval(askRoutes, 30000);
 
-  // Every 10 minutes the lists let go of trains with nothing newer than 6 hours that are neither on the map nor open
-  // in the panel (timetable rows, lateness, company, when its route was asked for). They only ever grew.
-  const FORGET_MS = 6 * 3600000;
   setInterval(() => {
     const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
-    routes.trim(before, keep);
-    lateness.trim(before, keep);
     for (const [key, at] of asked) if (at < before && !keep(key)) asked.delete(key);
   }, 10 * 60000);
 }
+// Every 10 minutes the lists let go of trains with nothing newer than 6 hours that are neither on the map nor open
+// in the panel (timetable rows, lateness, company, when its route was asked for). They only ever grew.
+const FORGET_MS = 6 * 3600000;
+if (!replay) setInterval(() => {
+  const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
+  routes.trim(before, keep);
+  lateness.trim(before, keep);
+}, 10 * 60000);
 
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
@@ -717,7 +765,9 @@ setInterval(() => {
   // The search bar's chip: the status in words, no count (Max, 2026-11-16: "remove the trains counter. Keep the status
   // text instead"): live / every 10 s / reconnecting / replay 07:01, or the problem; the whole short line, with the
   // count, as its label (read by tools/shot.mjs and soak.mjs).
-  const state = noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
+  // The public page: "live data paused since 14:32" when no new file has come for 30 s (src/files-source.js).
+  const paused = status.positions === 'paused' && status.pausedSince !== null;
+  const state = paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
   const short = `${t('trainsCount', trains.count)} · ${state}`;
   statusCount.textContent = state;
   statusEl.title = short;
@@ -732,16 +782,16 @@ setInterval(() => {
   }
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
-    (noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
+    (paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${modeText(status.positions)}` +
     (replay ? t('replayOf', hhmmss(tNow)) : '') +
     (error ? ` · ${error}` : '');
-  statusEl.classList.toggle('problem', Boolean(error) || noData);
+  statusEl.classList.toggle('problem', Boolean(error) || noData || paused);
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));
   if (!statsPage.hidden) {
-    if (!replay && hasKey) stats.wantCancelled(() => fetchCancelledToday(swedishDay(tNow)), tNow);
+    if (live) stats.wantCancelled(askCancelled, tNow);
     dayStats?.tick();
     if (!statsHeld) drawStats();
   }
@@ -752,5 +802,5 @@ setInterval(() => {
   }
 
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
-  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DELAY_MS), noData));
+  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DRAW_DELAY_MS), noData));
 }, 1000);

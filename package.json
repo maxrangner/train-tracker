@@ -10,7 +10,8 @@
     "dev": "vite --host",
     "build": "vite build",
     "phone": "vite build && vite preview --host --port 4173 --strictPort",
-    "apk": "node tools/apk.mjs"
+    "apk": "node tools/apk.mjs",
+    "build:public": "node tools/build-public.mjs"
   },
   "dependencies": {
     "@capacitor/android": "6.2.3",

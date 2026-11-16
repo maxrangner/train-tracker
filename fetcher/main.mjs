@@ -5,7 +5,9 @@
 // It uses the page's own Trafikverket code (src/trafikverket.js, src/trains-source.js), so both ask the same things.
 //
 // Run (Node 22 or newer, Windows or Linux):
-//   node fetcher/main.mjs --env <settings file> [--serve 8090] [--status 8091] [--upload] [--minutes N]
+//   node fetcher/main.mjs --env <settings file> [--serve 8090] [--status 8091] [--upload] [--minutes N] [--replay <recording>]
+// --replay: plays a recording from data/ instead of the two streams, times moved to now (fetcher/replay.mjs), for
+// checking the page that reads the files; no key needed (with one, stations, disruptions and stats are still asked).
 // Settings file (KEY=value lines, never in git; fetcher/example.env shows them): TRV_KEY (or VITE_TRV_KEY), and for
 // --upload SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_DIR, SFTP_HOSTKEY. On Linux it runs as a service:
 // fetcher/sparat-fetcher.service. Logs go to the console (the service's journal): errors, changes, a status line
@@ -18,6 +20,7 @@ import { swedishDay } from '../src/clock.js';
 import { createState } from './state.mjs';
 import { createShelf, buildLive, buildPassings, buildPlanned, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
+import { startReplay } from './replay.mjs';
 
 globalThis.EventSource ??= NodeEventSource;
 const MIN = 60000;
@@ -37,8 +40,9 @@ function readEnv(path) {
 }
 const cfg = { ...readEnv(envPath), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TRV_|SFTP_)/.test(k))) };
 const KEY = cfg.TRV_KEY ?? cfg.VITE_TRV_KEY;
-if (!KEY) { console.error(`no key: put TRV_KEY=... in ${envPath} (or give --env <file>)`); process.exit(2); }
-setKey(KEY);
+const replayName = arg('--replay');
+if (!KEY && !replayName) { console.error(`no key: put TRV_KEY=... in ${envPath} (or give --env <file>)`); process.exit(2); }
+if (KEY) setKey(KEY);
 const servePort = arg('--serve') ? Number(arg('--serve')) : null;
 const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 
@@ -97,13 +101,19 @@ const onFeed = name => s => {
   if (s.mode !== f.mode || s.error) log(`${name}: ${s.mode}${s.error ? ` (${s.error})` : ''}`);
   if (s.mode !== f.mode) { f.mode = s.mode; f.since = Date.now(); }
 };
-const stops = [
-  followPositions({ onRecords: rs => {
-    state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now();
-    for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
-  }, onStatus: onFeed('positions'), retryStreamMs: MIN }),
-  followPassings({ onPassings: (list, how) => state.addPassings(list, Date.now(), how), onStatus: onFeed('passings'), retryStreamMs: MIN }),
-];
+const onPositionRecords = rs => {
+  state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now();
+  for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
+};
+const onPassingList = (list, how) => state.addPassings(list, Date.now(), how);
+const stops = replayName
+  ? [startReplay(replayName, { onRecords: onPositionRecords, onPassings: onPassingList, onPlanned: rows => state.addPlanned(rows, Date.now()),
+      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); } })]
+  : [
+    followPositions({ onRecords: onPositionRecords, onStatus: onFeed('positions'), retryStreamMs: MIN }),
+    followPassings({ onPassings: onPassingList, onStatus: onFeed('passings'), retryStreamMs: MIN }),
+  ];
+if (replayName) log(`replaying data/positions-${replayName}.jsonl (times moved to now)${KEY ? '' : '; no key: no stations, disruptions or stats'}`);
 
 // ---------- timers ----------
 const timers = new Set();   // pending timeouts (a fired one leaves the set, so it doesn't grow over days)
@@ -162,7 +172,7 @@ async function askRoutes() {
     }
   }
 }
-every('planned routes', 30000, 10000, askRoutes);
+if (!replayName) every('planned routes', 30000, 10000, askRoutes);   // a replay brings its own
 const shownIds = t => state.trains(t).map(r => r.id);
 every('planned file', 10 * MIN, 40000, () => {
   const t = Date.now();
@@ -174,15 +184,15 @@ every('planned-add file', MIN, 100000, () => {
   if (plannedBaseAt !== null) shelf.put('planned-add', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS, plannedBaseAt));
 });
 
-every('disruptions', 5 * MIN, 2000, async () => {
+if (KEY) every('disruptions', 5 * MIN, 2000, async () => {
   const t = Date.now();
   shelf.put('disruptions', t, { v: 1, t, kind: 'disruptions', disruptions: await fetchDisruptions(t) });
 });
-every('stats', 5 * MIN, 4000, async () => {
+if (KEY) every('stats', 5 * MIN, 4000, async () => {
   const t = Date.now(), day = swedishDay(t);
   shelf.put('stats', t, { v: 1, t, kind: 'stats', day, cancelled: await fetchCancelledToday(day) });
 });
-every('stations', 24 * 60 * MIN, 1000, async () => {
+if (KEY) every('stations', 24 * 60 * MIN, 1000, async () => {
   const t = Date.now();
   shelf.put('stations', t, { v: 1, t, kind: 'stations', stations: [...(await fetchStations()).values()] });
 });
@@ -197,7 +207,7 @@ function swedishMidnight(t) {
 }
 const arr = { day: null, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 };
 const arrRows = m => [...m].map(([id, [p, a]]) => [id, p, a]);
-every('arrivals', 5 * MIN, 6000, async () => {
+if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
   const t = Date.now(), day = swedishDay(t);
   if (day !== arr.day) Object.assign(arr, { day, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 });
   const list = await fetchDayArrivals(swedishMidnight(t), arr.asOf === null ? null : arr.asOf - 5 * MIN);
