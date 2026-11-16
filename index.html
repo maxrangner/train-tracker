@@ -223,10 +223,11 @@
     .sel-train.late-late:not(.model) { border-color: var(--c-late); }
     /* Held on whole screen pixels (src/map.js setSelectedPlace): the text no longer snaps a pixel back and forth when
        the followed train's place hovers at a pixel's edge (Max, 2026-11-15: far out "the label pill vibrates"). */
-    .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; text-align: center;
+    .sel-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; text-align: center;
       font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
-      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); margin-top: 6px; }
-    .sel-train.model .sel-label { top: calc(50% + 16px); }   /* close in: 16 px under the train, as the bubbles (src/map.js LABEL_DY) */
+      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); }
+    .sel-label[hidden] { display: none; }
+    .sel-label.stale { opacity: 0.45; }
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
 
