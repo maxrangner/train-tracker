@@ -996,6 +996,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     map.on('idle', check);
   });
 
+  // Show the whole of a box ([[west, south], [east, north]]) in the map left free by the panel or card
+  // (a train's path; a disruption's stretches: Max, 2026-11-16, "Show everything").
+  async function fitBox(bounds) {
+    await ready;
+    const h = map.getContainer().clientHeight;
+    flying = true;
+    map.fitBounds(bounds,
+      { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
+        duration: 1000, maxZoom: 13 });
+  }
+
   return {
     ready,
     shown,
@@ -1152,15 +1163,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     },
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
-      await ready;
       if (!path || path.coords.length < 2) return;
       const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
-      const h = map.getContainer().clientHeight;
-      flying = true;
-      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
-          duration: 1000, maxZoom: 13 });
+      return fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
     },
+    fitBox,
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
     // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").
