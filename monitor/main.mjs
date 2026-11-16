@@ -13,7 +13,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { createRules, dayNumbers } from './rules.mjs';
+import { createRules, dayNumbers, isOffline } from './rules.mjs';
 import { createMailer } from './mail.mjs';
 
 const MIN = 60000;
@@ -105,10 +105,11 @@ async function minuteRow() {
     upError: U?.lastError ?? null,
     reportAge: fresh?.feeds.newestReport ? Math.max(0, Math.round((fresh.now - fresh.feeds.newestReport) / 1000)) : null,
     trains: fresh?.state.trains ?? null,
-    one, offline: one.status === 'error',
+    one,
     sizes: fresh ? Object.fromEntries(Object.entries(fresh.sizes ?? {}).map(([k, s]) => [k, s.gz])) : {},
     memMB: fresh?.memoryMB ?? null, cpuPct: elapsed > 0 ? Math.round(1000 * cpuMs / elapsed) / 10 : null,
   };
+  row.offline = isOffline(row);
   if (fresh) base = fresh;
   minuteUp = 0; minuteRestarts = 0; minutePolls = 0;
   return row;

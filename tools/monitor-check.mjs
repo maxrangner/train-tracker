@@ -1,6 +1,6 @@
 // Checks the monitor's mail rules (monitor/rules.mjs) on made-up timelines: each must give exactly the expected mails
 // and no others. No internet, no key. Run: node tools/monitor-check.mjs [--show] (--show prints every mail made).
-import { createRules } from '../monitor/rules.mjs';
+import { createRules, isOffline } from '../monitor/rules.mjs';
 
 const MIN = 60000;
 const show = process.argv.includes('--show');
@@ -11,7 +11,7 @@ function normal(t, over = {}) {
   return { t, day: d.toLocaleDateString('sv-SE'), hour: d.getHours(), minute: d.getMinutes(),
     up: true, upFor: 6 * 3600, restarts: 0, asks: 3, refused: 0, trvFailed: 0, bytesIn: 400000, streamsOpened: 0,
     feeds: 'stream/stream', uploads: true, upOk: 13, upFailed: 0, reconnects: 0, bytesOut: 300000, upAgo: 3,
-    reportAge: 4, trains: 120, one: { status: 200, age: 5 }, offline: false, sizes: { live: 4200, passings: 40000 },
+    reportAge: 4, trains: 120, one: { status: 200, age: 5 }, sizes: { live: 4200, passings: 40000 },
     memMB: 90, cpuPct: 0.1, ...over };
 }
 // A timeline: `minutes` rows from `start`; change(i, row) may alter row i (minutes from the start).
@@ -22,6 +22,7 @@ function run(start, minutes, change = () => {}, opts) {
   for (let i = 0; i < minutes; i++) {
     const row = normal(at(start) + i * MIN, { upFor });
     change(i, row);
+    row.offline = isOffline(row);   // as monitor/main.mjs does
     upFor = row.restarts ? 30 : row.up ? row.upFor + 60 : 0;
     row.upFor = row.up ? (row.restarts ? 30 : row.upFor) : 0;
     for (const m of rules.step(row)) mails.push({ i, ...m });
@@ -56,13 +57,20 @@ const cases = [
     ['problem no-reports', 'ok no-reports']],
   ['no train reports for 15 minutes, 01:00 (no trains at night)', run('2026-11-17T01:00', 60, (i, r) => { if (i >= 30 && i < 45) r.reportAge = (i - 29) * 60; }), []],
   ['the internet out 7 minutes', run('2026-11-17T10:00', 60, (i, r) => {
-    if (i >= 30 && i < 37) Object.assign(r, { offline: true, upOk: 0, upFailed: 2, upAgo: (i - 29) * 60, reportAge: (i - 29) * 60, trvFailed: 2,
+    if (i >= 30 && i < 37) Object.assign(r, { upOk: 0, upFailed: 2, upAgo: (i - 29) * 60, reportAge: (i - 29) * 60, trvFailed: 2,
       feeds: 'poll/poll', one: { status: 'error', age: null } });
     if (i === 37) Object.assign(r, { upAgo: 20, reportAge: 70, one: { status: 200, age: 40 } });   // back: catching up
   }), ['offline offline']],
   ['the internet out 2 minutes', run('2026-11-17T10:00', 60, (i, r) => {
-    if (i >= 30 && i < 32) Object.assign(r, { offline: true, upAgo: (i - 29) * 60, one: { status: 'error', age: null } });
+    if (i >= 30 && i < 32) Object.assign(r, { upAgo: (i - 29) * 60, trvFailed: 1, feeds: 'poll/poll', one: { status: 'error', age: null } });
   }), []],
+  ['one.com not answering for 10 minutes, the home internet fine', run('2026-11-17T10:00', 60, (i, r) => {
+    if (i >= 30 && i < 40) Object.assign(r, { upOk: 0, upFailed: 3, upAgo: (i - 29) * 60, one: { status: 'error', age: null } });
+  }), ['problem uploads-failing', 'ok uploads-failing']],
+  ['the fetcher down and its own files gone (no answer), the internet fine', run('2026-11-17T10:00', 60, (i, r) => {
+    if (i >= 30 && i < 35) Object.assign(r, { up: false, upAgo: null, one: { status: 'error', age: null } });
+    if (i === 35) r.restarts = 1;
+  }), ['problem fetcher-down', 'ok fetcher-down']],
   ['the fetcher down twice within 30 minutes (one mail pair only)', run('2026-11-17T10:00', 70, (i, r) => {
     if ((i >= 30 && i < 33) || (i >= 40 && i < 43)) Object.assign(r, { up: false, upAgo: null });
     if (i === 33 || i === 43) r.restarts = 1;

@@ -10,6 +10,13 @@
 //   one: { status: 200 | 404 | 429 | 'error' | 'off' (not set), age (s, null: no file found) }
 //   offline (the monitor couldn't reach the internet: its read of one.com failed with no answer at all)
 //   sizes { kind: gzip bytes }, memMB, cpuPct
+// The home internet counts as out only when both ways out fail: the monitor gets no answer at all from one.com AND the
+// running fetcher can't reach Trafikverket either (failed questions, or its streams not live: a dead stream is noticed
+// within a minute). one.com alone not answering is one.com's trouble, judged by the other rules ("uploads failing").
+export function isOffline(r) {
+  return r.one?.status === 'error' && r.up && (r.trvFailed > 0 || r.feeds !== 'stream/stream');
+}
+
 export const LIMITS = {
   quietMs: 30 * 60000,     // at most one mail per problem in this time
   downRows: 2,             // the fetcher not answering for 2 minutes
