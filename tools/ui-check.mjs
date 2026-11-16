@@ -7,14 +7,18 @@
 // stats page in each language, filled in (Sweden drawn), a train tapped there opens its card, and × closes it; the compact train card (tiles, the stop list, "All stops"); a tap on a company there shows only its trains, and × on
 // the bar that appears shows them all again.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
+// --files <address>: the same, on the page reading the fetcher's files there (public-plan step 3); tools/check.mjs
+// runs it with a fetcher replaying the rush hour (node fetcher/main.mjs --replay ... --serve 8095).
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { launch, openMap, sleep, PAGE, RUSH_HOUR } from './lib/browser.mjs';
 
 try { await fetch(PAGE); } catch { console.log(`UI check skipped: nothing answers at ${PAGE} (start it with npm run dev)`); process.exit(2); }
 
-const replay = existsSync(`data/positions-${RUSH_HOUR}.jsonl`) ? RUSH_HOUR : null;
-const base = { ...(replay ? { replay } : {}), view: '12/59.33/18.06', train: 'toy' };
+const filesAt = process.argv.includes('--files') ? process.argv[process.argv.indexOf('--files') + 1] : null;
+const replay = !filesAt && existsSync(`data/positions-${RUSH_HOUR}.jsonl`) ? RUSH_HOUR : null;
+const base = { ...(replay ? { replay } : {}), ...(filesAt ? { files: filesAt } : {}), view: '12/59.33/18.06', train: 'toy' };
+const runName = filesAt ? 'files, rush-hour replay' : replay ? 'rush-hour replay' : 'live';
 const problems = [];
 let stats = 0;   // sections on the stats page
 let filtered = '';   // the filter step's result
@@ -39,7 +43,10 @@ try {
       sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count,
       map: document.querySelector('#stats-body canvas')?.width ?? 0 }));
     expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
-    expect(st.first.startsWith(String(st.trains)) && st.bars > 0 && st.sections === 9 && st.map > 0,
+    // The page's number is redrawn each second; from the files, trains come in 5-s batches, so the two may differ by
+    // a few at the moment they are read (2026-11-16: "319" against 318).
+    const sameCount = filesAt ? Math.abs(parseInt(st.first, 10) - st.trains) <= 3 : st.first.startsWith(String(st.trains));
+    expect(sameCount && st.bars > 0 && st.sections === 9 && st.map > 0,
       `${lang}/${theme}: the stats page shows "${st.first}", ${st.bars} company bars, ${st.sections} of 9 sections, Sweden ${st.map ? 'drawn' : 'missing'}`);
     // The heatmap's switch: Lateness, then back to Trains.
     const heat = await page.evaluate(() => {
@@ -100,14 +107,23 @@ try {
       const q = m.project(f.geometry.coordinates);
       if (own.some(r => Math.abs((r.left + r.right) / 2 - q.x) < 2 && Math.abs(r.top - q.y - 16) < 3)) lone.add(f.properties.id);   // a bubble starts 16 px below its train (src/map.js LABEL_DY)
     }
-    const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id)).sort((a, b) => d(a) - d(b))[0];
+    // ...and not under a "3 trains" bubble (a tap there lists the group: right, but not this test; seen with the
+    // files' 5-s batches, 2026-11-16).
+    const groups = [...document.querySelectorAll('.near-label.group')].map(e => e.getBoundingClientRect());
+    // Nor under a station's name (close in a tap there opens the station).
+    const covered = q => groups.some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
+      || m.queryRenderedFeatures([[q.x - 8, q.y - 8], [q.x + 8, q.y + 8]], { layers: ['station-names'] }).length > 0;
+    const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id) && !covered(m.project(f.geometry.coordinates)))
+      .sort((a, b) => d(a) - d(b))[0];
     if (!f) return null;
     const q = m.project(f.geometry.coordinates);
     m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
     return String(window.__trains.get(f.properties.id).number);
   });
   await sleep(1500);
-  const head = await page.evaluate(() => (document.getElementById('panel').hidden ? null : document.querySelector('#panel .panel-head strong')?.textContent));
+  const head = await page.evaluate(() => (!document.getElementById('panel').hidden ? document.querySelector('#panel .panel-head strong')?.textContent
+    : !document.getElementById('picker').hidden ? `the group list: ${document.querySelector('#picker strong')?.textContent}`
+    : !document.getElementById('board').hidden ? `the board of ${document.querySelector('#board strong, #board h2')?.textContent}` : null));
   expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'}`);
 
   // ---- The compact card (2026-11-15): two tiles; the stop tile lists the stops ahead and counts down to the one
@@ -278,7 +294,7 @@ try {
   catch (e) { models = JSON.parse(String(e.stdout || '{"compact":-1,"realistic":-1}')); }
   expect(models.compact === 0 && models.realistic === 0, `model surfaces on top of each other: compact ${models.compact}, realistic ${models.realistic}`);
 
-  console.log(problems.length ? `UI check FAILED (${replay ? 'rush-hour replay' : 'live'}):` : `UI check ok (${replay ? 'rush-hour replay' : 'live'}): ` +
+  console.log(problems.length ? `UI check FAILED (${runName}):` : `UI check ok (${runName}): ` +
     `both languages and looks start clean, a tap opens train ${tapped}${cardNote}, ${groups} group labels match their lists (${farGroups} far out), tilted: ${lowSeen} of ${low.length} near trains drawn, ` +
     `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, the stats page opens (${stats} sections), filter ${filtered}, model surfaces 0`);
   for (const p of problems) console.log('  -', p);

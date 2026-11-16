@@ -11,6 +11,9 @@
 //   --nonet   don't use the rail network (public/rail-net.json, from tools/rail-net.mjs): straight lines
 //   --trace id  print one train's simulation every second;  --why  print the first turn-backs and fast-forwards
 //   --json    the main numbers as one JSON line (for tools/check.mjs)
+//   --files   the drawn trains get the reports as the public page will (public-plan step 3): the fetcher's live file
+//             every 5 s (made at :00.05, :05.05 ...) holds each train's newest report then; the page has it 2.45 s
+//             later (asks 2 s into the 5 s, ~0.45 s to arrive). Passings the same way. The truth keeps the reports as sent.
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { createTrains, DELAY_MS } from '../src/trains.js';
 import { netFromJSON } from '../src/rail-net.js';
@@ -29,6 +32,19 @@ const file = argv.find(a => a.endsWith('.jsonl')) ??
 
 // The same reading as src/trains-source.js (tools/lib/records.mjs: the same fields and report time).
 const recs = readPositions(file);
+// --files: when the page would have each report, and only a train's newest within one file.
+const FILES = argv.includes('--files');
+const FILE_MS = 5000, FILE_AT = 50, PAGE_HAS = 2450;
+const fileOf = got => Math.ceil((got - FILE_AT) / FILE_MS) * FILE_MS + FILE_AT;   // the first file made at or after got
+function asFiles(list) {
+  const newest = new Map();   // file time | id -> the newest report in that file
+  for (const r of list) {
+    const k = `${fileOf(r.got)}|${r.id}`, old = newest.get(k);
+    if (!old || r.time >= old.time) newest.set(k, r);
+  }
+  return [...newest.values()].map(r => ({ ...r, got: fileOf(r.got) + PAGE_HAS })).sort((a, b) => a.got - b.got);
+}
+const drawnRecs = FILES ? asFiles(recs) : recs;
 
 const R = Math.PI / 180;
 const metres = (a, b) => {
@@ -67,6 +83,7 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
       station: a.LocationSignature, time: Date.parse(a.TimeAtLocation), activity: a.ActivityType,
       minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000) } });
   }
+  if (FILES) for (const x of passings) x.got = fileOf(x.got) + PAGE_HAS;
   passings.sort((x, y) => x.got - y.got);
   {
     const acts = new Map();
@@ -93,7 +110,7 @@ if (net && !argv.includes('--noroutes') && existsSync(ttFile) && existsSync('dat
 const oracle = createTrains({ net, keepMs: Infinity });
 const branches = branchCounter(oracle);
 if (net && !PLAIN) { let ko = 0; for (let T = recs[0].got; ko < recs.length; T += 1000) { const batch = []; while (ko < recs.length && recs[ko].got <= T) batch.push(recs[ko++]); if (batch.length) oracle.update(batch, T); } }
-const drawnTrains = createTrains({ net, routes, onWayChange: branches.onWayChange, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
+const drawnTrains = createTrains({ net, routes, delayMs: DELAY, onWayChange: branches.onWayChange, ...(argv.includes('--coast') ? { coastMs: flag('coast') * 1000 } : {}) });
 const truth = createTrains({ net, routes });   // with the routes, on purpose: the truth then knows a platform stop sent only as repeats
 // How far drawn trains are from the nearest track (corner cutting), measured with the network even when not used.
 const anyNet = net ?? (existsSync(netFile) ? netFromJSON(JSON.parse(readFileSync(netFile, 'utf8'))) : null);
@@ -103,9 +120,9 @@ const start = recs.find(r => r.got - recs[0].got > 60_000).got;   // skip the fi
 const end = recs.at(-1).got - 120_000;                             // the truth needs two minutes of hindsight
 const cutFrom = start + (end - start) / 2 - CUT / 2, cutTo = cutFrom + CUT;
 let k = 0, kt = 0, lastArrival = start, kp = 0;
-const feed = (trains, upTo, i, skip) => {
+const feed = (trains, upTo, i, skip, list = recs) => {
   const batch = [];
-  while (i < recs.length && recs[i].got <= upTo) { if (!skip?.(recs[i])) batch.push(recs[i]); i++; }
+  while (i < list.length && list[i].got <= upTo) { if (!skip?.(list[i])) batch.push(list[i]); i++; }
   if (batch.length) trains.update(batch, upTo);
   return i;
 };
@@ -128,11 +145,11 @@ const cutLog = [];
 const seen = new Set();
 for (let T = start; T < end; T += STEP) {
   const k0 = k;
-  k = feed(drawnTrains, T, k, r => CUT && r.got >= cutFrom && r.got < cutTo);
+  k = feed(drawnTrains, T, k, r => CUT && r.got >= cutFrom && r.got < cutTo, drawnRecs);
   // As the page does (src/main.js): no data for 60 s, every train brakes to a stop; data again, back to normal.
-  const fed = recs.slice(k0, k).some(r => !(CUT && r.got >= cutFrom && r.got < cutTo));
+  const fed = drawnRecs.slice(k0, k).some(r => !(CUT && r.got >= cutFrom && r.got < cutTo));
   if (fed) { lastArrival = T; drawnTrains.setHalted(false); } else if (T - lastArrival > 60_000) drawnTrains.setHalted(true);
-  for (let i = k0; i < k; i++) seen.add(recs[i].id);
+  for (let i = k0; i < k; i++) seen.add(drawnRecs[i].id);
   const newPassings = [];
   while (kp < passings.length && passings[kp].got <= T) {
     const x = passings[kp++];

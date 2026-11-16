@@ -29,7 +29,9 @@ const pack = (hour, late) => hour * 10000 + Math.max(-4999, Math.min(4999, late)
 const hourOf = v => Math.floor(v / 10000);
 const groupOf = v => GROUP[lateClass((v % 10000) - 5000)];
 
-export function createDayStats({ now }) {
+// loadArrivals(midnight, since): the arrivals (src/trafikverket.js fetchDayArrivals with the key; the public page reads the
+// fetcher's arrivals files instead, src/main.js filesArrivals).
+export function createDayStats({ now, loadArrivals = fetchDayArrivals }) {
   let day = null, midnight = 0;
   let rows = new Map();               // "2042|Cst" -> packed
   let counts = [];                    // per hour: [on time, +3-5, +6 or more]
@@ -80,7 +82,7 @@ export function createDayStats({ now }) {
     lastTry = t;
     if (swedishDay(t) !== day) reset(swedishDay(t));
     try {
-      const list = await fetchDayArrivals(midnight, asOf === null ? null : asOf - MARGIN_MS);
+      const list = await loadArrivals(midnight, asOf === null ? null : asOf - MARGIN_MS);
       for (const r of list) {
         const hour = Math.floor((r.actual - midnight) / 3600000);
         if (hour >= 0 && hour < HOURS) put(r.id, pack(hour, Math.round((r.actual - r.planned) / 60000)));

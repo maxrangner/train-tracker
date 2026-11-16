@@ -9,6 +9,7 @@ image*.png
 .claude/settings.local.json
 # the packed app (npm run phone); it holds the Trafikverket key
 dist/
+dist-public/
 node_modules/
 data/
 shots/
