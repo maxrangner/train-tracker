@@ -71,10 +71,11 @@ switch ($kind) {
     $number = param('number', '/^\d{1,6}$/');
     $day = param('day', '/^\d{4}-\d{2}-\d{2}$/');
     $params = [$number, $day];
-    $xml = "$TA limit=\"200\"><FILTER><EQ name=\"AdvertisedTrainIdent\" value=\"{$x($number)}\"/>" .
+    // Times and Deleted so the page can join a trip's pieces into one row (src/trip.js tripsOf); 1000 rows so none is cut.
+    $xml = "$TA limit=\"1000\"><FILTER><EQ name=\"AdvertisedTrainIdent\" value=\"{$x($number)}\"/>" .
       "<EQ name=\"ScheduledDepartureDateTime\" value=\"{$x($day)}\"/></FILTER>" .
-      $inc(['AdvertisedTrainIdent', 'OperationalTrainNumber', 'ScheduledDepartureDateTime', 'FromLocation', 'ToLocation',
-        'ProductInformation']) . '</QUERY>';
+      $inc(['AdvertisedTrainIdent', 'OperationalTrainNumber', 'ScheduledDepartureDateTime', 'AdvertisedTimeAtLocation',
+        'Deleted', 'FromLocation', 'ToLocation', 'ProductInformation']) . '</QUERY>';
     break;
   default:
     fail(400, 'unknown question');

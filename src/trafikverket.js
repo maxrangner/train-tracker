@@ -1,7 +1,7 @@
 // Everything that talks to Trafikverket lives here (and in trains-source.js, which uses it).
 // Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
 // version, so the page and the fetcher ask Trafikverket the same things.
-import { joinPieces } from './trip.js';
+import { joinPieces, tripsOf, NUMBER_FIELDS } from './trip.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 // In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
@@ -402,24 +402,27 @@ export async function fetchBoard(sig, activity, at, n) {
 
 // ---------- A train number in today's timetable ----------
 
-// The trains with this public number running on this day (YYYY-MM-DD, Swedish time):
-// [{ key, operational, date, number, from, to, product }] (from/to are station signatures).
+// The trips with this public number running on this day (YYYY-MM-DD, Swedish time), one per trip however many
+// internal numbers Trafikverket splits it into (src/trip.js tripsOf; Max 2026-11-16: "2047" was listed three times):
+// [{ key, operational, date, number, from, to, product, keys }] (from/to are station signatures; key and operational
+// are the trip's first piece's; keys: every piece's key, in trip order). Times and Deleted are asked so the pieces
+// can be joined; the limit is 1000 so a long trip's pieces are never cut off (the recordings: at most 99 rows).
 export async function fetchTrainsByNumber(number, day) {
-  const r = await askTap('train', { number: String(number).replace(/\D/g, ''), day },
-    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="200">` +
-    `<FILTER><EQ name="AdvertisedTrainIdent" value="${String(number).replace(/\D/g, '')}"/>` +
+  const digits = String(number).replace(/\D/g, '');
+  const r = await askTap('train', { number: digits, day },
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="1000">` +
+    `<FILTER><EQ name="AdvertisedTrainIdent" value="${digits}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
-    `<INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
-    `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
-  const byKey = new Map();
-  for (const a of r.TrainAnnouncement ?? []) {
-    const key = trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime);
-    if (byKey.has(key)) continue;
-    byKey.set(key, { key, operational: a.OperationalTrainNumber, date: a.ScheduledDepartureDateTime.slice(0, 10),
-      number: a.AdvertisedTrainIdent, from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
-      product: a.ProductInformation?.[0]?.Description ?? null });
-  }
-  return [...byKey.values()];
+    NUMBER_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+  return trainsOfNumber(r.TrainAnnouncement ?? []);
+}
+// The search's rows from the answer's rows (pure: tools/split-check.mjs checks it on saved rows).
+export function trainsOfNumber(rows) {
+  const number = rows.find(a => a.AdvertisedTrainIdent)?.AdvertisedTrainIdent ?? null;
+  return tripsOf(rows).filter(trip => trip.day).map(trip => ({
+    key: trainKey(trip.operational, trip.day), operational: trip.operational, date: trip.day.slice(0, 10), number,
+    from: trip.from, to: trip.to, product: trip.product, keys: trip.ops.map(op => trainKey(op, trip.day)),
+  }));
 }
 
 // ---------- Planned routes ----------

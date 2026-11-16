@@ -1,12 +1,13 @@
 // Trips split over several internal numbers (src/trip.js), checked on saved timetable rows: the pieces of one trip
 // are joined, different trains with the same public number are not, and VR 2047's diverted path runs via Fristad to Borås.
+// The number search's trips too (tripsOf, one row per trip, 2026-11-16), on the rows cut down to what the search asks.
 // Works offline (no key). Run by tools/check.mjs.
 // Run: node tools/split-check.mjs            the checks
 //      node tools/split-check.mjs --save     asks Trafikverket again for the cases' rows (needs .env) into
 //                                            tools/split-cases.json (only while the day is still kept there)
 //      node tools/split-check.mjs --show N   one case's joined stops, for a closer look
 import { readFileSync, writeFileSync } from 'node:fs';
-import { joinPieces } from '../src/trip.js';
+import { joinPieces, tripsOf, NUMBER_FIELDS } from '../src/trip.js';
 
 const FILE = new URL('./split-cases.json', import.meta.url);
 const DAY = '2026-11-15';
@@ -80,6 +81,24 @@ for (const c of CASES) {
   console.log(`${problems.length ? 'FAIL' : 'ok  '} ${c.number} (tapped ${c.tapped}): ${c.why}${problems.length ? ': ' + problems.join('; ') : ''}`);
 }
 
+// The number search: one row per trip. Each number's trips (how many, and how many pieces each), from the rows cut
+// down to the search's fields; and every trip is what joinPieces gives from each of its pieces (the card shows it).
+const TRIPS = { 2047: [3], 384: [1, 1], 7960: [1, 1], 1136: [3], 449: [2], 3587: [1] };
+for (const [number, want] of Object.entries(TRIPS)) {
+  const rows = saved.rows[number].map(a => Object.fromEntries(NUMBER_FIELDS.filter(f => f in a).map(f => [f, a[f]])));
+  const trips = tripsOf(rows);
+  const problems = [];
+  const got = trips.map(tr => tr.ops.length);
+  if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(`trips of ${JSON.stringify(got)} pieces, not ${JSON.stringify(want)}`);
+  for (const tr of trips) for (const op of tr.ops) {
+    const card = joinPieces(saved.rows[number], op)?.ops ?? [];
+    if ([...card].sort().join() !== [...tr.ops].sort().join()) problems.push(`tapping ${op} gives ${card.join('+')}, the row ${tr.ops.join('+')}`);
+  }
+  if (problems.length) failed++;
+  console.log(`${problems.length ? 'FAIL' : 'ok  '} search ${number}: ${trips.map(tr => `${tr.ops.join('+')} ${tr.from} → ${tr.to}`).join('; ')}` +
+    `${problems.length ? ': ' + problems.join('; ') : ''}`);
+}
+
 // The path drawn on the map, built as src/main.js builds it (cancelled stops left out of a split trip): it must pass
 // Borås C and stay away from Alingsås (the cancelled old way).
 async function pathProblems(trip) {
@@ -115,5 +134,6 @@ async function pathProblems(trip) {
   return out;
 }
 
-console.log(failed ? `split-check: ${failed} of ${CASES.length} failed` : `split-check: all ${CASES.length} hold`);
+const total = CASES.length + Object.keys(TRIPS).length;
+console.log(failed ? `split-check: ${failed} of ${total} failed` : `split-check: all ${total} hold`);
 process.exit(failed ? 1 : 0);
