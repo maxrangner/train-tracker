@@ -129,6 +129,9 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
   // model itself isn't turned then; its cars carry the direction. False when the track isn't known far enough back;
   // otherwise where each car lies on the ground, [back lon, back lat, front lon, front lat] (for taps, map.js).
   const R = Math.PI / 180, M = 111195;
+  // A train's own lift, in metres at real size: 0 to 6 steps of 5 cm, fixed by its id.
+  const LIFT_M = 0.05, LIFT_STEPS = 7;
+  const liftOf = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return (h % LIFT_STEPS) * LIFT_M; };
   function bend(object, t, k) {
     if (!along) return false;
     const kx = Math.cos(t.lat * R);
@@ -218,8 +221,10 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
             scene.add(entry.object);
           }
           const m = MercatorCoordinate.fromLngLat([t.lon, t.lat], 0);
-          entry.object.position.set((m.x - origin.x) / s, -(m.y - origin.y) / s, 0);
           const k = modelScale({ toy: TOY, zoom, metresPerPx, length: entry.object.userData.length, s: settings });
+          // Lifted a few centimetres (times its enlargement) by its id: two models that overlap where trains meet
+          // no longer share a height, so their surfaces don't flicker against each other (Max, 2026-11-16).
+          entry.object.position.set((m.x - origin.x) / s, -(m.y - origin.y) / s, liftOf(t.id) * k);
           entry.object.scale.setScalar(k);
           const cars = bend(entry.object, t, k);
           if (!cars) {
