@@ -31,10 +31,10 @@ const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: 
 // page's colours (src/colours.js).
 const colourBase = dark => (dark
   ? { label: PAGE.dark.label, halo: PAGE.dark.halo, station: PAGE.dark.station, ring: '#8a93a8', ringFill: MAP.dark.land,
-      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: MAP.dark.land, disDash: true,
+      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: null, disDash: true,   // no dark band under the dashes: the gaps show the map (Max, 2026-11-16, pic 6)
       casing: MAP.dark.land, stopFill: MAP.dark.land }
   : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
-      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: '#ffffff', disDash: false,
+      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: null, disDash: false,
       casing: '#ffffff', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
@@ -317,10 +317,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // the trains. The line only, no dot (Max, 2026-11-15, "B, line only"); a ring round the station for a disruption
     // at one station, which has no line (src/disruptions.js geojson).
     const disColour = ['step', ['get', 'level'], C.dis[0], 3, C.dis[1], 4, C.dis[2]];
-    // In the Night look the rails are warm yellow too: there the stretch is dashed, over a dark edge, to tell it apart.
+    // The stretch is dashed in dark (the gaps show the map: no dark band under it since 2026-11-16, Max's pic 6).
     map.addLayer({ id: 'disruption-edge', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
-      layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disDash ? 'visible' : 'none' },
-      paint: { 'line-color': C.disEdge, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
+      layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disEdge ? 'visible' : 'none' },
+      paint: { 'line-color': C.disEdge ?? '#000000', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
     map.addLayer({ id: 'disruption-lines', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': C.disDash ? 'butt' : 'round', 'line-join': 'round' },
       paint: { 'line-color': disColour, 'line-opacity': C.disDash ? 1 : 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 5, 14, 9],
