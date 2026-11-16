@@ -5,7 +5,7 @@
 // It uses the page's own Trafikverket code (src/trafikverket.js, src/trains-source.js), so both ask the same things.
 //
 // Run (Node 22 or newer, Windows or Linux):
-//   node fetcher/main.mjs --env <settings file> [--serve 8090] [--upload] [--minutes N]
+//   node fetcher/main.mjs --env <settings file> [--serve 8090] [--status 8091] [--upload] [--minutes N]
 // Settings file (KEY=value lines, never in git; fetcher/example.env shows them): TRV_KEY (or VITE_TRV_KEY), and for
 // --upload SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_DIR, SFTP_HOSTKEY. On Linux it runs as a service:
 // fetcher/sparat-fetcher.service. Logs go to the console (the service's journal): errors, changes, a status line
@@ -17,7 +17,7 @@ import { followPositions } from '../src/trains-source.js';
 import { swedishDay } from '../src/clock.js';
 import { createState } from './state.mjs';
 import { createShelf, buildLive, buildPassings, buildPlanned, LIVE_MS } from './files.mjs';
-import { serve } from './serve.mjs';
+import { serve, serveStatus } from './serve.mjs';
 
 globalThis.EventSource ??= NodeEventSource;
 const MIN = 60000;
@@ -46,15 +46,23 @@ const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
 
 // ---------- load on Trafikverket, counted ----------
-const load = { asks: 0, streams: 0, since: Date.now() };
+// Counted from the start (the monitor, monitor/main.mjs, takes the differences): questions, streams opened, bytes
+// received (questions' answers unpacked + the streams), "too many requests" answers, failed questions.
+const load = { asks: 0, streams: 0, since: Date.now(), askBytes: 0, refused: 0, failed: 0 };
 const realFetch = globalThis.fetch;
 let offlineUntil = 0;   // --test-breaks: a pretend lost internet
 globalThis.fetch = (url, opts) => {
-  if (String(url).includes('trafikverket.se')) {
-    if (Date.now() < offlineUntil) return Promise.reject(new Error('test break: no internet'));
-    if (opts?.method === 'POST') load.asks++; else load.streams++;
-  }
-  return realFetch(url, opts);
+  if (!String(url).includes('trafikverket.se')) return realFetch(url, opts);
+  if (Date.now() < offlineUntil) { load.failed++; return Promise.reject(new Error('test break: no internet')); }
+  const isAsk = opts?.method === 'POST';
+  if (isAsk) load.asks++; else load.streams++;
+  return realFetch(url, opts).then(res => {
+    if (res.status === 429) load.refused++;
+    else if (!res.ok) load.failed++;
+    // A question's answer is counted from a copy (a stream is counted as it is read: NodeEventSource.bytes).
+    if (isAsk) res.clone().arrayBuffer().then(b => { load.askBytes += b.byteLength; }, () => {});
+    return res;
+  }, e => { load.failed++; throw e; });
 };
 
 // ---------- memory, files, outputs ----------
@@ -65,11 +73,23 @@ if (args.includes('--upload')) {
   const { createUploader } = await import('./upload.mjs');
   uploader = createUploader(cfg, log, { keep: name => Boolean(shelf.get(name)) });
 }
-const feeds = { positions: { mode: 'starting', since: Date.now() }, passings: { mode: 'starting', since: Date.now() }, lastRecordAt: null };
-const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), feeds, state: state.sizes(), load,
-  files: shelf.names(), upload: uploader?.stats() ?? null, memoryMB: Math.round(process.memoryUsage().rss / 1e6) });
+const feeds = { positions: { mode: 'starting', since: Date.now() }, passings: { mode: 'starting', since: Date.now() }, lastRecordAt: null,
+  newestReport: null };   // the newest position report's own time
+const startedAt = Date.now();
+// The newest file of each kind: its name and size (as uploaded, and gzip as a viewer gets it).
+const sizes = () => Object.fromEntries(Object.entries(shelf.names()).map(([kind, name]) => {
+  const f = shelf.get(name);
+  return [kind, { name, bytes: f?.json.length ?? 0, gz: f?.gz.length ?? 0 }];
+}));
+const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: process.pid, startedAt, feeds, state: state.sizes(),
+  load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), sizes: sizes(), upload: uploader?.stats() ?? null,
+  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage() });
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
+// --status 8091: only the status, only on this computer (127.0.0.1), for the monitor (monitor/main.mjs).
+const statusPort = arg('--status') ? Number(arg('--status')) : null;
+const statusServer = statusPort ? serveStatus(statusPort, status) : null;
+if (statusServer) log(`status on http://127.0.0.1:${statusPort}/status (this computer only)`);
 
 // ---------- the two live streams ----------
 const onFeed = name => s => {
@@ -78,7 +98,10 @@ const onFeed = name => s => {
   if (s.mode !== f.mode) { f.mode = s.mode; f.since = Date.now(); }
 };
 const stops = [
-  followPositions({ onRecords: rs => { state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now(); }, onStatus: onFeed('positions'), retryStreamMs: MIN }),
+  followPositions({ onRecords: rs => {
+    state.addRecords(rs, Date.now()); feeds.lastRecordAt = Date.now();
+    for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
+  }, onStatus: onFeed('positions'), retryStreamMs: MIN }),
   followPassings({ onPassings: (list, how) => state.addPassings(list, Date.now(), how), onStatus: onFeed('passings'), retryStreamMs: MIN }),
 ];
 
@@ -199,6 +222,7 @@ async function stop(why) {
   for (const s of stops) s();
   for (const t of timers) clearTimeout(t);
   server?.close();
+  statusServer?.close();
   await uploader?.close();
   process.exit(0);
 }
@@ -206,13 +230,17 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 if (minutes) setTimeout(() => stop(`${minutes} minutes`), minutes * MIN);
 
-// --test-breaks A,B,...: at these minutes after the start, pretend the internet is lost for a minute: Trafikverket
-// can't be reached, the open streams break, the upload connection drops and can't reconnect (the live test).
+// --test-breaks A,B,...: at these minutes after the start, pretend the internet is lost for a minute (or for L minutes
+// with AxL, e.g. 30x5): Trafikverket can't be reached, the open streams break, the upload connection drops and can't
+// reconnect (the live tests).
 const breaks = arg('--test-breaks');
-if (breaks) for (const m of breaks.split(',').map(Number)) setTimeout(() => {
-  log('test break: no internet for 60 s');
-  offlineUntil = Date.now() + MIN;
-  for (const es of NodeEventSource.open) es.fail();
-  uploader?.breakFor(MIN);
-}, m * MIN);
+if (breaks) for (const part of breaks.split(',')) {
+  const [m, len = 1] = part.split('x').map(Number);
+  setTimeout(() => {
+    log(`test break: no internet for ${len * 60} s`);
+    offlineUntil = Date.now() + len * MIN;
+    for (const es of NodeEventSource.open) es.fail();
+    uploader?.breakFor(len * MIN);
+  }, m * MIN);
+}
 log(`started (${envPath}; Node ${process.version}, ${process.platform}, process ${process.pid})`);

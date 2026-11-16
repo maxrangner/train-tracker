@@ -21,7 +21,8 @@ export function createUploader(cfg, log, { keep = () => false } = {}) {
   const dir = cfg.SFTP_DIR.replace(/\/$/, '');
   const pins = cfg.SFTP_HOSTKEY.split(',').map(s => s.trim().replace(/^SHA256:/, '').replace(/=+$/, ''));
   const queue = [];         // [{ op: 'put' | 'rm', name, f }]
-  const stats = { ok: 0, failed: 0, removed: 0, reconnects: 0, lastOkAt: null, lastMs: null, connected: false, swept: 0 };
+  const stats = { ok: 0, failed: 0, removed: 0, reconnects: 0, lastOkAt: null, lastMs: null, connected: false, swept: 0,
+    bytes: 0, lastError: null, lastErrorAt: null };
   let client = null, sftp = null, busy = false, closing = false, tries = 0, sweepTimer = null;
 
   const callOn = (s, fn, ...a) => new Promise((res, rej) => s[fn](...a, (e, v) => e ? rej(e) : res(v)));
@@ -59,6 +60,7 @@ export function createUploader(cfg, log, { keep = () => false } = {}) {
     client = null; sftp = null; stats.connected = false; busy = false;
     try { c.end(); } catch { /* already gone */ }
     const wait = WAITS[Math.min(tries, WAITS.length - 1)];
+    stats.lastError = String(e?.message ?? e); stats.lastErrorAt = Date.now();
     if (tries === 0 || tries % 10 === 0) log(`upload: ${e?.message ?? e}; connecting again in ${wait / 1000} s`);
     tries++; stats.reconnects++;
     setTimeout(connect, wait);
@@ -85,15 +87,15 @@ export function createUploader(cfg, log, { keep = () => false } = {}) {
           const tmp = `${dir}/${job.name}.tmp`;
           await call('writeFile', tmp, job.f.json);
           await call('rename', tmp, `${dir}/${job.name}`);
-          stats.ok++; stats.lastOkAt = Date.now(); stats.lastMs = Date.now() - t;
+          stats.ok++; stats.lastOkAt = Date.now(); stats.lastMs = Date.now() - t; stats.bytes += job.f.json.length;
         } else {
           await call('unlink', `${dir}/${job.name}`).catch(e => { if (e.code !== 2) throw e; });   // 2: already gone
           stats.removed++;
         }
         queue.shift();
       } catch (e) {
-        stats.failed++;
-        if (!sftp) break;                   // the connection broke: the job waits for the next one
+        stats.failed++; stats.lastError = e.message; stats.lastErrorAt = Date.now();
+        if (!sftp) break;                  // the connection broke: the job waits for the next one
         log(`upload: ${job.op} ${job.name}: ${e.message}`);
         queue.shift();                      // a job the server refuses is not tried forever
       }

@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spårat monitor</title>
+<!-- Spårat's monitor page (monitor/main.mjs serves it on 127.0.0.1:8092, on the Linux PC only). Plain HTML and SVG,
+     no libraries; it reads /data.json every 15 s. Colours: the data-viz reference palette (one hue per chart, status
+     colours only for state, always with an icon and a word). -->
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --ring: rgba(11,11,11,0.10);
+  --series: #2a78d6; --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --good-ink: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --series: #3987e5; --good-ink: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --ring: rgba(255,255,255,0.10); --series: #3987e5; --good-ink: #0ca30c;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 12px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 24px 0 8px; }
+.sub { color: var(--ink2); font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+.tile .k { color: var(--ink2); font-size: 12px; }
+.tile .v { font-size: 22px; font-weight: 600; margin: 2px 0; }
+.tile .n { color: var(--muted); font-size: 12px; }
+.state { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.box { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+.list { margin: 0; padding: 0; list-style: none; }
+.list li { padding: 4px 0; border-top: 1px solid var(--grid); }
+.list li:first-child { border-top: 0; }
+.list .t { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 8px; }
+details summary { cursor: pointer; color: var(--ink2); }
+pre { white-space: pre-wrap; font: 12px/1.4 ui-monospace, Consolas, monospace; color: var(--ink2); margin: 6px 0 0; }
+.ranges { display: inline-flex; border: 1px solid var(--ring); border-radius: 6px; overflow: hidden; }
+.ranges button { background: var(--surface); color: var(--ink2); border: 0; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.ranges button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 8px; }
+.chart { background: var(--surface); border: 1px solid var(--ring); border-radius: 8px; padding: 8px 10px 4px; position: relative; }
+.chart .title { font-size: 13px; font-weight: 600; }
+.chart .now { color: var(--ink2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.chart svg { display: block; width: 100%; height: 120px; overflow: visible; }
+.chart.strip svg { height: 44px; }
+svg text { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--surface); font-size: 12px; padding: 4px 8px; border-radius: 4px; display: none; z-index: 9; white-space: nowrap; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: right; padding: 4px 6px; border-top: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink2); font-weight: 600; }
+.wrap { overflow-x: auto; }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--ink2); font-size: 12px; margin: 4px 0 2px; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Spårat monitor</h1>
+    <span class="sub" id="sub">loading…</span>
+  </header>
+  <div class="tiles" id="tiles"></div>
+
+  <h2>Problems now</h2>
+  <div class="box"><ul class="list" id="open"></ul></div>
+
+  <h2 style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">Last hours
+    <span class="ranges" id="ranges"><button data-h="1">1 h</button><button data-h="6">6 h</button><button data-h="24" aria-pressed="true">24 h</button></span>
+  </h2>
+  <div class="charts" id="charts"></div>
+
+  <h2>Mails</h2>
+  <div class="box"><ul class="list" id="mails"></ul></div>
+
+  <h2>Days</h2>
+  <div class="box wrap"><table id="days"></table></div>
+  <p class="sub" id="foot"></p>
+</main>
+<div class="tip" id="tip"></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const hm = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+const ago = s => s === null || s === undefined ? '–' : s < 120 ? `${Math.round(s)} s` : s < 7200 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`;
+const kB = b => b === null || b === undefined ? '–' : b < 1000 ? `${Math.round(b)} B` : b < 1e6 ? `${(b / 1000).toFixed(1)} kB` : `${(b / 1e6).toFixed(1)} MB`;
+let D = null, hours = 24;
+
+const STATE = { ok: ['var(--good)', '✓', 'OK'], warn: ['var(--warning)', '!', 'Watch'], bad: ['var(--critical)', '✕', 'Problem'], off: ['var(--muted)', '–', 'Off'] };
+const state = k => `<span class="state"><span class="dot" style="background:${STATE[k][0]}"></span>${STATE[k][1]} ${STATE[k][2]}</span>`;
+
+function tiles() {
+  const f = D.fetcher, r = D.rows.at(-1) ?? {}, today = D.rows.filter(x => x.day === r.day);
+  const restarts = today.reduce((n, x) => n + x.restarts, 0);
+  const t = [];
+  t.push(['Fetcher', f?.up ? 'Running' : 'Not running', f?.up ? 'ok' : 'bad',
+    !f ? 'not seen yet' : f.up ? `since ${new Date(f.startedAt).toLocaleString('sv-SE')}; ${restarts} restart(s) today` : `last answered ${new Date(f.seenAt).toLocaleString('sv-SE')}; ${restarts} restart(s) today`]);
+  // The fetcher's own numbers mean nothing while it is not running: those tiles say so instead.
+  const down = ['–', 'off', 'the fetcher is not running'];
+  t.push(['Streams (positions / passings)', ...(f?.up ? [`${f.feeds.positions.mode} / ${f.feeds.passings.mode}`,
+    f.feeds.positions.mode === 'stream' && f.feeds.passings.mode === 'stream' ? 'ok' : 'warn', 'stream = live; poll = asking every few s while a stream is retried'] : down)]);
+  t.push(['Newest train report', ...(f?.up ? [ago(r.reportAge), r.reportAge === null || r.reportAge === undefined ? 'warn' : r.reportAge > 600 ? 'bad' : 'ok', `${r.trains ?? '–'} trains on the map`] : down)]);
+  const one = r.one ?? { status: 'off' };
+  t.push(['File viewers get (one.com)', one.status === 'off' ? 'not set' : one.age !== null ? ago(one.age) + ' old' : one.status === 404 ? 'none recent' : one.status === 'error' ? 'no answer' : `answer ${one.status}`,
+    one.status === 'off' ? 'off' : one.status === 200 && one.age <= 60 ? 'ok' : 'bad', one.status === 'off' ? 'MONITOR_DATA_URL not set' : 'read once a minute, as a viewer would']);
+  t.push(['Trafikverket', ...(f?.up ? [`${r.asks ?? '–'} /min`, (r.refused ?? 0) > 0 || (r.asks ?? 0) > 20 ? 'bad' : 'ok',
+    `${today.reduce((n, x) => n + x.refused, 0)} "too many requests" today; ${kB(r.bytesIn)} received last minute`] : down)]);
+  t.push(['Uploads to one.com', ...(!f?.up ? down : r.uploads ? [`${r.upOk} /min`, r.upAgo !== null && r.upAgo < 120 ? 'ok' : 'bad',
+    `last good ${ago(r.upAgo)} ago; ${today.reduce((n, x) => n + x.upFailed, 0)} failed today; ${kB(r.bytesOut)} sent last minute`] : ['off', 'off', 'the fetcher runs without --upload'])]);
+  t.push(['Fetcher memory / CPU', ...(f?.up ? [`${r.memMB ?? '–'} MB`, (r.memMB ?? 0) > 400 ? 'warn' : 'ok', `CPU ${r.cpuPct ?? '–'} %`] : down)]);
+  t.push(['Mail', D.mail ? `${D.mail.sent} sent` : 'off', !D.mail ? 'off' : D.mail.waiting ? 'warn' : 'ok',
+    D.mail ? `to ${esc(D.mailTo)}; ${D.mail.waiting} waiting${D.mail.lastError && D.mail.waiting ? `; last error: ${esc(D.mail.lastError)}` : ''}` : 'no MAIL_ settings']);
+  $('tiles').innerHTML = t.map(([k, v, s, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${esc(v)}</div>${state(s)}<div class="n">${n}</div></div>`).join('');
+}
+
+function lists() {
+  // An internet loss is not an "open problem" in the rules (it is mailed afterwards), but it is shown while it lasts.
+  const rs = D.rows, last = rs.at(-1);
+  let from = null;
+  if (last?.offline) { let i = rs.length - 1; while (i > 0 && rs[i - 1].offline) i--; from = rs[i].t - 60000; }
+  const items = [...(from ? [`<li>${state('warn')} the internet seems out (the monitor can't reach one.com) <span class="t">since ${hm(from)}</span> a mail follows when it is back</li>`] : []),
+    ...D.open.map(o => `<li>${state('bad')} ${esc(o.subject)} <span class="t">since ${hm(o.since)}</span></li>`)];
+  $('open').innerHTML = items.length ? items.join('') : `<li>${state('ok')} None</li>`;
+  $('mails').innerHTML = D.mails.length ? [...D.mails].reverse().map(m => `<li><span class="t">${new Date(m.t).toLocaleString('sv-SE')}</span>${esc(m.subject)}
+    <details><summary>text</summary><pre>${esc(m.text)}</pre></details></li>`).join('') : '<li>None yet.</li>';
+  const cols = [['Day', d => d.day + (d.partial ? ' (part)' : '')], ['Up', d => d.upPct + ' %'], ['Restarts', d => d.restarts], ['Offline', d => d.offlineMin + ' min'],
+    ['Questions', d => d.asks], ['Too many', d => d.refused], ['In', d => kB(d.bytesIn)], ['Uploads', d => d.upOk], ['Failed', d => d.upFailed], ['Out', d => kB(d.bytesOut)],
+    ['File age mid / max', d => `${d.fileAgeMed ?? '–'} / ${d.fileAgeMax ?? '–'} s`], ['Live file', d => kB(d.sizes?.live?.med)]];
+  $('days').innerHTML = D.days.length ? `<tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>` + [...D.days].reverse().map(d => `<tr>${cols.map(c => `<td>${esc(c[1](d))}</td>`).join('')}</tr>`).join('')
+    : '<tr><td>No whole day yet: a line is kept at each midnight.</td></tr>';
+}
+
+// ---------- charts ----------
+const H = 120, M = { l: 40, r: 8, t: 8, b: 18 };
+function nice(v) { if (!(v > 0)) return 1; const p = 10 ** Math.floor(Math.log10(v)); return [1, 2, 2.5, 5, 10].map(x => x * p).find(x => x >= v); }
+function timeTicks(a, b) {
+  const step = hours <= 1 ? 10 * 60000 : hours <= 6 ? 3600000 : 3 * 3600000;
+  const out = []; for (let t = Math.ceil(a / step) * step; t <= b; t += step) out.push(t); return out;
+}
+// One chart = one measure, one axis. spec: { id, title, get(row) -> number|null, unit fmt, threshold, marks(row) -> label|null }
+function chart(spec, rows, a, b) {
+  const el = document.querySelector(`[data-chart="${spec.id}"]`);
+  const svg = el.querySelector('svg');
+  const W = svg.clientWidth || 360;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const vals = rows.map(spec.get).filter(v => v !== null && v !== undefined);
+  const top = nice(Math.max(spec.min ?? 0, ...(vals.length ? vals : [0]), spec.threshold ?? 0));
+  const x = t => M.l + (t - a) / (b - a) * (W - M.l - M.r), y = v => M.t + (1 - v / top) * (H - M.t - M.b);
+  let g = '';
+  for (const f of [0, 0.5, 1]) g += `<line x1="${M.l}" x2="${W - M.r}" y1="${y(top * f)}" y2="${y(top * f)}" stroke="${f ? 'var(--grid)' : 'var(--axis)'}" stroke-width="1"/><text x="${M.l - 4}" y="${y(top * f) + 3}" text-anchor="end">${spec.fmt(top * f)}</text>`;
+  for (const t of timeTicks(a, b)) g += `<text x="${x(t)}" y="${H - 4}" text-anchor="middle">${hm(t)}</text>`;
+  if (spec.threshold) g += `<line x1="${M.l}" x2="${W - M.r}" y1="${y(spec.threshold)}" y2="${y(spec.threshold)}" stroke="var(--critical)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/><text x="${W - M.r}" y="${y(spec.threshold) - 3}" text-anchor="end">limit ${spec.fmt(spec.threshold)}</text>`;
+  // The line, broken where a minute is missing or has no value.
+  let d = '', prev = null;
+  for (const r of rows) {
+    const v = spec.get(r);
+    if (v === null || v === undefined) { prev = null; continue; }
+    d += `${prev && r.t - prev.t < 150000 ? 'L' : 'M'}${x(r.t).toFixed(1)},${y(Math.min(v, top)).toFixed(1)}`;
+    prev = r;
+  }
+  g += `<path d="${d}" fill="none" stroke="var(--series)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  if (spec.marks) for (const r of rows) { const m = spec.marks(r); if (m) g += `<circle cx="${x(r.t)}" cy="${M.t + 4}" r="4" fill="var(--critical)" stroke="var(--surface)" stroke-width="2"><title>${hm(r.t)} ${esc(m)}</title></circle>`; }
+  g += `<line class="cursor" y1="${M.t}" y2="${H - M.b}" stroke="var(--ink2)" stroke-width="1" visibility="hidden"/>`;
+  svg.innerHTML = g;
+  const last = [...rows].reverse().find(r => spec.get(r) !== null && spec.get(r) !== undefined);
+  el.querySelector('.now').textContent = last ? `now ${spec.fmt(spec.get(last))}` : 'no data';
+  el._hover = { x, a, b, rows, spec, W };
+}
+// The fetcher strip: one cell a minute: running (good), not running (critical), internet out (warning); restarts as ticks.
+function strip(rows, a, b) {
+  const el = document.querySelector('[data-chart="strip"]'), svg = el.querySelector('svg');
+  const W = svg.clientWidth || 360, h = 44;
+  svg.setAttribute('viewBox', `0 0 ${W} ${h}`);
+  const x = t => M.l + (t - a) / (b - a) * (W - M.l - M.r), w = Math.max(1, (W - M.l - M.r) / ((b - a) / 60000));
+  let g = '';
+  for (const r of rows) {
+    const c = r.offline ? 'var(--warning)' : r.up ? 'var(--good)' : 'var(--critical)';
+    g += `<rect x="${x(r.t - 60000).toFixed(1)}" y="4" width="${w.toFixed(2)}" height="14" fill="${c}"/>`;
+    if (r.restarts) g += `<line x1="${x(r.t)}" x2="${x(r.t)}" y1="0" y2="22" stroke="var(--ink)" stroke-width="2"><title>${hm(r.t)} restart</title></line>`;
+  }
+  for (const t of timeTicks(a, b)) g += `<text x="${x(t)}" y="${h - 4}" text-anchor="middle">${hm(t)}</text>`;
+  g += `<line class="cursor" y1="0" y2="22" stroke="var(--ink2)" stroke-width="1" visibility="hidden"/>`;
+  svg.innerHTML = g;
+  const r = rows.at(-1);
+  el.querySelector('.now').textContent = r ? (r.offline ? 'internet out' : r.up ? 'running' : 'not running') : '';
+  el._hover = { x, a, b, rows, W, spec: { title: 'Fetcher', get: r => r.offline ? 'internet out' : r.up ? 'running' : 'not running', fmt: v => v } };
+}
+
+const SPECS = [
+  { id: 'fileAge', title: 'Age of the file viewers get (one.com)', get: r => r.one?.age ?? null, fmt: v => `${Math.round(v)} s`, threshold: 60, min: 10,
+    marks: r => r.one && (r.one.status === 429 ? 'one.com: too many requests' : r.one.status === 404 && r.up ? 'no recent file' : null) },
+  { id: 'reportAge', title: 'Age of the newest train report', get: r => r.reportAge, fmt: v => v < 120 ? `${Math.round(v)} s` : `${Math.round(v / 60)} min`, min: 10 },
+  { id: 'asks', title: 'Questions to Trafikverket per minute', get: r => r.up ? r.asks : null, fmt: v => `${Math.round(v)}`, threshold: 20, min: 5,
+    marks: r => r.refused ? `${r.refused} "too many requests"` : null },
+  { id: 'bytesIn', title: 'Data from Trafikverket per minute', get: r => r.up ? r.bytesIn : null, fmt: kB },
+  { id: 'upOk', title: 'Uploads to one.com per minute', get: r => r.uploads ? r.upOk : null, fmt: v => `${Math.round(v)}`, min: 12,
+    marks: r => r.upFailed ? `${r.upFailed} failed upload(s)` : null },
+  { id: 'bytesOut', title: 'Data to one.com per minute', get: r => r.uploads ? r.bytesOut : null, fmt: kB },
+  { id: 'memMB', title: 'Fetcher memory', get: r => r.memMB, fmt: v => `${Math.round(v)} MB`, min: 100 },
+  { id: 'cpuPct', title: 'Fetcher CPU', get: r => r.cpuPct, fmt: v => `${v.toFixed(1)} %`, min: 1 },
+];
+function sizeSpecs() {
+  const kinds = [...new Set(D.rows.flatMap(r => Object.keys(r.sizes ?? {})))];
+  const order = ['live', 'passings', 'planned', 'planned-add', 'disruptions', 'stats', 'arrivals', 'arrivals-add', 'stations'];
+  kinds.sort((p, q) => order.indexOf(p) - order.indexOf(q));
+  return kinds.map(k => ({ id: 'size-' + k, title: `File size: ${k} (as viewers get it)`, get: r => r.sizes?.[k] ?? null, fmt: kB }));
+}
+let built = '';
+function charts() {
+  const specs = [...SPECS, ...sizeSpecs()];
+  const key = specs.map(s => s.id).join();
+  if (key !== built) {
+    $('charts').innerHTML = `<div class="chart strip" data-chart="strip"><div class="title">Fetcher <span class="now"></span></div>
+      <div class="legend"><span><i class="sw" style="background:var(--good)"></i>running</span><span><i class="sw" style="background:var(--critical)"></i>not running</span><span><i class="sw" style="background:var(--warning)"></i>internet out</span><span><i class="sw" style="background:var(--ink)"></i>restart</span></div><svg></svg></div>` +
+      specs.map(s => `<div class="chart" data-chart="${s.id}"><div class="title">${esc(s.title)} <span class="now"></span></div><svg></svg></div>`).join('');
+    built = key;
+    for (const el of document.querySelectorAll('.chart')) {
+      el.addEventListener('mousemove', e => hover(el, e));
+      el.addEventListener('mouseleave', () => { $('tip').style.display = 'none'; for (const c of document.querySelectorAll('.cursor')) c.setAttribute('visibility', 'hidden'); });
+    }
+  }
+  const b = D.now, a = b - hours * 3600000, rows = D.rows.filter(r => r.t >= a);
+  strip(rows, a, b);
+  for (const s of specs) chart(s, rows, a, b);
+}
+// The hover: the same minute marked in every chart; the tooltip shows the value under the pointer.
+function hover(el, e) {
+  const h = el._hover; if (!h) return;
+  const svg = el.querySelector('svg'), box = svg.getBoundingClientRect();
+  const px = (e.clientX - box.left) / box.width * h.W;
+  const t = h.a + (px - M.l) / (h.W - M.l - M.r) * (h.b - h.a);
+  const r = h.rows.reduce((best, x) => Math.abs(x.t - t) < Math.abs((best?.t ?? Infinity) - t) ? x : best, null);
+  if (!r) return;
+  for (const c of document.querySelectorAll('.chart')) {
+    const cur = c.querySelector('.cursor'), ch = c._hover; if (!cur || !ch) continue;
+    cur.setAttribute('x1', ch.x(r.t)); cur.setAttribute('x2', ch.x(r.t)); cur.setAttribute('visibility', 'visible');
+  }
+  const v = h.spec.get(r);
+  const tip = $('tip');
+  tip.textContent = `${hm(r.t)} · ${v === null || v === undefined ? 'no value' : h.spec.fmt(v)}`;
+  tip.style.display = 'block';
+  tip.style.left = Math.min(innerWidth - tip.offsetWidth - 8, e.clientX + 12) + 'px';
+  tip.style.top = (e.clientY - 30) + 'px';
+}
+
+for (const btn of document.querySelectorAll('#ranges button')) btn.onclick = () => {
+  hours = Number(btn.dataset.h);
+  for (const x of document.querySelectorAll('#ranges button')) x.setAttribute('aria-pressed', String(x === btn));
+  if (D) charts();
+};
+
+async function load() {
+  try {
+    D = await (await fetch('/data.json', { cache: 'no-store' })).json();
+    $('sub').textContent = `${new Date(D.now).toLocaleString('sv-SE')} · watching since ${new Date(D.startedAt).toLocaleString('sv-SE')} · summary mail at ${D.summaryAt}`;
+    tiles(); lists(); charts();
+    $('foot').textContent = `Updates every 15 s. Only on this computer (127.0.0.1). one.com address read: ${D.dataUrl || 'not set'}.`;
+  } catch (e) { $('sub').textContent = `The monitor does not answer (${e.message}). Is it running? systemctl status sparat-monitor`; }
+}
+load();
+setInterval(load, 15000);
+addEventListener('resize', () => D && charts());
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Spårat's monitor as a Linux service (systemd), beside the fetcher: starts at boot, starts again 5 s after a crash,
+# logs to the journal (journalctl -u sparat-monitor). Install with the fetcher (docs: deploy.md, "The monitor"):
+#   sudo cp monitor/sparat-monitor.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now sparat-monitor
+# Its page and data are only on this PC (127.0.0.1:8092); nothing is opened to the network.
+[Unit]
+Description=Spårat monitor (watches the fetcher, mails about problems)
+Wants=network-online.target
+After=network-online.target sparat-fetcher.service
+
+[Service]
+Type=simple
+User=sparat
+WorkingDirectory=/opt/sparat
+ExecStart=/usr/bin/node monitor/main.mjs --env /etc/sparat/monitor.env
+Restart=always
+RestartSec=5
+MemoryMax=300M
+# The one folder it may write: /var/lib/sparat-monitor (one line per day, days.jsonl).
+StateDirectory=sparat-monitor
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -7,6 +7,7 @@ export class NodeEventSource {
   static OPEN = 1;
   static CLOSED = 2;
   static open = new Set();   // the streams now open (the live test breaks them: main.mjs --test-breaks)
+  static bytes = 0;          // received on all streams so far (as sent: the stream is not compressed)
 
   // Break the stream as a lost connection would: it says CLOSED and follow() asks again.
   fail() { this.ctrl.abort(); }
@@ -39,6 +40,7 @@ export class NodeEventSource {
       const decoder = new TextDecoder();
       let buf = '';
       for await (const chunk of res.body) {
+        NodeEventSource.bytes += chunk.length;
         // Trafikverket sends \r\n. Replaced after joining: a \r\n split between two chunks, replaced per chunk, glued
         // two messages into one (tools/collect.mjs, 2026-11-12).
         buf = (buf + decoder.decode(chunk, { stream: true })).replace(/\r\n/g, '\n');
