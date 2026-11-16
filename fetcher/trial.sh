@@ -11,10 +11,10 @@ grep -E '^(PRETTY_NAME)=' /etc/os-release 2>/dev/null || true
 
 NODE=node; NPM=npm
 major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
-if [ "$major" -lt 22 ]; then
+if [ "$major" -lt 22 ] || ! command -v npm >/dev/null 2>&1; then
   case "$(uname -m)" in x86_64) A=x64 ;; aarch64|arm64) A=arm64 ;; *) echo "unknown processor $(uname -m)"; exit 1 ;; esac
   V=v26.13.0
-  echo "== Node: none or older than 22 here; getting Node $V ($A) into this folder only"
+  echo "== Node: none, older than 22, or without npm here; getting Node $V ($A) into this folder only"
   curl -fsSL "https://nodejs.org/dist/$V/node-$V-linux-$A.tar.xz" | tar -xJ
   PATH="$PWD/node-$V-linux-$A/bin:$PATH"; export PATH
 fi
