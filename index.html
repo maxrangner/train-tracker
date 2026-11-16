@@ -356,7 +356,7 @@
     #panel .panel-title { align-items: baseline; gap: 8px; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
+    #panel:not(.full) .panel-star, #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
 
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
@@ -434,7 +434,14 @@
     .panel-alert { flex: none; margin: 4px 0 0;   /* never squeezed (Max, 2026-11-16: "Kort tåg" cut off) */ color: var(--late); font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2;
       line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     /* Trafikverket's notes on the train card: problems in red, the rest plain; where, muted. */
-    .panel-tvnotes { margin: 0 0 6px; display: grid; gap: 2px; }
+    .panel-tvnotes { margin: 2px 0 6px; display: grid; gap: 2px; }
+    .panel-tvnotes[hidden] { display: none; }
+    /* The notes' line: "Notes (3)", a red ⚠ with the problems' count, ⌃/⌄ (folds them; Max, 2026-11-16). */
+    .tv-box { flex: none; }
+    .tv-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 0; border: 0; background: none; cursor: pointer;
+      font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted); text-align: left; }
+    .tv-toggle > span:not(.tv-warn) { flex: 1; }
+    .tv-warn { display: inline-flex; align-items: center; gap: 3px; color: var(--late); font-weight: 700; }
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }

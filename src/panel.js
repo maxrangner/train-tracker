@@ -18,6 +18,17 @@ const time = t => (t ? hhmm(t) : '');
 // The favourite star (☆ / ★), used by the train panel and the station board.
 export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
+// Trafikverket's notes on the full card fold under one line (Max, 2026-11-16: they "sometimes take a lot of space";
+// open by default, problems fold too, with a red ⚠ and their count on the line). Remembered on this device.
+const NOTES_KEY = 'notesOpen';
+let notesOpen = true;
+try { notesOpen = localStorage.getItem(NOTES_KEY) !== 'false'; } catch { /* storage blocked: open */ }
+const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
+const notesBox = (lines, problems) => `<div class="tv-box"><button type="button" class="tv-toggle" aria-expanded="${notesOpen}">` +
+  (problems ? `<span class="tv-warn">${icon('warning', 15)}${problems}</span>` : '') +
+  `<span>${t('notesCount', lines.length)}</span>${icon(notesOpen ? 'chevronUp' : 'chevronDown', 15)}</button>` +
+  `<div class="panel-tvnotes"${notesOpen ? '' : ' hidden'}>${lines.join('')}</div></div>`;
+
 // "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {
   const m = Math.round(ms / 60000);
@@ -297,6 +308,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
     // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)". Only on the full card.
     const noteLines = [];
+    let problemCount = 0;
     for (const kind of ['problems', 'notes']) {
       const at = new Map();   // text -> indices of the stops it is given at
       stops.forEach((s, i) => {
@@ -313,6 +325,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
           : run && idx.length >= 3 && idx.at(-1) === stops.length - 1 ? t('noteFrom', name(idx[0]))
           : run && idx.length >= 3 && idx[0] === 0 ? t('noteUntil', name(idx.at(-1)))
           : idx.slice(0, 2).map(name).join(', ') + (idx.length > 2 ? ` +${idx.length - 2}` : '');
+        if (kind === 'problems') problemCount++;
         noteLines.push(`<p class="panel-tvnote${kind === 'problems' ? ' problem' : ''}">${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
       }
     }
@@ -335,12 +348,14 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
       (stops.length
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
-          (noteLines.length ? `<div class="panel-tvnotes">${noteLines.join('')}</div>` : '') +
+          (noteLines.length ? notesBox(noteLines, problemCount) : '') +
           `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${rows}</div>`
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => el.classList.toggle('full');
+    const fold = el.querySelector('.tv-toggle');
+    if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
     showGlance();
     if (status) setStatus(status);   // the line on how its place is known stays (main.js updates it each second)
     if (scrolled !== undefined) { const box = el.querySelector('.panel-table'); if (box) box.scrollTop = scrolled; } else toNext();
