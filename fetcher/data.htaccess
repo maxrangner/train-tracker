@@ -1,10 +1,14 @@
 # The fetcher's data folder on one.com (put there by fetcher/upload.mjs). Every file has a new name per update, so a
 # file may be kept a while; a missing name must never be kept (it may exist a second later); any site may read the
 # files (the apps run from other addresses). Measured on one.com 2026-11-15 (docs/data.md "one.com, measured").
+# The files are stored packed (gzip, since 2026-11-16): they go out as they are, with a header saying so, so browsers
+# unpack them; the server must not pack them a second time (no-gzip).
+SetEnvIf Request_URI "\.json$" no-gzip=1
 <IfModule mod_headers.c>
 <FilesMatch "\.json$">
 Header always set Cache-Control "public, max-age=300" "expr=%{REQUEST_STATUS} == 200"
 Header always set Cache-Control "no-store" "expr=%{REQUEST_STATUS} != 200"
+Header always set Content-Encoding "gzip" "expr=%{REQUEST_STATUS} == 200"
 Header always set Access-Control-Allow-Origin "*"
 </FilesMatch>
 </IfModule>

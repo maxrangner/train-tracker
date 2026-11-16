@@ -11,7 +11,9 @@ const MIN = 60000;
 // kind -> [how often a new one is made (ms), how long one is kept after it was made (ms)]
 export const KINDS = {
   live: [LIVE_MS, MIN],                    // positions now, passings of the last minute, the other files' names
-  passings: [MIN, 3 * MIN],                // the last 90 minutes of passings (a page opening, or back after > 1 min)
+  passings: [10 * MIN, 15 * MIN],          // the last 90 minutes of passings (a page opening, or back after > 30 s)
+  'passings-add': [MIN, 3 * MIN],          // passings received since that passings file (2026-11-16: resending all
+                                           // 90 minutes every minute was 63 % of the upload volume)
   planned: [10 * MIN, 15 * MIN],           // planned rows of the trains on the map
   'planned-add': [MIN, 3 * MIN],           // planned rows added since that planned file
   disruptions: [5 * MIN, 10 * MIN],
@@ -37,7 +39,10 @@ export function buildLive(state, t, names) {
   };
 }
 
-export const buildPassings = (state, t) => ({ v: FORMAT, t, kind: 'passings', passings: state.passings(t).map(passingRow) });
+// The last 90 minutes of passings; with `since`, only those received after it (the -add file: a page reads the newest
+// passings file and the newest -add file, and keys passings, so a newer row replaces an older one).
+export const buildPassings = (state, t, since = null) => ({ v: FORMAT, t, kind: since === null ? 'passings' : 'passings-add',
+  ...(since === null ? {} : { since }), passings: state.passings(t, since).map(passingRow) });
 
 // Planned rows of these trains; brands: key -> company.
 export function buildPlanned(state, t, ids, from, since = null) {

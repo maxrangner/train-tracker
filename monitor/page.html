@@ -216,7 +216,7 @@ const SPECS = [
 ];
 function sizeSpecs() {
   const kinds = [...new Set(D.rows.flatMap(r => Object.keys(r.sizes ?? {})))];
-  const order = ['live', 'passings', 'planned', 'planned-add', 'disruptions', 'stats', 'arrivals', 'arrivals-add', 'stations'];
+  const order = ['live', 'passings', 'passings-add', 'planned', 'planned-add', 'disruptions', 'stats', 'arrivals', 'arrivals-add', 'stations'];
   kinds.sort((p, q) => order.indexOf(p) - order.indexOf(q));
   return kinds.map(k => ({ id: 'size-' + k, title: `File size: ${k} (as viewers get it)`, get: r => r.sizes?.[k] ?? null, fmt: kB }));
 }

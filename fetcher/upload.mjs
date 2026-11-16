@@ -4,6 +4,8 @@
 // every file has a new name anyway). Old names are deleted when the shelf lets go of them. A broken connection is
 // opened again (1 s, 2 s, 5 s ... 30 s) and the waiting files go then; of the live files only the newest is sent.
 // Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run).
+// Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
+// so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
 // The server's key is checked against SFTP_HOSTKEY (SHA256 fingerprints, comma-separated): a different server is
 // never sent anything. Pure JavaScript (ssh2), the same on Windows and Linux.
 import { createHash } from 'node:crypto';
@@ -12,7 +14,7 @@ import ssh2 from 'ssh2';
 
 const { Client } = ssh2;
 const WAITS = [1000, 2000, 5000, 10000, 30000];
-const OURS = /^(live|passings|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations)-\d+\.json$/;
+const OURS = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations)-\d+\.json$/;
 const HTACCESS = readFileSync(new URL('./data.htaccess', import.meta.url));
 
 export function createUploader(cfg, log, { keep = () => false } = {}) {
@@ -85,9 +87,9 @@ export function createUploader(cfg, log, { keep = () => false } = {}) {
       try {
         if (job.op === 'put') {
           const tmp = `${dir}/${job.name}.tmp`;
-          await call('writeFile', tmp, job.f.json);
+          await call('writeFile', tmp, job.f.gz);   // packed: one.com hands it out as it is (data.htaccess)
           await call('rename', tmp, `${dir}/${job.name}`);
-          stats.ok++; stats.lastOkAt = Date.now(); stats.lastMs = Date.now() - t; stats.bytes += job.f.json.length;
+          stats.ok++; stats.lastOkAt = Date.now(); stats.lastMs = Date.now() - t; stats.bytes += job.f.gz.length;
         } else {
           await call('unlink', `${dir}/${job.name}`).catch(e => { if (e.code !== 2) throw e; });   // 2: already gone
           stats.removed++;
