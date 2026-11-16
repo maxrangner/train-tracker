@@ -1,0 +1,8 @@
+{
+  "appId": "se.sparat.app",
+  "appName": "Spårat dev",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false
+  }
+}
