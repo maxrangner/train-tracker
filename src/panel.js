@@ -19,10 +19,11 @@ const time = t => (t ? hhmm(t) : '');
 export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
 // Trafikverket's notes on the full card fold under one line (Max, 2026-11-16: they "sometimes take a lot of space";
-// open by default, problems fold too, with a red ⚠ and their count on the line). Remembered on this device.
-const NOTES_KEY = 'notesOpen';
-let notesOpen = true;
-try { notesOpen = localStorage.getItem(NOTES_KEY) !== 'false'; } catch { /* storage blocked: open */ }
+// folded by default (Max, 2026-11-16: "change default to collapsed"), problems fold too, with a red ⚠ and their count on the
+// line). Remembered on this device (a new name for the memory: choices made while open was the default start over).
+const NOTES_KEY = 'notesShown';
+let notesOpen = false;
+try { notesOpen = localStorage.getItem(NOTES_KEY) === 'true'; } catch { /* storage blocked: folded */ }
 const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
 const notesBox = (lines, problems) => (notesOpen
