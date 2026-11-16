@@ -176,8 +176,9 @@ function chart(spec, rows, a, b) {
   if (spec.marks) for (const r of rows) { const m = spec.marks(r); if (m) g += `<circle cx="${x(r.t)}" cy="${M.t + 4}" r="4" fill="var(--critical)" stroke="var(--surface)" stroke-width="2"><title>${hm(r.t)} ${esc(m)}</title></circle>`; }
   g += `<line class="cursor" y1="${M.t}" y2="${H - M.b}" stroke="var(--ink2)" stroke-width="1" visibility="hidden"/>`;
   svg.innerHTML = g;
-  const last = [...rows].reverse().find(r => spec.get(r) !== null && spec.get(r) !== undefined);
-  el.querySelector('.now').textContent = last ? `now ${spec.fmt(spec.get(last))}` : 'no data';
+  // The newest minute's value; none then says so (not an older value shown as "now").
+  const nowV = rows.length ? spec.get(rows.at(-1)) : null;
+  el.querySelector('.now').textContent = !rows.length ? 'no data' : nowV === null || nowV === undefined ? 'no value now' : `now ${spec.fmt(nowV)}`;
   el._hover = { x, a, b, rows, spec, W };
 }
 // The fetcher strip: one cell a minute: running (good), not running (critical), internet out (warning); restarts as ticks.
