@@ -64,6 +64,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   let shown = null;       // { train, route, stops }: what the panel shows, to redraw it in another language
   let target = null;      // the station counted down to (null: the end station); kept while the card is open
   let picking = false;    // the list of stops to count down to is open
+  let opening = false, closing = false;   // it slides open (only when it opens, not at each redraw) and closed
 
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
@@ -193,7 +194,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     const stopTile = `<button class="cd-stop tile" type="button" aria-expanded="${picking}">` +
       `<b${(g.mark + g.inn).length > 8 ? ' class="long"' : ''}>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
       `${g.w.kind === 'planned' ? ` · ${t('planned')}` : ''}</span>${icon(picking ? 'chevronUp' : 'chevronDown', 14)}</small></button>`;
-    const list = picking ? `<div class="cd-pick"><p>${t('countDownTo')}</p><div class="cd-list">${ahead.map(a => {
+    const list = picking ? `<div class="cd-pick${opening ? ' opening' : ''}"><p>${t('countDownTo')}</p><div class="cd-list">${ahead.map(a => {
       const r = row(a), on = a === goal;
       const note = a.i === nextIdx ? t(r.here ? 'stopHere' : 'nextStop') : a === ahead.at(-1) ? t('endStation') : '';
       return `<button type="button" class="cd-row${on ? ' on' : ''}" data-sig="${esc(a.s.station)}"><span class="cd-name"><b>${esc(stationName(a.s.station))}</b>` +
@@ -223,11 +224,20 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
   }
   function wireGlance() {
     const b = el.querySelector('.cd-stop');
-    if (b?.tagName === 'BUTTON') b.onclick = () => { picking = !picking; showGlance(); };
-    for (const r of el.querySelectorAll('.cd-row')) r.onclick = () => { target = r.dataset.sig; picking = false; showGlance(); };
+    // Closing: it slides shut first, then goes (a pick shows at once in the tile).
+    const shut = () => {
+      const p = el.querySelector('.cd-pick');
+      if (!p || closing) { picking = false; showGlance(); return; }
+      closing = true;
+      p.classList.add('closing');
+      setTimeout(() => { closing = false; picking = false; showGlance(); }, 180);
+    };
+    if (b?.tagName === 'BUTTON') b.onclick = () => { if (picking) shut(); else { picking = true; opening = true; showGlance(); opening = false; } };
+    for (const r of el.querySelectorAll('.cd-row')) r.onclick = () => { target = r.dataset.sig; shut(); };
   }
   let glanceSeen = '';
   function showGlance() {
+    if (closing) return;   // sliding shut: left as it is for those 0.18 s
     const stops = shown?.stops;
     const box = el.querySelector('.cd');
     if (!box || !stops?.length) return;
