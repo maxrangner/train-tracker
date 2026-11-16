@@ -24,10 +24,13 @@ const NOTES_KEY = 'notesOpen';
 let notesOpen = true;
 try { notesOpen = localStorage.getItem(NOTES_KEY) !== 'false'; } catch { /* storage blocked: open */ }
 const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
-const notesBox = (lines, problems) => `<div class="tv-box"><button type="button" class="tv-toggle" aria-expanded="${notesOpen}">` +
-  (problems ? `<span class="tv-warn">${icon('warning', 15)}${problems}</span>` : '') +
-  `<span>${t('notesCount', lines.length)}</span>${icon(notesOpen ? 'chevronUp' : 'chevronDown', 15)}</button>` +
-  `<div class="panel-tvnotes"${notesOpen ? '' : ' hidden'}>${lines.join('')}</div></div>`;
+// Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
+const notesBox = (lines, problems) => (notesOpen
+  ? `<div class="tv-box open"><button type="button" class="tv-toggle tv-fold" aria-expanded="true" aria-label="${t('foldNotes')}">${icon('chevronUp', 15)}</button>` +
+    `<div class="panel-tvnotes">${lines.join('')}</div></div>`
+  : `<div class="tv-box"><button type="button" class="tv-toggle" aria-expanded="false">` +
+    (problems ? `<span class="tv-warn">${icon('warning', 15)}${problems}</span>` : '') +
+    `<span>${t('notesCount', lines.length)}</span>${icon('chevronDown', 15)}</button></div>`);
 
 // "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {

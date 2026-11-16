@@ -441,6 +441,9 @@
     .tv-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 0; border: 0; background: none; cursor: pointer;
       font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted); text-align: left; }
     .tv-toggle > span:not(.tv-warn) { flex: 1; }
+    .tv-box.open { position: relative; }
+    .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
+    .tv-fold { position: absolute; top: 0; right: -6px; width: 34px; height: 30px; padding: 0; justify-content: center; }
     .tv-warn { display: inline-flex; align-items: center; gap: 3px; color: var(--late); font-weight: 700; }
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
