@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The start colour: the page's own start screen (index.html #splash), light. Dark in values-night. -->
+<resources>
+    <color name="splash_bg">#F7F3EC</color>
+</resources>
