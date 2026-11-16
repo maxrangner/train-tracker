@@ -267,7 +267,7 @@ const menu = createMenu({
   findTrains: digits => trains.reports()
     .filter(r => String(r.number).startsWith(digits))
     .sort((a, b) => String(a.number).length - String(b.number).length || Number(a.number) - Number(b.number))
-    .map(r => ({ id: r.id, operational: r.operational, date: r.date, number: r.number, company: lateness.brand(r.id) })),
+    .map(r => ({ id: r.id, operational: r.operational, date: r.date, number: r.number, company: lateness.brand(r.id), time: r.time })),
   findStations(text) {
     const q = fold(text);
     return [...stations.values()]

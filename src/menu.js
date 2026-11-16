@@ -1,10 +1,12 @@
 // The menu: opens from the ☰ button, so the main screen stays clean (Max, 2026-11-12). Search for a train number or
 // a station; the full status line.
 //
-// findTrains(digits) -> trains on the map whose number starts with them: [{ id, number, company }]
+// findTrains(digits) -> trains on the map whose number starts with them: [{ id, number, company, time (latest report) }]
 // findStations(text) -> passenger stations whose name matches: [{ sig, name }]
-// searchTimetable(number) -> Promise of today's trains with exactly this number: [{ key, operational, date, number,
-//   product, from, to }] (from/to as names)
+// searchTimetable(number) -> Promise of today's trips with exactly this number: [{ key, operational, date, number,
+//   product, from, to, keys }] (from/to as names; keys: every piece of the trip, src/trip.js tripsOf). One row per
+//   trip (Max 2026-11-16): a trip with a piece on the map is that piece's row; two pieces of one trip on the map at
+//   once (at the handover; a quiet train stays on the map 2–15 min) become one row, the newest report's.
 // onPickTrain({ id, operational, date, number, onMap }), onPickStation(station)
 // favourites() -> { stations: [{ sig, name }], trains: [{ number, company, onMap }] }; onPickFavouriteTrain(number)
 
@@ -73,9 +75,12 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
     const digits = /^\d+$/.test(q);
     const trains = digits ? findTrains(q).slice(0, MAX_ROWS) : [];
     const stations = digits ? [] : findStations(q).slice(0, MAX_ROWS);
+    const onMapRows = new Map();   // train id -> its row
     for (const tr of trains) {
-      list.append(row(`<b>${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))} · ${t('onMap')}</span>`,
-        () => onPickTrain({ ...tr, onMap: true })));
+      const li = row(`<b>${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))} · ${t('onMap')}</span>`,
+        () => onPickTrain({ ...tr, onMap: true }));
+      onMapRows.set(tr.id, li);
+      list.append(li);
     }
     for (const st of stations) list.append(row(`<b>${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
     if (!digits && !stations.length) list.append(stateEl('empty', t('noStation'), 'li'));
@@ -89,8 +94,15 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
       try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.replaceWith(stateEl('error', t('timetableFailed', e.message), 'li')); return; }
       if (n !== asked) return;
       waiting.remove();
-      const onMap = new Set(trains.map(tr => tr.id));
-      const more = found.filter(tr => !onMap.has(tr.key));
+      const onMap = new Map(trains.map(tr => [tr.id, tr]));
+      // Two pieces of one trip on the map: keep the newest report's row (the same time: the later piece's).
+      for (const trip of found) {
+        const here = trip.keys.filter(k => onMap.has(k));
+        if (here.length < 2) continue;
+        const keep = here.reduce((a, k) => ((onMap.get(k).time ?? 0) >= (onMap.get(a).time ?? 0) ? k : a));
+        for (const k of here) if (k !== keep) onMapRows.get(k)?.remove();
+      }
+      const more = found.filter(tr => !tr.keys.some(k => onMap.has(k)));
       for (const tr of more.slice(0, MAX_ROWS)) {
         list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
           () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
