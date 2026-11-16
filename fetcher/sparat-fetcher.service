@@ -1,0 +1,27 @@
+# Spårat's fetcher as a Linux service (systemd): starts at boot, starts again 5 s after a crash, logs to the journal
+# (journalctl -u sparat-fetcher). Install (public-plan step 6; paths as below, change them if the folder is elsewhere):
+#   sudo cp fetcher/sparat-fetcher.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now sparat-fetcher
+# The settings file holds the key and the upload password: chmod 600, owned by the user below.
+[Unit]
+Description=Spårat fetcher (Trafikverket -> small files for the map)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=sparat
+WorkingDirectory=/opt/sparat
+ExecStart=/usr/bin/node fetcher/main.mjs --env /etc/sparat/fetcher.env --upload
+Restart=always
+RestartSec=5
+# A runaway would be stopped here (it uses about 100 MB).
+MemoryMax=600M
+# Nothing is written to disk by the fetcher; it needs no more than to read its folder.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

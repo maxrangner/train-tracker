@@ -1,18 +1,36 @@
 // Everything that talks to Trafikverket lives here (and in trains-source.js, which uses it).
-// For the public version these are swapped for calls to our own helper.
+// Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
+// version, so the page and the fetcher ask Trafikverket the same things.
 import { joinPieces } from './trip.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
-const KEY = import.meta.env.VITE_TRV_KEY;
+// In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
+// no Vite, and hands its key over with setKey().
+let KEY = import.meta.env?.VITE_TRV_KEY;
 
-export const hasKey = Boolean(KEY);
+export let hasKey = Boolean(KEY);
+export function setKey(key) { KEY = key; hasKey = Boolean(key); }
 
 // One query. `query` is the inside of <QUERY ...>...</QUERY>, written by the caller.
+// "Too many requests" (HTTP 429, over 100 a second on the key, data.md "Request limits"): wait as Trafikverket says
+// (Retry-After), else 10 s, 30 s, 60 s, and ask again; after that it is an error like any other.
+const WAITS_429 = [10000, 30000, 60000];
+export async function ask(queryXml) {
+  for (let i = 0; ; i++) {
+    try {
+      return await askOnce(queryXml);
+    } catch (e) {
+      if (!e.tooMany || i >= WAITS_429.length) throw e;
+      await new Promise(r => setTimeout(r, e.retryAfter ?? WAITS_429[i]));
+    }
+  }
+}
+
 // A request that gets no answer is given up: ANSWER_MS for the answer to start, then BODY_MS for all of it to
 // arrive (the first passings answer is big on a slow connection). Without a limit a request could hang for good,
 // and the page said "connecting" with nothing trying again (measured 2026-11-13: 3 minutes, then the test ended).
 const ANSWER_MS = 20 * 1000, BODY_MS = 60 * 1000;
-export async function ask(queryXml) {
+async function askOnce(queryXml) {
   const ctrl = new AbortController();
   let timer = setTimeout(() => ctrl.abort(), ANSWER_MS);
   try {
@@ -24,6 +42,13 @@ export async function ask(queryXml) {
     });
     clearTimeout(timer);
     timer = setTimeout(() => ctrl.abort(), BODY_MS);
+    if (res.status === 429) {
+      const e = new Error('Trafikverket: too many requests (429)');
+      e.tooMany = true;
+      const after = Number(res.headers.get('retry-after'));
+      if (after > 0) e.retryAfter = Math.min(after, 120) * 1000;
+      throw e;
+    }
     if (!res.ok) throw new Error(`Trafikverket answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const result = (await res.json()).RESPONSE.RESULT[0];
     if (result.ERROR) throw new Error(`Trafikverket: ${result.ERROR.MESSAGE}`);
@@ -40,14 +65,14 @@ export async function ask(queryXml) {
 // where it left off; if it keeps breaking, ask every 10 s instead, and try the stream again every 5 minutes.
 // makeQuery({changeId, stream}) returns the <QUERY> xml; onResult(result) gets every answer and stream message.
 // onResult(result, { first }): first is true for the first answer after starting (every object's latest version).
-export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
+// retryStreamMs: while asking every 10 s, how often to try the live stream again (the fetcher tries sooner).
+export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryStreamMs = 5 * 60 * 1000 }) {
   let lastChangeId = null;
   let es = null;
   let silentTimer = null;
   let failures = [];
   let stopped = false;
   let pollingSince = null;   // when it started asking every 10 s (null: following the stream)
-  const RETRY_STREAM_MS = 5 * 60 * 1000;
 
   const closeStream = () => {
     clearTimeout(silentTimer);
@@ -113,7 +138,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
       onStatus({ mode: 'polling', error: e.message });
     }
     // Every 5 minutes, try the live stream again (if it breaks three more times, back to asking every 10 s).
-    if (Date.now() - pollingSince >= RETRY_STREAM_MS) {
+    if (Date.now() - pollingSince >= retryStreamMs) {
       pollingSince = null;
       failures = [];
       onStatus({ mode: 'reconnecting' });
@@ -135,6 +160,13 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000 }) {
   return stop;
 }
 
+// Taps (a train's route, a station's board and its messages, a train number) can go through our own server instead:
+// in the public version php/ask.php asks Trafikverket the same question (the same XML, built there from kind and
+// params) and keeps the answer 30 s for everyone. tapAsker(kind, params) -> Promise of Trafikverket's RESULT.
+let tapAsker = null;
+export function setTapAsker(fn) { tapAsker = fn; }
+const askTap = (kind, params, xml) => tapAsker ? tapAsker(kind, params) : ask(xml);
+
 const changeAttrs = ({ changeId, stream }) =>
   `${stream ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}"`;
 
@@ -145,7 +177,7 @@ export const trainKey = (operationalNumber, departureDate) => `${operationalNumb
 
 // Follow actual passings at stations (the timetable feed). onPassings(list) gets
 // [{key, minutes, station, time, brand, activity}] where minutes = actual - planned, rounded (+ late, - early).
-export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
+export function followPassings({ onPassings, onStatus, sinceMinutes = 90, retryStreamMs }) {
   return follow({
     makeQuery: (c) => {
       const since = new Date(Date.now() - sinceMinutes * 60000).toISOString();
@@ -156,24 +188,30 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90 }) {
         `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Deleted</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
         `<INCLUDE>ActivityType</INCLUDE></QUERY>`;
     },
-    onResult: (r) => {
-      const list = [];
-      for (const a of r.TrainAnnouncement ?? []) {
-        if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
-        list.push({
-          key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
-          minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
-          station: a.LocationSignature,
-          time: Date.parse(a.TimeAtLocation),
-          brand: a.ProductInformation?.[0]?.Description ?? null,   // e.g. "Pågatågen"; a second entry is a line
-          activity: a.ActivityType ?? null,                         // "Ankomst" arrival / "Avgang" departure
-        });
-      }
-      if (list.length) onPassings(list);
+    onResult: (r, { first = false } = {}) => {
+      const list = passingsOf(r.TrainAnnouncement);
+      if (list.length) onPassings(list, { first });   // first: the first answer (the last 90 minutes at once)
     },
     onStatus,
+    retryStreamMs,
     silentMs: 120000,   // passings are rarer than positions at quiet hours
   });
+}
+// Timetable rows -> the actual passings among them (also used by the fetcher's replay check).
+export function passingsOf(rows) {
+  const list = [];
+  for (const a of rows ?? []) {
+    if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
+    list.push({
+      key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
+      minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),
+      station: a.LocationSignature,
+      time: Date.parse(a.TimeAtLocation),
+      brand: a.ProductInformation?.[0]?.Description ?? null,   // e.g. "Pågatågen"; a second entry is a line
+      activity: a.ActivityType ?? null,                         // "Ankomst" arrival / "Avgang" departure
+    });
+  }
+  return list;
 }
 
 // ---------- A train's route for today ----------
@@ -196,8 +234,10 @@ export async function fetchRoute(operationalNumber, departureDate, number = null
   const day = departureDate.slice(0, 10);
   const publicNumber = String(number ?? '').replace(/\D/g, '');
   let trip = null;
-  if (publicNumber) trip = joinPieces((await ask(routeQuery('AdvertisedTrainIdent', publicNumber, day))).TrainAnnouncement ?? [], operationalNumber);
-  if (!trip) trip = joinPieces((await ask(routeQuery('OperationalTrainNumber', operationalNumber, day))).TrainAnnouncement ?? [], operationalNumber);
+  // Through the tap switch (setTapAsker): php/ask.php asks the same routeQuery, by the public or the internal number.
+  const askRoute = (by, field, value) => askTap('route', { by, value, date: day }, routeQuery(field, value, day));
+  if (publicNumber) trip = joinPieces((await askRoute('number', 'AdvertisedTrainIdent', publicNumber)).TrainAnnouncement ?? [], operationalNumber);
+  if (!trip) trip = joinPieces((await askRoute('train', 'OperationalTrainNumber', operationalNumber)).TrainAnnouncement ?? [], operationalNumber);
   const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
   const rows = trip?.rows ?? [];
   return {
@@ -299,7 +339,7 @@ export async function fetchDisruptions(at) {
 // of 2026-11-14). Test messages are left out, and the same text only once. [{ text, until (ms or null) }]
 export async function fetchStationMessages(sig, at) {
   const now = new Date(at).toISOString();
-  const r = await ask(
+  const r = await askTap('messages', { sig },
     `<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
     `<FILTER><EQ name="LocationCode" value="${sig}"/><EQ name="MediaType" value="Monitor"/>` +
     `<LT name="StartDateTime" value="${now}"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
@@ -336,7 +376,7 @@ export async function fetchStations() {
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
 export async function fetchBoard(sig, activity, at, n) {
-  const r = await ask(
+  const r = await askTap('board', { sig, act: activity, n },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
@@ -365,7 +405,7 @@ export async function fetchBoard(sig, activity, at, n) {
 // The trains with this public number running on this day (YYYY-MM-DD, Swedish time):
 // [{ key, operational, date, number, from, to, product }] (from/to are station signatures).
 export async function fetchTrainsByNumber(number, day) {
-  const r = await ask(
+  const r = await askTap('train', { number: String(number).replace(/\D/g, ''), day },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" limit="200">` +
     `<FILTER><EQ name="AdvertisedTrainIdent" value="${String(number).replace(/\D/g, '')}"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +

@@ -1,0 +1,6 @@
+# Spårat's tap answers (php/ask.php): only ask.php is reachable from the web; the key (secret.php) and the kept
+# answers (cache/) are not.
+<FilesMatch "^(secret\.php|.*\.tmp)$">
+Require all denied
+</FilesMatch>
+RedirectMatch 403 /cache/

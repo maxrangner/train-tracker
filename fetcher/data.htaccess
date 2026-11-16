@@ -1,0 +1,10 @@
+# The fetcher's data folder on one.com (put there by fetcher/upload.mjs). Every file has a new name per update, so a
+# file may be kept a while; a missing name must never be kept (it may exist a second later); any site may read the
+# files (the apps run from other addresses). Measured on one.com 2026-11-15 (docs/data.md "one.com, measured").
+<IfModule mod_headers.c>
+<FilesMatch "\.json$">
+Header always set Cache-Control "public, max-age=300" "expr=%{REQUEST_STATUS} == 200"
+Header always set Cache-Control "no-store" "expr=%{REQUEST_STATUS} != 200"
+Header always set Access-Control-Allow-Origin "*"
+</FilesMatch>
+</IfModule>
