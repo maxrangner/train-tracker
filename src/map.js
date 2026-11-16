@@ -31,10 +31,10 @@ const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: 
 // page's colours (src/colours.js).
 const colourBase = dark => (dark
   ? { label: PAGE.dark.label, halo: PAGE.dark.halo, station: PAGE.dark.station, ring: '#8a93a8', ringFill: MAP.dark.land,
-      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: MAP.dark.land, disDash: true,
+      rail: MAP.dark.rail, railEdge: null, railK: 0.9, nameHalo: MAP.dark.land, disEdge: null, disDash: true,   // no dark band under the dashes: the gaps show the map (Max, 2026-11-16, pic 6)
       casing: MAP.dark.land, stopFill: MAP.dark.land }
   : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
-      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: '#ffffff', disDash: false,
+      rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: null, disDash: false,
       casing: '#ffffff', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
@@ -317,10 +317,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // the trains. The line only, no dot (Max, 2026-11-15, "B, line only"); a ring round the station for a disruption
     // at one station, which has no line (src/disruptions.js geojson).
     const disColour = ['step', ['get', 'level'], C.dis[0], 3, C.dis[1], 4, C.dis[2]];
-    // In the Night look the rails are warm yellow too: there the stretch is dashed, over a dark edge, to tell it apart.
+    // The stretch is dashed in dark (the gaps show the map: no dark band under it since 2026-11-16, Max's pic 6).
     map.addLayer({ id: 'disruption-edge', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
-      layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disDash ? 'visible' : 'none' },
-      paint: { 'line-color': C.disEdge, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
+      layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disEdge ? 'visible' : 'none' },
+      paint: { 'line-color': C.disEdge ?? '#000000', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
     map.addLayer({ id: 'disruption-lines', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': C.disDash ? 'butt' : 'round', 'line-join': 'round' },
       paint: { 'line-color': disColour, 'line-opacity': C.disDash ? 1 : 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 5, 14, 9],
@@ -655,29 +655,32 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const selEl = document.createElement('div');
   selEl.className = 'sel-train';
   selEl.innerHTML = '<div class="sel-dot"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="" ' +
-    'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div><div class="sel-label"></div>';
-  const selDot = selEl.firstChild, selLabel = selEl.lastChild, selShape = selEl.querySelector('path');
+    'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div>';
+  const selDot = selEl.firstChild, selShape = selEl.querySelector('path');
+  const selLabel = Object.assign(document.createElement('div'), { className: 'sel-label', hidden: true });
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
   let selShown = false, selText = '', selClass = '';
-  // The selected label held on whole screen (device) pixels: the marker sits at the exact fraction (the ring needs it),
-  // and a followed train hovering at a pixel's edge made the text snap back and forth (Max, 2026-11-15: far out "the
-  // label pill vibrates"; measured at 125 % scaling: 6-11 jumps of ~200 pixels in 59 frames). Read after the map has
-  // placed the marker (each camera move and each new place); it moves on when the label's own place has gone 0.75 of a
-  // device pixel from where it is held. Its own place: where it is now, less the shift it has (its offsets inside the
-  // marker can land on half a device pixel, e.g. at 150 % scaling).
-  let labelHeld = null, shiftX = 0, shiftY = 0;
+  // The selected train's label: its own element, not inside the marker, placed by us on whole screen (device) pixels.
+  // The marker sits at the exact fraction (the ring needs it); a label inside it snapped a pixel back and forth when a
+  // followed train hovered at a pixel's edge (Max, 2026-11-15/16: "the label pill vibrates"). Chrome took a correction
+  // inside the marker; Firefox snaps the marker itself to whole pixels, so that correction then landed half a pixel off
+  // (measured in Firefox at 100 %, zoom 9: 26 of 39 frames jumped). Out of the marker there is nothing to snap above it.
+  // It moves on when the train has gone 0.75 of a device pixel from where its label is held.
+  let labelHeld = null;
   function holdLabel() {
     if (!selShown) return;
-    const r = selLabel.getBoundingClientRect();
-    if (!r.width) return;
-    const x = r.left - shiftX, y = r.top - shiftY, dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
+    const w = selLabel.offsetWidth;
+    if (!w) return;
+    const p = map.project(selMarker.getLngLat());   // where the map puts the marker's middle
+    const x = p.x - w / 2, y = p.y + (selEl.classList.contains('model') ? LABEL_DY : selEl.offsetHeight / 2 + 8);
+    const dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
     if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
       labelHeld = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
     }
-    const sx = Number((labelHeld.x - x).toFixed(3)), sy = Number((labelHeld.y - y).toFixed(3));
-    if (sx !== shiftX || sy !== shiftY) { shiftX = sx; shiftY = sy; selLabel.style.translate = `${sx}px ${sy}px`; }
+    const tf = `translate(${labelHeld.x}px, ${labelHeld.y}px)`;
+    if (selLabel.style.transform !== tf) selLabel.style.transform = tf;
   }
 
   // ---- Close in, the trains' labels ----
@@ -1175,7 +1178,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       selected = id;
       await ready;
       if (isReady) applySelectionFilters();
-      if (!id && selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
+      if (!id && selShown) { selMarker.remove(); selShown = false; selLabel.hidden = true; map.off('move', holdLabel); }
     },
     // Called every frame with the selected train's place (the one the camera uses) and its label and colour
     // ({ label, late, stale }), or null.
@@ -1183,13 +1186,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // No details (props): the train has just left the map (arrived, or silent too long) while its last place is still
       // known; the marker goes too (Max, 2026-11-15: "props is null" with 2047 after Herrljunga).
       if (!isReady || !selected || !place || !props) {
-        if (selShown) { selMarker.remove(); selShown = false; map.off('move', holdLabel); }
+        if (selShown) { selMarker.remove(); selShown = false; selLabel.hidden = true; map.off('move', holdLabel); }
         return;
       }
       // Moved only when the train moved (the map moves it with the camera itself).
       const ll = selMarker.getLngLat();
       if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
-      if (!selShown) { selMarker.addTo(map); selShown = true; map.on('move', holdLabel); }
+      if (!selShown) { selMarker.addTo(map); selShown = true; map.getCanvasContainer().appendChild(selLabel); selLabel.hidden = false; labelHeld = null; map.on('move', holdLabel); }
       // The same bubble as the others (company small above, the number, the minutes in their colour), ringed in the accent.
       const company = props.company && map.getZoom() >= modelZoom() ? props.company : '';
       const text = `${company}|${props.label}`;
@@ -1206,7 +1209,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       selStale = Boolean(props.stale);
       selLate = props.late;
       const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
-      if (cls !== selClass) selEl.className = selClass = cls;
+      if (cls !== selClass) { selEl.className = selClass = cls; selLabel.classList.toggle('stale', Boolean(props.stale)); }
       // The triangle turned the way the train goes, on the screen (the map may be turned).
       const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
       if (selDot.style.transform !== turn) selDot.style.transform = turn;

@@ -223,10 +223,11 @@
     .sel-train.late-late:not(.model) { border-color: var(--c-late); }
     /* Held on whole screen pixels (src/map.js setSelectedPlace): the text no longer snaps a pixel back and forth when
        the followed train's place hovers at a pixel's edge (Max, 2026-11-15: far out "the label pill vibrates"). */
-    .sel-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; text-align: center;
+    .sel-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; text-align: center;
       font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
-      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); margin-top: 6px; }
-    .sel-train.model .sel-label { top: calc(50% + 16px); }   /* close in: 16 px under the train, as the bubbles (src/map.js LABEL_DY) */
+      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); }
+    .sel-label[hidden] { display: none; }
+    .sel-label.stale { opacity: 0.45; }
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
 
@@ -372,7 +373,9 @@
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
     .tile b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .tile small { display: flex; align-items: center; gap: 2px; font-size: 13.5px; font-weight: 500; color: var(--muted); margin-top: 2px; }
-    .tile small span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Up to two lines, never "…" (Max, 2026-11-16, pic 8: "till Göteborg C · enligt tidtabell" was cut, with no way to see it). */
+    .tile small span { min-width: 0; overflow-wrap: anywhere; }
+    .tile small { align-items: flex-start; }
     .cd-late b { font-size: 34px; line-height: 1; }
     .cd-late.ontime { background: var(--t-ontime-bg); } .cd-late.ontime, .cd-late.ontime small { color: var(--t-ontime); }
     .cd-late.some { background: var(--t-some-bg); } .cd-late.some, .cd-late.some small { color: var(--t-some); }
@@ -419,6 +422,8 @@
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
     #panel.full .panel-more { margin: 6px 0 2px; }
+    /* The arrow shows where the card goes: on a phone it grows up (Mer ⌃), on a wider screen down (Mer ⌄) (Max, 2026-11-16). */
+    @media (min-width: 440px) { .panel-more svg { transform: rotate(180deg); } }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
     /* Loading, empty and error messages (src/state.js; round 4): a soft tile, centred, with a turning ring, (i) or ⚠. */
     .state { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 4px; padding: 14px 12px; border-radius: 14px;
@@ -465,9 +470,11 @@
     .tl-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
     .tl-row.next .tl-dot { width: 18px; height: 18px; box-sizing: border-box; background: var(--bg); border: 3.5px solid var(--accent); box-shadow: none; }
     /* Passed: an accent ring, the card's colour inside, a green ✓; cancelled: a red ring with ✕ (Max, 2026-11-15). */
+    /* Passed: filled with the accent, a light ✓ (the colour on accent buttons); cancelled: filled red, a light ✕
+       (Max, 2026-11-16, pic 9: "totally filled with accent"; light marks his pick). */
     .tl-row.passed .tl-dot, .tl-row.canceled .tl-dot { width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center;
-      background: var(--bg); border: 2.5px solid var(--accent); color: var(--c-ontime); box-shadow: none; }
-    .tl-row.canceled .tl-dot { border-color: var(--late); color: var(--late); }
+      background: var(--accent); border: 0; color: var(--accent-ink); box-shadow: none; }
+    .tl-row.canceled .tl-dot { background: var(--c-late); }
     /* "Track" over the tracks (Max, 2026-11-15), kept at the top while the stops scroll. */
     .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; padding: 2px 0 4px;
       background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -655,8 +662,8 @@
       </div>
       <p class="about-soon" data-t="comingSoon">Both buttons come alive soon.</p>
       <h3 data-t="credits">Credits</h3>
-      <ul class="about-credits" data-lang="en"><li><span>Trains, timetables, stations, tracks, disruptions</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (open data)</b></li><li><span>Map data</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, ODbL</b></li><li><span>Map tiles</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Drawn with</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Font</span><b>Outfit, SIL Open Font License</b></li><li><span>Spårat</span><b>free software, AGPL-3.0</b></li></ul>
-      <ul class="about-credits" data-lang="sv" hidden><li><span>Tåg, tidtabeller, stationer, spår, störningar</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (öppna data)</b></li><li><span>Kartdata</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> bidragsgivare, ODbL</b></li><li><span>Kartrutor</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Ritad med</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Typsnitt</span><b>Outfit, SIL Open Font License</b></li><li><span>Spårat</span><b>fri programvara, AGPL-3.0</b></li></ul>
+      <ul class="about-credits" data-lang="en"><li><span>Trains, timetables, stations, tracks, disruptions</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (open data)</b></li><li><span>Map data</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, ODbL</b></li><li><span>Map tiles</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Drawn with</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Font</span><b>Outfit, SIL Open Font License</b></li><li><span>Spårat: source code (free software, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
+      <ul class="about-credits" data-lang="sv" hidden><li><span>Tåg, tidtabeller, stationer, spår, störningar</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (öppna data)</b></li><li><span>Kartdata</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> bidragsgivare, ODbL</b></li><li><span>Kartrutor</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Ritad med</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Typsnitt</span><b>Outfit, SIL Open Font License</b></li><li><span>Spårat: källkod (fri programvara, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
       <p class="about-note" data-t="notAffiliated">Train companies' names and liveries belong to their owners. Spårat is not affiliated with them or with Trafikverket.</p>
     </div>
   </div>
