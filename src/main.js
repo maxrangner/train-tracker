@@ -712,12 +712,17 @@ setInterval(() => {
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
-  // The search bar's chip: the count (and the replay's time); the whole short line as its label (2026-11-15).
-  const short = `${t('trainsCount', trains.count)} · ` + (noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode);
-  statusCount.textContent = noData || error ? short : `${trains.count}${replay ? ` · ${hhmm(tNow)}` : ''}`;
+  // The search bar's chip: the status in words, no count (Max, 2026-11-16: "remove the trains counter. Keep the status
+  // text instead"): live / every 10 s / reconnecting / replay 07:01, or the problem; the whole short line, with the
+  // count, as its label (read by tools/shot.mjs and soak.mjs).
+  const state = noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
+  const short = `${t('trainsCount', trains.count)} · ${state}`;
+  statusCount.textContent = state;
   statusEl.title = short;
   statusEl.ariaLabel = short;
-  statusEl.classList.toggle('slow', status.positions !== 'live' && !replay);
+  // Yellow when not streaming (asking every 10 s, reconnecting, starting). The streaming mode is 'stream' (shown as
+  // "live"): the test was !== 'live', so the chip was yellow all the time when live (2026-11-15 to 16).
+  statusEl.classList.toggle('slow', status.positions !== 'stream' && !replay);
   // A pulse of the live dot when fresh data has come, at most every 10 s (round 4: a sign of life without drawing all the time).
   if (trains.lastReport && trains.lastReport !== beatSeen && tNow - beatAt > 10000 && !noData && !error) {
     beatSeen = trains.lastReport; beatAt = tNow;
