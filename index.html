@@ -309,7 +309,7 @@
       padding: 24px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
       border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
       animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1);
-      transition: max-height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
+      transition: max-height .26s cubic-bezier(.2, .9, .25, 1), height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
     .sheet.dragging { transition: none; }
     .sheet.leaving { transition: transform .2s ease-in; }
     /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
@@ -358,9 +358,7 @@
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     #panel:not(.full) .panel-star, #panel:not(.full) .panel-tvnotes, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
-    /* The stops to count down to, opened on the full card: the notes and timeline step aside so the list gets the room
-       (Max, 2026-11-16: "a super small area with a tiny scrollbar"; measured 129 px, 451 on the compact card). */
-    #panel.full.picking .panel-tvnotes, #panel.full.picking .panel-table { display: none; }
+
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
        disruption's card too (his answer 2A). */
     @media (max-width: 439px) { #panel .panel-close, #board .panel-close, #disruption .panel-close { display: none; } }
@@ -381,10 +379,17 @@
     button.cd-stop[aria-expanded="true"] { box-shadow: inset 0 0 0 2.5px var(--accent); }
     button.cd-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* The stops ahead to count down to: the list scrolls; the one counted down to in the accent, with ✓. */
-    .cd-pick { display: flex; flex-direction: column; min-height: 0; flex: 0 1 auto; }
+    /* Under the tiles, pushing the rest down (on the full card the timeline keeps what is left, scrolling); it slides
+       open and closed (Max, 2026-11-16: hiding the timeline was "too jerky"). */
+    .cd-pick { display: flex; flex-direction: column; flex: none; overflow: hidden; }
+    .cd-pick.opening { animation: cd-open .22s cubic-bezier(.2, .9, .25, 1); }
+    .cd-pick.closing { animation: cd-close .18s ease-in forwards; }
+    @keyframes cd-open { from { max-height: 0; opacity: 0; } to { max-height: 46vh; opacity: 1; } }
+    @keyframes cd-close { from { max-height: 46vh; opacity: 1; } to { max-height: 0; opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .cd-pick.opening, .cd-pick.closing { animation-duration: 1ms; } }
     .cd-pick > p { margin: 12px 2px 6px; font-size: 13.5px; color: var(--muted); }
     #panel.picking { max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); }
-    .cd-list { overflow: auto; min-height: 0; max-height: 52vh; border-radius: 16px; background: var(--hover); padding: 4px; touch-action: pan-y; }
+    .cd-list { overflow: auto; min-height: 0; max-height: 40vh; border-radius: 16px; background: var(--hover); padding: 4px; touch-action: pan-y; }
     .cd-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 12px; background: none;
       font: inherit; font-size: 15px; color: var(--ink); text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
     .cd-row:hover { background: var(--bg); }

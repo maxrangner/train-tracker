@@ -81,7 +81,12 @@ function dragging(el) {
     const dy = e.clientY - start.y;
     if (dy < 0) {   // taller, following the finger, up to full height
       el.style.transform = '';
-      el.style.maxHeight = `${Math.min(window.innerHeight - TOP_GAP, start.h - dy)}px`;
+      const h = `${Math.min(window.innerHeight - TOP_GAP, start.h - dy)}px`;
+      // A compact card has nothing taller to show: it shows its full content at once and grows to the finger (Max,
+      // 2026-11-16: dragging up "doesn't follow the finger"; only its height limit grew).
+      if (!start.grew && !el.classList.contains('full') && !el.classList.contains('page') && dy < -6) { start.grew = true; el.classList.add('full'); }
+      el.style.maxHeight = h;
+      if (start.grew) el.style.height = h;
     } else {        // down: the whole sheet follows the finger
       el.style.maxHeight = '';
       el.style.transform = `translateY(${dy}px)`;
@@ -89,8 +94,20 @@ function dragging(el) {
   });
   const end = (e) => {
     if (!start || e.pointerId !== start.id) return;
-    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH } = start;
+    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew } = start;
     start = null;
+    if (grew) {   // grown with the finger: on to full height, or back to compact; its height glides there
+      const now = el.getBoundingClientRect().height, stay = dy < -SNAP_PX;
+      if (!stay) el.classList.remove('full');
+      el.style.height = ''; el.style.maxHeight = '';
+      const to = stay ? el.getBoundingClientRect().height : startH;
+      el.style.height = `${now}px`;
+      el.getBoundingClientRect();   // (the start of the glide)
+      el.classList.remove('dragging');
+      el.style.height = `${to}px`;
+      setTimeout(() => { el.style.height = ''; }, 280);
+      return;
+    }
     el.classList.remove('dragging');   // from here it moves to where it settles (CSS transition)
     el.style.maxHeight = '';
     const page = el.classList.contains('page'), full = el.classList.contains('full');
