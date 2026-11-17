@@ -6,18 +6,24 @@ import nodemailer from 'nodemailer';
 
 const WAITS = [60000, 120000, 300000, 600000];
 
-export function createMailer(cfg, log, { offline = () => false } = {}) {
-  const need = ['MAIL_HOST', 'MAIL_USER', 'MAIL_PASS', 'MAIL_TO'];
-  if (need.every(k => !cfg[k])) return null;                      // no mail settings: no mails (page and terminal only)
-  for (const k of need) if (!cfg[k]) throw new Error(`mail needs ${k} in the settings file (or none of the MAIL_ lines)`);
+function makeTransport(cfg) {
   const port = Number(cfg.MAIL_PORT ?? 465);
-  const transport = nodemailer.createTransport({
+  return nodemailer.createTransport({
     // Always encrypted before the password goes (Codex's review, 2026-11-17): from the first byte on 465, otherwise the
     // server must switch to encryption first (requireTLS) or nothing is sent.
     host: cfg.MAIL_HOST, port, secure: (cfg.MAIL_SECURE ?? (port === 465 ? 'yes' : 'no')) === 'yes', requireTLS: true,
     auth: { user: cfg.MAIL_USER, pass: cfg.MAIL_PASS },
     connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 30000,
   });
+}
+// Logs in to the mail server and leaves, sending nothing (the self-check, monitor/self-check.mjs).
+export const mailCheck = cfg => makeTransport(cfg).verify();
+
+export function createMailer(cfg, log, { offline = () => false } = {}) {
+  const need = ['MAIL_HOST', 'MAIL_USER', 'MAIL_PASS', 'MAIL_TO'];
+  if (need.every(k => !cfg[k])) return null;                      // no mail settings: no mails (page and terminal only)
+  for (const k of need) if (!cfg[k]) throw new Error(`mail needs ${k} in the settings file (or none of the MAIL_ lines)`);
+  const transport = makeTransport(cfg);
   const queue = [];
   const stats = { sent: 0, failed: 0, waiting: 0, lastError: null, lastSentAt: null };
   let busy = false, tries = 0, timer = null;

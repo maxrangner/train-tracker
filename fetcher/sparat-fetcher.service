@@ -1,8 +1,9 @@
 # Spårat's fetcher as a Linux service (systemd): starts at boot, starts again 5 s after a crash, logs to the journal
-# (journalctl -u sparat-fetcher). Install (public-plan step 6; paths as below, change them if the folder is elsewhere):
-#   sudo cp fetcher/sparat-fetcher.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now sparat-fetcher
-# The settings file holds the key and the upload password: chmod 600, owned by the user below.
+# (journalctl -u sparat-fetcher). Installed by the guide in docs/deploy.md (plan step 2, 2026-11-17).
+# Its settings file /etc/sparat/fetcher.env holds the key and the one.com password: owned by sparat, mode 600.
+# Locked down (each line explained in the guide; checked at install by the self-check and systemd-analyze security):
+# its own powerless user, a read-only disk with the home folders hidden, no way to become administrator, and a fence:
+# no address on this PC or in the home network, only the internet (IPv4) and the name lookup on 127.0.0.53.
 [Unit]
 Description=Spårat fetcher (Trafikverket -> small files for the map)
 Wants=network-online.target
@@ -11,17 +12,48 @@ After=network-online.target
 [Service]
 Type=simple
 User=sparat
+Group=sparat
 WorkingDirectory=/opt/sparat
-ExecStart=/usr/bin/node fetcher/main.mjs --env /etc/sparat/fetcher.env --upload --status 8091
+Environment=NODE_OPTIONS=--dns-result-order=ipv4first
+ExecStart=/usr/bin/node fetcher/main.mjs --env /etc/sparat/fetcher.env --upload --status-socket /run/sparat/status.sock --self-check-file /etc/sparat/self-check
 Restart=always
 RestartSec=5
+# The self-check's own exit codes (78 all as expected, 79 not): never restarted.
+RestartPreventExitStatus=78 79
 # A runaway would be stopped here (it uses about 100 MB).
 MemoryMax=600M
-# Nothing is written to disk by the fetcher; it needs no more than to read its folder.
+# Its status for the monitor, as a local socket file (no network address): /run/sparat/status.sock, group sparat.
+RuntimeDirectory=sparat
+RuntimeDirectoryMode=0750
+UMask=0077
+
+# The box: nothing written to disk, home folders hidden, no devices, no way to change the system or gain powers.
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
 NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+# Not MemoryDenyWriteExecute: Node's JavaScript engine needs it.
+
+# The fence: IPv4 only (so no IPv6 address at home can be reached either; AF_NETLINK only lets the name lookup ask
+# the kernel which kinds of address exist), and no address on this PC (localhost), in
+# the home network or the provider's shared range, no link-local, multicast or broadcast. Allowed on top: the name
+# lookup (127.0.0.53). The internet stays open: Trafikverket and one.com.
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+IPAddressDeny=localhost link-local multicast 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 172.16.0.0/12 192.168.0.0/16 255.255.255.255/32
+IPAddressAllow=127.0.0.53/32
 
 [Install]
 WantedBy=multi-user.target

@@ -5,6 +5,7 @@
 //           new or changed file first, index.html last, so a page being opened never mixes versions; files the new
 //           page no longer has are kept a day (pages already open may still ask for them), then deleted
 //   all     tiles, page
+//   mark    only makes sure the folder is claimed and data/ holds the fetcher's marker (.sparat-data); nothing else
 //   list    what is on the site
 //   remove  undo: everything in the folder, the fetcher's data/ too; the address shows one.com's placeholder again
 // Settings: the fetcher's (SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_HOSTKEY) plus SITE_DIR (the address's
@@ -28,8 +29,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const arg = n => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : undefined; };
 const what = process.argv[2];
 const envPath = arg('env');
-if (!['tiles', 'page', 'all', 'list', 'remove'].includes(what) || !envPath) {
-  console.log('node tools/deploy.mjs tiles|page|all|list|remove --env <settings file>'); process.exit(2);
+if (!['tiles', 'page', 'all', 'mark', 'list', 'remove'].includes(what) || !envPath) {
+  console.log('node tools/deploy.mjs tiles|page|all|mark|list|remove --env <settings file>'); process.exit(2);
 }
 const cfg = Object.fromEntries(readFileSync(envPath, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l))
   .map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]));
