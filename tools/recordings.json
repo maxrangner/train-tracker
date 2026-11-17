@@ -108,6 +108,25 @@
       }
     },
     {
+      "name": "2026-11-17T15-00-00-001Z",
+      "role": "library",
+      "slot": "weekday evening rush",
+      "swedish": "Tue 17 Nov 2026 16:00-18:00",
+      "why": "The screens check's replay (tools/lib/browser.mjs CARD_HOUR, 2026-11-17): the first recording with its trains' routes saved at once (823 of 823), so the train card has its stops; a weekday rush, two hours, SL's GPS on (117 of 120 SL trains sent a speed; Sat 14 Nov 4 of 56). 361 trains at once (most 378), 32 % never send a speed, 40 % of train time in GPS silences of 30 s or more, 101 jumps, 22 % of trains 6 min or more late. One stream break each for positions and timetable, asked again at once: no gap over 20 s in the positions. Library, not core: the evening rush already has its core hour; at 137 MB the page still shows trains after 5.5 s (rush hour 4 s).",
+      "positions": {
+        "bytes": 136913093,
+        "sha256": "2c73949aa929e417e2be5212f89ea0e574952a389441c856bdb284920ee2acda"
+      },
+      "timetable": {
+        "bytes": 26518453,
+        "sha256": "9ed20c8c34c035edf84e2e376a5c1314e527abd698f09225b437ba4d53473cca"
+      },
+      "routes": {
+        "bytes": 12971238,
+        "sha256": "0d011312b206648cd225a93e7b14db7649d64d43e6dfd034825bec85dd8dec31"
+      }
+    },
+    {
       "name": "2026-11-13T10-30-00-013Z",
       "role": "library",
       "slot": "weekday midday",

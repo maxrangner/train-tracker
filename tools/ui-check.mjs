@@ -151,7 +151,8 @@ try {
     // With saved routes the replay's card is as at the replay's clock, the stops ahead (as live); a train at its end:
     // "Arrived".
     if (c.button) {
-      await page.click('#panel .cd-stop');
+      // Clicked in the page: the card redraws each second, so a handle taken first can be gone by the click.
+      await page.evaluate(() => document.querySelector('#panel .cd-stop').click());
       await sleep(300);
       c = await card();
       expect(c.rows.length > 0, 'the stop tile listed no stops');
