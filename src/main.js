@@ -259,14 +259,31 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
-// About (round 4): the logo, Buy me a coffee (Max's Ko-fi link, when he gives it: until then the button does nothing)
-// and Report a bug (does nothing yet: "Leave non functional for now").
-const KOFI_URL = '';
+// About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
+// "Email, pre-filled", to sparat@rangner.com, a mailbox of its own). The mail app opens with the build, a link to the
+// same map view, the open train and the phone filled in; the person writes what happened (and attaches a screenshot).
+const KOFI_URL = 'https://ko-fi.com/rangner';
+const BUG_EMAIL = 'sparat@rangner.com';
+const PUBLIC_URL = 'https://sparat.rangner.com/';   // the view link points here (inside the app the page's own address is local)
 helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
 document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
 document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
 document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
-helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL);
+function bugMail() {
+  const version = `${typeof __VERSION__ === 'string' ? __VERSION__ : '?'} (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'})`;
+  const view = new URLSearchParams(location.hash.slice(1)).get('view');
+  const r = panel.openId && trains.get(panel.openId);
+  const company = r && lateness.brand(r.id);
+  const train = r ? `${r.number}${company ? ` ${company}` : ''}` : '–';
+  const mode = replay ? `replay ${replay}` : fromFiles ? 'files' : 'live';
+  const body = [t('bugWhat'), '', '', '', '—', `Spårat ${version}`, `${t('bugView')}: ${PUBLIC_URL}${view ? `#view=${view}` : ''}`,
+    `${t('bugTrain')}: ${train}`, `${t('bugMode')}: ${mode}, ${settings.language}, ${settings.theme}`,
+    `${t('bugDevice')}: ${navigator.userAgent}`].join('\r\n');
+  return `mailto:${BUG_EMAIL}?subject=${encodeURIComponent(t('bugSubject', version))}&body=${encodeURIComponent(body)}`;
+}
+window.__bugMail = bugMail;   // (tools: the mail a tap would open)
+document.getElementById('bug-button').onclick = () => { window.location.href = bugMail(); };
+helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL && BUG_EMAIL);
 // The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
 // The same word in both languages. "dev" on the PC's live-reloading page.
 document.getElementById('about-version').textContent = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
