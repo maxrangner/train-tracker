@@ -47,11 +47,32 @@ const mailer = createMailer(cfg, log, { offline: testOffline });
 
 // ---------- watching the fetcher (every 15 s) ----------
 let cur = null;               // the newest status from the fetcher
+// The fetcher's status is taken in only as the numbers and short words it should hold (Codex's review, 2026-11-17):
+// a fetcher gone wrong can't put page code into the monitor page or odd text into a mail.
+const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const word = v => (typeof v === 'string' && /^[a-z-]{1,20}$/.test(v) ? v : '?');
+const text = v => (typeof v === 'string' ? v.slice(0, 300).replace(/[<>&"'`]/g, '?') : null);   // never page code, wherever it is shown
+const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, num(o[k])]));
+function cleanStatus(s) {
+  const F = obj(s.feeds), U = s.upload && typeof s.upload === 'object' ? s.upload : null, feed = f => ({ mode: word(obj(f).mode), since: num(obj(f).since) });
+  return {
+    ...pick(obj(s), ['now', 'up', 'pid', 'startedAt', 'memoryMB']),
+    feeds: { positions: feed(F.positions), passings: feed(F.passings), lastRecordAt: num(F.lastRecordAt), newestReport: num(F.newestReport) },
+    state: Object.fromEntries(Object.entries(obj(s.state)).filter(([k]) => /^[a-zA-Z]{1,20}$/.test(k)).map(([k, v]) => [k, num(v)])),
+    load: pick(obj(s.load), ['asks', 'streams', 'since', 'askBytes', 'refused', 'failed', 'streamBytes']),
+    upload: U && { ...pick(U, ['ok', 'failed', 'removed', 'reconnects', 'lastOkAt', 'lastMs', 'swept', 'bytes', 'lastErrorAt', 'waiting']),
+      connected: U.connected === true, lastError: text(U.lastError), refused: text(U.refused) },
+    sizes: Object.fromEntries(Object.entries(obj(s.sizes)).filter(([k]) => /^[a-z-]{1,20}$/.test(k))
+      .map(([k, v]) => [k, { name: /^[a-z0-9.-]{1,60}$/.test(obj(v).name ?? '') ? v.name : null, bytes: num(obj(v).bytes), gz: num(obj(v).gz) }])),
+    cpu: pick(obj(s.cpu), ['user', 'system']),
+  };
+}
 let lastPid = null, minutePolls = 0, minuteUp = 0, minuteRestarts = 0;
 async function poll() {
   minutePolls++;
   try {
-    const s = await (await fetch(FETCHER, { signal: AbortSignal.timeout(5000) })).json();
+    const s = cleanStatus(await (await fetch(FETCHER, { signal: AbortSignal.timeout(5000), redirect: 'error' })).json());
     if (lastPid !== null && s.pid !== lastPid) { minuteRestarts++; log(`the fetcher started again (process ${s.pid})`); }
     lastPid = s.pid; cur = { ...s, seenAt: Date.now() }; minuteUp++;
   } catch { /* not answering: counted by the minute row */ }
@@ -67,7 +88,7 @@ async function readOne() {
   for (let back = 1; back <= 4; back++) {   // the newest finished 5-s file, then older ones (as the page will)
     const slot = Math.floor(now / LIVE_MS) - back;
     try {
-      const res = await fetch(`${DATA_URL}live-${slot}.json`, { method: 'HEAD', signal: AbortSignal.timeout(10000), headers: { 'Accept-Encoding': 'gzip' } });
+      const res = await fetch(`${DATA_URL}live-${slot}.json`, { method: 'HEAD', signal: AbortSignal.timeout(10000), headers: { 'Accept-Encoding': 'gzip' }, redirect: 'error' });
       status = res.status;
       if (res.status === 200) return { status: 200, age: Math.round((now - slot * LIVE_MS) / 1000) };
       if (res.status !== 404) return { status: res.status, age: null };
@@ -158,7 +179,8 @@ const data = () => ({
   open: rules.open(), mails: mails.slice(-50), rows, days: readDays(),
 });
 const server = createServer((req, res) => {
-  const path = new URL(req.url, 'http://x').pathname;
+  let path;
+  try { path = new URL(req.url, 'http://x').pathname; } catch { res.writeHead(400); return res.end(); }   // a malformed address: 400, no crash
   if (path === '/') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(readFileSync(PAGE)); }
   if (path === '/data.json') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify(data())); }
   res.writeHead(404); res.end();

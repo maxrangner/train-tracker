@@ -143,7 +143,7 @@ function detail(key, r) {
     case 'crash-loop': return 'The fetcher started again 3 or more times in 15 minutes: it is crashing.';
     case 'trv-refused': return `Trafikverket refused ${r.refused} question(s) in the last minute.`;
     case 'asking-too-much': return `${r.asks} questions to Trafikverket in the last minute.`;
-    case 'uploads-failing': return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).`;
+    case 'uploads-failing': return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${r.upError ? ` The fetcher says: ${r.upError}` : ''}`;
     case 'onecom-refused': return 'one.com refused the monitor\'s read of the newest file.';
     case 'stale-file': return r.one.age === null ? 'No recent file is found on one.com.' : `The newest file on one.com is ${r.one.age} s old.`;
     case 'no-reports': return r.reportAge === null ? 'No position report since the fetcher started.' : `The newest position report is ${Math.round(r.reportAge / 60)} min old.`;

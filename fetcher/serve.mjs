@@ -1,11 +1,17 @@
 // Hands the fetcher's files from memory over plain HTTP on this computer (for working on the page: public-plan step 3
 // and 4). The public is served by one.com, not by this. Same rules as there: any site may read (the apps need it), a
 // missing name is never kept (it may exist a second later), and a name never changes content, so it may be kept.
+// Both answer only on this computer (127.0.0.1), and a malformed address gets "400" instead of stopping the fetcher
+// (Codex's review, 2026-11-17).
 import { createServer } from 'node:http';
+
+const pathOf = req => { try { return decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { return null; } };
 
 export function serve(shelf, port, status) {
   const server = createServer((req, res) => {
-    const name = decodeURIComponent(new URL(req.url, 'http://x').pathname.slice(1));
+    const path = pathOf(req);
+    if (path === null) { res.writeHead(400); return res.end(); }
+    const name = path.slice(1);
     const head = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
     if (name === 'status') {
       res.writeHead(200, { ...head, 'Cache-Control': 'no-store' });
@@ -17,7 +23,7 @@ export function serve(shelf, port, status) {
     res.writeHead(200, { ...head, 'Cache-Control': 'public, max-age=300', ...(gz ? { 'Content-Encoding': 'gzip' } : {}), Vary: 'Accept-Encoding' });
     res.end(gz ? f.gz : f.json);
   });
-  server.listen(port);
+  server.listen(port, '127.0.0.1');
   return server;
 }
 
@@ -25,7 +31,7 @@ export function serve(shelf, port, status) {
 // The monitor (monitor/main.mjs) reads it.
 export function serveStatus(port, status) {
   const server = createServer((req, res) => {
-    if (new URL(req.url, 'http://x').pathname !== '/status') { res.writeHead(404); return res.end(); }
+    if (pathOf(req) !== '/status') { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(status()));
   });

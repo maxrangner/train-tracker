@@ -24,10 +24,17 @@ for (const f of files) {
     const m = /^\s*([A-Za-z_][\w]*)\s*=\s*(.*)$/.exec(line);
     if (!m || !/KEY|PASS|SECRET|TOKEN/i.test(m[1]) || /HOSTKEY/i.test(m[1])) continue;
     const v = m[2].trim().replace(/^['"]|['"]$/g, '');
-    if (v.length >= 8 && !secrets.some(([, x]) => x === v)) secrets.push([`${m[1]} (${f})`, v]);
+    if (v.length >= 6 && !secrets.some(([, x]) => x === v)) secrets.push([`${m[1]} (${f})`, v]);
   }
 }
-if (!secrets.length) { console.log(`secret search FAILED: no secret found to search for in ${files.join(', ')}`); process.exit(2); }
+// Every kind of secret this computer holds must be known before "none found" means anything (Codex's review,
+// 2026-11-17): the Trafikverket key and the one.com password always; the monitor's mail password when its file is here.
+// What it can't promise: secrets it was never told about, or written in another form (encoded, split oddly).
+const KINDS = [['the Trafikverket key', /TRV_KEY$/, true], ['the one.com password', /^SFTP_PASS$/, true], ['the mail password', /^MAIL_PASS$/, false]];
+const has = re => secrets.some(([what]) => re.test(what.split(' ')[0]));
+const missing = KINDS.filter(([, re, must]) => must && !has(re)).map(([name]) => name);
+if (missing.length) { console.log(`secret search FAILED: ${missing.join(' and ')} not found to search for (in ${files.join(', ')})`); process.exit(2); }
+console.log(`secret search: looking for ${KINDS.filter(([, re]) => has(re)).map(([name]) => name).join(', ')}`);
 
 // A value is found whole, or (16 characters or longer) as its first or last 12 characters: a key cut in two by a
 // build would still show.

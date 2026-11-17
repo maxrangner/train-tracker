@@ -32,7 +32,7 @@ export class NodeEventSource {
   async #run() {
     let lastEventId = '';
     try {
-      const res = await fetch(this.url, { signal: this.ctrl.signal, headers: { Accept: 'text/event-stream' } });
+      const res = await fetch(this.url, { signal: this.ctrl.signal, headers: { Accept: 'text/event-stream' }, redirect: 'error' });
       if (!res.ok) throw new Error(`stream answered ${res.status}`);
       if (this.readyState === NodeEventSource.CLOSED) return;
       this.readyState = NodeEventSource.OPEN;

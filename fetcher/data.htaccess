@@ -3,6 +3,10 @@
 # files (the apps run from other addresses). Measured on one.com 2026-11-15 (docs/data.md "one.com, measured").
 # The files are stored packed (gzip, since 2026-11-16): they go out as they are, with a header saying so, so browsers
 # unpack them; the server must not pack them a second time (no-gzip).
+# The folder's marker (.sparat-data: the fetcher writes only where it is) is never handed out.
+<Files ".sparat-data">
+Require all denied
+</Files>
 SetEnvIf Request_URI "\.json$" no-gzip=1
 <IfModule mod_headers.c>
 <FilesMatch "\.json$">

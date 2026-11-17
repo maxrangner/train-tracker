@@ -103,6 +103,30 @@ let failed = 0;
   console.log(`${s.status === 0 ? 'ok  ' : 'FAIL'} ${(s.stdout || s.stderr || '').trim()}`);
   if (s.status !== 0) failed++;
 }
+// The fetcher writes only in Spårat's own folder on one.com (tools/upload-check.mjs: a pretend connection, no network;
+// plan to beta step 1, 2026-11-17).
+{
+  const u = spawnSync('node', ['tools/upload-check.mjs'], { encoding: 'utf8' });
+  console.log(`${u.status === 0 ? 'ok  ' : 'FAIL'} ${(u.stdout || '').trim().split('\n').at(-1)}`);
+  if (u.status !== 0) { console.log((u.stdout || '').split('\n').filter(l => l.startsWith('FAIL')).join('\n')); failed++; }
+}
+// Known problems in the libraries the Linux PC runs (npm's own list, asked online; Codex's review, 2026-11-17): high
+// or critical there fails the check; in the page's other libraries it is a note; npm not answering is a note.
+{
+  const lock = JSON.parse(readFileSync('package-lock.json', 'utf8')).packages, linux = new Set(), todo = ['ssh2', 'nodemailer'];
+  while (todo.length) { const n = todo.pop(); if (linux.has(n)) continue; linux.add(n); const e = lock[`node_modules/${n}`] ?? {}; todo.push(...Object.keys(e.dependencies ?? {}), ...Object.keys(e.optionalDependencies ?? {})); }
+  const a = spawnSync('npm audit --omit=dev --json', { encoding: 'utf8', shell: true, timeout: 60000 });
+  let v = null;
+  try { v = JSON.parse(a.stdout).vulnerabilities; } catch { /* no answer */ }
+  if (!v) console.log('note the libraries\' known problems could not be asked (npm audit gave no answer)');
+  else {
+    const bad = Object.values(v).filter(x => ['high', 'critical'].includes(x.severity));
+    const there = bad.filter(x => linux.has(x.name)), other = bad.filter(x => !linux.has(x.name));
+    console.log(`${there.length ? 'FAIL' : 'ok  '} libraries on the Linux PC (${linux.size}): ${there.length ? there.map(x => `${x.name} (${x.severity})`).join(', ') : 'no known high or critical problems'}`);
+    if (other.length) console.log(`note the page's libraries: ${other.map(x => `${x.name} (${x.severity})`).join(', ')}`);
+    if (there.length) failed++;
+  }
+}
 for (const f of skipReplay ? [] : recordings) {
   let r;
   try {

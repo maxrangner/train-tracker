@@ -12,7 +12,9 @@ export function createMailer(cfg, log, { offline = () => false } = {}) {
   for (const k of need) if (!cfg[k]) throw new Error(`mail needs ${k} in the settings file (or none of the MAIL_ lines)`);
   const port = Number(cfg.MAIL_PORT ?? 465);
   const transport = nodemailer.createTransport({
-    host: cfg.MAIL_HOST, port, secure: (cfg.MAIL_SECURE ?? (port === 465 ? 'yes' : 'no')) === 'yes',
+    // Always encrypted before the password goes (Codex's review, 2026-11-17): from the first byte on 465, otherwise the
+    // server must switch to encryption first (requireTLS) or nothing is sent.
+    host: cfg.MAIL_HOST, port, secure: (cfg.MAIL_SECURE ?? (port === 465 ? 'yes' : 'no')) === 'yes', requireTLS: true,
     auth: { user: cfg.MAIL_USER, pass: cfg.MAIL_PASS },
     connectionTimeout: 20000, greetingTimeout: 20000, socketTimeout: 30000,
   });

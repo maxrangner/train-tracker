@@ -39,6 +39,7 @@ const SITE = cfg.SITE_DIR.replace(/\/$/, '');
 const URL_ = cfg.SITE_URL.replace(/\/$/, '');
 if (!/^\/webroots\/[0-9a-z]+$/.test(SITE)) { console.log(`SITE_DIR must be a one.com address folder like /webroots/4506cfb2 (got ${SITE})`); process.exit(2); }
 const MARK = '.sparat-site';
+const DATA_MARK = '.sparat-data';   // the fetcher's folder marker (fetcher/upload.mjs MARK)
 const OURS = new Set(['data', 'api', 'tiles', MARK]);   // never part of the page's own files
 
 // Cache rules. Root: the page itself is asked again every visit (a new version shows at once); the few named files
@@ -95,8 +96,10 @@ const sftp = await new Promise((res, rej) => {
 });
 const call = (fn, ...a) => new Promise((res, rej) => sftp[fn](...a, (e, v) => (e ? rej(e) : res(v))));
 const inside = p => { const n = posix.normalize(p); if (n !== SITE && !n.startsWith(SITE + '/')) throw new Error('outside the site folder: ' + p); return n; };
-const stat = async p => { try { return await call('stat', inside(p)); } catch { return null; } };
-const readdir = async p => { try { return await call('readdir', inside(p)); } catch { return []; } };
+// Only "no such file" (SFTP code 2) counts as missing or empty; any other error stops the run, so a folder that
+// can't be read is never taken for an empty one (Codex's review, 2026-11-17).
+const stat = async p => { try { return await call('stat', inside(p)); } catch (e) { if (e.code === 2) return null; throw e; } };
+const readdir = async p => { try { return await call('readdir', inside(p)); } catch (e) { if (e.code === 2) return []; throw e; } };
 const made = new Set();
 async function mkdirs(dir) {
   let at = SITE;
@@ -132,15 +135,24 @@ async function walkRemote(p, out = []) {
   return out;
 }
 
-// The folder must be ours (the marker), or empty (data/ allowed) on the first run.
+// The folder must be ours (the marker), or empty (data/ allowed) on the first run. Every run also makes sure the
+// fetcher's folder data/ holds its own marker (.sparat-data): the fetcher writes only where it finds it
+// (fetcher/upload.mjs; plan to beta step 1, 2026-11-17).
 async function claim() {
   const names = (await readdir(SITE)).map(e => e.filename);
-  if (names.includes(MARK)) return;
+  if (names.includes(MARK)) return markData();
   const other = names.filter(n => n !== 'data');
   if (other.length) throw new Error(`${SITE} is not Spårat's (no ${MARK}) and not empty (${other.slice(0, 5).join(', ')}): refusing`);
   await put(MARK, `Spårat's site folder (tools/deploy.mjs). ${URL_}\n`);
   await put('.htaccess', HT_ROOT);
   log(`claimed ${SITE} (${MARK})`);
+  await markData();
+}
+async function markData() {
+  if (await stat(`${SITE}/data/${DATA_MARK}`)) return;
+  await put(`data/${DATA_MARK}`, `Spårat's data folder: the fetcher writes only here (fetcher/upload.mjs). ${URL_}/data/
+`);
+  log(`marked ${SITE}/data (${DATA_MARK})`);
 }
 
 async function tiles() {
