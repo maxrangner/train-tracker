@@ -96,6 +96,13 @@ else console.log(`replaying the ${MODE} recordings (${recordings.length}): ${rec
 const replayStart = Date.now();
 
 let failed = 0;
+// No secret in any file git tracks (plan to beta phase B, 2026-11-17): every time, it takes a second. A search
+// that can't run (no settings file with a secret on this computer) fails too.
+{
+  const s = spawnSync('node', ['tools/key-search.mjs', '--git'], { encoding: 'utf8' });
+  console.log(`${s.status === 0 ? 'ok  ' : 'FAIL'} ${(s.stdout || s.stderr || '').trim()}`);
+  if (s.status !== 0) failed++;
+}
 for (const f of skipReplay ? [] : recordings) {
   let r;
   try {

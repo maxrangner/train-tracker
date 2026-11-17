@@ -17,5 +17,6 @@ const env = { ...process.env, VITE_TRV_KEY: '', VITE_DATA_URL: data, VITE_TAP_UR
 const build = spawnSync('npx', ['vite', 'build', '--outDir', 'dist-public', '--emptyOutDir'], { stdio: 'inherit', env, shell: true });
 if (build.status !== 0) process.exit(build.status ?? 1);
 console.log(`built dist-public/: data ${data}, taps ${tap || '(none)'}, map ${mapFile || 'OpenFreeMap'}`);
+// Every secret, and a search that can't run is a failure too (plan to beta phase B, 2026-11-17: exit 2 used to pass).
 const search = spawnSync('node', ['tools/key-search.mjs', 'dist-public'], { stdio: 'inherit' });
-process.exit(search.status === 2 ? 0 : search.status ?? 1);
+process.exit(search.status === 0 ? 0 : 1);

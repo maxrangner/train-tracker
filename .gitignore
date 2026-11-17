@@ -1,4 +1,10 @@
 .env
+# settings files hold the key and passwords (plan to beta phase B, 2026-11-17): never committed; the examples are
+*.env
+.env.*
+*sftp*.txt
+!.env.example
+!example.env
 # the agent's and the owner's working notes: kept on this computer only
 CLAUDE.md
 AGENTS.md
