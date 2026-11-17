@@ -152,9 +152,11 @@
     .about-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
     .about-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 16px;
       font: inherit; font-size: 15px; font-weight: 700; background: var(--hover); color: var(--ink); cursor: pointer; }
-    .about-btn.primary { background: var(--accent); color: var(--accent-ink); }
     .about-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .about-ic { display: grid; place-items: center; }
+    /* Ko-fi's blue with dark text (white on it is too faint) and Ko-fi's cup, as in Connection Lab; the same in dark */
+    .about-btn.kofi { background: #72a4f2; color: #16263d; }
+    .about-btn.kofi img { height: 20px; width: auto; display: block; }
     .about-soon { margin: 6px 0 0; text-align: center; font-size: 12.5px; color: var(--muted); }
     .about-credits { list-style: none; margin: 0; padding: 4px 12px; border-radius: 16px; background: var(--hover); }
     .about-credits li { display: grid; gap: 1px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -675,7 +677,7 @@
     <div class="help-body">
       <div class="about-top"><span class="about-logo"></span><p data-t="aboutLine">A live map of Sweden's trains</p></div>
       <div class="about-buttons">
-        <button id="kofi-button" class="about-btn primary" type="button"><span class="about-ic"></span><span data-t="coffee">Buy me a coffee</span></button>
+        <button id="kofi-button" class="about-btn kofi" type="button"><span class="about-ic"></span><span data-t="coffee">Buy me a coffee</span></button>
         <button id="bug-button" class="about-btn" type="button"><span class="about-ic"></span><span data-t="reportBug">Report a bug</span></button>
       </div>
       <p class="about-soon" data-t="comingSoon">Both buttons come alive soon.</p>
