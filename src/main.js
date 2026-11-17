@@ -26,6 +26,7 @@ import { createStats } from './stats.js';
 import { createStatsPage } from './stats-page.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
+import kofiCup from './kofi-cup.png';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -299,11 +300,14 @@ document.getElementById('help-button').onclick = () => { menu.close(); openHelp(
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled", to sparat@rangner.com, a mailbox of its own). The mail app opens with the build, a link to the
 // same map view, the open train and the phone filled in; the person writes what happened (and attaches a screenshot).
-const KOFI_URL = 'https://ko-fi.com/rangner';
+// Ko-fi as in Max's Connection Lab (Max, 2026-11-17: "do the same"): a plain link, the one Ko-fi's button script writes,
+// in Ko-fi's blue with Ko-fi's cup kept in the page (kofi-cup.png, from there). Not the script itself: it would load
+// from Ko-fi and Google Fonts on every visit, and it writes with document.writeln, so it can't go in a panel built later.
+const KOFI_URL = 'https://ko-fi.com/X1C729ZIK7';
 const BUG_EMAIL = 'sparat@rangner.com';
 const PUBLIC_URL = 'https://sparat.rangner.com/';   // the view link points here (inside the app the page's own address is local)
 helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
-document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
+document.querySelector('#kofi-button .about-ic').innerHTML = `<img src="${kofiCup}" alt="">`;   // the words say where it goes
 document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
 document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
 function bugMail() {

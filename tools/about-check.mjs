@@ -45,7 +45,7 @@ try {
   await page.evaluate(() => document.getElementById('help-button').click()); await sleep(400);
   await page.evaluate(() => document.getElementById('kofi-button').click());
   const opened = await page.evaluate(() => window.__opened);
-  if (opened[0] !== 'https://ko-fi.com/rangner') fails.push(`Ko-fi opened ${JSON.stringify(opened)}`);
+  if (opened[0] !== 'https://ko-fi.com/X1C729ZIK7') fails.push(`Ko-fi opened ${JSON.stringify(opened)}`);
   if (await page.evaluate(() => !document.querySelector('.about-soon').hidden)) fails.push('the "come alive soon" note still shows');
   await page.screenshot({ path: 'shots/todo-1117/about.jpg', quality: 85 });
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));
