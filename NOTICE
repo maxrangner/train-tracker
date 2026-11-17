@@ -14,7 +14,15 @@ your version's source code.
 Data and services used by the program, each under its own terms:
 - Train positions, timetables and stations: Trafikverket's open data (CC0).
 - Map data: (c) OpenStreetMap contributors, Open Database License.
-- Map tiles: OpenFreeMap, built on (c) OpenMapTiles.
+- Map tiles: OpenFreeMap, built on (c) OpenMapTiles. The public page uses its own file of Sweden's map pieces, cut
+  out of OpenFreeMap's world file by tools/map-file.mjs (not in this repository; same terms).
+- Map styles (public/map/light.json, dark.json, from OpenFreeMap's positron and dark, recoloured in src/map-look.js):
+  Positron and Dark Matter, (c) MapTiler.com & OpenMapTiles contributors, (c) CartoDB Inc.; code BSD 3-Clause,
+  design CC BY 4.0, derived from CartoDB Basemaps (Stamen, Paul Norman; CC BY 3.0). Their icons (public/map/sprites/):
+  OpenFreeMap (MIT) and OpenMapTiles.
+- The Noto Sans font (public/map/fonts/, as served by OpenFreeMap): (c) 2022 The Noto Project Authors, SIL Open Font
+  License 1.1 (public/map/fonts/OFL-NotoSans.txt).
+- Reading the map file: PMTiles (BSD 3-Clause), with fflate (MIT).
 - Sweden's border (public/sweden-mask.json, from OpenStreetMap): (c) OpenStreetMap contributors, Open Database
   License.
 - Drawn with MapLibre GL JS (BSD 3-Clause) and three.js (MIT).

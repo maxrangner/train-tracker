@@ -1,7 +1,8 @@
 // The map and how trains are drawn on it.
 // Step 1: a dot per train. Step 2: rail lines from two sources, one shown at a time. Step 3: number + minutes off,
 // the dot's colour from the minutes off. The dots glide (positions come from trains.js at each frame).
-import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl } from 'maplibre-gl';
+import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWorkerUrl, addProtocol } from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 import { splitLabel, minutesText } from './tag.js';
 import { lateClass } from './lateness.js';
 import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trains-3d.js';
@@ -17,7 +18,20 @@ setWorkerUrl(workerUrl);
 
 // OpenFreeMap: free, no key. Positron is their calm grey style, so the lines and dots stand out; in dark their Dark
 // style (Max, 2026-11-12: B, near black, of Dark and Fiord).
-const styleUrl = dark => `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`;
+// The public page has its own background map instead (public-plan step 5, tools/map-file.mjs): one file of Sweden's
+// map pieces (PMTiles, cut out of OpenFreeMap's world file: the same data, so the same look), read piece by piece;
+// the same two styles, lettering and icons from public/map/. Chosen by VITE_MAP_URL in a build (npm run build:public)
+// or #map=<address of the file> on the dev page; without either, OpenFreeMap as before (dev page, Android dev app).
+const OWN_MAP = (import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).get('map')) || import.meta.env.VITE_MAP_URL || null;
+const here = p => new URL(p, location.href).href;
+if (OWN_MAP) addProtocol('pmtiles', new Protocol().tile);
+const styleUrl = dark => (OWN_MAP ? here(`/map/${dark ? 'dark' : 'light'}.json`) : `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`);
+// Our style files leave the map file, lettering and icons open (MAP_FILE, GLYPHS, SPRITE); filled in here.
+const ownStyle = s => {
+  if (!OWN_MAP || !s?.sources?.openmaptiles) return s;
+  return { ...s, glyphs: here('/map/fonts') + '/{fontstack}/{range}.pbf', sprite: here('/map/sprites/ofm'),
+    sources: { ...s.sources, openmaptiles: { ...s.sources.openmaptiles, url: `pmtiles://${here(OWN_MAP)}` } } };
+};
 // Our own colours on the map, light and dark. In dark, labels are white with a dark border (Max, 2026-11-12).
 // The open train's route is green, the part it has travelled a darker green (Max, 2026-11-13; it was one blue).
 // The rails and stations follow the map's look (Max, 2026-11-14: "Paper" light, dark rails with a white edge;
@@ -159,6 +173,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const map = new Map({
     container,
     style: styleUrl(dark),
+    transformStyle: (_, next) => ownStyle(next),   // also for each later setStyle (light ↔ dark)
     center: [16.5, 62.5],   // middle of Sweden
     zoom: 4.3,
     hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
@@ -171,7 +186,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // a second over all of Sweden with nothing moving on screen (measured 2026-11-15; Max: "Optimization is KEY").
     fadeDuration: 0,
     // Our labels' letters in Outfit (round 4): cut by tools/glyphs.mjs into public/glyphs/; a range not cut there
-    // (letters Outfit hasn't) comes from OpenFreeMap's Noto Sans. The base map's own names stay Noto Sans.
+    // (letters Outfit hasn't) comes from the base map's Noto Sans (OpenFreeMap's, or ours in public/map/fonts/).
+    // The base map's own names stay Noto Sans.
     transformRequest: (url, type) => {
       if (type !== 'Glyphs') return undefined;
       const m = /\/fonts\/([^/]+)\/(\d+-\d+)\.pbf/.exec(url);
