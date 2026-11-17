@@ -23,6 +23,7 @@ setWorkerUrl(workerUrl);
 // the same two styles, lettering and icons from public/map/. Chosen by VITE_MAP_URL in a build (npm run build:public)
 // or #map=<address of the file> on the dev page; without either, OpenFreeMap as before (dev page, Android dev app).
 const OWN_MAP = (import.meta.env.DEV && new URLSearchParams(location.hash.slice(1)).get('map')) || import.meta.env.VITE_MAP_URL || null;
+export const ownMap = Boolean(OWN_MAP);   // (the map credit: OpenFreeMap named only when its tiles are used)
 const here = p => new URL(p, location.href).href;
 if (OWN_MAP) addProtocol('pmtiles', new Protocol().tile);
 const styleUrl = dark => (OWN_MAP ? here(`/map/${dark ? 'dark' : 'light'}.json`) : `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`);
