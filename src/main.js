@@ -274,6 +274,12 @@ document.addEventListener('keydown', (e) => {
   if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
   if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
 });
+// The phone's back button in the Android app (Max, 2026-11-17): closes the sheet on top (card, board, search, a page),
+// one per press, like a drag down; with none open, the app goes to the background (as Android's own back does since
+// Android 12: the map stays loaded). Only inside the app: Capacitor's bridge is there; the web page never loads this.
+if (window.Capacitor?.isNativePlatform?.()) {
+  import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => { if (!sheets.closeTop()) App.minimizeApp(); }));
+}
 
 // ---- The menu: search for a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
