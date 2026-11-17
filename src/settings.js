@@ -107,7 +107,7 @@ export function setSetting(key, value) {
   settings[key] = v;
   saved[key] = v;
   try { localStorage.setItem(STORE, JSON.stringify(saved)); } catch { /* not remembered, but used now */ }
-  const now = new URLSearchParams(location.hash.slice(1));   // as it is now (the map keeps #view up to date)
+  const now = new URLSearchParams(location.hash.slice(1));   // as it is now (other settings, #replay and the like)
   if (now.has(KEYS[key].param)) {
     now.delete(KEYS[key].param);
     history.replaceState(null, '', `#${now.toString().replace(/%2F/g, '/')}`);

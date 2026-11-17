@@ -149,6 +149,40 @@ function addTriangles(map, dark) {
 // camera was still too far out for models (Max, 2026-11-15, pic 9-10 and #view=11.14/59.3328/17.9924/0/70).
 const dotOpacity = (sel, models) => (models ? 0 : ['case', ['==', ['get', 'id'], sel], 0, ['get', 'stale'], 0.4, 1]);
 
+// The view as text, zoom/lat/lon[/bearing[/tilt]], the way the map library wrote it into the address (#view=...):
+// lat/lon as precise as the zoom needs.
+const viewText = map => {
+  const z = Math.round(map.getZoom() * 100) / 100;
+  const m = 10 ** Math.ceil((z * Math.LN2 + Math.log(512 / 360 / 0.5)) / Math.LN10);
+  const c = map.getCenter(), b = Math.round(map.getBearing() * 10) / 10, p = Math.round(map.getPitch());
+  const parts = [z, Math.round(c.lat * m) / m, Math.round(c.lng * m) / m];
+  if (b || p) parts.push(b);
+  if (p) parts.push(p);
+  return parts.join('/');
+};
+// Text like that back to a camera, or null when it isn't one.
+const readView = text => {
+  const [zoom, lat, lon, bearing = 0, pitch = 0] = String(text ?? '').split('/').map(Number);
+  if (![zoom, lat, lon, bearing, pitch].every(Number.isFinite)) return null;
+  return { zoom, center: [lon, lat], bearing, pitch };
+};
+// Where the map opens (Max, 2026-11-18: the view is no longer shown in the address): a link's #view=... wins, then
+// the place this phone or computer last left the map at (VIEW_STORE), then the middle of Sweden.
+// The #view is then taken out of the address, the rest (#replay=... and the like) kept.
+const VIEW_STORE = 'view';
+const startView = () => {
+  const now = new URLSearchParams(location.hash.slice(1));
+  const linked = readView(now.get('view'));
+  if (now.has('view')) {
+    now.delete('view');
+    const rest = now.toString().replace(/%2F/g, '/');
+    history.replaceState(null, '', `${location.pathname}${location.search}${rest ? `#${rest}` : ''}`);
+  }
+  let last = null;
+  try { last = readView(localStorage.getItem(VIEW_STORE)); } catch { /* storage blocked: the start view */ }
+  return linked ?? last ?? { center: [16.5, 62.5], zoom: 4.3 };   // the middle of Sweden
+};
+
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
@@ -175,9 +209,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     container,
     style: styleUrl(dark),
     transformStyle: (_, next) => ownStyle(next),   // also for each later setStyle (light ↔ dark)
-    center: [16.5, 62.5],   // middle of Sweden
-    zoom: 4.3,
-    hash: 'view',           // the view is kept in the address (#view=zoom/lat/lon/bearing/tilt), so a link opens the same view
+    ...startView(),         // a link's #view, else where the map was left last, else the middle of Sweden
     maxBounds: MAX_BOUNDS,
     maxZoom: MAX_ZOOM,
     maxPitch: 70,
@@ -940,8 +972,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const GLIDE_MS = 600;   // a tapped train is brought to its place on the screen in this time
   const SETTLE_MAX_MS = 700;
   let dragged = false;
+  // Where the map is left, remembered for the next visit (startView): at most once a second (following a train moves
+  // the camera in every frame), and when the page is closed or put away.
+  let viewTimer = null;
+  const saveView = () => {
+    clearTimeout(viewTimer); viewTimer = null;
+    try { localStorage.setItem(VIEW_STORE, viewText(map)); } catch { /* not remembered */ }
+  };
+  const saveViewSoon = () => { viewTimer ??= setTimeout(saveView, 1000); };
+  addEventListener('pagehide', saveView);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveView(); });
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
+    saveViewSoon();
     if (flying && !map._camera?.isEasing?.()) landed();
     if (!dragged || pointers.size) return;
     dragged = false;
@@ -1071,6 +1114,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   return {
     ready,
     shown,
+    viewText: () => viewText(map),   // the view now, zoom/lat/lon[/bearing[/tilt]] (for the bug report's link)
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
