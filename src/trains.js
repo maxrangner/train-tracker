@@ -53,6 +53,18 @@ const LONG_SILENCE_MS = 10 * 60 * 1000;
 const SILENT_MS = 10 * 60 * 1000;    // no position and no passing for this long: the train is shown as stale (grey)...
 const SILENT_NO_ROUTE_MS = 2 * 60 * 1000;   // ...or this long, for a train whose timetable is not known
 const FINISHED_MS = 2 * 60 * 1000;   // a train that arrived at the end of its trip is removed after this long quiet
+// A trip handed on to its next internal number (Trafikverket splits many trips: the same public number, another
+// internal number from a station on; 2026-11-17, all 12 recordings: about 30-45 an hour at rush hour). The old number
+// stayed on the map beside the new one for about a minute (at most 2), and a piece whose timetable ran on was drawn
+// grey for over half an hour (1522, Skåne, 12 Nov: 36 km from the real train). Now the old piece goes once a newer
+// piece of the same public number and day reports, HANDOVER_QUIET_MS after its own last report, within
+// HANDOVER_M + HANDOVER_M_PER_MIN for each minute between them. Measured on the recordings (the rule on the raw
+// reports): 262 handovers; 4 old pieces reported again afterwards (3 within seconds, 1 after 3 minutes) and come back
+// with that report (60 s instead of 30: the same 4); two trains far apart with one public number never touched. Replayed
+// through this code: old and new piece on the map together 49 times (median 56 s, at most 132) -> 15 (median 44 s, at
+// most 60: both numbers reporting side by side for a while), and the grey 1522 gone.
+const HANDOVER_QUIET_MS = 30 * 1000;
+const HANDOVER_M = 2000, HANDOVER_M_PER_MIN = 3000;
 const MAX_PACE = 250 / 3.6;          // m/s: the fastest a train is moved by its timetable
 const STOOD_M = 30, STOOD_MS = 60000; // positions this close over this long before a silence: it stood still
 const PASSING_MAX_M = 80000;         // a reported passing is used when its station is this close ahead on the tracks...
@@ -272,6 +284,7 @@ export function createTrains(options = {}) {
 
   const byId = new Map();   // id -> { latest, hist, pending, against, sim }
   let lastReport = 0;       // time of the newest report we have, from Trafikverket's clock
+  const handed = new Map(); // id of a piece taken off (prune) -> { to: the piece it was handed to, time: its last report, at }
   let simTime = null;       // the moment the simulations have reached
   let halted = false;       // no data arriving at all: every train brakes to a stop (setHalted)
   // Stale: shown grey. The connection is lost, or this train has sent nothing for SILENT_MS (a repeat of its last
@@ -319,7 +332,7 @@ export function createTrains(options = {}) {
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
         frozen: t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0 };
+  const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -719,6 +732,10 @@ export function createTrains(options = {}) {
       for (let r of records) {
         if (r.gone) { changed = byId.delete(r.id) || changed; continue; }
         if (!(r.time > now - MAX_AGE_MS)) continue;            // too old (the stream has sent 2-day-old ones)
+        // A piece handed on (prune): its old reports sent again don't bring it back; a newer one does.
+        const h = handed.get(r.id);
+        if (h && r.time <= h.time) continue;
+        if (h) handed.delete(r.id);
         let tr = byId.get(r.id);
         if (tr && tr.latest.time >= r.time) continue;           // not newer than what we have
         // A report without a speed is a fixed place along the track, not GPS (about 1 report in 4; a third of the
@@ -767,7 +784,34 @@ export function createTrains(options = {}) {
         const onTrip = ROUTES && ROUTES.tripEnd(id) > now && !ROUTES.finished(id);
         if ((t.heard < now - MAX_AGE_MS && !onTrip) || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; }
       }
+      // A trip handed on to its next internal number (HANDOVER_QUIET_MS): the pieces of one public number on one day.
+      const pieces = new Map();
+      for (const [id, t] of byId) {
+        if (!t.latest.number) continue;   // (the check tools' records carry no number)
+        const k = `${t.latest.number}/${id.slice(id.indexOf('/') + 1)}`;
+        (pieces.get(k) ?? pieces.set(k, []).get(k)).push([id, t]);
+      }
+      for (const group of pieces.values()) {
+        if (group.length < 2) continue;
+        for (const [id, a] of group) {
+          const to = group.find(([bid, b]) => b !== a && byId.has(bid) && b.latest.time - a.latest.time >= HANDOVER_QUIET_MS &&
+            metres(a.latest, b.latest) <= HANDOVER_M + HANDOVER_M_PER_MIN * (b.latest.time - a.latest.time) / 60000);
+          if (!to) continue;
+          byId.delete(id);
+          handed.set(id, { to: to[0], time: a.latest.time, at: now });
+          counts.handedOver++;
+          changed = true;
+        }
+      }
+      for (const [id, h] of handed) if (h.at < now - MAX_AGE_MS) handed.delete(id);
       return changed;
+    },
+    // The piece a trip was handed on to, when train id was taken off for it (prune), else null.
+    handedTo(id) {
+      const seen = new Set();
+      let to = null;
+      while (handed.has(id) && !seen.has(id)) { seen.add(id); to = id = handed.get(id).to; }
+      return to && byId.has(to) ? to : null;
     },
     get(id) { return byId.get(id)?.latest ?? null; },
     // A train's kept history (for the checks' "real way", tools/lib/branch.mjs).
