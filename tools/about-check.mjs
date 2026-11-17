@@ -34,7 +34,12 @@ try {
   const q = new URLSearchParams(query);
   const subject = q.get('subject'), body = q.get('body') ?? '';
   const version = await page.evaluate(() => document.getElementById('about-version').textContent);
-  if (to !== 'sparat@rangner.com') fails.push(`bug mail to "${to}"`);
+  // The address in pieces here too (this file is public): the monitor's Gmail, "+bugs" tag. The page's own code must not
+  // hold it whole, nor Max's own domain as a mail address.
+  const whole = ['sparat.app', '+bugs', '@', 'gmail.com'].join('');
+  if (to !== whole) fails.push(`bug mail to "${to}"`);
+  const code = await page.evaluate(() => fetch('/src/main.js').then(r => r.text()));
+  if (code.includes(whole) || code.includes(['@', 'rangner.com'].join(''))) fails.push('the page\'s code holds the bug address whole');
   if (!/^Spårat \d+\.\d+\.\d+ \(\w+\+?\): felrapport$/.test(subject)) fails.push(`bug mail subject "${subject}"`);
   for (const want of ['Vad hände?', 'https://sparat.rangner.com/#view=', `Öppet tåg: ${number}`, 'replay ', 'Telefon eller webbläsare: Mozilla'])
     if (!body.includes(want)) fails.push(`bug mail body lacks "${want}"`);
