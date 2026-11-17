@@ -1,5 +1,5 @@
-// A quick check of the screens, in a phone-sized headless browser, on the rush-hour replay (or live, when that
-// recording isn't in data/). Run by tools/check.mjs; or alone: node tools/ui-check.mjs
+// A quick check of the screens, in a phone-sized headless browser, on a replay (CARD_HOUR, a recording with its
+// trains' routes saved; else the rush hour; or live, when neither is in data/). Run by tools/check.mjs; or alone: node tools/ui-check.mjs
 // Needs `npm run dev` going. Exit code 0: all good; 1: something failed (it says what); 2: the page isn't running.
 // Checked: the page starts without errors in English/light and Swedish/dark; a tap opens a train's card; every
 // "N trains" label lists exactly N; a search lists every matching train and scrolls; a setting changes without the
@@ -11,14 +11,16 @@
 // runs it with a fetcher replaying the rush hour (node fetcher/main.mjs --replay ... --serve 8095).
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { launch, openMap, sleep, PAGE, RUSH_HOUR } from './lib/browser.mjs';
+import { launch, openMap, sleep, PAGE, RUSH_HOUR, CARD_HOUR } from './lib/browser.mjs';
 
 try { await fetch(PAGE); } catch { console.log(`UI check skipped: nothing answers at ${PAGE} (start it with npm run dev)`); process.exit(2); }
 
 const filesAt = process.argv.includes('--files') ? process.argv[process.argv.indexOf('--files') + 1] : null;
-const replay = !filesAt && existsSync(`data/positions-${RUSH_HOUR}.jsonl`) ? RUSH_HOUR : null;
+// The replay with its trains' routes saved (the card's stops, 2026-11-17), else the rush hour as before, else live.
+const has = name => existsSync(`data/positions-${name}.jsonl`);
+const replay = filesAt ? null : has(CARD_HOUR) && existsSync(`data/routes-${CARD_HOUR}.jsonl`) ? CARD_HOUR : has(RUSH_HOUR) ? RUSH_HOUR : null;
 const base = { ...(replay ? { replay } : {}), ...(filesAt ? { files: filesAt } : {}), view: '12/59.33/18.06', train: 'toy' };
-const runName = filesAt ? 'files, rush-hour replay' : replay ? 'rush-hour replay' : 'live';
+const runName = filesAt ? 'files, rush-hour replay' : replay ? `replay ${replay}` : 'live';
 const problems = [];
 let stats = 0;   // sections on the stats page
 let filtered = '';   // the filter step's result
@@ -129,7 +131,8 @@ try {
   // ---- The compact card (2026-11-15): two tiles; the stop tile lists the stops ahead and counts down to the one
   // picked; "All stops" opens it full; no × on a phone; Settings → Train card: Expanded opens it full ----
   // Trafikverket gives out a day's timetable only for a few days: the 12 Nov recording's routes were there on 15 Nov,
-  // gone on 16 Nov (every train "no stops"). Then the card's parts can't be checked in the replay: said so, not failed.
+  // gone on 16 Nov (every train "no stops"). Since 2026-11-17 the replay brings its own (CARD_HOUR's routes file); in
+  // the files run, or without that file, the card's parts can't be checked: said so, not failed.
   await sleep(2000);   // the route
   const noRoute = head && await page.evaluate(() => Boolean(document.querySelector('#panel .state.empty')) && !document.querySelector('#panel .tile'));
   if (noRoute) cardNote = ' (card parts not checked: the replay\'s day is no longer at Trafikverket)';
@@ -145,7 +148,8 @@ try {
     expect(c.tiles === 2 && c.late, `the card shows ${c.tiles} tiles, lateness "${c.late}"`);
     expect(c.close === 0, 'the card shows a × on a phone');
     expect(!c.full && c.timeline === 0, 'the card opened full, or shows its timeline, though Compact is the default');
-    // In the replay a train's route is a past day's, every stop passed: "Arrived". Live, the stops ahead.
+    // With saved routes the replay's card is as at the replay's clock, the stops ahead (as live); a train at its end:
+    // "Arrived".
     if (c.button) {
       await page.click('#panel .cd-stop');
       await sleep(300);
@@ -276,8 +280,12 @@ try {
     await sleep(3000);
     await kb.setViewport({ ...phone, height: 430 });
     await sleep(400);
+    // A train on the map in this replay (2311 was the rush hour's): the one nearest the middle with a 4-digit number.
+    const pick = await kb.evaluate(() => { const m = window.__map, c = m.getCenter();
+      return (window.__last3d ?? []).map(x => ({ n: String(window.__trains.get(x.id)?.number ?? ''), d: Math.hypot(x.lon - c.lng, x.lat - c.lat) }))
+        .filter(x => /^\d{4}$/.test(x.n)).sort((a, b) => a.d - b.d)[0]?.n ?? '2311'; });
     await kb.click('#menu-button'); await sleep(300);
-    await kb.keyboard.type('2311', { delay: 30 }); await sleep(700);
+    await kb.keyboard.type(pick, { delay: 30 }); await sleep(700);
     await kb.click('#search-results button');
     await sleep(300);
     await kb.setViewport(phone);

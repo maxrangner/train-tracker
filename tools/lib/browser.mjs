@@ -12,6 +12,9 @@ export const PAGE = (process.env.PAGE ?? 'http://localhost:5173/').replace(/\/?$
 export const PHONE = { width: 393, height: 851, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 // The recording most pictures and checks use: the morning rush of 2026-11-12 (the status line says "replay 07:01").
 export const RUSH_HOUR = '2026-11-12T06-00-00-005Z';
+// The recording the screens check (tools/ui-check.mjs) replays: one with its trains' routes saved
+// (data/routes-<name>.jsonl, tools/save-routes.mjs), so the train card has its stops (the rush hour's are gone).
+export const CARD_HOUR = '2026-11-14T09-00-00-018Z';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
