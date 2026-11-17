@@ -63,6 +63,15 @@ export function initSheets(els) {
       const i = order.indexOf(el);
       if (i >= 0 && i < order.length - 1) { order.splice(i, 1); order.push(el); show(); }
     },
+    // Close the sheet on top the way a drag down does (its own close button); false when none is open (the phone's
+    // back button in the app: then it leaves the app; Max, 2026-11-17).
+    closeTop() {
+      const top = order.at(-1);
+      const button = top?.querySelector('.panel-close, .menu-close');
+      if (!button) return false;
+      button.click();
+      return true;
+    },
   };
 }
 
