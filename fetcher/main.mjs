@@ -100,9 +100,10 @@ const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: 
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
 // --status 8091: only the status, only on this computer (127.0.0.1), for the monitor (monitor/main.mjs).
-const statusPort = arg('--status') ? Number(arg('--status')) : null;
-const statusServer = statusPort ? serveStatus(statusPort, status) : null;
-if (statusServer) log(`status on http://127.0.0.1:${statusPort}/status (this computer only)`);
+// --status-socket <path>: the same on a local socket file instead (the Linux service: /run/sparat/status.sock).
+const statusAt = arg('--status-socket') ?? (arg('--status') ? Number(arg('--status')) : null);
+const statusServer = statusAt ? serveStatus(statusAt, status) : null;
+if (statusServer) log(typeof statusAt === 'number' ? `status on http://127.0.0.1:${statusAt}/status (this computer only)` : `status on the local socket ${statusAt}`);
 
 // ---------- the two live streams ----------
 const onFeed = name => s => {

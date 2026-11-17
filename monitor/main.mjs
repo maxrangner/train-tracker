@@ -10,7 +10,7 @@
 //
 // What it keeps: a row a minute for 24 hours in memory; one line per day in days.jsonl (in the service's own folder,
 // STATE_DIRECTORY, or DAY_DIR). Nothing else is written.
-import { createServer } from 'node:http';
+import { createServer, get as httpGet } from 'node:http';
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRules, dayNumbers, isOffline } from './rules.mjs';
@@ -36,6 +36,29 @@ const PAGE_PORT = Number(cfg.MONITOR_PORT ?? 8092);
 const DAY_DIR = process.env.STATE_DIRECTORY ?? cfg.MONITOR_DAY_DIR ?? 'monitor-days';
 const summaryAt = arg('--summary-at', cfg.MONITOR_SUMMARY_AT ?? '07:00');
 const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
+
+// The fetcher's status: over HTTP (MONITOR_FETCHER=http://127.0.0.1:8091/status, Windows and tests), or from its local
+// socket file (MONITOR_FETCHER=unix:/run/sparat/status.sock, the Linux service: no network address, plan step 2).
+function readStatus() {
+  if (!FETCHER.startsWith('unix:')) return fetch(FETCHER, { signal: AbortSignal.timeout(5000), redirect: 'error' }).then(r => r.json());
+  return new Promise((res, rej) => {
+    const q = httpGet({ socketPath: FETCHER.slice(5), path: '/status', timeout: 5000 }, r => {
+      let body = '';
+      r.setEncoding('utf8'); r.on('data', c => { if ((body += c).length > 1e6) q.destroy(new Error('status too big')); });
+      r.on('end', () => { try { res(JSON.parse(body)); } catch (e) { rej(e); } });
+    });
+    q.on('timeout', () => q.destroy(new Error('no answer in 5 s'))); q.on('error', rej);
+  });
+}
+
+// The self-check (monitor/self-check.mjs) runs first and alone, then exits (78 or 79).
+{
+  const where = args.includes('--self-check') ? arg('--self-check') : arg('--self-check-file') && existsSync(arg('--self-check-file')) ? 'inside' : null;
+  if (where) {
+    const { selfCheck } = await import('./self-check.mjs');
+    process.exit(await selfCheck(where === 'inside' ? 'inside' : 'outside', cfg, { args, readStatus, dataUrl: DATA_URL }));
+  }
+}
 
 // --test-offline: pretend lost internet for the monitor (its read of one.com and its mails).
 const offlineSpans = (arg('--test-offline') ?? '').split(',').filter(Boolean).map(p => { const [a, l = 1] = p.split('x').map(Number); return [a * MIN, (a + l) * MIN]; });
@@ -72,7 +95,7 @@ let lastPid = null, minutePolls = 0, minuteUp = 0, minuteRestarts = 0;
 async function poll() {
   minutePolls++;
   try {
-    const s = cleanStatus(await (await fetch(FETCHER, { signal: AbortSignal.timeout(5000), redirect: 'error' })).json());
+    const s = cleanStatus(await readStatus());
     if (lastPid !== null && s.pid !== lastPid) { minuteRestarts++; log(`the fetcher started again (process ${s.pid})`); }
     lastPid = s.pid; cur = { ...s, seenAt: Date.now() }; minuteUp++;
   } catch { /* not answering: counted by the minute row */ }

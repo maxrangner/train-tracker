@@ -1,8 +1,9 @@
 # Spårat's monitor as a Linux service (systemd), beside the fetcher: starts at boot, starts again 5 s after a crash,
-# logs to the journal (journalctl -u sparat-monitor). Install with the fetcher (docs: deploy.md, "The monitor"):
-#   sudo cp monitor/sparat-monitor.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now sparat-monitor
-# Its page and data are only on this PC (127.0.0.1:8092); nothing is opened to the network.
+# logs to the journal (journalctl -u sparat-monitor). Installed by the guide in docs/deploy.md (plan step 2, 2026-11-17).
+# Its own user (sparat-monitor, in the group sparat only to read the fetcher's status socket) and its own settings file
+# /etc/sparat/monitor.env (the mail password; owned by sparat-monitor, mode 600): it can't read the fetcher's settings.
+# Its page answers only on this PC (127.0.0.1:8092). Locked down like the fetcher; its fence also allows 127.0.0.1,
+# where its page is opened.
 [Unit]
 Description=Spårat monitor (watches the fetcher, mails about problems)
 Wants=network-online.target
@@ -10,18 +11,41 @@ After=network-online.target sparat-fetcher.service
 
 [Service]
 Type=simple
-User=sparat
+User=sparat-monitor
+Group=sparat-monitor
+SupplementaryGroups=sparat
 WorkingDirectory=/opt/sparat
-ExecStart=/usr/bin/node monitor/main.mjs --env /etc/sparat/monitor.env
+Environment=NODE_OPTIONS=--dns-result-order=ipv4first
+ExecStart=/usr/bin/node monitor/main.mjs --env /etc/sparat/monitor.env --self-check-file /etc/sparat/self-check
 Restart=always
 RestartSec=5
+RestartPreventExitStatus=78 79
 MemoryMax=300M
 # The one folder it may write: /var/lib/sparat-monitor (one line per day, days.jsonl).
 StateDirectory=sparat-monitor
+UMask=0077
+
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
 NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+
+RestrictAddressFamilies=AF_INET AF_UNIX AF_NETLINK
+IPAddressDeny=localhost link-local multicast 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 172.16.0.0/12 192.168.0.0/16 255.255.255.255/32
+IPAddressAllow=127.0.0.53/32 127.0.0.1/32
 
 [Install]
 WantedBy=multi-user.target
