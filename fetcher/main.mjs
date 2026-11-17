@@ -21,6 +21,9 @@ import { createState } from './state.mjs';
 import { createShelf, buildLive, buildPassings, buildPlanned, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
+import { createTimetable } from './timetable.mjs';
+import { GROUPS } from '../src/tap-files.js';
+import { FORMAT } from '../src/live-file.js';
 
 globalThis.EventSource ??= NodeEventSource;
 const MIN = 60000;
@@ -96,7 +99,7 @@ const sizes = () => Object.fromEntries(Object.entries(shelf.names()).map(([kind,
 }));
 const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: process.pid, startedAt, feeds, state: state.sizes(),
   load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), sizes: sizes(), upload: uploader?.stats() ?? null,
-  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage() });
+  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null });
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
 // --status 8091: only the status, only on this computer (127.0.0.1), for the monitor (monitor/main.mjs).
@@ -229,13 +232,42 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
   } else shelf.put('arrivals-add', t, { v: 1, t, kind: 'arrivals-add', day, rows: arrRows(arr.changed) });
 });
 
+// ---------- taps from files (plan step 4, 2026-11-17: fetcher/timetable.mjs, src/tap-files.js) ----------
+// The card and board files in groups, made in turns: all at the first round (a page opening needs them), then the
+// oldest card and the oldest board every 30 s (each one about every 16 minutes), with a changes file every 30 s that brings every row changed
+// since the oldest of them, so a tap is at most ~30 s behind Trafikverket. The index every 10 minutes, the station
+// messages every 2 minutes. Live data only (a replay has no timetable).
+const groupAt = {};   // card-NN / board-NN -> when its file in use was made
+const timetable = KEY && !replayName ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
+if (timetable) {
+  stops.push(() => timetable.stop());
+  const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`]);
+  every('tap files', 30000, 30000, () => {
+    if (!timetable.ready()) return;
+    const t = Date.now();
+    const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
+      : ['card', 'board'].map(w => GROUP_KINDS.filter(k => k.startsWith(w)).sort((a, b) => groupAt[a] - groupAt[b])[0]);
+    for (const k of due) {
+      const [what, g] = k.split('-');
+      shelf.put(k, t, { v: FORMAT, ...(what === 'card' ? timetable.card(g, t) : timetable.board(g, t)) });
+      groupAt[k] = t;
+    }
+    const oldest = Math.min(...Object.values(groupAt));
+    shelf.put('taps-add', t, { v: FORMAT, ...timetable.changes(oldest - MIN, t) });
+  });
+  const notReady = () => { throw new Error('the timetable is still loading'); };   // every() tries again in a minute
+  every('taps index', 10 * MIN, 45000, () => { if (!timetable.ready()) notReady(); const t = Date.now(); shelf.put('taps-index', t, { v: FORMAT, ...timetable.index(t) }); });
+  every('messages file', 2 * MIN, 50000, () => { const t = Date.now(); shelf.put('messages', t, { v: FORMAT, ...timetable.messages(t) }); });
+}
+
 // ---------- a status line every 10 minutes ----------
 let lastLoad = { asks: 0, streams: 0, at: Date.now(), cpu: process.cpuUsage() };
 every('status', 10 * MIN, 10 * MIN, () => {
   const s = status(), ms = Date.now() - lastLoad.at, cpu = process.cpuUsage(lastLoad.cpu);
   log(`status: ${s.state.trains} trains, ${s.state.passings} passings, ${s.state.planned} routes; Trafikverket ${((load.asks - lastLoad.asks) / (ms / MIN)).toFixed(1)} asks/min, ${load.streams - lastLoad.streams} streams opened; ` +
     `${s.upload ? `uploads ${s.upload.ok} ok, ${s.upload.failed} failed, ${s.upload.reconnects} reconnects, ${s.upload.waiting} waiting; ` : ''}` +
-    `memory ${s.memoryMB} MB, CPU ${((cpu.user + cpu.system) / 10 / ms).toFixed(1)} %; feeds ${feeds.positions.mode}/${feeds.passings.mode}`);
+    `memory ${s.memoryMB} MB, CPU ${((cpu.user + cpu.system) / 10 / ms).toFixed(1)} %; feeds ${feeds.positions.mode}/${feeds.passings.mode}` +
+    (s.taps ? `; timetable ${s.taps.rows} rows (${s.taps.days.join(', ')}), ${s.taps.changes} changes, last ${s.taps.lastChangeAgo} s ago, ${s.taps.messages} messages` : ''));
   lastLoad = { asks: load.asks, streams: load.streams, at: Date.now(), cpu: process.cpuUsage() };
 });
 

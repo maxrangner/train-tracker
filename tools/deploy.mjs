@@ -12,8 +12,8 @@
 // folder on one.com, e.g. /webroots/4506cfb2) and SITE_URL (e.g. https://sparat.rangner.com).
 // No key and no script ever goes to one.com (2026-11-17, Max: the tap script ask.php and its key file were taken off
 // one.com; taps come from the fetcher's files instead, public plan phase B): put() refuses any .php file and anything
-// under api/. Until phase B the page is built with taps pointing at api/ask.php, which answers 404: a tap fails
-// quietly and no viewer's browser asks Trafikverket anything.
+// under api/. No viewer's browser asks Trafikverket anything: since plan step 4 (2026-11-17) taps come from the
+// fetcher's files too.
 // Safety: it writes and deletes only inside SITE_DIR, and never in data/ (the fetcher's) except on remove. The first
 // run needs the folder empty (data/ allowed) and leaves a marker (.sparat-site); later runs refuse a folder without
 // it, so a wrong SITE_DIR (rangner.com's own folder, say) is never written to.
@@ -176,7 +176,7 @@ async function page() {
   const name = mapFiles().at(-1);
   if (!name || (await stat(`${SITE}/tiles/${name}`))?.size !== statSync(join(ROOT, 'data/map', name)).size)
     throw new Error(`the map file ${name} is not on the site yet: run tiles first`);
-  const b = spawnSync(process.execPath, ['tools/build-public.mjs', '--data', `${URL_}/data/`, '--tap', `${URL_}/api/ask.php`, '--map', `${URL_}/tiles/${name}`],
+  const b = spawnSync(process.execPath, ['tools/build-public.mjs', '--data', `${URL_}/data/`, '--map', `${URL_}/tiles/${name}`],
     { cwd: ROOT, stdio: 'inherit' });
   if (b.status !== 0) throw new Error('build:public failed (or the key search found the key): nothing uploaded');
   const dist = join(ROOT, 'dist-public');

@@ -110,6 +110,12 @@ let failed = 0;
   console.log(`${u.status === 0 ? 'ok  ' : 'FAIL'} ${(u.stdout || '').trim().split('\n').at(-1)}`);
   if (u.status !== 0) { console.log((u.stdout || '').split('\n').filter(l => l.startsWith('FAIL')).join('\n')); failed++; }
 }
+// Taps from files (plan step 4, 2026-11-17): a saved day's timetable through the files' format and back, offline.
+{
+  const u = spawnSync('node', ['tools/taps-check.mjs', '--format'], { encoding: 'utf8' });
+  console.log(`${u.status === 0 ? 'ok  ' : 'FAIL'} ${(u.stdout || u.stderr || '').trim().split('\n').at(-1)}`);
+  if (u.status !== 0) failed++;
+}
 // Known problems in the libraries the Linux PC runs (npm's own list, asked online; Codex's review, 2026-11-17): high
 // or critical there fails the check; in the page's other libraries it is a note; npm not answering is a note.
 {

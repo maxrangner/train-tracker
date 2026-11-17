@@ -27,8 +27,8 @@ import ssh2 from 'ssh2';
 const WAITS = [1000, 2000, 5000, 10000, 30000];
 const REFUSED_WAIT = 10 * 60000;
 export const MARK = '.sparat-data';
-export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations)-\d+\.json$/;
-const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations)-\d+\.json\.tmp$/;
+export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|taps-add|taps-index|messages)-\d+\.json$/;
+const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|taps-add|taps-index|messages)-\d+\.json\.tmp$/;
 const HTACCESS = readFileSync(new URL('./data.htaccess', import.meta.url));
 
 const callOn = (s, fn, ...a) => new Promise((res, rej) => s[fn](...a, (e, v) => e ? rej(e) : res(v)));
