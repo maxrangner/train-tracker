@@ -1,5 +1,7 @@
 apply plugin: 'com.android.application'
 
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+
 android {
     namespace "se.sparat.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +9,10 @@ android {
         applicationId "se.sparat.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // From package.json (Max, 2026-11-17): versionName 0.2.0, versionCode 0.2.0 → 200 (major × 10000 + minor × 100 + patch),
+        // so each new version installs over the last.
+        versionCode appVersion.tokenize('.').collect { it as int }.with { it[0] * 10000 + it[1] * 100 + it[2] }
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
