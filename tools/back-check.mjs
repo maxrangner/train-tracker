@@ -49,8 +49,25 @@ try {
     if (s2.card || s2.away) fails.push(`2nd back: card ${s2.card}, away ${s2.away} (want: card closed, still here)`);
     const s3 = await back();
     if (!s3.away) fails.push('3rd back on the bare map: the app did not go to the background');
+
+    // With the keyboard open (2026-11-17): a search typed, the page shortened by a keyboard's height (Max's phone:
+    // 430 px); back → only the keyboard goes (the field loses focus, the search stays); back again → the search closes.
+    await page.evaluate(() => { window.__minimized = false; document.getElementById('menu-button').click(); });
+    await sleep(400);
+    await page.type('#search', '2');
+    await page.setViewport({ ...PHONE, height: PHONE.height - 430 });
+    await sleep(500);
+    const focused = () => page.evaluate(() => document.activeElement?.id === 'search');
+    const k0 = { ...(await state()), typing: await focused() };
+    const k1 = { ...(await back()), typing: await focused() };
+    if (!k0.search || !k0.typing) fails.push(`keyboard setup: search ${k0.search}, typing ${k0.typing}`);
+    if (!k1.search || k1.typing) fails.push(`back with the keyboard up: search ${k1.search} (want open), typing ${k1.typing} (want not)`);
+    await page.setViewport(PHONE);   // (the keyboard has gone)
+    await sleep(400);
+    const k2 = await back();
+    if (k2.search || k2.away) fails.push(`back after the keyboard: search ${k2.search} (want closed), away ${k2.away}`);
   }
   if (errors.length) fails.push('page errors: ' + errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }
-console.log(fails.length ? `back-check FAILED:\n  ${fails.join('\n  ')}` : 'back-check ok: search → card → background, one per press');
+console.log(fails.length ? `back-check FAILED:\n  ${fails.join('\n  ')}` : 'back-check ok: search → card → background, one per press; with the keyboard up, back hides only the keyboard');
 process.exit(fails.length ? 1 : 0);
