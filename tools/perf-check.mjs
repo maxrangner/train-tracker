@@ -13,6 +13,8 @@
 //   node tools/perf-check.mjs --phone         a phone's screen
 //   node tools/perf-check.mjs --live          live data (needs the key)
 //   node tools/perf-check.mjs --only idle     one part: start, idle, tap or back
+//   node tools/perf-check.mjs --runs 5        tap, idle and back 5 times, each on a newly opened page: the page's
+//                                             work used to swing from load to load (zoom 11: 13 % or 95 %; 2026-11-17)
 import { launch, openMap, sleep, PHONE, address } from './lib/browser.mjs';
 
 const args = process.argv.slice(2);
@@ -20,6 +22,7 @@ const live = args.includes('--live');
 const size = args.includes('--phone') ? PHONE : { width: 1400, height: 850, deviceScaleFactor: 1 };
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 const part = name => !only || only === name;
+const runs = args.includes('--runs') ? Math.max(1, Number(args[args.indexOf('--runs') + 1]) || 1) : 1;
 const STOCKHOLM = [18.0585, 59.3308];
 const KARLBERG = [18.0345, 59.3405];   // trains away from a station's ring (a tap near one opens the station)
 const base = { size, theme: 'dark', ...(live ? {} : { replay: true }) };
@@ -89,7 +92,8 @@ if (part('start')) {
   await page.close();
 }
 
-if (part('idle') || part('tap') || part('back')) {
+for (let run = 1; run <= runs && (part('idle') || part('tap') || part('back')); run++) {
+  if (runs > 1) say(`run ${run} of ${runs}`);
   const page = await openMap(browser, { ...base, view: `11/${STOCKHOLM[1]}/${STOCKHOLM[0]}` });
   const cdp = await page.createCDPSession();
   await cdp.send('Performance.enable');
