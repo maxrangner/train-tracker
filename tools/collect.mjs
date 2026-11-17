@@ -3,8 +3,10 @@
 //   -> data/positions-<time>.jsonl  every train position (one per line)
 //   -> data/timetable-<time>.jsonl  every timetable row (planned stops in the window, and their changes: passings)
 //   -> data/stations.json           every station's name and place (once)
+//   -> data/routes-<time>.jsonl     at the end: every train's whole route, for the card in a replay (tools/save-routes.mjs)
 // --at waits until that time of day (this computer's clock) before starting. Keep the computer awake meanwhile.
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
+import { saveRoutes } from './save-routes.mjs';
 
 const argv = process.argv.slice(2);
 const at = argv.includes('--at') ? argv[argv.indexOf('--at') + 1] : null;
@@ -115,3 +117,9 @@ await Promise.all([
     `<INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>Deleted</INCLUDE>` +
     `<INCLUDE>ProductInformation</INCLUDE><INCLUDE>ModifiedTime</INCLUDE></QUERY>`),
 ]);
+// Every train's whole route, for the card in a replay (Trafikverket keeps them only about 4 days; tools/save-routes.mjs).
+try {
+  console.log(await saveRoutes(stamp));
+} catch (e) {
+  console.log(`routes not saved (${e.message}): node tools/save-routes.mjs ${stamp} within 4 days`);
+}

@@ -764,6 +764,13 @@ setInterval(() => {
   const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
   if (noData && !trains.halted) trains.setHalted(true);
   trains.prune(tNow);
+  // The open train's trip handed on to its next internal number (trains.prune): the card and the camera go with it.
+  const to = panel.openId && !trains.get(panel.openId) ? trains.handedTo(panel.openId) : null;
+  if (to) {
+    const r = trains.get(to), wasFollowing = map.following;
+    panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
+    if (wasFollowing) follow(to); else panel.setFollowing(false);
+  }
   const error = statusError();
   const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
