@@ -4,8 +4,11 @@
 // file copied from the project's own (the same exact versions and checksums; nothing is looked up anew). Then the
 // secret search runs over the package; a find stops it.
 // Left out on purpose: fetcher/trial.sh (the old trial: it skipped the checks and opened a server to the home network).
+// The libraries go inside the package (npm ci --omit=dev --ignore-scripts here: the lock file's exact versions and
+// checksums, no library's own install program run; all 9 are plain JavaScript), so the Linux PC needs Node only, not
+// npm (2026-11-17: Ubuntu's npm would have pulled in hundreds of packages).
 // Run: node tools/pack-linux.mjs     -> dist-linux/sparat/ and dist-linux/sparat-<version>.tar.gz
-// On the Linux PC (docs/deploy.md): unpack, then npm ci --omit=dev --ignore-scripts.
+// On the Linux PC (docs/deploy.md section 4): unpack into /opt/sparat, restart the services.
 import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync, existsSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -52,6 +55,8 @@ writeFileSync(join(DIR, 'package.json'), JSON.stringify(out, null, 2) + '\n');
 writeFileSync(join(DIR, 'package-lock.json'), JSON.stringify({ name: out.name, version: out.version, lockfileVersion: 3, requires: true,
   packages: { '': { name: out.name, version: out.version, license: out.license, dependencies: deps }, ...keep } }, null, 2) + '\n');
 
+const libs = spawnSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund', { cwd: DIR, stdio: 'inherit', shell: true });
+if (libs.status !== 0) { console.log('pack-linux: installing the libraries failed'); process.exit(1); }
 const search = spawnSync(process.execPath, ['tools/key-search.mjs', DIR], { stdio: 'inherit' });
 if (search.status !== 0) { rmSync(OUT, { recursive: true, force: true }); console.log('pack-linux: stopped, the package was deleted'); process.exit(1); }
 const tar = `sparat-${pkg.version}.tar.gz`;

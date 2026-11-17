@@ -6,11 +6,13 @@
 import { connect } from 'node:net';
 import { mailCheck } from './mail.mjs';
 
+const blocked = got => got === 'blocked by Linux' || got === 'no answer in 4 s';   // inside: refused or dropped; only believed because it answered outside
 function tcp(hostPort) {
   const [host, port] = hostPort.split(/:(?=\d+$)/);
   return new Promise(res => {
     const s = connect({ host, port: Number(port) });
     const done = r => { clearTimeout(t); s.destroy(); res(r); };
+    // Linux's fence drops the connection silently (measured on the Linux PC 2026-11-17: no answer, not a refusal).
     const t = setTimeout(() => done('no answer in 4 s'), 4000);
     s.on('connect', () => done('reachable'));
     s.on('error', e => done(e.code === 'EPERM' || e.code === 'EACCES' ? 'blocked by Linux' : e.code ?? e.message));
@@ -24,7 +26,7 @@ export async function selfCheck(where, cfg, { args, readStatus, dataUrl }) {
   const row = (what, got, ok) => { rows.push(ok); console.log(`self-check ${ok ? 'ok  ' : 'FAIL'} ${what}: ${got}`); };
   console.log(`monitor self-check (${inside ? 'inside the service: the device at home must be blocked' : 'outside, as yourself: all must work'})`);
   const r = await tcp(router);
-  row(`a device at home (${router})`, r, inside ? r === 'blocked by Linux' : r === 'reachable');
+  row(`a device at home (${router})`, inside && blocked(r) ? `blocked (${r})` : r, inside ? blocked(r) : r === 'reachable');
   let st;
   try { const s = await readStatus(); st = `answers (process ${s.pid})`; } catch (e) { st = e.cause?.code ?? e.code ?? e.message; }
   row('the fetcher\'s status', st, st.startsWith('answers'));

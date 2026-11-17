@@ -15,11 +15,13 @@ import { folderCheck } from './upload.mjs';
 
 const TRV_HOST = 'api.trafikinfo.trafikverket.se';
 
+const blocked = got => got === 'blocked by Linux' || got === 'no answer in 4 s';   // inside: refused or dropped; only believed because it answered outside
 function tcp(hostPort) {
   const [host, port] = hostPort.split(/:(?=\d+$)/);
   return new Promise(res => {
     const s = connect({ host, port: Number(port) });
     const done = r => { clearTimeout(t); s.destroy(); res(r); };
+    // Linux's fence drops the connection silently (measured on the Linux PC 2026-11-17: no answer, not a refusal).
     const t = setTimeout(() => done('no answer in 4 s'), 4000);
     s.on('connect', () => done('reachable'));
     s.on('error', e => done(e.code === 'EPERM' || e.code === 'EACCES' ? 'blocked by Linux' : e.code ?? e.message));
@@ -45,7 +47,7 @@ export async function selfCheck(where, cfg, args) {
   // 3. A device at home (the router's page) and 4. another program on this PC (Syncthing's page).
   for (const [what, target] of [[`a device at home (${router})`, router], [`another program on this PC (${local})`, local]]) {
     const got = await tcp(target);
-    row(what, got, inside ? got === 'blocked by Linux' : got === 'reachable');
+    row(what, inside && blocked(got) ? `blocked (${got})` : got, inside ? blocked(got) : got === 'reachable');
   }
   // 5. Name lookup and 6. Trafikverket, both needed everywhere.
   let dns;
