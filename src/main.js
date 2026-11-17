@@ -27,6 +27,7 @@ import { createStatsPage } from './stats-page.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
+import { abroadEnds } from './abroad.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -107,13 +108,14 @@ const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELA
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
+  station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
   isStarred: number => favourites.has('train', number),
   lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
     if (!id) map.unfollow();   // the map stays exactly as it is
-    if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); }
+    if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); map.setAbroad(null); }
     map.setRouteStations(null);   // the new train's come with its route
   },
   // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
@@ -157,6 +159,12 @@ const panel = createPanel(document.getElementById('panel'), {
       map.setPathProgress(done);
       map.setPath(shownPath.path);
       map.setRouteStations(places.filter(p => p.stop).map(p => p.sig));   // their names in pills (Max, 2026-11-15)
+      // The leg abroad (src/abroad.js; Max, 2026-11-17: "only when that train is selected"): from the path's Swedish
+      // end to the foreign station, dashed, marching the way the train goes; none when the stop at the border is
+      // cancelled (the trip doesn't go there).
+      const ends = abroadEnds(route, sig => stations.get(sig)), c = shownPath.path.coords;
+      map.setAbroad([ends.from, ends.to].filter(e => e && !e.cut && e.lon !== null && c.length).map(e => ({ ...e,
+        coords: e.dir === 'to' ? [c.at(-1), [e.lon, e.lat]] : [[e.lon, e.lat], c[0]] })));
       if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
     });
   },

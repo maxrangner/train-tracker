@@ -371,17 +371,18 @@ export async function fetchStationMessages(sig, at) {
 
 // ---------- Stations ----------
 
-// Signature -> { sig, name, lon, lat, advertised } for every station, e.g. "Cst" -> Stockholm C and its place.
+// Signature -> { sig, name, lon, lat, advertised, country } for every station, e.g. "Cst" -> Stockholm C and its place.
 // advertised: a station passengers use (720 of 1,757 on 2026-11-12; the rest are junctions, sidings and the like).
+// country: "SE", or the country of one of the 114 stations abroad ("NO" for No.osl; src/abroad.js).
 export async function fetchStations() {
   const r = await ask(
     `<QUERY objecttype="TrainStation" namespace="rail.infrastructure" schemaversion="1.5">` +
     `<INCLUDE>LocationSignature</INCLUDE><INCLUDE>AdvertisedLocationName</INCLUDE><INCLUDE>Geometry.WGS84</INCLUDE>` +
-    `<INCLUDE>Advertised</INCLUDE></QUERY>`);
+    `<INCLUDE>Advertised</INCLUDE><INCLUDE>CountryCode</INCLUDE></QUERY>`);
   return new Map((r.TrainStation ?? []).map(s => {
     const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(s.Geometry?.WGS84 ?? '');
     return [s.LocationSignature, { sig: s.LocationSignature, name: s.AdvertisedLocationName,
-      lon: m ? Number(m[1]) : null, lat: m ? Number(m[2]) : null, advertised: s.Advertised === true }];
+      lon: m ? Number(m[1]) : null, lat: m ? Number(m[2]) : null, advertised: s.Advertised === true, country: s.CountryCode ?? null }];
   }));
 }
 

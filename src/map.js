@@ -9,6 +9,7 @@ import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trai
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
+import { drawFlag, hasFlag } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -69,6 +70,11 @@ const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // Open
 // Wide east-west: on a wide screen at the furthest zoom (Sweden's height decides it) the map can still be panned
 // sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
 const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// The leg abroad's dashes, one step every 100 ms: a dash of 3, a gap of 4 (line widths), moved half a width a step
+// (MapLibre can't shift a dash pattern, so the pattern is cut where it has moved to).
+const MARCH = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
+  [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
+const FLAG_CODES = ['NO', 'DK', 'DE', 'AT', 'NL', 'IT', 'PT'];
 const MASK_URL = '/sweden-mask.json';
 // The ranges of Outfit letters in public/glyphs/ (tools/glyphs.mjs GLYPH_RANGES).
 const GLYPH_RANGES = new Set(['0-255', '8192-8447', '8704-8959']);
@@ -186,7 +192,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -287,14 +293,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
+  const data = { path: empty(), abroad: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
   let routeSigs = [];   // the open train's stations (setRouteStations): their names in pills
+  let abroadNames = [];   // the open train's ends abroad (setAbroad): their names in pills too
+  let marchTimer = null, marchStep = 0;   // the leg abroad's dashes marching (setAbroad)
 
   function addSources() {
     const add = (id, extra = {}) => { if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: data[id] ?? empty(), ...extra }); };
     add('sweden-mask', { data: MASK_URL });
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
     add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
+    add('abroad');   // the open train's leg abroad and its flag (setAbroad)
     add('stations');
     // The dots' tiles are made no finer than zoom 12 (about a metre's precision; closer in they are enlarged): the
     // default 18 cut the view into many small tiles, each one redrawing the map when it arrived (about 6 draws per
@@ -313,7 +322,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   function routeNames() {
     const at = new globalThis.Map(routeSigs.map((sig, i) => [sig, i === 0 || i === routeSigs.length - 1 ? 0 : 1]));
     data['route-names'] = { type: 'FeatureCollection', features: data.stations.features.filter(f => at.has(f.properties.sig))
-      .map(f => ({ ...f, properties: { ...f.properties, rank: at.get(f.properties.sig) } })) };
+      .map(f => ({ ...f, properties: { ...f.properties, rank: at.get(f.properties.sig) } })).concat(abroadNames) };
     if (!isReady) return;
     map.getSource('route-names')?.setData(data['route-names']);
     if (map.getLayer('station-names')) map.setFilter('station-names', routeSigs.length ? ['!', ['in', ['get', 'sig'], ['literal', routeSigs]]] : null);
@@ -361,6 +370,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-gradient': pathColours().line,
         'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
+    // The leg abroad (setAbroad; Max, 2026-11-18: "dashed is good"): from the path's Swedish end to the foreign
+    // station, in the route's colour, the dashes marching the way the train goes (MARCH).
+    map.addLayer({ id: 'path-abroad', type: 'line', source: 'abroad', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: { 'line-color': C.route, 'line-opacity': 0.85, 'line-dasharray': MARCH[marchStep],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 2.5, 14, 6] } });
     // Disruptions (setDisruptions; Max, 2026-11-14: in the menu and on the map): the stretch where it is, along our
     // tracks, coloured by Trafikverket's level (1-2 yellow, 3 orange, 4 red: its "green" level 1 is still a
     // disruption with a message for travellers). Over the rails and the open train's route, under the stations and
@@ -400,6 +415,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
         'circle-stroke-color': pathColours().stops,
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
+    // The foreign end: its round flag in a ring of the route's colour (src/abroad.js drawFlag).
+    for (const code of [...FLAG_CODES, 'none']) {
+      const img = drawFlag(code, 56, C.route), id = `flag-${code}`;
+      if (map.hasImage(id)) map.updateImage(id, img); else map.addImage(id, img, { pixelRatio: 2 });
+    }
+    map.addLayer({ id: 'path-abroad-end', type: 'symbol', source: 'abroad', filter: ['==', ['geometry-type'], 'Point'],
+      layout: { 'icon-image': ['get', 'flag'], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 10, 1] } });
 
     map.addLayer({
       id: 'train-dots',
@@ -1229,6 +1252,31 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
       if (routeSigs.length) routeNames();
+    },
+    // The open train's legs abroad (src/abroad.js abroadEnds, with coords: [from, to] the way the train goes); null
+    // or []: none. A foreign station outside the map's bounds (Austria, Italy) gets none (the card still names it).
+    async setAbroad(legs) {
+      const inside = ([lon, lat]) => lon >= MAX_BOUNDS[0][0] && lon <= MAX_BOUNDS[1][0] && lat >= MAX_BOUNDS[0][1] && lat <= MAX_BOUNDS[1][1];
+      const shown = (legs ?? []).filter(l => l.coords.every(inside));
+      const end = l => (l.dir === 'to' ? l.coords[1] : l.coords[0]);
+      data.abroad = { type: 'FeatureCollection', features: shown.flatMap(l => [
+        { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: l.coords } },
+        { type: 'Feature', properties: { flag: `flag-${hasFlag(l.country) ? l.country : 'none'}` }, geometry: { type: 'Point', coordinates: end(l) } }]) };
+      abroadNames = shown.map(l => ({ type: 'Feature', properties: { sig: l.sig, name: l.name, rank: 0 }, geometry: { type: 'Point', coordinates: end(l) } }));
+      // The march: a step every 100 ms while a leg is shown and the page is in view; still for less motion.
+      clearInterval(marchTimer);
+      marchTimer = null;
+      if (shown.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        marchTimer = setInterval(() => {
+          if (document.hidden || !isReady || !map.getLayer('path-abroad')) return;
+          marchStep = (marchStep + 1) % MARCH.length;
+          map.setPaintProperty('path-abroad', 'line-dasharray', MARCH[marchStep]);
+        }, 100);
+      }
+      await ready;
+      if (!isReady) return;
+      map.getSource('abroad')?.setData(data.abroad);
+      routeNames();
     },
     // The open train's stations (signatures, in order) get their names in pills; null: none.
     async setRouteStations(sigs) {

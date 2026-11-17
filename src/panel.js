@@ -11,6 +11,7 @@ import { t } from './i18n.js';
 import { hhmm, now } from './clock.js';
 import { settings } from './settings.js';
 import { glide } from './sheet.js';
+import { abroadEnds, flagSvg } from './abroad.js';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -72,7 +73,8 @@ function routeLate(stops) {
 // onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
 // isStarred(number) / onStar(number) -> starred now: the ☆ for favourites.
 // lateOf(id): the train's minutes late now, as on the map (undefined: not on the map; null: not known).
-export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isStarred, onStar, lateOf }) {
+// station(sig): the station ({ name, lon, lat, country }), for a trip's end abroad (src/abroad.js).
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -274,6 +276,33 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     wireGlance();
   }
 
+  // The row for a trip's end abroad (e: abroadEnds' to or from). The line to it counts as travelled once the train is
+  // past the last Swedish stop (to) or past the first (from); while the train is out there and still on the map, it
+  // rides on that line. The Swedish stop next to the border cancelled: the trip doesn't go there (a dotted line, the
+  // reason from Trafikverket, the name crossed out).
+  function abroadRow(e, nextIdx) {
+    const to = e.dir === 'to', onMap = lateOf?.(openId) !== undefined;
+    const done = !e.cut && (to ? nextIdx === -1 : nextIdx !== 0);
+    const riding = !e.cut && onMap && (to ? nextIdx === -1 : nextIdx === 0);
+    // The stretch: 48 px from the Swedish row's edge to the flag; the cuts 18 px from that edge, halfway between the
+    // Swedish stop's dot and the flag.
+    const H = 48, c = to ? 18 : H - 18;
+    const stretch = e.cut
+      ? `<svg class="ab-stretch" viewBox="0 0 30 ${H}" aria-hidden="true"><line class="ab-run" x1="15" y1="2" x2="15" y2="${H - 2}" stroke-dasharray="2 8"/></svg>`
+      : `<svg class="ab-stretch" viewBox="0 0 30 ${H}" aria-hidden="true"><line class="ab-run" x1="15" y1="0" x2="15" y2="${c - 9}"/>` +
+        `<line class="ab-run" x1="15" y1="${c + 9}" x2="15" y2="${H}"/><line class="ab-cut" x1="8" y1="${c - 2}" x2="22" y2="${c - 7}"/>` +
+        `<line class="ab-cut" x1="8" y1="${c + 7}" x2="22" y2="${c + 2}"/><g class="ab-slip"><rect x="10" y="${c - 7}" width="10" height="14" rx="4"/>` +
+        `<rect class="ab-win" x="12" y="${c - 4}" width="6" height="4" rx="1.5"/></g></svg>`;
+    const flag = flagSvg(e.country);
+    const dot = flag ? `<span class="tl-flag">${flag}</span>` : '<span class="tl-dot"></span>';
+    const sub = e.cut ? t('notRunning', (e.texts.length ? e.texts : [t('cancelledStop')]).join(' · ')) : `${t('country', e.country)} · ${t('timeUnknown')}`;
+    return `<div class="tl-row abroad ${e.dir}${e.cut ? ' canceled' : ''}${done ? ' done' : ''}">` +
+      `<span class="tl-time">${t(to ? 'abroadEnd' : 'abroadStart')}</span>` +
+      `<span class="tl-node">${stretch}${dot}${riding ? `<span class="tl-train ab-rider">${icon('train', 17)}</span>` : ''}</span>` +
+      `<span class="tl-name"><span class="ab-name">${esc(t(to ? 'towardsEnd' : 'fromStart', e.name))}</span><small>${esc(sub)}</small></span>` +
+      `<span class="tl-trk"></span></div>`;
+  }
+
   // The card for a train whose route has loaded.
   // keepScroll: a refresh; the table stays where it was scrolled to (otherwise it scrolls to the next stop).
   function draw(train, route, { keepScroll = false } = {}) {
@@ -309,6 +338,11 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
     }).join('');
+    // A trip that goes on abroad, or comes from there (src/abroad.js): one more row for that end, after the last stop
+    // (before the first), the line to it broken by two cuts with a little train slipping through now and then (Max's
+    // pick from the sketch, 2026-11-18: "B", the cuts halfway between the two dots), a round flag for its dot.
+    const ends = abroadEnds(route, station);
+    const tlRows = (ends.from ? abroadRow(ends.from, nextIdx) : '') + rows + (ends.to ? abroadRow(ends.to, nextIdx) : '');
 
     // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
     // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)". Only on the full card.
@@ -356,7 +390,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
-          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${rows}</div>`
+          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>`
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');

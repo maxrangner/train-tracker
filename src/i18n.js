@@ -39,6 +39,9 @@ const EN = {
   lateNow: 'late now', earlyNow: 'early now', rightNow: 'right now', lateUnknown: 'not known',
   cdTo: s => `to ${s}`, cdAt: s => `At ${s}`, cdNow: 'Now', cdHere: 'Now', hours: 'h', planned: 'planned',
   arrived: 'Arrived', towardsEnd: s => `To ${s}`, timeUnknown: 'time unknown', countDownTo: 'Count down to', nextStop: 'next stop', stopHere: 'here now', endStation: 'end station',
+  // A trip's end abroad (src/abroad.js): the card's extra row.
+  fromStart: s => `From ${s}`, abroadEnd: 'end', abroadStart: 'start', notRunning: s => `Not running: ${s}`,
+  country: c => ({ NO: 'Norway', DK: 'Denmark', DE: 'Germany', AT: 'Austria', IT: 'Italy', NL: 'Netherlands', PT: 'Portugal' })[c] ?? c,
   allStops: 'More', fewerStops: 'Less',
   notesCount: n => `Notes (${n})`, foldNotes: 'Fold the notes',
   messagesCount: n => `${n} message${n === 1 ? '' : 's'} from the station`,
@@ -251,7 +254,9 @@ const SV = {
   // The compact train card (2026-11-15)
   lateNow: 'sen nu', earlyNow: 'före tid nu', rightNow: 'just nu', lateUnknown: 'okänt',
   cdTo: s => `till ${s}`, cdAt: s => `Vid ${s}`, cdNow: 'Nu', cdHere: 'Nu', hours: 'tim', planned: 'enligt tidtabell',
-  arrived: 'Framme', towardsEnd: s => `Mot ${s}`, timeUnknown: 'tid okänd', countDownTo: 'Räkna ner till', nextStop: 'nästa', stopHere: 'står här', endStation: 'slutstation',
+  arrived: 'Framme', towardsEnd: s => `Mot ${s}`, timeUnknown: 'tid okänd',
+  fromStart: s => `Från ${s}`, abroadEnd: 'slut', abroadStart: 'start', notRunning: s => `Går inte: ${s}`,
+  country: c => ({ NO: 'Norge', DK: 'Danmark', DE: 'Tyskland', AT: 'Österrike', IT: 'Italien', NL: 'Nederländerna', PT: 'Portugal' })[c] ?? c, countDownTo: 'Räkna ner till', nextStop: 'nästa', stopHere: 'står här', endStation: 'slutstation',
   allStops: 'Mer', fewerStops: 'Mindre',
   notesCount: n => `Anmärkningar (${n})`, foldNotes: 'Fäll ihop anmärkningarna',
   messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`,
