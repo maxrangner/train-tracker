@@ -10,6 +10,7 @@ import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { hhmm, now } from './clock.js';
 import { settings } from './settings.js';
+import { glide } from './sheet.js';
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -357,7 +358,7 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
-    if (more) more.onclick = () => el.classList.toggle('full');
+    if (more) more.onclick = () => glide(el, () => el.classList.toggle('full'));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
     showGlance();

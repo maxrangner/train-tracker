@@ -281,8 +281,19 @@ document.addEventListener('keydown', (e) => {
 // The phone's back button in the Android app (Max, 2026-11-17): closes the sheet on top (card, board, search, a page),
 // one per press, like a drag down; with none open, the app goes to the background (as Android's own back does since
 // Android 12: the map stays loaded). Only inside the app: Capacitor's bridge is there; the web page never loads this.
+// With the keyboard open, back only hides the keyboard (Max's phone test, 2026-11-17: one swipe closed both it and the
+// search). Open = a text field has focus and the page is clearly lower than the tallest seen at this width (the
+// viewport line's interactive-widget=resizes-content: the keyboard shrinks the page).
 if (window.Capacitor?.isNativePlatform?.()) {
-  import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => { if (!sheets.closeTop()) App.minimizeApp(); }));
+  let tallest = { w: 0, h: 0 };
+  const seen = () => { if (innerWidth !== tallest.w) tallest = { w: innerWidth, h: 0 }; tallest.h = Math.max(tallest.h, innerHeight); };
+  seen();
+  addEventListener('resize', seen);
+  const keyboardUp = () => Boolean(document.activeElement?.matches?.('input, textarea')) && innerHeight < tallest.h - 150;
+  import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
+    if (keyboardUp()) { document.activeElement.blur(); return; }
+    if (!sheets.closeTop()) App.minimizeApp();
+  }));
 }
 
 // ---- The menu: search for a train number or a station ----

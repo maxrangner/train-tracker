@@ -17,6 +17,27 @@ const HANDLE_PX = 34;    // the handle: the sheet's top this high
 const TOP_GAP = 78;      // full height leaves this much at the top (the search bar)
 
 const bottomSheet = el => Boolean(NARROW?.matches) && el.id !== 'menu';
+const GLIDE_MS = 280;    // a little over the CSS height transition (.sheet, .26 s)
+
+// A size change that glides (Max's phone test, 2026-11-17: Mer, the handle tap and a short drag down "snap down very
+// fast"): the change itself (a class, new content) is made with the transitions off, so the new natural height can
+// be measured at once (the height limit changes with it); then the height goes from what it was (or `from`, a dragged
+// sheet's visible height) to the new one by the sheet's CSS transition, and is left to the content again after.
+// settle: runs once the transitions are back on (what should move too, e.g. the transform back to 0).
+export function glide(el, change, { from = el.getBoundingClientRect().height, settle } = {}) {
+  clearTimeout(el.glideTimer);
+  el.classList.add('dragging');   // (transitions off)
+  el.style.height = ''; el.style.maxHeight = '';
+  change();
+  const to = el.getBoundingClientRect().height;
+  el.style.maxHeight = `${Math.max(from, to)}px`;   // (neither limit cuts the glide short)
+  el.style.height = `${from}px`;
+  el.getBoundingClientRect();   // (the start of the glide)
+  el.classList.remove('dragging');
+  settle?.();
+  el.style.height = `${to}px`;
+  el.glideTimer = setTimeout(() => { el.style.height = ''; el.style.maxHeight = ''; }, GLIDE_MS);
+}
 
 export function initSheets(els) {
   const order = [];   // the open sheets, oldest first
@@ -98,6 +119,9 @@ function dragging(el) {
       if (start.grew) el.style.height = h;
     } else {        // down: the whole sheet follows the finger
       el.style.maxHeight = '';
+      // grown first, then back below the start: at its small height again, following the finger down (Max's phone
+      // test, 2026-11-17: it stayed at the grown height, shifted down, and was left there cut off)
+      if (start.grew) el.style.height = `${start.h}px`;
       el.style.transform = `translateY(${dy}px)`;
     }
   });
@@ -105,26 +129,31 @@ function dragging(el) {
     if (!start || e.pointerId !== start.id) return;
     const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew } = start;
     start = null;
-    if (grew) {   // grown with the finger: on to full height, or back to compact; its height glides there
-      const now = el.getBoundingClientRect().height, stay = dy < -SNAP_PX;
-      if (!stay) el.classList.remove('full');
-      el.style.height = ''; el.style.maxHeight = '';
-      const to = stay ? el.getBoundingClientRect().height : startH;
-      el.style.height = `${now}px`;
-      el.getBoundingClientRect();   // (the start of the glide)
+    if (grew && dy > CLOSE_PX) {   // grown, then pulled far down: slides away and closes, as from small
       el.classList.remove('dragging');
-      el.style.height = `${to}px`;
-      setTimeout(() => { el.style.height = ''; }, 280);
+      el.classList.add('leaving');
+      el.style.transform = 'translateY(100%)';
+      setTimeout(close, 200);
+      return;
+    }
+    if (grew) {   // grown with the finger: on to full height, or back to compact; its height glides there
+      const stay = dy < -SNAP_PX;
+      glide(el, () => { if (!stay) el.classList.remove('full'); }, { settle: () => { el.style.transform = ''; } });   // (back up, if pulled below its start)
+      return;
+    }
+    const page = el.classList.contains('page'), full = el.classList.contains('full');
+    if (tap && handle && !page) { glide(el, () => { el.classList.toggle('full'); el.style.transform = ''; }); return; }
+    if (dy < -SNAP_PX && !full) { glide(el, () => { el.classList.add('full'); el.style.transform = ''; }); return; }
+    // From full: a short drag down goes back to compact, a long one (past half its height) closes it (Max, 2026-11-15:
+    // "a swipe all the way down should close it. But a small swipe only minimize it"). It glides from where the finger
+    // left it (the height it shows, its top where it was).
+    if (dy > SNAP_PX && full && !page && dy < Math.max(2 * CLOSE_PX, startH / 2)) {
+      glide(el, () => { el.classList.remove('full'); el.style.transform = ''; }, { from: startH - dy });
       return;
     }
     el.classList.remove('dragging');   // from here it moves to where it settles (CSS transition)
     el.style.maxHeight = '';
-    const page = el.classList.contains('page'), full = el.classList.contains('full');
-    if (tap) { if (handle && !page) el.classList.toggle('full'); el.style.transform = ''; return; }
-    if (dy < -SNAP_PX) { el.classList.add('full'); el.style.transform = ''; return; }
-    // From full: a short drag down goes back to compact, a long one (past half its height) closes it (Max, 2026-11-15:
-    // "a swipe all the way down should close it. But a small swipe only minimize it").
-    if (dy > SNAP_PX && full && !page && dy < Math.max(2 * CLOSE_PX, startH / 2)) { el.classList.remove('full'); el.style.transform = ''; return; }
+    if (tap || dy < -SNAP_PX) { el.style.transform = ''; return; }
     if (dy > CLOSE_PX) {   // slides away, then closes
       el.classList.add('leaving');
       el.style.transform = 'translateY(100%)';
