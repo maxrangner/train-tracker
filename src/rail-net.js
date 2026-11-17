@@ -237,7 +237,8 @@ export function netFromJSON(json) {
         if (c < ownCost) { ownCost = c; own = t; }
       }
     }
-    if (own) {
+    // (within maxM like any other way: the review's F05, 2026-11-17; tools/net-check.mjs)
+    if (own && ownCost <= maxM) {
       const poly = newPoly();
       addPiece(poly, a.li, a.along, own.along);
       poly.target = own;
@@ -285,7 +286,9 @@ export function netFromJSON(json) {
         if (angle(hin, leaveHeading(m, e)) > maxTurn) continue;
         const nd = e === 0 ? +1 : -1;
         for (const t of onLine.get(m) ?? []) {
-          const c = cost + (nd > 0 ? t.along : len[m] - t.along) * F(m, nd);
+          const into = nd > 0 ? t.along : len[m] - t.along;
+          if (real + into > maxM) continue;   // (the limit holds into the last line too; found with F05, 2026-11-17)
+          const c = cost + into * F(m, nd);
           if (c < doneCost) { doneCost = c; done = { li, d, last: m, lastDir: nd, t }; }
         }
         push(cost + len[m] * F(m, nd), m, nd, [li, d], real + len[m]);

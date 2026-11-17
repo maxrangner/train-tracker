@@ -3,7 +3,7 @@ import { icon } from './icons.js';
 import { splitLabel, tagHtml, minutesText } from './tag.js';
 import { createTrains } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
-import { createMap } from './map.js';
+import { createMap, ownMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
@@ -58,6 +58,10 @@ const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is 
 let net = null;
 netReady.then((n) => { net = n; });
 let shownPath = null;   // { id, path, places }: the open train's path
+const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
+// The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
+let reversalList = null, reversalFrom = null;
+const reversalPlaces = () => { if (reversalFrom !== stations) { reversalFrom = stations; reversalList = [...stations.values()].filter(st => st.advertised && st.lon !== null); } return reversalList; };
 if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
 // Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
 // and it waits before that stop rather than arriving in the drawing.
@@ -116,6 +120,18 @@ const panel = createPanel(document.getElementById('panel'), {
   // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
   // travelled up to the last place it was reported at.
   onRoute(id, route) {
+    // The last few drawn routes are kept (the review's F09, 2026-11-17): reopening a train doesn't search the rail
+    // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
+    const cachedPath = (places) => {
+      if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
+      const key = places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
+      let path = pathCache.get(key);
+      if (path) pathCache.delete(key);
+      else path = pathOf(places, net, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
+      pathCache.set(key, path);   // (the newest last)
+      if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
+      return path;
+    };
     const places = [];
     for (const s of route.stops) {
       // A trip split over several internal numbers (a diversion): its cancelled stops are often the old way (VR 2047,
@@ -133,7 +149,7 @@ const panel = createPanel(document.getElementById('panel'), {
     // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
     map.whenSettled().then(() => {
       if (panel.openId !== id) return;   // closed, or another train opened meanwhile
-      shownPath = { id, path: pathOf(places, net), places };
+      shownPath = { id, path: cachedPath(places), places };
       const here = placeNow(id);
       let done = 0;
       if (here) done = progressAt(shownPath.path, here);
@@ -182,6 +198,27 @@ const splash = document.getElementById('splash');
 const SPLASH_MIN_MS = 1300;
 map.shown.then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
   Math.max(0, SPLASH_MIN_MS - performance.now())));
+
+// The map credit (index.html #credit; Max, 2026-11-17): shown once the start screen has gone, faded on the first touch
+// of the map (or a wheel) or after 5 s, then taken away; the full credits stay in About.
+const CREDIT_MS = 5000;
+const creditEl = Object.assign(document.createElement('div'), { id: 'credit' });
+const creditLink = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+creditEl.innerHTML = `© ${creditLink('https://www.openstreetmap.org/copyright', 'OpenStreetMap')} © ${creditLink('https://openmaptiles.org/', 'OpenMapTiles')}` +
+  (ownMap ? '' : ` · ${creditLink('https://openfreemap.org/', 'OpenFreeMap')}`);
+const mapEl = document.getElementById('map');
+mapEl.appendChild(creditEl);
+map.shown.then(() => {
+  const fade = (e) => {
+    if (e?.target && creditEl.contains(e.target)) return;   // (a tap on one of its links opens it first)
+    if (creditEl.classList.contains('gone')) return;
+    creditEl.classList.add('gone');
+    setTimeout(() => { creditEl.hidden = true; }, 700);
+    for (const type of ['pointerdown', 'wheel']) mapEl.removeEventListener(type, fade);
+  };
+  setTimeout(fade, Math.max(SPLASH_MIN_MS - performance.now(), 0) + 500 + CREDIT_MS);   // 5 s seen, after the start screen
+  for (const type of ['pointerdown', 'wheel']) mapEl.addEventListener(type, fade, { passive: true });
+});
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
@@ -259,14 +296,31 @@ const helpEl = document.getElementById('help');
 function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
-// About (round 4): the logo, Buy me a coffee (Max's Ko-fi link, when he gives it: until then the button does nothing)
-// and Report a bug (does nothing yet: "Leave non functional for now").
-const KOFI_URL = '';
+// About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
+// "Email, pre-filled", to sparat@rangner.com, a mailbox of its own). The mail app opens with the build, a link to the
+// same map view, the open train and the phone filled in; the person writes what happened (and attaches a screenshot).
+const KOFI_URL = 'https://ko-fi.com/rangner';
+const BUG_EMAIL = 'sparat@rangner.com';
+const PUBLIC_URL = 'https://sparat.rangner.com/';   // the view link points here (inside the app the page's own address is local)
 helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
 document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
 document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
 document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
-helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL);
+function bugMail() {
+  const version = `${typeof __VERSION__ === 'string' ? __VERSION__ : '?'} (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'})`;
+  const view = new URLSearchParams(location.hash.slice(1)).get('view');
+  const r = panel.openId && trains.get(panel.openId);
+  const company = r && lateness.brand(r.id);
+  const train = r ? `${r.number}${company ? ` ${company}` : ''}` : '–';
+  const mode = replay ? `replay ${replay}` : fromFiles ? 'files' : 'live';
+  const body = [t('bugWhat'), '', '', '', '—', `Spårat ${version}`, `${t('bugView')}: ${PUBLIC_URL}${view ? `#view=${view}` : ''}`,
+    `${t('bugTrain')}: ${train}`, `${t('bugMode')}: ${mode}, ${settings.language}, ${settings.theme}`,
+    `${t('bugDevice')}: ${navigator.userAgent}`].join('\r\n');
+  return `mailto:${BUG_EMAIL}?subject=${encodeURIComponent(t('bugSubject', version))}&body=${encodeURIComponent(body)}`;
+}
+window.__bugMail = bugMail;   // (tools: the mail a tap would open)
+document.getElementById('bug-button').onclick = () => { window.location.href = bugMail(); };
+helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL && BUG_EMAIL);
 // The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
 // The same word in both languages. "dev" on the PC's live-reloading page.
 document.getElementById('about-version').textContent = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +

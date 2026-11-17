@@ -25,6 +25,12 @@ const SHARP_TURN = 120;   // degrees, the fallback where the trains' own rule fi
 const QUICK = { step: 60, rings: 1, max: 6 }, WIDE = { step: 30, rings: 4, max: 30 };
 const FAR_M = 600, FAR_MAX = 40, FAR_COST = 2;
 const PASS_FAST = 4, PASS_M = 150;
+// A reversal at a station (2026-11-17, docs: split-1116/a11-report.md): Skövde C → Borås C was drawn 212 km, the real
+// way reverses at Herrljunga (over 150°, which no way-finding inside one piece allows) and those timetables list no
+// Herrljunga. When a piece's way is over REV_RATIO times the straight distance (and the stations are over REV_MIN_M
+// apart), the way through a station near the straight line (REV_NEAR: the detour via it at most that much longer than
+// straight; REV_TRY nearest) is tried too, the train turning there; kept only if under REV_KEEP of the first way.
+const REV_RATIO = 1.7, REV_MIN_M = 10000, REV_NEAR = 1.25, REV_TRY = 25, REV_KEEP = 0.75;
 
 // Every track within far metres of place p (the point of each line nearest the place), nearest first: the third round.
 function farCandidates(net, p, far, max) {
@@ -62,7 +68,8 @@ function candidates(net, p, { step, rings, max }, passFast = false) {
 // Returns { coords: [[lon, lat], ...], at: [index in coords of each place], stops: [[lon, lat], ...] (the passenger
 // stops' dots), stopAt: [index in coords where each stop's piece starts], stopF: [0 to 1 along that piece] }.
 // options (for comparing, tools/route-check.mjs): costed (default: when the network has costs), passFast (default: true).
-export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = true } = {}) {
+// reversals: stations where a train may turn round ([{ lon, lat }], the page's advertised stations), or null.
+export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = true, reversals = null } = {}) {
   const opts = { costed, maxW: costed ? net.maxWeight : 1 };
   // Per place, its candidate tracks (a place with none is itself the one candidate: null).
   const C = places.map(p => (net ? candidates(net, p, QUICK, passFast && costed) : []));
@@ -80,6 +87,16 @@ export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = 
       chosen = choose(places, net, C, opts);
     }
   }
+  // A piece whose chosen way is a long way round: turning round at a station on the way (REV_*, above), between the
+  // tracks already chosen, kept when much shorter in real metres. (After the choice, not inside it: there a siding's
+  // long way could win a turn-round over a normal way elsewhere; Göteborg Sävenäs → Trollhättan, 2026-11-17.)
+  if (reversals && net) chosen.forEach((ch, i) => {
+    if (i === 0 || !ch.poly) return;
+    const a = places[i - 1], b = places[i], dist = metres(a, b);
+    if (dist <= REV_MIN_M || realLen(ch.poly) <= REV_RATIO * dist) return;
+    const rev = viaReversal(net, reversals, a, b, C[i - 1][chosen[i - 1].j], C[i][ch.j], costed);
+    if (rev && realLen(rev) < REV_KEEP * realLen(ch.poly)) ch.poly = rev;
+  });
 
   const coords = [], at = [];
   const add = (lon, lat) => {
@@ -120,6 +137,31 @@ function nearestOn(coords, m, lo, hi) {
 }
 
 // The track per place (an index into C[i]) and the way from the place before: [{ j, poly (null: straight) }].
+// The way from track p to track q turning round at a station near the straight line between places a and b (the
+// shortest of REV_TRY tries, in real metres), or null.
+const realLen = w => w.cum[w.cum.length - 1];
+function viaReversal(net, reversals, a, b, p, q, costed) {
+  const dist = metres(a, b), maxM = dist * 3 + 3000;
+  const mids = reversals.map(s => ({ s, d: metres(a, s) + metres(s, b) }))
+    .filter(x => x.d < REV_NEAR * dist && metres(a, x.s) > 1000 && metres(x.s, b) > 1000)
+    .sort((x, y) => x.d - y.d).slice(0, REV_TRY);
+  let best = null;
+  for (const { s } of mids) {
+    const turn = net.snapsNear(s, 150);
+    if (!turn.length) continue;
+    const one = net.route(p, turn, maxM, 0, undefined, costed);
+    const two = one && net.route(one.target, q, maxM, 0, undefined, costed);
+    if (!two) continue;
+    const m = realLen(one) + realLen(two);
+    if (!best || m < best.m) best = { m, one, two };
+  }
+  if (!best) return null;
+  const { one, two } = best, end = realLen(one);
+  const poly = { lon: [...one.lon], lat: [...one.lat], cum: [...one.cum], target: two.target, cost: (one.cost ?? 0) + (two.cost ?? 0) };
+  for (let k = 1; k < two.lon.length; k++) { poly.lon.push(two.lon[k]); poly.lat.push(two.lat[k]); poly.cum.push(end + two.cum[k]); }
+  return poly;
+}
+
 function choose(places, net, C, { costed = false, maxW = 1 } = {}) {
   // best[i][j]: the cheapest way to reach candidate j of place i: { cost, prev, poly }. A straight piece costs a
   // lot more than its length, so a way along the rails is always preferred.
