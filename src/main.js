@@ -3,7 +3,7 @@ import { icon } from './icons.js';
 import { splitLabel, tagHtml, minutesText } from './tag.js';
 import { createTrains } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
-import { createMap } from './map.js';
+import { createMap, ownMap } from './map.js';
 import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
@@ -182,6 +182,27 @@ const splash = document.getElementById('splash');
 const SPLASH_MIN_MS = 1300;
 map.shown.then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
   Math.max(0, SPLASH_MIN_MS - performance.now())));
+
+// The map credit (index.html #credit; Max, 2026-11-17): shown once the start screen has gone, faded on the first touch
+// of the map (or a wheel) or after 5 s, then taken away; the full credits stay in About.
+const CREDIT_MS = 5000;
+const creditEl = Object.assign(document.createElement('div'), { id: 'credit' });
+const creditLink = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
+creditEl.innerHTML = `© ${creditLink('https://www.openstreetmap.org/copyright', 'OpenStreetMap')} © ${creditLink('https://openmaptiles.org/', 'OpenMapTiles')}` +
+  (ownMap ? '' : ` · ${creditLink('https://openfreemap.org/', 'OpenFreeMap')}`);
+const mapEl = document.getElementById('map');
+mapEl.appendChild(creditEl);
+map.shown.then(() => {
+  const fade = (e) => {
+    if (e?.target && creditEl.contains(e.target)) return;   // (a tap on one of its links opens it first)
+    if (creditEl.classList.contains('gone')) return;
+    creditEl.classList.add('gone');
+    setTimeout(() => { creditEl.hidden = true; }, 700);
+    for (const type of ['pointerdown', 'wheel']) mapEl.removeEventListener(type, fade);
+  };
+  setTimeout(fade, Math.max(SPLASH_MIN_MS - performance.now(), 0) + 500 + CREDIT_MS);   // 5 s seen, after the start screen
+  for (const type of ['pointerdown', 'wheel']) mapEl.addEventListener(type, fade, { passive: true });
+});
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
