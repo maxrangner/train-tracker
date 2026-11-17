@@ -14,7 +14,8 @@ export const PHONE = { width: 393, height: 851, deviceScaleFactor: 2, isMobile: 
 export const RUSH_HOUR = '2026-11-12T06-00-00-005Z';
 // The recording the screens check (tools/ui-check.mjs) replays: one with its trains' routes saved
 // (data/routes-<name>.jsonl, tools/save-routes.mjs), so the train card has its stops (the rush hour's are gone).
-export const CARD_HOUR = '2026-11-14T09-00-00-018Z';
+// A weekday evening rush with SL's GPS on (Tue 17 Nov 16:00-18:00); the page starts at its first minute.
+export const CARD_HOUR = '2026-11-17T15-00-00-001Z';
 
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
