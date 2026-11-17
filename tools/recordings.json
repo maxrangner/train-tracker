@@ -33,7 +33,7 @@
       "role": "core",
       "slot": "weekday morning rush",
       "swedish": "Thu 12 Nov 2026 07:00-08:00",
-      "why": "The busiest traffic recorded: 363 trains at once (most 389), 1,820 real stops, 155 silences of 5 min or more, 54 jumps. Also the page tests' fixed moment (tools/ui-check.mjs).",
+      "why": "The busiest traffic recorded: 363 trains at once (most 389), 1,820 real stops, 155 silences of 5 min or more, 54 jumps. Also most pictures' fixed moment (tools/lib/browser.mjs RUSH_HOUR; the screens check moved to a recording with its routes saved, CARD_HOUR, 2026-11-17: this one's are gone at Trafikverket).",
       "positions": {
         "bytes": 67387058,
         "sha256": "61347f910d1504bab13d4c5d326a08c38a7b6230a9a15e7181525af24a071b0d"
@@ -101,6 +101,10 @@
       "timetable": {
         "bytes": 9048440,
         "sha256": "cf35bc8c401925c46544e37b589d5a81ad12dfa763704a44ecc5812886914d4d"
+      },
+      "routes": {
+        "bytes": 5143609,
+        "sha256": "aaa30dcf99fc761fd0c0e03ba47a68d0777f2ab7264afdbf8eda5fddae760f15"
       }
     },
     {
@@ -116,6 +120,10 @@
       "timetable": {
         "bytes": 10891474,
         "sha256": "e84f63636a4b5170324d6fa19d78fd60d2e39002533d9c04a4e94f2ddce2d179"
+      },
+      "routes": {
+        "bytes": 5860775,
+        "sha256": "09adac52e4023872c24f7ce5d97a18aabfcbd58a536132e3d538de9269bff97e"
       }
     },
     {
@@ -131,6 +139,10 @@
       "timetable": {
         "bytes": 8324904,
         "sha256": "c43e87a23d339524fe02613b53a7ab9d80e60596752c8b8184f323ef658ffb1a"
+      },
+      "routes": {
+        "bytes": 3556861,
+        "sha256": "deb8330b55b05a62848e2dc848265ddd7d9871562f77244d31a37b6c8bf5fec3"
       }
     },
     {

@@ -223,19 +223,26 @@ export function passingsOf(rows) {
 // number: the public number. Asked by it, the whole trip comes even when Trafikverket split it over several internal
 // numbers (a diversion, a border; src/trip.js joins the pieces). Without it (a freight train), the internal number only.
 // pieces: how many internal numbers the trip is made of (1: not split).
-const ROUTE_FIELDS = ['OperationalTrainNumber', 'LocationSignature', 'ActivityType', 'Advertised', 'AdvertisedTimeAtLocation',
+export const ROUTE_FIELDS = ['OperationalTrainNumber', 'LocationSignature', 'ActivityType', 'Advertised', 'AdvertisedTimeAtLocation',
   'EstimatedTimeAtLocation', 'TimeAtLocation', 'Canceled', 'Deleted', 'TrackAtLocation', 'FromLocation', 'ToLocation',
   'ProductInformation', 'Deviation', 'OtherInformation', 'Booking', 'Service', 'TrainComposition'];
 export const routeQuery = (field, value, day) =>
   `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation">` +
   `<FILTER><EQ name="${field}" value="${value}"/><EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
   ROUTE_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`;
+// A replay answers the route question itself (src/replay-source.js, from data/routes-<name>.jsonl saved by
+// tools/save-routes.mjs): fn(field, value, day) -> Promise of { TrainAnnouncement: rows } as Trafikverket would
+// answer routeQuery, or null to ask Trafikverket.
+let savedRoutes = null;
+export function useSavedRoutes(fn) { savedRoutes = fn; }
 export async function fetchRoute(operationalNumber, departureDate, number = null) {
   const day = departureDate.slice(0, 10);
   const publicNumber = String(number ?? '').replace(/\D/g, '');
   let trip = null;
   // Through the tap switch (setTapAsker): php/ask.php asks the same routeQuery, by the public or the internal number.
-  const askRoute = (by, field, value) => askTap('route', { by, value, date: day }, routeQuery(field, value, day));
+  // In a replay with its routes saved (useSavedRoutes), the recording answers.
+  const askRoute = async (by, field, value) =>
+    (await savedRoutes?.(field, value, day)) ?? askTap('route', { by, value, date: day }, routeQuery(field, value, day));
   if (publicNumber) trip = joinPieces((await askRoute('number', 'AdvertisedTrainIdent', publicNumber)).TrainAnnouncement ?? [], operationalNumber);
   if (!trip) trip = joinPieces((await askRoute('train', 'OperationalTrainNumber', operationalNumber)).TrainAnnouncement ?? [], operationalNumber);
   const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
