@@ -43,13 +43,20 @@ try {
   await sleep(400);
 
   // ---- a train card (through the search, as tools/back-check.mjs) ----
+  // a train whose card has stops to show (a Mer button); up to 8 tries
   async function openCard() {
-    const number = await page.evaluate(() => { const f = window.__map.queryRenderedFeatures({ layers: ['train-dots'] })[0];
-      return f ? String(window.__trains.get(f.properties.id).number) : null; });
-    await page.click('#menu-button'); await sleep(300);
-    await page.type('#search', number ?? ''); await sleep(500);
-    await page.keyboard.press('Enter'); await sleep(1500);
-    return page.evaluate(() => !document.getElementById('panel').hidden);
+    const numbers = await page.evaluate(() => [...new Set(window.__map.queryRenderedFeatures({ layers: ['train-dots'] })
+      .map(f => String(window.__trains.get(f.properties.id)?.number ?? '')).filter(Boolean))].slice(0, 8));
+    for (const number of numbers) {
+      await page.evaluate(() => { if (document.getElementById('menu').hidden) document.getElementById('menu-button').click(); });
+      await sleep(300);
+      await page.evaluate((n) => { const i = document.getElementById('search'); i.focus(); i.value = n; i.dispatchEvent(new Event('input', { bubbles: true })); }, number);
+      await sleep(500);
+      await page.keyboard.press('Enter'); await sleep(1500);
+      if (await page.evaluate(() => !document.getElementById('panel').hidden && Boolean(document.querySelector('#panel .panel-more')))) return true;
+      await page.evaluate(() => document.querySelector('#panel .panel-close')?.click()); await sleep(300);
+    }
+    return false;
   }
   const card = () => page.evaluate(() => { const p = document.getElementById('panel'), r = p.getBoundingClientRect();
     return { open: !p.hidden, full: p.classList.contains('full'), h: Math.round(r.height), top: Math.round(r.top),

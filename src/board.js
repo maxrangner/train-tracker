@@ -16,6 +16,7 @@ import { lateClass } from './lateness.js';
 import { icon } from './icons.js';
 import { hhmm } from './clock.js';
 import { t } from './i18n.js';
+import { glide } from './sheet.js';
 
 export function createBoard(el, { load, stationName, onPickTrain, onClose, isStarred, onStar, messages = null }) {
   let station = null;     // { sig, name }
@@ -30,7 +31,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
   function wireMsgs() {
     const b = el.querySelector('.board-msgs-toggle');
     // Opened, the card goes full height so departures still show under them; folded again, back to its size.
-    if (b) b.onclick = () => { msgsOpen = !msgsOpen; el.classList.toggle('full', msgsOpen); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); };
+    if (b) b.onclick = () => glide(el, () => { msgsOpen = !msgsOpen; el.classList.toggle('full', msgsOpen); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); });
   }
   async function askMessages() {
     if (!station || !messages) return;
