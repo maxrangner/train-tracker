@@ -1,16 +1,18 @@
 // Puts the public page online (public-plan step 7) into its own address's folder on one.com, over SFTP.
 // Run: node tools/deploy.mjs <what> --env <settings file>     (e.g. --env D:/dev/sparat-site.env)
 //   tiles   the newest data/map/sweden-<date>.pmtiles into tiles/ (skipped when it is there with the same size)
-//   api     php/ask.php and its .htaccess into api/, and secret.php with the key (written from the settings, never
-//           printed; the web can't read it: php/.htaccess)
-//   page    builds the public page for SITE_URL (tools/build-public.mjs: no key, the key search) and uploads it: every
+//   page   builds the public page for SITE_URL (tools/build-public.mjs: no key, the key search) and uploads it: every
 //           new or changed file first, index.html last, so a page being opened never mixes versions; files the new
 //           page no longer has are kept a day (pages already open may still ask for them), then deleted
-//   all     tiles, api, page
+//   all     tiles, page
 //   list    what is on the site
 //   remove  undo: everything in the folder, the fetcher's data/ too; the address shows one.com's placeholder again
-// Settings: the fetcher's (SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_HOSTKEY, TRV_KEY or VITE_TRV_KEY) plus
-// SITE_DIR (the address's folder on one.com, e.g. /webroots/4506cfb2) and SITE_URL (e.g. https://sparat.rangner.com).
+// Settings: the fetcher's (SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_HOSTKEY) plus SITE_DIR (the address's
+// folder on one.com, e.g. /webroots/4506cfb2) and SITE_URL (e.g. https://sparat.rangner.com).
+// No key and no script ever goes to one.com (2026-11-17, Max: the tap script ask.php and its key file were taken off
+// one.com; taps come from the fetcher's files instead, public plan phase B): put() refuses any .php file and anything
+// under api/. Until phase B the page is built with taps pointing at api/ask.php, which answers 404: a tap fails
+// quietly and no viewer's browser asks Trafikverket anything.
 // Safety: it writes and deletes only inside SITE_DIR, and never in data/ (the fetcher's) except on remove. The first
 // run needs the folder empty (data/ allowed) and leaves a marker (.sparat-site); later runs refuse a folder without
 // it, so a wrong SITE_DIR (rangner.com's own folder, say) is never written to.
@@ -26,8 +28,8 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const arg = n => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : undefined; };
 const what = process.argv[2];
 const envPath = arg('env');
-if (!['tiles', 'api', 'page', 'all', 'list', 'remove'].includes(what) || !envPath) {
-  console.log('node tools/deploy.mjs tiles|api|page|all|list|remove --env <settings file>'); process.exit(2);
+if (!['tiles', 'page', 'all', 'list', 'remove'].includes(what) || !envPath) {
+  console.log('node tools/deploy.mjs tiles|page|all|list|remove --env <settings file>'); process.exit(2);
 }
 const cfg = Object.fromEntries(readFileSync(envPath, 'utf8').split(/\r?\n/).filter(l => /^[A-Z_]+=/.test(l))
   .map(l => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim()]));
@@ -36,7 +38,6 @@ for (const k of ['SFTP_HOST', 'SFTP_USER', 'SFTP_PASS', 'SFTP_HOSTKEY', 'SITE_DI
 const SITE = cfg.SITE_DIR.replace(/\/$/, '');
 const URL_ = cfg.SITE_URL.replace(/\/$/, '');
 if (!/^\/webroots\/[0-9a-z]+$/.test(SITE)) { console.log(`SITE_DIR must be a one.com address folder like /webroots/4506cfb2 (got ${SITE})`); process.exit(2); }
-const KEY = cfg.TRV_KEY || cfg.VITE_TRV_KEY;
 const MARK = '.sparat-site';
 const OURS = new Set(['data', 'api', 'tiles', MARK]);   // never part of the page's own files
 
@@ -108,6 +109,7 @@ async function mkdirs(dir) {
 }
 // A whole file under a temporary name, then into place: a reader never gets half a file.
 async function put(rel, buf) {
+  if (/\.(php|phtml|phar)$/i.test(rel) || rel.split('/')[0] === 'api') throw new Error(`refusing ${rel}: no scripts and nothing under api/ on one.com`);
   const to = inside(`${SITE}/${rel}`), tmp = `${to}.up-${process.pid}.tmp`;
   await mkdirs(posix.dirname(to));
   await call('writeFile', tmp, buf);
@@ -155,15 +157,6 @@ async function tiles() {
   try { await call('unlink', inside(to)); } catch { /* not there */ }
   await call('rename', inside(tmp), inside(to));
   log(`tiles: ${name} uploaded in ${((Date.now() - t) / 1000).toFixed(0)} s`);
-}
-
-async function api() {
-  if (!KEY) throw new Error(`${envPath} has no TRV_KEY: ask.php needs it`);
-  if (!/^[0-9A-Za-z-]+$/.test(KEY)) throw new Error('the key has unexpected characters');
-  await put('api/.htaccess', readFileSync(join(ROOT, 'php/.htaccess')));
-  await put('api/secret.php', `<?php\n// Trafikverket's key for ask.php (tools/deploy.mjs). Never in git.\nreturn '${KEY}';\n`);
-  await put('api/ask.php', readFileSync(join(ROOT, 'php/ask.php')));
-  log('api: ask.php, .htaccess, secret.php (the key) uploaded');
 }
 
 async function page() {
@@ -231,7 +224,6 @@ try {
   } else {
     await claim();
     if (what === 'tiles' || what === 'all') await tiles();
-    if (what === 'api' || what === 'all') await api();
     if (what === 'page' || what === 'all') await page();
   }
 } catch (e) { console.log('deploy: ' + e.message); process.exitCode = 1; }
