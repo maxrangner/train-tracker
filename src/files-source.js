@@ -12,6 +12,7 @@
 // onPlanned(rows), plus onStations(Map) and onFile(fileTime) (fresh data came, even with no new reports).
 import { trainOf, passingOf, plannedOf, LIVE_MS } from './live-file.js';
 import { setClock } from './clock.js';
+import { groupOf, withChanges } from './tap-files.js';
 
 const READ_AT_MS = 2000;      // ask this long into each 5-s slot (the fetcher makes it at +0.05 s, uploads in ~0.5 s)
 const GAP_MS = 30 * 1000;     // files missed for longer: read the passings files again
@@ -174,17 +175,39 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   return stop;
 }
 
-// Taps through the small script on one.com (php/ask.php): the same four questions, kept 30 s there for everyone.
-// The answer is Trafikverket's own, so src/trafikverket.js reads it as before. "busy" (503): once more after 2 s.
-export function tapAsker(url) {
-  return async (kind, params) => {
-    const q = new URLSearchParams({ q: kind, ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])) });
-    for (let i = 0; ; i++) {
-      const r = await fetch(`${url}?${q}`);
-      if (r.status === 503 && i === 0) { await new Promise(res => setTimeout(res, 2000)); continue; }
-      const body = await r.json().catch(() => null);
-      if (!r.ok || !body || body.error) throw new Error(`ask.php ${kind}: ${body?.error ?? r.status}`);
-      return body;
+// Taps from the fetcher's files (plan step 4, 2026-11-17; src/tap-files.js, fetcher/timetable.mjs): the same four
+// questions as src/trafikverket.js asks Trafikverket, answered from the newest files the live file names, in
+// Trafikverket's own answer shape, so the card, board, search and messages read them as before. asOf: when the
+// answer's newest file was made (the card and board say "updated" when it is older than 2 minutes).
+// latest(kind) -> Promise of the newest file of that kind (null: none yet); at() -> the page's clock.
+const byPlanned = (a, b) => Date.parse(a.AdvertisedTimeAtLocation) - Date.parse(b.AdvertisedTimeAtLocation);
+export function filesTapAsker(latest, at) {
+  const need = async kind => {
+    const f = await latest(kind);
+    if (!f) throw new Error('the timetable is not ready yet; try again in a minute');
+    return f;
+  };
+  return async (kind, p) => {
+    const now = at();
+    if (kind === 'messages') {
+      const f = await need('messages');
+      return { asOf: f.t, TrainStationMessage: f.messages.filter(m => m[0] === p.sig && (!m[2] || Date.parse(m[2]) < now) && (!m[3] || Date.parse(m[3]) > now))
+        .map(m => ({ LocationCode: m[0], FreeText: m[1], StartDateTime: m[2], EndDateTime: m[3], Status: m[4] })) };
     }
+    const add = await latest('taps-add');
+    if (kind === 'board') {
+      const g = await need(`board-${groupOf(p.sig)}`), act = p.act === 'Avgang' ? 'D' : 'A';
+      const rows = withChanges(g, add, r => r[3] === p.sig && r[4] === act)
+        .filter(a => a.Advertised && !a.Deleted && Date.parse(a.AdvertisedTimeAtLocation) > now - 90 * 60000).sort(byPlanned);
+      return { asOf: add?.t ?? g.t, TrainAnnouncement: rows.slice(0, p.n * 4) };
+    }
+    // route (by public or internal number) and train (the number search): the train's group, by its public number
+    // (an internal number finds it in the index).
+    const day = p.date ?? p.day;
+    let number = kind === 'train' || p.by === 'number' ? String(p.number ?? p.value) : null, op = number ? null : String(p.value);
+    const groupKey = number ?? (await latest('taps-index'))?.ops?.[op] ?? op;
+    const g = await need(`card-${groupOf(groupKey)}`);
+    const rows = withChanges(g, add, (r, f) => (number ? r[1] === number : r[0] === op) && String(f.d[r[2]] ?? '').slice(0, 10) === day).sort(byPlanned);
+    return { asOf: add?.t ?? g.t, TrainAnnouncement: rows };
   };
 }

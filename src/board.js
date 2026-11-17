@@ -14,7 +14,7 @@ import { tagHtml } from './tag.js';
 import { stateHtml } from './state.js';
 import { lateClass } from './lateness.js';
 import { icon } from './icons.js';
-import { hhmm } from './clock.js';
+import { hhmm, now } from './clock.js';
 import { t } from './i18n.js';
 import { glide } from './sheet.js';
 
@@ -115,7 +115,9 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
         `<span class="bd-tag">${r.canceled ? `<span class="tag late">${t('cancelled')}</span>` : late > 0 ? tagHtml(late, { short: true }) : ''}</span>` +
         `<span class="tl-trk">${esc(r.track)}</span></button>`;
     }).join('');
-    frame(`<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
+    // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
+    const stale = rows.asOf && now() - rows.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(rows.asOf))}</p>` : '';
+    frame(stale + `<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
       `<div class="panel-table bd">${body}</div>`);
     const box = el.querySelector('.panel-table');
     box.scrollTop = scroll;

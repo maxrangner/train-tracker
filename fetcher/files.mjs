@@ -21,7 +21,14 @@ export const KINDS = {
   arrivals: [60 * MIN, 75 * MIN],          // today's arrivals (the stats page's graph)
   'arrivals-add': [5 * MIN, 15 * MIN],     // arrivals changed since that arrivals file
   stations: [24 * 60 * MIN, 48 * 60 * MIN],
+  // Taps from files (plan step 4; fetcher/timetable.mjs): card-NN and board-NN (in turns, each about every 16 min),
+  // the changes since the oldest of them, the internal -> public number index, the station messages.
+  'taps-add': [30000, 3 * MIN],
+  'taps-index': [10 * MIN, 15 * MIN],
+  messages: [2 * MIN, 5 * MIN],
 };
+const GROUP_KEEP = 25 * MIN;   // card-NN, board-NN: kept 25 minutes after made (a newer one comes within ~16)
+export const keepOf = kind => KINDS[kind]?.[1] ?? (/^(card|board)-\d+$/.test(kind) ? GROUP_KEEP : 15 * MIN);
 // The live file's name comes from its 5-s slot (a page works it out from the clock); every other file is named by
 // the moment it was made (the live file tells its name), so even a file made twice in one period gets a new name.
 export const nameOf = (kind, t) => kind === 'live' ? liveName(t) : `${kind}-${t}.json`;
@@ -67,7 +74,7 @@ export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
     // Remove what is past its keep time (never the newest of a kind).
     sweep(t) {
       for (const [name, f] of files) {
-        if (current[f.kind] === name || t - f.at <= KINDS[f.kind][1]) continue;
+        if (current[f.kind] === name || t - f.at <= keepOf(f.kind)) continue;
         files.delete(name);
         onRemove(name, f);
       }

@@ -1,0 +1,162 @@
+// The day's timetable in the fetcher's memory, for taps from files (plan step 4, 2026-11-17): every TrainAnnouncement
+// of yesterday's trains still running, today's, and from the evening tomorrow's, kept up to date by one more live
+// stream of changes (corrections, delays, tracks, cancellations, new and deleted trains); and every station's monitor
+// messages. From it fetcher/main.mjs makes the tap files (src/tap-files.js is their format):
+//   card-NN   the rows of the trains whose number is in group NN (a train's card; the number search)
+//   board-NN  the advertised rows of the stations in group NN, from 90 minutes ago on (a station's board)
+//   taps-add  every row changed since the oldest card or board file now in use, at its newest state
+//   taps-index  internal number -> public number (a card asked by internal number finds its group)
+//   messages  every station's monitor messages in force or coming
+// Trafikverket is asked: a whole day in 6-hour slices of planned time (halved while an answer is too big; measured
+// 2026-11-17: 7 questions, 21 s, 94k rows), one question a second; a day at start, at the day's turn, tomorrow at 18:00
+// and today again at 03:30 (a clean copy); the changes stream (one stream); messages every 2 minutes.
+import { ask, follow } from '../src/trafikverket.js';
+import { swedishDay } from '../src/clock.js';
+import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey } from '../src/tap-files.js';
+
+const MIN = 60000, HOUR = 60 * MIN;
+const KEEP_RUNNING_MS = 6 * HOUR;     // yesterday's rows kept while planned less than this ago
+const BOARD_BACK_MS = 90 * MIN;       // a board shows from 90 minutes ago (as src/trafikverket.js fetchBoard)
+const BOARD_ROWS = 120;               // rows per station and direction (30 shown at most, asked 4 times as many)
+const CHANGES_BACK_MS = 15 * MIN;     // the changes stream starts from changes in the last 15 minutes
+const FIELDS = TAP_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
+const Q = filter => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"><FILTER>${filter}</FILTER>${FIELDS}</QUERY>`;
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+export function createTimetable({ log, onChange = () => {}, onLoaded = () => {} }) {
+  const w = words();                  // one word list for everything in memory
+  const rows = new Map();             // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
+  const days = new Set();             // days loaded (YYYY-MM-DD)
+  let messages = [], messagesAt = null, lastChange = Date.now(), stopped = false, loading = null;
+  const counts = { asks: 0, loads: 0, changes: 0, rows: 0 };
+
+  // A row in; never over a newer version of it (a change that came while its day was loading). loading: days being
+  // loaded, whose changes are kept meanwhile (measured 2026-11-17: rows changed during the 16 s of a load were lost).
+  const loadingDays = new Set();
+  function put(a) {
+    const day = (a.ScheduledDepartureDateTime ?? '').slice(0, 10);
+    if (!a.LocationSignature || !a.AdvertisedTimeAtLocation || !(days.has(day) || loadingDays.has(day))) return false;
+    const r = encodeRow(a, w, 0), k = rowKey(r), mod = Date.parse(a.ModifiedTime ?? '') || Date.now();
+    const had = rows.get(k);
+    if (had && had.mod > mod) return false;
+    rows.set(k, { r, mod, day });
+    return true;
+  }
+
+  // One day's rows, in slices of planned time from 6 h before to 36 h after its start (overnight trains), halved
+  // while Trafikverket says the answer would be too big; one question a second.
+  async function loadDay(day, from = null) {
+    const start = Date.parse(`${day}T00:00:00+01:00`);
+    const all = [];
+    async function slice(a, b) {
+      await wait(1000);
+      counts.asks++;
+      try {
+        all.push(...(await ask(Q(`<EQ name="ScheduledDepartureDateTime" value="${day}"/>` +
+          `<GTE name="AdvertisedTimeAtLocation" value="${new Date(a).toISOString()}"/><LT name="AdvertisedTimeAtLocation" value="${new Date(b).toISOString()}"/>`))).TrainAnnouncement ?? []);
+      } catch (e) {
+        if (!/Maximum response size/.test(e.message) || b - a <= 15 * MIN) throw e;
+        const mid = Math.round((a + b) / 2);
+        await slice(a, mid); await slice(mid, b);
+      }
+    }
+    const t0 = Date.now();
+    loadingDays.add(day);
+    try {
+      for (let h = Math.max(start - 6 * HOUR, from ?? -Infinity); h < start + 36 * HOUR; h += 6 * HOUR) await slice(h, Math.min(h + 6 * HOUR, start + 36 * HOUR));
+    } finally { loadingDays.delete(day); }
+    days.add(day);
+    let n = 0;
+    const got = new Set();
+    for (const a of all) { if (put(a)) n++; got.add(rowKey(encodeRow(a, w, 0))); }
+    // A clean copy: rows of the day no longer in Trafikverket's answer go, unless changed since the load began.
+    for (const [k, x] of rows) if (x.day === day && (from === null || x.r[6] * 1000 >= from) && !got.has(k) && x.mod < t0) rows.delete(k);
+    counts.loads++;
+    log(`timetable: ${day} loaded, ${n} rows (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+    onLoaded(day);   // every card and board file made again (a loaded day's rows are older than the changes file)
+  }
+
+  // Which days to hold now: yesterday (only rows planned in the last 6 h), today, and tomorrow from 18:00.
+  async function keepDays() {
+    if (loading) return loading;
+    loading = (async () => {
+      const now = Date.now(), today = swedishDay(now), yesterday = swedishDay(now - 24 * HOUR), tomorrow = swedishDay(now + 24 * HOUR);
+      const want = [yesterday, today, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
+      for (const d of [...days]) if (!want.includes(d)) { days.delete(d); for (const [k, x] of rows) if (x.day === d) rows.delete(k); }
+      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - KEEP_RUNNING_MS : null);
+      for (const [k, x] of rows) if (x.day === yesterday && x.r[6] * 1000 < now - KEEP_RUNNING_MS) rows.delete(k);
+    })().catch(e => log(`timetable: loading failed: ${e.message}; tried again in a minute`)).finally(() => { loading = null; });
+    return loading;
+  }
+
+  // Changes: one live stream of every TrainAnnouncement changed from 15 minutes ago on. After a break longer than
+  // that, today is loaded again (a change could have been missed).
+  const stream = follow({
+    makeQuery: ({ changeId, stream: s }) => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" ${s ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
+      `<FILTER><GT name="ModifiedTime" value="${new Date(Date.now() - CHANGES_BACK_MS).toISOString()}"/></FILTER>${FIELDS}</QUERY>`,
+    onResult: (r, { first = false } = {}) => {
+      const gap = Date.now() - lastChange;
+      lastChange = Date.now();
+      let n = 0;
+      for (const a of r.TrainAnnouncement ?? []) if (put(a)) n++;
+      counts.changes += n;
+      if (first && gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
+      if (n) onChange();
+    },
+    onStatus: s => { if (s.error) log(`timetable changes: ${s.mode}: ${s.error}`); },
+    silentMs: 180000,
+  });
+
+  async function loadMessages() {
+    const now = new Date().toISOString();
+    try {
+      counts.asks++;
+      const r = await ask(`<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
+        `<FILTER><EQ name="MediaType" value="Monitor"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
+        ['LocationCode', 'FreeText', 'StartDateTime', 'EndDateTime', 'Status'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
+      messages = r.TrainStationMessage ?? []; messagesAt = Date.now();
+    } catch (e) { log(`timetable: station messages: ${e.message}`); }
+  }
+
+  // Timers: the days every minute (cheap when nothing is due), today again at 03:30, messages every 2 minutes.
+  let resyncDay = swedishDay(Date.now());   // today is loaded fresh at start: the clean copy is from tomorrow 03:30 on
+  const dayTimer = setInterval(() => {
+    const hm = new Date().toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' });
+    const today = swedishDay(Date.now());
+    if (hm >= '03:30' && resyncDay !== today && days.has(today)) { resyncDay = today; days.delete(today); }
+    keepDays();
+  }, MIN);
+  const msgTimer = setInterval(loadMessages, 2 * MIN);
+  keepDays(); loadMessages();
+
+  // ---------- the files' contents ----------
+  const out = (list, extra) => {   // rows from memory (base 0, the memory's words) -> a file body
+    const fw = words();
+    const b = list.reduce((m, x) => (x.r[6] !== null && x.r[6] < m ? x.r[6] : m), Math.floor(Date.now() / 1000));   // seconds
+    const r = list.map(x => { const a = decodeRow(x.r, w.list, 0); return encodeRow(a, fw, b); });
+    return { ...extra, b, d: fw.list, r };
+  };
+  const all = () => [...rows.values()];
+  return {
+    ready: () => days.has(swedishDay(Date.now())),
+    // Cards: today's and yesterday's trains (tomorrow's only on boards, until the day turns).
+    card: (g, t) => { const today = swedishDay(t); return out(all().filter(x => x.day <= today && groupOf(x.r[1] || x.r[0]) === g), { kind: `card-${g}`, t }); },
+    // Boards: per station and direction its next BOARD_ROWS advertised rows from 90 minutes ago (a board shows at most
+    // 30, src/trafikverket.js fetchBoard asks for 4 times as many).
+    board: (g, t) => {
+      const by = new Map();
+      for (const x of rows.values()) {
+        if (!(x.r[5] & 1) || x.r[6] * 1000 < t - BOARD_BACK_MS || groupOf(x.r[3]) !== g) continue;
+        const k = x.r[3] + x.r[4];
+        if (!by.has(k)) by.set(k, []);
+        by.get(k).push(x);
+      }
+      return out([...by.values()].flatMap(l => l.sort((a, b) => a.r[6] - b.r[6]).slice(0, BOARD_ROWS)), { kind: `board-${g}`, t });
+    },
+    changes: (since, t) => out(all().filter(x => x.mod >= since), { kind: 'taps-add', t, since }),
+    index: t => { const ops = {}; for (const x of rows.values()) if (x.r[1]) ops[x.r[0]] = x.r[1]; return { kind: 'taps-index', t, groups: GROUPS, ops }; },
+    messages: t => ({ kind: 'messages', t, at: messagesAt, messages: messages.map(m => [m.LocationCode, m.FreeText, m.StartDateTime ?? null, m.EndDateTime ?? null, m.Status ?? null]) }),
+    stats: () => ({ ...counts, rows: rows.size, days: [...days], words: w.list.length, messages: messages.length, lastChangeAgo: Math.round((Date.now() - lastChange) / 1000) }),
+    stop() { stopped = true; clearInterval(dayTimer); clearInterval(msgTimer); stream(); },
+  };
+}

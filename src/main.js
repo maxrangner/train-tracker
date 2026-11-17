@@ -16,7 +16,7 @@ import { initSheets } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
-import { startFilesSource, tapAsker } from './files-source.js';
+import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
@@ -33,14 +33,13 @@ import kofiCup from './kofi-cup.png';
 // recording's start (src/clock.js).
 const replay = new URLSearchParams(location.hash.slice(1)).get('replay');
 // The public page reads the fetcher's files instead (public-plan step 3, src/files-source.js): VITE_DATA_URL in the
-// build, and VITE_TAP_URL for taps (php/ask.php on one.com); no key in the page. On the dev page also
-// #files=<address>&tap=<address> for tests (only there: a link can't point the public page elsewhere). Otherwise the
-// key, as before (the dev page, the Android dev app).
+// build; taps too come from its files (plan step 4, 2026-11-17: filesTapAsker); no key in the page. On the dev page
+// also #files=<address> for tests (only there: a link can't point the public page elsewhere). Otherwise the key, as
+// before (the dev page, the Android dev app).
 const hashOpt = new URLSearchParams(location.hash.slice(1));
 const filesBase = replay ? null : (import.meta.env.DEV && hashOpt.get('files')) || import.meta.env.VITE_DATA_URL || null;
-const tapUrl = (import.meta.env.DEV && hashOpt.get('tap')) || import.meta.env.VITE_TAP_URL || null;
 const fromFiles = Boolean(filesBase);
-if (tapUrl) setTapAsker(tapAsker(tapUrl));
+if (fromFiles) setTapAsker(filesTapAsker(kind => positionsFeed?.latest?.(kind) ?? Promise.resolve(null), now));
 const live = !replay && (hasKey || fromFiles);   // live data of some kind: stations, disruptions, stats, messages
 // The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement is as
 // good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).

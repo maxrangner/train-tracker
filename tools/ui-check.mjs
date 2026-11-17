@@ -134,8 +134,11 @@ try {
   // gone on 16 Nov (every train "no stops"). Since 2026-11-17 the replay brings its own (CARD_HOUR's routes file); in
   // the files run, or without that file, the card's parts can't be checked: said so, not failed.
   await sleep(2000);   // the route
-  const noRoute = head && await page.evaluate(() => Boolean(document.querySelector('#panel .state.empty')) && !document.querySelector('#panel .tile'));
-  if (noRoute) cardNote = ' (card parts not checked: the replay\'s day is no longer at Trafikverket)';
+  // Since plan step 4 (2026-11-17) the files run's taps come from the fetcher's tap files, which a replaying fetcher
+  // doesn't make (no timetable): the card says so (an error state), checked live by tools/taps-check.mjs instead.
+  const noRoute = head && await page.evaluate(() => Boolean(document.querySelector('#panel .state.empty, #panel .state.error')) && !document.querySelector('#panel .tile'));
+  if (noRoute) cardNote = filesAt ? ' (card parts not checked: a replaying fetcher makes no tap files; tools/taps-check.mjs checks them live)'
+    : ' (card parts not checked: the replay\'s day is no longer at Trafikverket)';
   if (head && !noRoute) {
     const card = () => page.evaluate(() => {
       const el = document.getElementById('panel'), stop = el.querySelector('.cd-stop');

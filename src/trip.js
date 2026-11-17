@@ -6,7 +6,7 @@
 // Pure (no page, no network), so node can check it: tools/split-check.mjs.
 
 const HOUR = 60 * 60000;
-// What the number search asks for each row (src/trafikverket.js fetchTrainsByNumber; php/ask.php 'train' the same):
+// What the number search asks for each row (src/trafikverket.js fetchTrainsByNumber; from files the same rows):
 // enough for tripsOf.
 export const NUMBER_FIELDS = ['AdvertisedTrainIdent', 'OperationalTrainNumber', 'ScheduledDepartureDateTime',
   'AdvertisedTimeAtLocation', 'Deleted', 'FromLocation', 'ToLocation', 'ProductInformation'];

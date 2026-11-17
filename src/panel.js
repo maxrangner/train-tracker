@@ -350,6 +350,8 @@ export function createPanel(el, { stationName, onSelect, onFollow, onRoute, isSt
     el.innerHTML =
       head(train, route.product) +
       (alert ? `<p class="panel-alert">${esc(alert)}</p>` : '') +
+      // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
+      (route.asOf && now() - route.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(route.asOf))}</p>` : '') +
       (stops.length
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +

@@ -164,9 +164,9 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
   return stop;
 }
 
-// Taps (a train's route, a station's board and its messages, a train number) can go through our own server instead:
-// in the public version php/ask.php asks Trafikverket the same question (the same XML, built there from kind and
-// params) and keeps the answer 30 s for everyone. tapAsker(kind, params) -> Promise of Trafikverket's RESULT.
+// Taps (a train's route, a station's board and its messages, a train number) can be answered from elsewhere: in the
+// public version from the fetcher's files (src/files-source.js filesTapAsker, plan step 4, 2026-11-17), in
+// Trafikverket's own answer shape plus asOf (when the files were made). tapAsker(kind, params) -> Promise of it.
 let tapAsker = null;
 export function setTapAsker(fn) { tapAsker = fn; }
 const askTap = (kind, params, xml) => tapAsker ? tapAsker(kind, params) : ask(xml);
@@ -242,11 +242,14 @@ export function useSavedRoutes(fn) { savedRoutes = fn; }
 export async function fetchRoute(operationalNumber, departureDate, number = null) {
   const day = departureDate.slice(0, 10);
   const publicNumber = String(number ?? '').replace(/\D/g, '');
-  let trip = null;
-  // Through the tap switch (setTapAsker): php/ask.php asks the same routeQuery, by the public or the internal number.
+  let trip = null, asOf = null;
+  // Through the tap switch (setTapAsker): the fetcher's files answer the same routeQuery, by the public or the internal number.
   // In a replay with its routes saved (useSavedRoutes), the recording answers.
-  const askRoute = async (by, field, value) =>
-    (await savedRoutes?.(field, value, day)) ?? askTap('route', { by, value, date: day }, routeQuery(field, value, day));
+  const askRoute = async (by, field, value) => {
+    const r = (await savedRoutes?.(field, value, day)) ?? await askTap('route', { by, value, date: day }, routeQuery(field, value, day));
+    asOf = r.asOf ?? asOf;
+    return r;
+  };
   if (publicNumber) trip = joinPieces((await askRoute('number', 'AdvertisedTrainIdent', publicNumber)).TrainAnnouncement ?? [], operationalNumber);
   if (!trip) trip = joinPieces((await askRoute('train', 'OperationalTrainNumber', operationalNumber)).TrainAnnouncement ?? [], operationalNumber);
   const texts = list => (list ?? []).map(x => x.Description).filter(Boolean);
@@ -256,6 +259,7 @@ export async function fetchRoute(operationalNumber, departureDate, number = null
     to: trip?.to ?? null,
     product: rows.find(a => a.ProductInformation?.[0])?.ProductInformation[0].Description ?? null,
     pieces: trip?.pieces ?? 1,
+    asOf,   // from files: when they were made (null: asked Trafikverket now)
     stops: rows.map(a => ({
       station: a.LocationSignature,
       activity: a.ActivityType,          // "Ankomst" (arrival) or "Avgang" (departure)
@@ -350,7 +354,7 @@ export async function fetchDisruptions(at) {
 // of 2026-11-14). Test messages are left out, and the same text only once. [{ text, until (ms or null) }]
 export async function fetchStationMessages(sig, at) {
   const now = new Date(at).toISOString();
-  const r = await askTap('messages', { sig },
+  const r = await askTap('messages', { sig, at },
     `<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
     `<FILTER><EQ name="LocationCode" value="${sig}"/><EQ name="MediaType" value="Monitor"/>` +
     `<LT name="StartDateTime" value="${now}"/><GT name="EndDateTime" value="${now}"/></FILTER>` +
@@ -387,7 +391,7 @@ export async function fetchStations() {
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
 export async function fetchBoard(sig, activity, at, n) {
-  const r = await askTap('board', { sig, act: activity, n },
+  const r = await askTap('board', { sig, act: activity, n, at },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
@@ -407,8 +411,10 @@ export async function fetchBoard(sig, activity, at, n) {
     from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
   }));
   // Gone: left (or arrived) before now, or cancelled and planned more than 5 minutes ago. Then the next n.
-  return rows.filter(x => !(x.actual && x.actual < at) && !(x.canceled && x.planned < at - 5 * 60000)
+  const out = rows.filter(x => !(x.actual && x.actual < at) && !(x.canceled && x.planned < at - 5 * 60000)
     && !(!x.actual && !x.estimated && x.planned < at - 30 * 60000)).slice(0, n);
+  out.asOf = r.asOf ?? null;   // from files: when they were made
+  return out;
 }
 
 // ---------- A train number in today's timetable ----------
