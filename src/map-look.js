@@ -1,6 +1,7 @@
 import { MAP } from './colours.js';
 // The map's own look (Max, 2026-11-14: "Paper" for light, "Night" for dark; since 2026-11-15 the Soft look). The base map
-// stays OpenFreeMap's (positron for light, dark for dark); restyleBase() recolours it and hides what a train map
+// stays OpenFreeMap's (positron for light, dark for dark; on the public page our own copy of them, public/map/, over our
+// own map file: tools/map-file.mjs); restyleBase() recolours it and hides what a train map
 // doesn't need: the base map's own railways (ours are drawn instead), borders, airports, and every name except places
 // and water. Layers are found by their kind (source-layer), so a renamed layer in OpenFreeMap's style still works.
 // Our own layers' colours (rails, stations, labels) are in map.js colours(), which reads LOOK.
