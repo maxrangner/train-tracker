@@ -298,13 +298,15 @@ function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.que
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
 document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
-// "Email, pre-filled", to sparat@rangner.com, a mailbox of its own). The mail app opens with the build, a link to the
-// same map view, the open train and the phone filled in; the person writes what happened (and attaches a screenshot).
+// "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
+// filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
+// pointing robots at his own domain): the monitor's Gmail with a "+bugs" tag, put together only on a tap, so the
+// page and the public code never hold it whole (bugAddress; tools/about-check.mjs checks the page's code for it).
 // Ko-fi as in Max's Connection Lab (Max, 2026-11-17: "do the same"): a plain link, the one Ko-fi's button script writes,
 // in Ko-fi's blue with Ko-fi's cup kept in the page (kofi-cup.png, from there). Not the script itself: it would load
 // from Ko-fi and Google Fonts on every visit, and it writes with document.writeln, so it can't go in a panel built later.
 const KOFI_URL = 'https://ko-fi.com/X1C729ZIK7';
-const BUG_EMAIL = 'sparat@rangner.com';
+const bugAddress = () => { const back = s => [...s].reverse().join(''); return `${back('sgub+ppa.taraps')}@${back('moc.liamg')}`; };
 const PUBLIC_URL = 'https://sparat.rangner.com/';   // the view link points here (inside the app the page's own address is local)
 helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
 document.querySelector('#kofi-button .about-ic').innerHTML = `<img src="${kofiCup}" alt="">`;   // the words say where it goes
@@ -320,11 +322,11 @@ function bugMail() {
   const body = [t('bugWhat'), '', '', '', '—', `Spårat ${version}`, `${t('bugView')}: ${PUBLIC_URL}${view ? `#view=${view}` : ''}`,
     `${t('bugTrain')}: ${train}`, `${t('bugMode')}: ${mode}, ${settings.language}, ${settings.theme}`,
     `${t('bugDevice')}: ${navigator.userAgent}`].join('\r\n');
-  return `mailto:${BUG_EMAIL}?subject=${encodeURIComponent(t('bugSubject', version))}&body=${encodeURIComponent(body)}`;
+  return `mailto:${bugAddress()}?subject=${encodeURIComponent(t('bugSubject', version))}&body=${encodeURIComponent(body)}`;
 }
 window.__bugMail = bugMail;   // (tools: the mail a tap would open)
 document.getElementById('bug-button').onclick = () => { window.location.href = bugMail(); };
-helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL && BUG_EMAIL);
+helpEl.querySelector('.about-soon').hidden = true;
 // The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
 // The same word in both languages. "dev" on the PC's live-reloading page.
 document.getElementById('about-version').textContent = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
