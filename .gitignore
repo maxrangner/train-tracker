@@ -26,3 +26,4 @@ public/rail-net.json
 # the tap answers on one.com: the key and the kept answers stay there
 php/secret.php
 php/cache/
+dist-linux/

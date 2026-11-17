@@ -39,6 +39,15 @@ function readEnv(path) {
   return out;
 }
 const cfg = { ...readEnv(envPath), ...Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(TRV_|SFTP_)/.test(k))) };
+// The self-check (fetcher/self-check.mjs) runs first and alone: nothing else starts, then it exits (78 or 79).
+//   --self-check outside|inside, or --self-check-file <path> (the service: inside, when that file exists)
+{
+  const where = args.includes('--self-check') ? arg('--self-check') : arg('--self-check-file') && existsSync(arg('--self-check-file')) ? 'inside' : null;
+  if (where) {
+    const { selfCheck } = await import('./self-check.mjs');
+    process.exit(await selfCheck(where === 'inside' ? 'inside' : 'outside', cfg, args));
+  }
+}
 const KEY = cfg.TRV_KEY ?? cfg.VITE_TRV_KEY;
 const replayName = arg('--replay');
 if (!KEY && !replayName) { console.error(`no key: put TRV_KEY=... in ${envPath} (or give --env <file>)`); process.exit(2); }

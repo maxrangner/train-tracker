@@ -107,6 +107,10 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
     onResult(result, { first });
     const url = result.INFO?.SSEURL;
     if (!url) return streamFailed('no stream address in the answer');
+    // Only Trafikverket's own streams over HTTPS (Codex's review, 2026-11-17; measured: https://api.trafikinfo.trafikverket.se).
+    let host = '';
+    try { const u = new URL(url); host = u.protocol === 'https:' ? u.hostname : ''; } catch { /* not an address */ }
+    if (!/(^|\.)trafikverket\.se$/.test(host)) return streamFailed('the stream address is not at trafikverket.se');
 
     es = new EventSource(url);
     const arm = () => {
