@@ -266,7 +266,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The dots' tiles are made no finer than zoom 12 (about a metre's precision; closer in they are enlarged): the
     // default 18 cut the view into many small tiles, each one redrawing the map when it arrived (about 6 draws per
     // refresh of the dots at zoom 11; measured 2026-11-15).
-    add('trains', { maxzoom: 12 });
+    add('trains', { maxzoom: 12, promoteId: 'id' });   // id: sendDots sends only the trains that changed
+    dotsHeld = null;
     // The far-out labels: the same trains, those close together on the screen grouped by the map into one "N trains"
     // label (Max, 2026-11-15: far out only some labels showed where trains were close; close in they were grouped).
     // The open train is left out (its own marker has its label).
@@ -972,6 +973,48 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let selStale = false;        // the selected train is grey (its ring under the model is faded too)
   let selLate = 'unknown';     // its lateness: the ring's colour, zoomed in as zoomed out (Max, 2026-11-15)
   let lastTrainsSent = 0;      // setTrains
+  // What the dots' source holds: id -> its feature as last sent (sendDots), or null (send them all next time).
+  let dotsHeld = null;
+  // The dots to the map. A full send makes the map rebuild every tile in view (12 at zoom 11, 24 times a second: most
+  // of the page's work there; 2026-11-17). So when the camera keeps still and the dots are seen, only the trains that
+  // moved a quarter of a pixel or more, turned half a degree, changed in any other way, came or went are sent, and
+  // the map rebuilds only the tiles they are on. A train that moved less stays where it was sent until it moves
+  // further (the same quarter pixel trainsEvery allows between refreshes). Moving the camera or the models sends all.
+  function sendDots(geojson) {
+    const src = map.getSource('trains');
+    if (!src) return;
+    const z = map.getZoom();
+    if (!dotsHeld || map.isMoving() || modelsAt(z)) {
+      src.setData(geojson);
+      dotsHeld = new globalThis.Map(geojson.features.map(f => [f.properties.id, f]));
+      return;
+    }
+    const quarterPx = 0.25 * 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** z);
+    const add = [], seen = new Set();
+    for (const f of geojson.features) {
+      const id = f.properties.id, was = dotsHeld.get(id);
+      seen.add(id);
+      if (was && !dotMoved(was, f, quarterPx)) continue;
+      add.push(f);
+      dotsHeld.set(id, f);
+    }
+    const remove = [];
+    for (const id of dotsHeld.keys()) if (!seen.has(id)) remove.push(id);
+    for (const id of remove) dotsHeld.delete(id);
+    if (add.length || remove.length) src.updateData({ add, remove });
+  }
+  // Has a dot changed enough to be sent again? Its place by a quarter pixel (in metres), its heading by half a degree
+  // (the tip of the largest arrow moves about a quarter pixel), or any other of its words or colours.
+  function dotMoved(was, now, quarterPx) {
+    const [x0, y0] = was.geometry.coordinates, [x1, y1] = now.geometry.coordinates;
+    const metres = Math.hypot((x1 - x0) * Math.cos(y0 * Math.PI / 180), y1 - y0) * 111319.5;
+    if (metres >= quarterPx) return true;
+    const a = was.properties, b = now.properties;
+    if (Math.abs((((a.bearing ?? 0) - (b.bearing ?? 0)) % 360 + 540) % 360 - 180) >= 0.5) return true;
+    for (const k in b) if (k !== 'bearing' && a[k] !== b[k]) return true;
+    for (const k in a) if (!(k in b)) return true;
+    return false;
+  }
   ready.then(() => { isReady = true; warmRoute(); });
   // The first route shown made the map prepare its drawing programs for the route's line and stop dots: about 75 ms,
   // in the middle of the camera's glide to the first train tapped (measured 2026-11-15). Done here instead, while the
@@ -1029,14 +1072,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
-    // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and from just before the models show.
+    // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and where the models show. (From one zoom step
+    // before the models it used to be 33 ms too: at zoom 11 the dots were rebuilt 24 times a second for movements of a
+    // tenth of a pixel, and the map was drawn ~55 times a second; 2026-11-17.)
     // following: the camera follows a train among the models, so the map is drawn in every frame anyway; the others
     // are then moved on as soon as the fastest could have gone half a pixel (every frame from about zoom 16).
     trainsEvery(following = false) {
       const z = map.getZoom();
       const metresPerPx = 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** z);
       if (following && modelsAt(z)) return Math.min(33, 1000 * 0.5 * metresPerPx / FASTEST_MS);
-      if (map.isMoving() || z >= modelZoom() - 1) return 33;
+      if (map.isMoving() || modelsAt(z)) return 33;
       return Math.max(33, Math.min(1000, 1000 * 0.25 * metresPerPx / FASTEST_MS));
     },
     // Is a place in the view, or within half a view's width or height outside it? (lon, lat) -> true / false.
@@ -1062,7 +1107,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const t = performance.now();
       if (modelsAt(map.getZoom()) && t - lastTrainsSent < 500) { map.triggerRepaint(); return; }
       lastTrainsSent = t;
-      map.getSource('trains').setData(geojson);
+      sendDots(geojson);
     },
     // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
