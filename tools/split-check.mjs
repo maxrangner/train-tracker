@@ -134,6 +134,29 @@ async function pathProblems(trip) {
   return out;
 }
 
-const total = CASES.length + Object.keys(TRIPS).length;
+// A turn round at a station (src/path.js REV_*, 2026-11-17): Skövde C → Borås C (SJ 10427, 14 Nov; its rows list no
+// Herrljunga) was drawn 213 km; turning at Herrljunga, 114 km. Göteborg Sävenäs → Trollhättan stays as it was (a turn
+// round was once picked there over a normal way, 69.7 → 71.6 km). Every station may be a turning place here (the
+// page uses its advertised ones).
+const TURNS = [['Sk', 'Bsc', 0, 130, 'Skövde C → Borås C turns at Herrljunga'], ['Gsv', 'Thn', 69, 70.5, 'Göteborg Sävenäs → Trollhättan without a turn']];
+{
+  const { netFromJSON } = await import('../src/rail-net.js');
+  const { pathOf } = await import('../src/path.js');
+  const net = netFromJSON(JSON.parse(readFileSync(new URL('../public/rail-net.json', import.meta.url), 'utf8')));
+  const st = new Map(JSON.parse(readFileSync(new URL('../data/stations.json', import.meta.url), 'utf8')).map(s => {
+    const m = s.Geometry?.WGS84?.match(/POINT \(([\d.-]+) ([\d.-]+)\)/);
+    return [s.LocationSignature, m ? { lon: +m[1], lat: +m[2] } : null];
+  }));
+  const reversals = [...st.values()].filter(Boolean), R = Math.PI / 180;
+  const km = c => c.reduce((s, p, i) => (i ? s + Math.hypot((p[0] - c[i - 1][0]) * Math.cos(p[1] * R), p[1] - c[i - 1][1]) * R * 6371 : 0), 0);
+  for (const [a, b, lo, hi, why] of TURNS) {
+    const len = km(pathOf([{ ...st.get(a), sig: a, stop: true }, { ...st.get(b), sig: b, stop: true }], net, { reversals }).coords);
+    const ok = len >= lo && len <= hi;
+    if (!ok) failed++;
+    console.log(`${ok ? 'ok  ' : 'FAIL'} turn ${why}: ${len.toFixed(1)} km (want ${lo}–${hi})`);
+  }
+}
+
+const total = CASES.length + Object.keys(TRIPS).length + TURNS.length;
 console.log(failed ? `split-check: ${failed} of ${total} failed` : `split-check: all ${total} hold`);
 process.exit(failed ? 1 : 0);

@@ -185,6 +185,25 @@
         "bytes": 10904923,
         "sha256": "c19f49d19fdacf654c017afd080b87ba3c9fa3f4ceb49fe6db7b6cd47fb471e8"
       }
+    },
+    {
+      "name": "2026-11-15T22-15-13-852Z",
+      "role": "library",
+      "slot": "sunday late evening",
+      "swedish": "Sun 15 Nov 2026 23:15-23:35",
+      "why": "VR 2047 Stockholm C → Göteborg C diverted (Elfel) and split over three internal numbers (2047, 12015, 12016); the split-trip work (src/trip.js, fix/handover, the Herrljunga turn-round) was measured on it. 158 trains, 123 at once (profile.mjs).",
+      "positions": {
+        "bytes": 5773076,
+        "sha256": "c383cf1ccddb0463eaf0a72cefe6414d006a869e8ff82d3f379325d21d69aca6"
+      },
+      "timetable": {
+        "bytes": 3005042,
+        "sha256": "75f27e2a0806d86598fdfd15a87aa7229479f4acb189c09ceb9a24fc3e688bd3"
+      },
+      "routes": {
+        "bytes": 3455674,
+        "sha256": "a406969ae6f5dd27d4d0d2373ae463c1a7264288907283fd01cdbcf2e4e1bfb5"
+      }
     }
   ],
   "stations": {
