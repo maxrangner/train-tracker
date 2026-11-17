@@ -59,6 +59,9 @@ let net = null;
 netReady.then((n) => { net = n; });
 let shownPath = null;   // { id, path, places }: the open train's path
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
+// The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
+let reversalList = null, reversalFrom = null;
+const reversalPlaces = () => { if (reversalFrom !== stations) { reversalFrom = stations; reversalList = [...stations.values()].filter(st => st.advertised && st.lon !== null); } return reversalList; };
 if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
 // Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
 // and it waits before that stop rather than arriving in the drawing.
@@ -124,7 +127,7 @@ const panel = createPanel(document.getElementById('panel'), {
       const key = places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
       let path = pathCache.get(key);
       if (path) pathCache.delete(key);
-      else path = pathOf(places, net);
+      else path = pathOf(places, net, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
       pathCache.set(key, path);   // (the newest last)
       if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
       return path;
