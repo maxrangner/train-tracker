@@ -1056,7 +1056,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds
     // to move one pixel (at the opening view about 20), and the 30 refreshes a second it got showed nothing new.
-    // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and from just before the models show.
+    // Always 33 ms while the map itself moves (a drag, a zoom, a flight) and where the models show. (From one zoom step
+    // before the models it used to be 33 ms too: at zoom 11 the dots were rebuilt 24 times a second for movements of a
+    // tenth of a pixel, and the map was drawn ~55 times a second; 2026-11-17.)
     // following: the camera follows a train among the models, so the map is drawn in every frame anyway; the others
     // are then moved on as soon as the fastest could have gone half a pixel (every frame from about zoom 16).
     trainsEvery(following = false) {
