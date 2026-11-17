@@ -267,6 +267,10 @@ document.querySelector('#kofi-button .about-ic').innerHTML = icon('coffee', 20);
 document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
 document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
 helpEl.querySelector('.about-soon').hidden = Boolean(KOFI_URL);
+// The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
+// The same word in both languages. "dev" on the PC's live-reloading page.
+document.getElementById('about-version').textContent = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
+  ` (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'}${import.meta.env.DEV ? ', dev' : ''})`;
 // Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
