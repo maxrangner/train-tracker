@@ -337,6 +337,15 @@
       .sheet.page, .sheet.full { max-height: calc(100% - 80px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); }
       .searchbar { flex: 0 1 420px; }
     }
+    /* With the search empty (favourites and the rest), the whole search sheet scrolls under its search row, so nothing
+       is squeezed when the phone's keyboard leaves little room (Max's phone test, 2026-11-17: the favourites hint was
+       cut to a sliver). The row stays on top: sticky, with the sheet's top padding moved into it. While typing, only
+       the results scroll (above). */
+    #menu.sheet { padding-top: 0; }
+    .menu-head { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-top: 14px; }
+    @media (min-width: 440px) { .menu-head { padding-top: 16px; } }
+    #menu:has(#search:placeholder-shown) { overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+    #menu:has(#search:placeholder-shown) > #search-results { flex: none; overflow: visible; }
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 17px; }
     .panel-head strong { font-weight: 800; }
     .panel-buttons { display: flex; align-items: center; gap: 6px; }
