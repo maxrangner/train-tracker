@@ -2,7 +2,9 @@
 // build, the view link, the open train, the phone), the Ko-fi button's link, the "come alive soon" note gone; the map
 // credit there at start, gone after 5 s or a drag, clear of the map's buttons. node tools/about-check.mjs (with
 // npm run dev; PAGE= for another port). Not the phone: whether its mail app opens.
+import { mkdirSync } from 'node:fs';
 import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
+mkdirSync('shots/todo-1117', { recursive: true });   // (pictures aren't in git: a fresh working folder has no such folder)
 
 const browser = await launch();
 const fails = [], notes = [];

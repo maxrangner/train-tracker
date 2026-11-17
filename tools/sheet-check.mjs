@@ -3,7 +3,9 @@
 // 2 a card grown upwards and dragged back below its start comes back to its small height (or closes past 100 px);
 // 3 every size change glides (heights in between, sampled each frame): Mer, the handle tap, a short drag down from full.
 // node tools/sheet-check.mjs (with npm run dev; PAGE= for another port). Not the phone: the feel and the real keyboard.
+import { mkdirSync } from 'node:fs';
 import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
+mkdirSync('shots/test-0117', { recursive: true });   // (pictures aren't in git: a fresh working folder has no such folder)
 
 const KEYBOARD_PX = 430;   // the phone keyboard's height in CSS pixels (Max's screenshot, 2026-11-17: 1120 of 2340 device pixels, 2.625 each)
 const browser = await launch();
