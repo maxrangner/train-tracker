@@ -98,6 +98,9 @@ function dragging(el) {
       if (start.grew) el.style.height = h;
     } else {        // down: the whole sheet follows the finger
       el.style.maxHeight = '';
+      // grown first, then back below the start: at its small height again, following the finger down (Max's phone
+      // test, 2026-11-17: it stayed at the grown height, shifted down, and was left there cut off)
+      if (start.grew) el.style.height = `${start.h}px`;
       el.style.transform = `translateY(${dy}px)`;
     }
   });
@@ -105,6 +108,13 @@ function dragging(el) {
     if (!start || e.pointerId !== start.id) return;
     const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew } = start;
     start = null;
+    if (grew && dy > CLOSE_PX) {   // grown, then pulled far down: slides away and closes, as from small
+      el.classList.remove('dragging');
+      el.classList.add('leaving');
+      el.style.transform = 'translateY(100%)';
+      setTimeout(close, 200);
+      return;
+    }
     if (grew) {   // grown with the finger: on to full height, or back to compact; its height glides there
       const now = el.getBoundingClientRect().height, stay = dy < -SNAP_PX;
       if (!stay) el.classList.remove('full');
@@ -113,6 +123,7 @@ function dragging(el) {
       el.style.height = `${now}px`;
       el.getBoundingClientRect();   // (the start of the glide)
       el.classList.remove('dragging');
+      el.style.transform = '';   // (glides back up, if it was pulled below its start)
       el.style.height = `${to}px`;
       setTimeout(() => { el.style.height = ''; }, 280);
       return;
