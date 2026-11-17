@@ -163,6 +163,10 @@ if (cases.status !== 0) failed++;
 const split = spawnSync('node', ['tools/split-check.mjs'], { stdio: 'inherit' });
 if (split.status !== 0) failed++;
 
+// The way-finding on a tiny made-up network (src/rail-net.js; the review's F14, 2026-11-17): a second, offline.
+const netCheck = spawnSync('node', ['tools/net-check.mjs'], { stdio: 'inherit' });
+if (netCheck.status !== 0) failed++;
+
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into

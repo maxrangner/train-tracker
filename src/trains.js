@@ -301,9 +301,13 @@ export function createTrains(options = {}) {
   const dwellOf = (tr, t) => {
     const last = tr.hist[tr.hist.length - 1];
     if (!ROUTES || last.passing) return null;
-    if (tr.dwellFor !== last) {
-      tr.dwellFor = last;
-      tr.dwellInfo = last.speed !== null && last.speed !== undefined && last.speed > 10 ? null : ROUTES.dwellAt(tr.latest.id, last, last.time);
+    const ver = ROUTES.version(tr.latest.id);   // (redone when the timetable grows: the review's F04, 2026-11-17)
+    if (tr.dwellFor !== last || tr.dwellVer !== ver) {
+      const fresh = tr.dwellFor !== last;
+      tr.dwellFor = last; tr.dwellVer = ver;
+      const dw = last.speed !== null && last.speed !== undefined && last.speed > 10 ? null : ROUTES.dwellAt(tr.latest.id, last, last.time);
+      // the same stop as before keeps its object (aheadOf decides the drive up to it once per dwell)
+      if (fresh || !(dw && tr.dwellInfo && dw.sig === tr.dwellInfo.sig && dw.until === tr.dwellInfo.until)) tr.dwellInfo = dw;
     }
     const dw = tr.dwellInfo;
     return dw && t < dw.until && !ROUTES.departed(tr.latest.id, dw.sig) ? dw : null;
@@ -313,7 +317,8 @@ export function createTrains(options = {}) {
   const stoodReleased = (tr, t) => {
     if (!ROUTES || !longSilent(tr, t)) return false;
     const last = tr.hist[tr.hist.length - 1];
-    if (tr.depFor !== last) { tr.depFor = last; tr.depAt = ROUTES.departureNear(tr.latest.id, last); }
+    const ver = ROUTES.version(tr.latest.id);
+    if (tr.depFor !== last || tr.depVer !== ver) { tr.depFor = last; tr.depVer = ver; tr.depAt = ROUTES.departureNear(tr.latest.id, last); }
     return tr.depAt !== null && t > tr.depAt + 30000;
   };
   const aheadOf = (tr, t) => {

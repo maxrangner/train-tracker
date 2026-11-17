@@ -58,6 +58,7 @@ const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is 
 let net = null;
 netReady.then((n) => { net = n; });
 let shownPath = null;   // { id, path, places }: the open train's path
+const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
 if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
 // Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
 // and it waits before that stop rather than arriving in the drawing.
@@ -116,6 +117,18 @@ const panel = createPanel(document.getElementById('panel'), {
   // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
   // travelled up to the last place it was reported at.
   onRoute(id, route) {
+    // The last few drawn routes are kept (the review's F09, 2026-11-17): reopening a train doesn't search the rail
+    // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
+    const cachedPath = (places) => {
+      if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
+      const key = places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
+      let path = pathCache.get(key);
+      if (path) pathCache.delete(key);
+      else path = pathOf(places, net);
+      pathCache.set(key, path);   // (the newest last)
+      if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
+      return path;
+    };
     const places = [];
     for (const s of route.stops) {
       // A trip split over several internal numbers (a diversion): its cancelled stops are often the old way (VR 2047,
@@ -133,7 +146,7 @@ const panel = createPanel(document.getElementById('panel'), {
     // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
     map.whenSettled().then(() => {
       if (panel.openId !== id) return;   // closed, or another train opened meanwhile
-      shownPath = { id, path: pathOf(places, net), places };
+      shownPath = { id, path: cachedPath(places), places };
       const here = placeNow(id);
       let done = 0;
       if (here) done = progressAt(shownPath.path, here);
