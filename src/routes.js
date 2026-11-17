@@ -85,11 +85,16 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
     add(rows) {
       for (const r of rows) {
         const e = entry(r.key);
-        e.rows.set(`${r.sig}|${r.activity}|${r.planned}`, r);
+        const k = `${r.sig}|${r.activity}|${r.planned}`;
+        if (!e.rows.has(k)) e.ver = (e.ver ?? 0) + 1;   // a new row: decisions made on the old timetable are redone (version)
+        e.rows.set(k, r);
         e.locs = null;
         if (r.planned > e.until) e.until = r.planned;
       }
     },
+    // How many times the train's timetable has grown (the review's F04, 2026-11-17: a dwell or departure decided before
+    // the planned route arrived stayed "none" until the next report; trains.js redoes them when this changes).
+    version(key) { return byKey.get(key)?.ver ?? 0; },
     // Actual passings: [{ key, station, time, minutes, activity }] (src/trafikverket.js followPassings).
     addPassings(list) {
       for (const p of list) {
