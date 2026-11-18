@@ -215,7 +215,17 @@ if (ui.status !== 2) {
   const fetcher = spawn('node', ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', '8095', '--minutes', '8'], { stdio: 'ignore' });
   await new Promise(r => setTimeout(r, 75000));   // a minute in, as the page's own replay starts (the first batch taken in)
   filesUi = spawnSync('node', ['tools/ui-check.mjs', '--files', 'http://localhost:8095/'], { stdio: 'inherit' });
+  // The files this code makes stay readable by released pages and apps (HARD RULE, 2026-11-18; tools/format-check.mjs).
+  const fmt = spawnSync('node', ['tools/format-check.mjs', '--files', 'http://localhost:8095/'], { encoding: 'utf8' });
+  console.log((fmt.stdout || '').trim());
+  if (fmt.status === 1) failed++;
   fetcher.kill();
+}
+// The site's files too (the code running on the Linux PC; tap files only there): the site not answering is a note.
+{
+  const fmt = spawnSync('node', ['tools/format-check.mjs', '--files', 'https://sparat.rangner.com/data/'], { encoding: 'utf8' });
+  console.log(fmt.status === 2 ? `note ${(fmt.stdout || '').trim()}` : (fmt.stdout || '').trim());
+  if (fmt.status === 1) failed++;
 }
 // Trains to and from abroad (src/abroad.js, 2026-11-18): the card's row and the map's leg, on the rush-hour replay.
 let abroad = { status: 0 };
