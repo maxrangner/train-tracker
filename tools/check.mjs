@@ -233,4 +233,7 @@ if (ui.status !== 2) abroad = spawnSync('node', ['tools/abroad-check.mjs'], { st
 // Settings → Debug hidden until switched on (#debug, 7 taps on About's version line; 2026-11-18).
 let debug = { status: 0 };
 if (ui.status !== 2) debug = spawnSync('node', ['tools/debug-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 ? 1 : 0);
+// A tap on a train in a "N trains" group lists the group (2026-11-18).
+let group = { status: 0 };
+if (ui.status !== 2) group = spawnSync('node', ['tools/group-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 ? 1 : 0);

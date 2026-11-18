@@ -79,6 +79,13 @@ try {
           return true;
         }, c.id);
         if (!opened) continue;
+        await sleep(1200);
+        // In a "N trains" group the tap lists the group (2026-11-18): the train is picked from that list, as by hand.
+        await page.evaluate(n => {
+          const p = document.getElementById('picker');
+          if (p.hidden) return;
+          [...p.querySelectorAll('[data-i]')].find(b => b.textContent.includes(n))?.click();
+        }, c.number);
         await sleep(3500);   // the route, then the camera and the path
         const head = await page.evaluate(() => document.querySelector('#panel .panel-head strong')?.textContent ?? '');
         if (kind(head) === k) { t = { ...c, number: head }; break; }

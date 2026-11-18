@@ -650,7 +650,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (label) return onTrainTap?.(label.properties.id);
       // Close in: anywhere on a model (its outline on the screen, with a little margin), nearest to its middle line.
       const onModel = modelsAt(map.getZoom()) ? modelAt(e.point) : null;
-      if (onModel) return onTrainTap?.(onModel);
+      if (onModel) return tapTrain(onModel, e.point);
       const pad = isToy() && map.getZoom() >= modelZoom() ? Math.max(12, settings.toySize / 2) : 12;
       const hits = map.queryRenderedFeatures(
         [[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ['train-dots'] });
@@ -670,8 +670,32 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const hit = dis.find(f => f.layer.id === 'disruption-rings') ?? dis[0];
         if (hit) return onDisruptionTap(hit.properties.id);
       }
-      onTrainTap?.(nearest?.properties.id ?? null);
+      if (nearest) return tapTrain(nearest.properties.id, e.point);
+      onTrainTap?.(null);
     });
+    // A train shown inside a "N trains" group opens the group's list, not the train (Max, 2026-11-18: "Should only show
+    // the menu for choosing all n number of trains"); a train on its own opens. pt: where the tap was.
+    function tapTrain(id, pt) {
+      if (!onGroupTap) return onTrainTap?.(id);
+      groupOf(id, pt).then(g => (g ? onGroupTap(g) : onTrainTap?.(id))).catch(() => onTrainTap?.(id));
+    }
+    // The group a train is shown in now: close in, the page's "3 trains" bubbles (nearEls); further out, the map's
+    // grouped labels (train-groups), those near the tap asked for their trains. null: on its own.
+    async function groupOf(id, pt) {
+      for (const n of nearEls.values()) {
+        if (n.ids.length > 1 && n.ids.includes(id)) return n.ids.map(i => nearProps.get(i)).filter(Boolean);
+      }
+      if (!map.getLayer('train-labels') || map.getLayoutProperty('train-labels', 'visibility') === 'none') return null;
+      const r = LABEL_GROUP_PX * 3;
+      const groups = map.queryRenderedFeatures([[pt.x - r, pt.y - r], [pt.x + r, pt.y + r]], { layers: ['train-labels'] })
+        .filter(f => f.properties.cluster_id !== undefined);
+      const src = map.getSource('train-groups');
+      for (const g of groups) {
+        const leaves = await src.getClusterLeaves(g.properties.cluster_id, 200, 0);
+        if (leaves.some(l => l.properties.id === id)) return leaves.map(l => nearProps.get(l.properties.id)).filter(Boolean);
+      }
+      return null;
+    }
     // Arrow keys (Max, 2026-11-12): up and down always tilt the view; left and right turn it while a train is
     // followed (otherwise they move the map, as the map's own keys do). Not while typing or in Help, Settings or the
     // menu. Caught before the map's own key handling, which would move the map and end the following.
