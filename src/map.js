@@ -9,7 +9,7 @@ import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trai
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
-import { drawFlag, hasFlag } from './abroad.js';
+import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -628,8 +628,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // are small on a phone). The nearest wins.
     map.on('click', (e) => {
       // Close in, a station's name is drawn on top of everything, so a tap on it opens the station.
+      // A station abroad is shown but not tappable (Max, 2026-11-18): Trafikverket has no trains stopping there, so its
+      // board would be empty; the tap goes on to whatever else is there.
       const named = onStationTap && stationNameAt(e.point);
-      if (named) return onStationTap(named);
+      if (named && !isAbroad(named)) return onStationTap(named);
       // Close in, a label: a "3 trains" label lists exactly the trains it was drawn for (the open train is in no
       // group); a train's own label opens it.
       const near = nearLabelAt(e.point);
@@ -657,6 +659,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (!nearest && onStationTap && map.getZoom() >= 9) {
         const sp = 14;
         const st = map.queryRenderedFeatures([[e.point.x - sp, e.point.y - sp], [e.point.x + sp, e.point.y + sp]], { layers: ['station-dots', 'station-names'] })
+          .filter(f => !isAbroad(f.properties.sig, { country: f.properties.country || undefined }))   // (abroad: not tappable)
           .reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
         if (st) return onStationTap(st.properties.sig);
       }
@@ -1248,7 +1251,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     },
     async setStations(list) {
       data.stations = { type: 'FeatureCollection', features: list.map(st => ({
-        type: 'Feature', properties: { sig: st.sig, name: st.name }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
+        type: 'Feature', properties: { sig: st.sig, name: st.name, country: st.country ?? '' }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
       if (routeSigs.length) routeNames();
