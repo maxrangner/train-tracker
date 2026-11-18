@@ -15,6 +15,9 @@ const ASK_EVERY_MS = 5 * 60 * 1000;
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 // Trafikverket's level 1 is "green", but each of these has a message for travellers: shown as yellow (1-2), orange, red.
 export const levelName = level => (level >= 4 ? 'red' : level === 3 ? 'orange' : 'yellow');
+// Rail work (planned, or run over) rather than a fault or incident (Max, 2026-11-18: told apart in the list and on the
+// map). From Trafikverket's event type; a file from an older fetcher has only its name, which starts "Banarbete".
+export const isWork = d => d.work ?? /^banarbete/i.test(d.kind ?? '');
 
 // A path's ({ coords }) length, in degrees of latitude (enough to compare two stretches).
 function length({ coords: c }) {
@@ -53,10 +56,13 @@ export function createDisruptions({ load, now, station, net, onData }) {
   function geojson() {
     const features = [];
     for (const d of list) {
-      const lines = stretchesOf(d);
-      for (const coords of lines) features.push({ type: 'Feature', properties: { id: d.id, level: d.level }, geometry: { type: 'LineString', coordinates: coords } });
+      const lines = stretchesOf(d), work = isWork(d) ? 1 : 0;
+      for (const coords of lines) features.push({ type: 'Feature', properties: { id: d.id, level: d.level, work }, geometry: { type: 'LineString', coordinates: coords } });
       const p = !lines.length && placeOf(d);
-      if (p) features.push({ type: 'Feature', properties: { id: d.id, level: d.level }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } });
+      if (p) features.push({ type: 'Feature', properties: { id: d.id, level: d.level, work }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } });
+      // Its icon (a cone for rail work, ⚠ for a problem; Max's pick B, 2026-11-18): halfway along it, or at its station.
+      const at = placeOf(d);
+      if (at) features.push({ type: 'Feature', properties: { id: d.id, level: d.level, work, badge: 1 }, geometry: { type: 'Point', coordinates: [at.lon, at.lat] } });
     }
     return { type: 'FeatureCollection', features };
   }
@@ -113,15 +119,19 @@ export function timesText(d, now) {
   return d.until ? t('disruptionUntil', when(d.since), when(d.until)) : t('disruptionSince', when(d.since));
 }
 
-// One row of the list (a button): the level's dot, the header, the places and the times.
+// The icon of a row or card: ⚠ in the level's colour for a problem, a cone in grey for rail work (Max's pick C for
+// the list, 2026-11-18).
+const kindIcon = d => (isWork(d) ? `<span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>`
+  : `<span class="dis-ic ${levelName(d.level)}" aria-hidden="true">${icon('warning', 16)}</span>`);
+// One row of the list (a button): its icon, the header, the places and the times.
 export function rowHtml(d, stationName, now) {
-  return `<button type="button" class="dis-row" data-id="${esc(d.id)}"><span class="dis-dot ${levelName(d.level)}" aria-hidden="true"></span>` +
+  return `<button type="button" class="dis-row" data-id="${esc(d.id)}">${kindIcon(d)}` +
     `<span><b>${esc(d.header)}</b><span class="dis-sub">${esc(placesText(d, stationName))} · ${esc(timesText(d, now))}</span></span></button>`;
 }
 
 // The card's contents.
 export function cardHtml(d, stationName, now) {
-  return `<div class="panel-head"><strong><span class="dis-dot ${levelName(d.level)}" aria-hidden="true"></span> ${esc(d.header)}</strong>` +
+  return `<div class="panel-head"><strong class="dis-title">${kindIcon(d)} ${esc(d.header)}</strong>` +
     `<button class="panel-close" type="button" aria-label="${esc(t('close'))}">${icon('close')}</button></div>` +
     `<p class="panel-note">${esc(d.kind)} · ${esc(placesText(d, stationName))}<br>${esc(timesText(d, now))}</p>` +
     `<div class="dis-text">${esc(d.text)}</div><p class="panel-note dis-source">${esc(t('disruptionSource'))}</p>`;

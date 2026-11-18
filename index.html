@@ -300,6 +300,17 @@
     .dis-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
     .dis-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
     .dis-dot.yellow { background: var(--dis-1); } .dis-dot.orange { background: var(--dis-2); } .dis-dot.red { background: var(--dis-3); }
+    /* Rail work vs problems (Max, 2026-11-18): ⚠ in the level's colour, a cone in grey; rail work folded at the end. */
+    .dis-ic { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; }
+    .dis-ic.yellow { color: var(--dis-1); background: color-mix(in srgb, var(--dis-1) 16%, transparent); }
+    .dis-ic.orange { color: var(--dis-2); background: color-mix(in srgb, var(--dis-2) 16%, transparent); }
+    .dis-ic.red { color: var(--dis-3); background: color-mix(in srgb, var(--dis-3) 16%, transparent); }
+    .dis-ic.work { color: var(--muted); background: var(--hover); }
+    .dis-title { display: flex; align-items: center; gap: 8px; }
+    .dis-fold { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-weight: 700; font-size: 14.5px; color: var(--ink);
+      background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 4px; margin-top: 4px; cursor: pointer; text-align: left; }
+    .dis-fold > span:nth-child(2) { flex: 1; }
+    .dis-fold .icon { color: var(--muted); }
     #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
     .dis-source { font-size: 12px; margin: 8px 0 0; }
@@ -657,6 +668,8 @@
         <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="trainCard">Train card</span>
         <div class="seg" data-key="trainCard" role="group" aria-label="Train card" data-t-aria="trainCard"><button type="button" data-v="compact" data-t="cardCompact">Compact</button><button type="button" data-v="expanded" data-t="cardExpanded">Expanded</button></div></div>
+      <div class="set-row"><span data-t="disruptionsMap">Disruptions on the map</span>
+        <div class="seg" data-key="disruptionsMap" role="group" aria-label="Disruptions on the map" data-t-aria="disruptionsMap"><button type="button" data-v="off" data-t="disOff">Off</button><button type="button" data-v="problems" data-t="disProblems">Problems</button><button type="button" data-v="all" data-t="disAll">All</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
       <div class="set-row"><span data-t="accent">Accent colour</span>

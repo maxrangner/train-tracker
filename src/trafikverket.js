@@ -324,7 +324,7 @@ export async function fetchDisruptions(at) {
     `<QUERY objecttype="OperativeEvent" namespace="ols.open" schemaversion="1">` +
     `<FILTER><EQ name="EventState" value="1"/><EXISTS name="TrafficImpact.PublicMessage.Header" value="true"/>` +
     `<ELEMENTMATCH><GT name="TrafficImpact.EndDateTime" value="${now}"/><LT name="TrafficImpact.StartDateTime" value="${now}"/></ELEMENTMATCH></FILTER>` +
-    ['OperativeEventId', 'EventType.Description', 'Geometry.WGS84', 'EventSection', 'TrafficImpact.StartDateTime',
+    ['OperativeEventId', 'EventType.Description', 'EventType.EventTypeCode', 'Geometry.WGS84', 'EventSection', 'TrafficImpact.StartDateTime',
       'TrafficImpact.EndDateTime', 'TrafficImpact.PublicMessage.Header', 'TrafficImpact.PublicMessage.Description',
       'TrafficImpact.PublicMessage.StartDateTime', 'TrafficImpact.PublicMessage.EndDateTime',
       'TrafficImpact.SelectedSection.OperatingLevel'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('') + `</QUERY>`);
@@ -340,7 +340,8 @@ export async function fetchDisruptions(at) {
     const sections = (e.EventSection ?? []).map(s => [sig(s.FromLocation), sig(s.ViaLocation), sig(s.ToLocation)].filter(Boolean)).filter(s => s.length);
     const ends = imps.map(i => (i.EndDateTime ? Date.parse(i.EndDateTime) : null));
     out.push({
-      id: e.OperativeEventId, kind: e.EventType?.Description ?? '', header: imps[0].PublicMessage.Header.trim(),
+      // work: rail work (EventTypeCode 16, "Banarbete/transport"), not a fault or incident (2026-11-18, docs/data.md).
+      id: e.OperativeEventId, kind: e.EventType?.Description ?? '', work: e.EventType?.EventTypeCode === '16', header: imps[0].PublicMessage.Header.trim(),
       text: imps.map(i => i.PublicMessage.Description?.trim()).filter((x, k, a) => x && a.indexOf(x) === k).join('\n\n'),
       since: Math.min(...imps.map(i => Date.parse(i.StartDateTime))), until: ends.includes(null) ? null : Math.max(...ends),
       level: Math.max(0, ...imps.flatMap(i => (i.SelectedSection ?? []).map(s => s.OperatingLevel ?? 0))),

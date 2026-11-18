@@ -17,7 +17,7 @@ import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
-import { createDisruptions, rowHtml, cardHtml } from './disruptions.js';
+import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now, hhmm, hhmmss, swedishDay } from './clock.js';
@@ -521,6 +521,7 @@ onSettingChange((key) => {
     if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
   }
   if (key === 'boardRows') board.relabel();
+  if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
   if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
@@ -624,7 +625,8 @@ netReady.then((n) => { netNow = n; });
 const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disruptions').then(f => f.disruptions) : fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
   onData({ list, geojson }) {
     map.setDisruptions(geojson);
-    document.getElementById('disruptions-count').textContent = `(${list.length})`;
+    // The menu's count: problems only, not rail work (Max, 2026-11-18).
+    document.getElementById('disruptions-count').textContent = `(${list.filter(d => !isWork(d)).length})`;
     if (!disruptionsPage.hidden) drawDisruptions();
     const open = disruptionEl.dataset.id;
     if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
@@ -633,11 +635,23 @@ if (live) {
   document.getElementById('disruptions-section').hidden = false;
   Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 }
+// The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
+// end, ending soonest first; open or folded is remembered on this device.
+const WORKS_KEY = 'railWorksOpen';
+let worksOpen = false;
+try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
 function drawDisruptions() {
-  const list = disruptions.list;
-  document.getElementById('disruptions-body').innerHTML = (list.length ? `<p class="panel-note">${t('disruptionsNote')}</p>` : stateHtml('empty', t('noDisruptions'))) +
-    list.map(d => rowHtml(d, stationName, now())).join('');
+  const list = disruptions.list, problems = list.filter(d => !isWork(d));
+  const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
+  const row = d => rowHtml(d, stationName, now());
+  document.getElementById('disruptions-body').innerHTML = (!list.length ? stateHtml('empty', t('noDisruptions'))
+    : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
+    problems.map(row).join('') +
+    (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
+      `<span>${t('railWorks')} (${works.length})</span>${icon(worksOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` + (worksOpen ? works.map(row).join('') : '') : '');
   for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
+  const fold = disruptionsPage.querySelector('.dis-fold');
+  if (fold) fold.onclick = () => { worksOpen = !worksOpen; try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ } drawDisruptions(); };
 }
 function drawDisruption(id) {
   const d = disruptions.byId(id);

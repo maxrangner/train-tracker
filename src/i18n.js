@@ -63,6 +63,8 @@ const EN = {
   closeSize: 'Size zoomed in',
   debug: 'Debug',                // the settings for trying things out (Max, 2026-11-13)
   debugOn: 'Debug settings shown (Settings)', debugOff: 'Debug settings hidden',
+  disruptionsMap: 'Disruptions on the map', disOff: 'Off', disProblems: 'Problems', disAll: 'All',
+  railWorks: 'Rail work', noProblemsNow: 'No problems right now; only rail work.',
   boardRows: 'Station board',
   boardRowsAria: 'Trains on a station board',
   trainSymbol: 'Train symbol',
@@ -278,6 +280,8 @@ const SV = {
   modelSize: 'Storlek, realistisk',
   closeSize: 'Storlek inzoomad',
   debug: 'Felsökning', debugOn: 'Felsökning visas (Inställningar)', debugOff: 'Felsökning dold',
+  disruptionsMap: 'Störningar på kartan', disOff: 'Av', disProblems: 'Fel', disAll: 'Alla',
+  railWorks: 'Banarbeten', noProblemsNow: 'Inga fel just nu, bara banarbeten.',
   boardRows: 'Stationstavla',
   boardRowsAria: 'Antal tåg på en stationstavla',
   trainSymbol: 'Tågsymbol',

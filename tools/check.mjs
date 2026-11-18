@@ -236,4 +236,7 @@ if (ui.status !== 2) debug = spawnSync('node', ['tools/debug-check.mjs'], { stdi
 // A tap on a train in a "N trains" group lists the group (2026-11-18).
 let group = { status: 0 };
 if (ui.status !== 2) group = spawnSync('node', ['tools/group-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 ? 1 : 0);
+// Disruptions: rail work vs problems in the list and on the map, the map setting (live data; 2026-11-18).
+let dis = { status: 0 };
+if (ui.status !== 2) dis = spawnSync('node', ['tools/disruption-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);

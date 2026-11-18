@@ -34,6 +34,9 @@ const DEFAULTS = {
   // A stop Trafikverket gives no expected time for, counted down to (Max, 2026-11-15, 1B, with a Debug switch to A):
   // 'guess', its planned time plus the lateness now (shown with ≈), or 'planned'.
   noEstimate: 'guess',
+  // Disruptions on the map (Max, 2026-11-18): 'all' (problems and rail work, the default: "Alla"), 'problems' (faults
+  // and incidents only: "Fel") or 'off'. The menu's list always has them all.
+  disruptionsMap: 'all',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -52,6 +55,7 @@ const KEYS = {
   accent: { param: 'accent' },
   trainCard: { param: 'card' },
   noEstimate: { param: 'noest' },
+  disruptionsMap: { param: 'dis' },
 };
 const STORE = 'settings';
 
@@ -76,6 +80,7 @@ const valid = {
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
   trainCard: v => (['compact', 'expanded'].includes(v) ? v : undefined),
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
+  disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>

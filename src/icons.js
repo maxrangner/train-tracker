@@ -19,6 +19,7 @@ const PATHS = {
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
   warning: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.2M12 16.8v.3"/>',
+  cone: '<path d="M10.2 4h3.6l4.4 15H5.8z"/><path d="M8.5 9.5h7M7.4 14h9.2M3.5 19.5h17"/>',   // rail work (2026-11-18)
 };
 export const icon = (name, size = 20, stroke = 2) =>
   `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] ?? ''}</svg>`;
