@@ -291,8 +291,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       ? `<svg class="ab-stretch" viewBox="0 0 30 ${H}" aria-hidden="true"><line class="ab-run" x1="15" y1="2" x2="15" y2="${H - 2}" stroke-dasharray="2 8"/></svg>`
       : `<svg class="ab-stretch" viewBox="0 0 30 ${H}" aria-hidden="true"><line class="ab-run" x1="15" y1="0" x2="15" y2="${c - 9}"/>` +
         `<line class="ab-run" x1="15" y1="${c + 9}" x2="15" y2="${H}"/><line class="ab-cut" x1="8" y1="${c - 2}" x2="22" y2="${c - 7}"/>` +
-        `<line class="ab-cut" x1="8" y1="${c + 7}" x2="22" y2="${c + 2}"/><g class="ab-slip"><rect x="10" y="${c - 7}" width="10" height="14" rx="4"/>` +
-        `<rect class="ab-win" x="12" y="${c - 4}" width="6" height="4" rx="1.5"/></g></svg>`;
+        `<line class="ab-cut" x1="8" y1="${c + 7}" x2="22" y2="${c + 2}"/></svg>`;   // (no little train slipping through: Max, 2026-11-18)
     const flag = flagSvg(e.country);
     const dot = flag ? `<span class="tl-flag">${flag}</span>` : '<span class="tl-dot"></span>';
     const sub = e.cut ? t('notRunning', (e.texts.length ? e.texts : [t('cancelledStop')]).join(' · ')) : `${t('country', e.country)} · ${t('timeUnknown')}`;
@@ -339,8 +338,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
     }).join('');
     // A trip that goes on abroad, or comes from there (src/abroad.js): one more row for that end, after the last stop
-    // (before the first), the line to it broken by two cuts with a little train slipping through now and then (Max's
-    // pick from the sketch, 2026-11-18: "B", the cuts halfway between the two dots), a round flag for its dot.
+    // (before the first), the line to it broken by two cuts (Max's pick from the sketch, 2026-11-18: "B", the cuts
+    // halfway between the two dots; "Just the cuts": nothing moving there), a round flag for its dot.
     const ends = abroadEnds(route, station);
     const tlRows = (ends.from ? abroadRow(ends.from, nextIdx) : '') + rows + (ends.to ? abroadRow(ends.to, nextIdx) : '');
 
