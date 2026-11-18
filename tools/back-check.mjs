@@ -50,6 +50,14 @@ try {
     const s3 = await back();
     if (!s3.away) fails.push('3rd back on the bare map: the app did not go to the background');
 
+    // The menu (☰, 2026-11-18): back closes it, and only it.
+    await page.evaluate(() => { window.__minimized = false; document.getElementById('nav-button').click(); });
+    await sleep(400);
+    const n0 = await page.evaluate(() => !document.getElementById('nav').hidden);
+    await page.evaluate(() => window.__back({ canGoBack: false })); await sleep(500);
+    const n1 = await page.evaluate(() => ({ nav: !document.getElementById('nav').hidden, away: Boolean(window.__minimized) }));
+    if (!n0 || n1.nav || n1.away) fails.push(`the menu and back: open ${n0}, after back open ${n1.nav}, away ${n1.away} (want: closed, still here)`);
+
     // With the keyboard open (2026-11-17): a search typed, the page shortened by a keyboard's height (Max's phone:
     // 430 px); back → only the keyboard goes (the field loses focus, the search stays); back again → the search closes.
     await page.evaluate(() => { window.__minimized = false; document.getElementById('menu-button').click(); });

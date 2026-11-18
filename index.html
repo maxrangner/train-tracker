@@ -76,6 +76,34 @@
     #status.problem { background: var(--t-late-bg); color: var(--t-late); white-space: normal; }
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .menu-icon { display: inline-flex; margin-right: 8px; color: var(--muted); vertical-align: -3px; }
+    /* ☰ (Max's pick A, 2026-11-18): first in the bar, where people look for a menu. */
+    #nav-button { flex: none; width: 38px; height: 38px; margin-left: -6px; display: grid; place-items: center; border: 0; border-radius: 50%;
+      background: transparent; color: var(--ink); cursor: pointer; }
+    #nav-button:hover { background: var(--hover); }
+    #nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* The menu: a drawer from the left over a dimmed map (Esc, ×, a tap outside or the phone's back closes it). */
+    #nav { position: fixed; top: 0; bottom: 0; left: 0; z-index: 9; width: min(84vw, 340px); box-sizing: border-box; display: flex; flex-direction: column; gap: 4px;
+      padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(14px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px));
+      background: var(--card); color: var(--ink); box-shadow: var(--shadow); border-radius: 0 var(--radius) var(--radius) 0; overflow-y: auto;
+      transition: transform .28s cubic-bezier(.2, .9, .25, 1); }
+    #nav[hidden] { display: flex !important; transform: translateX(-105%); visibility: hidden; transition: transform .22s ease-in, visibility 0s .22s; }
+    #nav-backdrop { position: fixed; inset: 0; z-index: 8; background: rgba(0, 0, 0, 0.3); opacity: 0; pointer-events: none; transition: opacity .22s; }
+    #nav:not([hidden]) + #nav-backdrop { opacity: 1; pointer-events: auto; }
+    .nav-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px 8px; }
+    .nav-logo { width: 84px; display: flex; color: var(--ink); } .nav-logo svg { width: 100%; height: auto; }
+    .nav-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+    .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 8px; border: 0; border-radius: 14px; background: transparent;
+      color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    .nav-row[hidden] { display: none; }
+    .nav-row:hover, .nav-row:focus-visible { background: var(--hover); outline: none; }
+    .nav-ic { width: 36px; height: 36px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--hover); color: var(--accent); }
+    .nav-t { flex: 1; min-width: 0; display: grid; }
+    .nav-t b { font-size: 16px; font-weight: 600; }
+    .nav-t small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-count { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: var(--t-late-bg); color: var(--t-late); }
+    .nav-count:empty, .nav-count.none { display: none; }
+    .nav-foot { margin: auto 0 0; padding: 8px; color: var(--muted); font-size: 12px; }
+    @media (prefers-reduced-motion: reduce) { #nav, #nav[hidden], #nav-backdrop { transition: none; } }
     /* While the map shows only some trains (src/filter.js): what it shows, on its own line, and × for all again. */
     #filter-bar { flex-basis: 100%; max-width: max-content; display: flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; font-size: 14px; }
     #filter-bar[hidden] { display: none; }
@@ -136,6 +164,8 @@
     #settings-page { display: flex; flex-direction: column; gap: 6px; z-index: 7; }
     /* The stats page (opened from the status line): its own page over the map, at the top, as Settings was before. */
     #stats-page { display: flex; flex-direction: column; gap: 6px; }
+    /* The connection screen (src/connection.js; its own look: src/connection.css). */
+    #conn-page { display: flex; flex-direction: column; gap: 6px; }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
     #settings-page:not([hidden]) + #settings-backdrop { display: block; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
@@ -627,12 +657,13 @@
   </div>
   <div id="map"></div>
   <div id="top">
-    <!-- One search bar (the Soft look, 2026-11-15): the logo (src/logo.js), the search that opens the menu sheet, and
-         the live count that opens the stats. -->
+    <!-- One search bar (the Soft look, 2026-11-15): the menu (☰, Max's pick A, 2026-11-18: menu and search apart), the
+         logo (src/logo.js), the search, and the live pill that opens the connection screen. -->
     <div class="searchbar card">
+      <button id="nav-button" type="button" aria-expanded="false" aria-controls="nav" aria-label="Menu" data-t-aria="navOpen"><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></svg></button>
       <span class="logo" aria-hidden="true"></span>
-      <button id="menu-button" type="button" aria-expanded="false" aria-controls="menu" aria-label="Menu and search" data-t-aria="menu"><svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg><span data-t="search">Search</span></button>
-      <button id="status" type="button" aria-controls="stats-page"><span class="live"></span><span class="count" data-t="connecting">connecting…</span></button>
+      <button id="menu-button" type="button" aria-expanded="false" aria-controls="menu" aria-label="Search" data-t-aria="search"><svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg><span data-t="search">Search</span></button>
+      <button id="status" type="button" aria-controls="conn-page"><span class="live"></span><span class="count" data-t="connecting">connecting…</span></button>
     </div>
     <div id="filter-bar" class="card" hidden><span id="filter-text"></span>
       <button id="filter-clear" type="button" aria-label="Show every train" data-t-aria="filterClear"><svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
@@ -641,23 +672,21 @@
     <div class="menu-head">
       <input id="search" type="search" placeholder="Train number or station" data-t-ph="searchPh" autocomplete="off" autocorrect="off"
         spellcheck="false" enterkeyhint="search" aria-label="Search for a train number or a station" data-t-aria="searchAria">
-      <button class="menu-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      <button class="menu-close" type="button" aria-label="Close the search" data-t-aria="closeSearch"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
     </div>
     <ul id="search-results" aria-live="polite"></ul>
-    <div class="menu-section" id="disruptions-section" hidden>
-      <button id="open-disruptions" class="menu-link" type="button"><b><span data-t="disruptions">Disruptions</span> <span id="disruptions-count"></span></b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
-    </div>
-    <div class="menu-section">
-      <button id="open-settings" class="menu-link" type="button"><b data-t="settings">Settings</b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
-    </div>
-    <div class="menu-section">
-      <button id="help-button" class="menu-link" type="button" aria-label="About Spårat" data-t-aria="helpButton"><b><span class="menu-icon"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.6v.3"/></svg></span><span data-t="help">About</span></b><span aria-hidden="true"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9.5 6 6 6-6 6"/></svg></span></button>
-    </div>
-    <div class="menu-section">
-      <div class="menu-label" data-t="liveData">Live data</div>
-      <p id="status-full" class="menu-text" data-t="connecting">connecting…</p>
-    </div>
   </div>
+  <!-- The menu (Max's pick A, 2026-11-18): slides in from the left; Störningar, Statistik, Inställningar, Om Spårat. -->
+  <nav id="nav" hidden aria-label="Menu" data-t-aria="navAria">
+    <div class="nav-head"><span class="nav-logo" aria-hidden="true"></span>
+      <button class="nav-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+    <button id="open-disruptions" class="nav-row" type="button" hidden><span class="nav-ic" data-icon="warning"></span><span class="nav-t"><b data-t="disruptions">Disruptions</b><small data-t="navDisruptionsSub">Faults and rail work</small></span><span id="disruptions-count" class="nav-count"></span></button>
+    <button id="open-stats" class="nav-row" type="button"><span class="nav-ic" data-icon="stats"></span><span class="nav-t"><b data-t="navStats">Statistics</b><small id="nav-stats-line"></small></span></button>
+    <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t"><b data-t="settings">Settings</b><small data-t="navSettingsSub">Trains, look, language</small></span></button>
+    <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t"><b data-t="help">About</b><small data-t="navAboutSub">Where the data comes from, support</small></span></button>
+    <p class="nav-foot" id="nav-foot"></p>
+  </nav>
+  <div id="nav-backdrop"></div>
   <div id="settings-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
       <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
@@ -699,6 +728,12 @@
     <div class="panel-head"><strong id="stats-title" data-t="stats">Live statistics</strong>
       <button class="panel-close" type="button" aria-label="Close statistics" data-t-aria="closeStats"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div id="stats-body"></div>
+  </div>
+  <!-- The connection screen (Max's pick Y, 2026-11-18), from the live pill: src/connection.js draws it. -->
+  <div id="conn-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="conn-title" hidden>
+    <div class="panel-head"><strong id="conn-title" data-t="connTitle">Connection</strong>
+      <button class="panel-close" type="button" aria-label="Close" data-t-aria="close"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+    <div id="conn-body"></div>
   </div>
   <div id="disruptions-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="disruptions-title" hidden>
     <div class="panel-head"><strong id="disruptions-title" data-t="disruptions">Disruptions</strong>

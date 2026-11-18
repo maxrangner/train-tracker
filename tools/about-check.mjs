@@ -45,7 +45,7 @@ try {
     if (!body.includes(want)) fails.push(`bug mail body lacks "${want}"`);
   notes.push(`bug mail: to ${to}, "${subject}"; About says "${version}"`);
   notes.push('body:\n      ' + body.split('\r\n').join('\n      '));
-  await page.evaluate(() => { document.getElementById('menu-button').click(); });
+  await page.evaluate(() => { document.getElementById('nav-button').click(); });   // About is in the menu (☰, 2026-11-18)
   await sleep(300);
   await page.evaluate(() => document.getElementById('help-button').click()); await sleep(400);
   await page.evaluate(() => document.getElementById('kofi-button').click());

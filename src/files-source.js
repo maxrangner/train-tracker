@@ -218,9 +218,11 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
       const at = Date.now() + skew;
       wait = (LIVE_MS - (at % LIVE_MS) + READ_AT_MS) % LIVE_MS || LIVE_MS;
     }
+    nextAt = Date.now() + wait;
     timer = setTimeout(async () => { await tick(); schedule(); }, wait);
   }
 
+  let nextAt = null;   // when the next read is due (this phone's clock), for the connection screen's countdown
   const startedAt = Date.now();
   onStatus({ mode: 'starting' });
   tick().then(schedule);
@@ -237,6 +239,7 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     tick().then(schedule);
   };
   stop.latest = latest;
+  stop.nextAt = () => (paused || stopped || misses ? null : nextAt);
   stop.pausedSince = () => (mode === 'paused' ? lastFile?.t ?? null : null);
   // For tools/files-check.mjs: how much the reader keeps.
   stop.sizes = () => ({ cache: cache.size, failed: failed.size, trainSeen: trainSeen.size, passSeen: passSeen.size });
