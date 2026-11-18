@@ -41,6 +41,10 @@ export function restyleBase(map, dark) {
       if (/ice|glacier/.test(id)) continue;
       paint(id, 'fill-color', R.wood);
       if (R.wood && R.woodOpacity) set(id, 'fill-opacity', R.woodOpacity);
+      // The dark style's woods ask for a pattern picture ("wood-pattern") its icon sheet doesn't have, and a pattern
+      // hides the fill colour: the dark map drew no woods at all, with a console warning at every start (found
+      // 2026-11-18; Max: "2b", the woods in their colour).
+      if (l.paint?.['fill-pattern'] !== undefined) set(id, 'fill-pattern', undefined);
     } else if (sl === 'landuse') paint(id, 'fill-color', R.town);
     else if (sl === 'building') { paint(id, 'fill-color', R.building); if (R.building) set(id, 'fill-outline-color', R.building); }
     else if (sl === 'aeroway' || sl === 'boundary') show(id, false);
