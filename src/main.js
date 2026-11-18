@@ -336,8 +336,35 @@ document.getElementById('bug-button').onclick = () => { window.location.href = b
 helpEl.querySelector('.about-soon').hidden = true;
 // The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
 // The same word in both languages. "dev" on the PC's live-reloading page.
-document.getElementById('about-version').textContent = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
+const versionEl = document.getElementById('about-version');
+const versionText = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
   ` (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'}${import.meta.env.DEV ? ', dev' : ''})`;
+versionEl.textContent = versionText;
+// Settings → Debug shows only when switched on (Max, 2026-11-18: "Taps is good", "build yes"): #debug in the address
+// (#debug=off hides it), or 7 taps on the version line above (7 more hide it), remembered on the device; on the dev
+// page shown unless switched off. Hidden, its choices keep working.
+const DEBUG_KEY = 'debugShown';
+let debugShown = import.meta.env.DEV;
+try { const v = localStorage.getItem(DEBUG_KEY); if (v !== null) debugShown = v === 'true'; } catch { /* storage blocked: the default */ }
+function showDebug(on) {
+  debugShown = on;
+  try { localStorage.setItem(DEBUG_KEY, String(on)); } catch { /* used now, not remembered */ }
+  document.getElementById('settings').classList.toggle('debug', on);
+}
+const debugAsked = new URLSearchParams(location.hash.slice(1)).get('debug');
+if (debugAsked !== null) showDebug(debugAsked !== 'off'); else document.getElementById('settings').classList.toggle('debug', debugShown);
+let taps = 0, lastTap = 0, sayTimer = null;
+versionEl.addEventListener('click', () => {
+  const at = Date.now();
+  taps = at - lastTap < 1500 ? taps + 1 : 1;   // in a row: at most 1.5 s apart
+  lastTap = at;
+  if (taps < 7) return;
+  taps = 0;
+  showDebug(!debugShown);
+  versionEl.textContent = t(debugShown ? 'debugOn' : 'debugOff');
+  clearTimeout(sayTimer);
+  sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
+});
 // Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;

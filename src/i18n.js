@@ -62,6 +62,7 @@ const EN = {
   modelSize: 'Realistic model size',
   closeSize: 'Size zoomed in',
   debug: 'Debug',                // the settings for trying things out (Max, 2026-11-13)
+  debugOn: 'Debug settings shown (Settings)', debugOff: 'Debug settings hidden',
   boardRows: 'Station board',
   boardRowsAria: 'Trains on a station board',
   trainSymbol: 'Train symbol',
@@ -276,7 +277,7 @@ const SV = {
   on: 'På',
   modelSize: 'Storlek, realistisk',
   closeSize: 'Storlek inzoomad',
-  debug: 'Felsökning',
+  debug: 'Felsökning', debugOn: 'Felsökning visas (Inställningar)', debugOff: 'Felsökning dold',
   boardRows: 'Stationstavla',
   boardRowsAria: 'Antal tåg på en stationstavla',
   trainSymbol: 'Tågsymbol',
