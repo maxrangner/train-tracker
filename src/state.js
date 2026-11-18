@@ -2,7 +2,7 @@
 // before it: a turning ring while loading, (i) for nothing found, ⚠ for an error. CSS .state in index.html.
 import { icon } from './icons.js';
 
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { esc } from './html.js';
 const mark = kind => (kind === 'loading' ? '<span class="spin" aria-hidden="true"></span>' : icon(kind === 'error' ? 'warning' : 'about', 18));
 
 // kind: 'loading', 'empty' or 'error'. tag: the element ('p', or 'li' in a list).

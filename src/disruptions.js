@@ -12,7 +12,7 @@ import { t, lang } from './i18n.js';
 import { hhmm } from './clock.js';
 
 const ASK_EVERY_MS = 5 * 60 * 1000;
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { esc } from './html.js';
 // Trafikverket's level 1 is "green", but each of these has a message for travellers: shown as yellow (1-2), orange, red.
 export const levelName = level => (level >= 4 ? 'red' : level === 3 ? 'orange' : 'yellow');
 // Rail work (planned, or run over) rather than a fault or incident (Max, 2026-11-18: told apart in the list and on the
