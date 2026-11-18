@@ -28,10 +28,14 @@ if (at) {
 const dir = new URL('../data/', import.meta.url);
 mkdirSync(dir, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+// A question gives up after ASK_MS, answer and all (2026-11-19, TODO 45: on 18 Nov at 15:16 both streams broke with the
+// network gone, the new question never answered nor failed, and 15 of the 30 minutes were lost); then again in 5 s.
+const ASK_MS = 30 * 1000, SILENT_MS = 3 * 60 * 1000;
 const ask = async (query) => {
   const res = await fetch(API, {
     method: 'POST', headers: { 'Content-Type': 'text/xml' },
     body: `<REQUEST><LOGIN authenticationkey="${key}"/>${query}</REQUEST>`,
+    signal: AbortSignal.timeout(ASK_MS),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return (await res.json()).RESPONSE.RESULT[0];
@@ -68,11 +72,17 @@ async function record(name, objectType, makeQuery) {
     first = false;
     const ctrl = new AbortController();
     const stop = setTimeout(() => ctrl.abort(), end - Date.now());
+    // A stream silent for SILENT_MS is given up and asked for again (one that stops without closing was never noticed;
+    // 3 minutes as the fetcher's timetable stream, src/trafikverket.js follow silentMs).
+    let silent = null, wasSilent = false;
+    const arm = () => { clearTimeout(silent); silent = setTimeout(() => { wasSilent = true; ctrl.abort(); }, SILENT_MS); };
     try {
+      arm();
       const stream = await fetch(result.INFO.SSEURL, { signal: ctrl.signal, headers: { Accept: 'text/event-stream' } });
       const decoder = new TextDecoder();
       let buf = '';
       for await (const chunk of stream.body) {
+        arm();
         // Trafikverket sends \r\n. Replaced after joining: a \r\n split between two chunks, replaced per chunk, glued
         // two messages into one (a JSON error and a lost stream about once an hour, 2026-11-12).
         buf = (buf + decoder.decode(chunk, { stream: true })).replace(/\r\n/g, '\n');
@@ -89,9 +99,11 @@ async function record(name, objectType, makeQuery) {
       }
       if (Date.now() < end) console.log(`${name}: the stream ended; asking again`);
     } catch (e) {
-      if (e.name !== 'AbortError') console.log(`${name}: stream broke (${e.message}); asking again`);
+      if (wasSilent) console.log(`${name}: nothing for ${SILENT_MS / 60000} min; asking again`);
+      else if (e.name !== 'AbortError') console.log(`${name}: stream broke (${e.message}); asking again`);
     } finally {
       clearTimeout(stop);
+      clearTimeout(silent);
     }
   }
   console.log(`${name}: done, ${count} from the stream`);
