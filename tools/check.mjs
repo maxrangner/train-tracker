@@ -210,6 +210,11 @@ if (netCheck.status !== 0) failed++;
 const filesCheck = spawnSync('node', ['tools/files-check.mjs'], { stdio: 'inherit' });
 if (filesCheck.status !== 0) failed++;
 
+// The boards end to end: a saved day through the fetcher's own board files and the page's reader (batch 2,
+// 2026-11-19): every board full at 4, 12 and 40 rows, read 25 minutes after its file. About 70 s, offline.
+const boardCheck = spawnSync('node', ['tools/board-check.mjs'], { stdio: 'inherit' });
+if (boardCheck.status !== 0) failed++;
+
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into

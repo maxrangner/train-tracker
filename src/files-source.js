@@ -19,7 +19,7 @@
 // lastRecordAt: when the fetcher last got a position report, on its clock, or null from fetchers before 0.6.0).
 import { trainOf, passingOf, plannedOf, LIVE_MS, FORMAT } from './live-file.js';
 import { setClock } from './clock.js';
-import { groupOf, withChanges } from './tap-files.js';
+import { groupOf, withChanges, BOARD_BACK_MS } from './tap-files.js';
 
 const READ_AT_MS = 2000;      // ask this long into each 5-s slot (the fetcher makes it at +0.05 s, uploads in ~0.5 s)
 const GAP_MS = 30 * 1000;     // files missed for longer: read the passings files again
@@ -267,12 +267,13 @@ export function filesTapAsker(latest, at) {
     }
     const add = await latest('taps-add');
     if (kind === 'board') {
-      // Every row of the station from 90 minutes back: fetchBoard (src/trafikverket.js) drops the trains that are gone
-      // and then takes the next n. (Cut to n × 4 here first, a busy station's board could come out empty: Codex's beta
-      // review point 2; Malmö C at midday 2026-11-18 showed 8 of 12, and 0 with the board set to 8 or 4 rows.)
+      // Every row of the station from BOARD_BACK_MS back (4 h: a very late train still shows): fetchBoard
+      // (src/trafikverket.js) drops the trains that are gone and then takes the next n. (Cut to n × 4 here first, a busy
+      // station's board could come out empty: Codex's beta review point 2; Malmö C at midday 2026-11-18 showed 8 of 12,
+      // and 0 with the board set to 8 or 4 rows.)
       const g = await need(`board-${groupOf(p.sig)}`), act = p.act === 'Avgang' ? 'D' : 'A';
       const rows = withChanges(g, add, r => r[3] === p.sig && r[4] === act)
-        .filter(a => a.Advertised && !a.Deleted && Date.parse(a.AdvertisedTimeAtLocation) > now - 90 * 60000).sort(byPlanned);
+        .filter(a => a.Advertised && !a.Deleted && Date.parse(a.AdvertisedTimeAtLocation) > now - BOARD_BACK_MS).sort(byPlanned);
       return { asOf: add?.t ?? g.t, TrainAnnouncement: rows };
     }
     // route (by public or internal number) and train (the number search): the train's group, by its public number

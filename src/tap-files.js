@@ -18,6 +18,10 @@ export const TAP_FIELDS = ['OperationalTrainNumber', 'AdvertisedTrainIdent', 'Sc
   'TrainComposition', 'ModifiedTime'];
 const LISTS = ['FromLocation', 'ToLocation', 'ProductInformation', 'Deviation', 'OtherInformation', 'Booking', 'Service', 'TrainComposition'];
 export const GROUPS = 32;   // cards by number, boards by station: 32 files each (measured 2026-11-17: ~23 / 9 kB each)
+// How far back a board reaches: a train planned this long ago still shows while it hasn't left (fetcher/timetable.mjs
+// keeps such rows in the board files, src/files-source.js reads them). 90 minutes until 2026-11-19: a train later than
+// that dropped off its board.
+export const BOARD_BACK_MS = 4 * 3600 * 1000;
 
 // The group of a number or a station (the same on both sides).
 export function groupOf(s) {
