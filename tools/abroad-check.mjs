@@ -36,9 +36,12 @@ const rows = readFileSync(`data/routes-${CARD_HOUR}.jsonl`, 'utf8').split('\n').
 const trips = new Map();
 for (const a of rows) {
   if (!a.Advertised) continue;
-  const t = trips.get(a.AdvertisedTrainIdent) ?? { from: null, to: null };
+  const t = trips.get(a.AdvertisedTrainIdent) ?? { from: null, to: null, first: null, last: null };
   t.from ??= a.FromLocation?.[0]?.LocationName ?? null;
   t.to = a.ToLocation?.[0]?.LocationName ?? t.to;
+  // The first and last passenger rows: cancelled there, the trip doesn't go abroad (no leg; the row says so).
+  if (!t.first || a.AdvertisedTimeAtLocation < t.first.AdvertisedTimeAtLocation) t.first = a;
+  if (!t.last || a.AdvertisedTimeAtLocation >= t.last.AdvertisedTimeAtLocation) t.last = a;
   trips.set(a.AdvertisedTrainIdent, t);
 }
 const kind = n => { const t = trips.get(n); return !t ? null : isAbroad(t.to) ? 'to' : isAbroad(t.from) ? 'from' : 'home'; };
@@ -103,8 +106,10 @@ try {
         const near = m && endAt && Math.abs(endAt[0] - Number(m[1])) < 1e-6 && Math.abs(endAt[1] - Number(m[2])) < 1e-6;
         expect(seen.row?.dir === k && seen.row.name?.includes(nameOf(foreign)) && seen.row.flag && (k === 'to' ? seen.row.last : seen.row.first),
           `${label}: the row "${seen.row?.name}" / "${seen.row?.sub}"${seen.row?.flag ? ', a flag' : ''}, ${k === 'to' ? 'last' : 'first'}`);
-        expect(near && seen.flags.length === 1, `${label}: the map's leg ends at ${nameOf(foreign)} (${seen.flags.join(', ')})`);
-        await page.screenshot({ path: `shots/abroad/card-${k}-${theme}.jpg`, quality: 85 });
+        const cut = (k === 'to' ? trip.last : trip.first)?.Canceled === true;
+        if (cut) expect(!seen.line && /^(Går inte|Not running)/.test(seen.row?.sub ?? ''), `${label}: cancelled at the border: "${seen.row?.sub}", no leg on the map`);
+        else expect(near && seen.flags.length === 1, `${label}: the map's leg ends at ${nameOf(foreign)} (${seen.flags.join(', ')})`);
+        await page.screenshot({ path: `shots/abroad/card-${k}-${theme}${cut ? '-cut' : ''}.jpg`, quality: 85 });
         // The map: the card closed, the leg in view.
         if (seen.line) {
           await page.evaluate(() => { const f = document.querySelector('#panel .panel-follow[aria-pressed="true"]'); if (f) f.click(); });   // the camera stops following
@@ -121,6 +126,28 @@ try {
       const after = await page.evaluate(() => (window.__map.getSource('abroad')?.serialize().data.features ?? []).length);
       if (k !== 'home') expect(after === 0, `${label}: closing the card takes the leg away (${after} left)`);
     }
+    // Stations abroad: shown, not tappable (2026-11-18); a Swedish one still opens its board. Close in, so the names
+    // and rings are drawn; each tapped on its ring.
+    const tapStation = async (center, abroad) => {
+      await page.evaluate(c => window.__map.jumpTo({ center: c, zoom: 12 }), center);
+      await sleep(2500);
+      return page.evaluate(want => {
+        const m = window.__map, fs = m.queryRenderedFeatures({ layers: ['station-dots'] }).filter(f => /^(At|De|Dk|It|Nl|No|Pt)\./.test(f.properties.sig) === want);
+        if (!fs.length) return { none: true };
+        // One with no train within 24 px (a train next to it takes the tap, rightly).
+        const clear = f => { const q = m.project(f.geometry.coordinates);
+          return !m.queryRenderedFeatures([[q.x - 24, q.y - 24], [q.x + 24, q.y + 24]], { layers: ['train-dots'] }).length; };
+        const f = fs.find(clear) ?? fs[0], q = m.project(f.geometry.coordinates);
+        document.getElementById('board').hidden = true;
+        m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
+        return new Promise(r => setTimeout(() => r({ sig: f.properties.sig, name: f.properties.name, shown: f !== null, board: !document.getElementById('board').hidden }), 1200));
+      }, abroad);
+    };
+    const dk = await tapStation([12.565, 55.672], true);
+    expect(!dk.none && !dk.board, `${theme}: a station abroad (${dk.name ?? 'none on screen'}) is drawn, a tap opens no board`);
+    const se = await tapStation([13.0, 55.609], false);
+    expect(!se.none && se.board, `${theme}: a Swedish station (${se.name ?? 'none on screen'}) still opens its board`);
+    await page.evaluate(() => document.querySelector('#board .panel-close')?.click());
     expect(!errors.length, `${theme}: page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
     await page.close();
   }
