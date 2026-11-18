@@ -1,7 +1,9 @@
 // Do any model's surfaces lie on top of each other? Builds every train model (compact and realistic, every company)
 // and counts pairs of differently coloured parts whose surfaces lie in the same plane (within 3 cm) and overlap,
-// unless the two parts have a different drawing order (the `order` given to mat() in src/toy-trains.js and
-// src/train-model.js). Such pairs flicker on screen. Must be 0.
+// unless the two parts have a different drawing order (a material's polygonOffset). Such pairs flicker on screen.
+// Must be 0. Since the faceted trains (2026-11-18, src/train-kit.js) the trains are built with each piece as its own
+// part (the shell, each windscreen skin, each wheel ...; the map gets them joined), and a triangle's colour is its
+// own (vertex colours).
 // Run: node tools/models-check.mjs [--json] [--who "Mälartåg"]     exit code 1 when any pair is found
 import * as THREE from 'three';
 import { buildToy } from '../src/toy-trains.js';
@@ -30,7 +32,9 @@ function triangles(root) {
       nrm.normalize();
       // Faces back to back fight too: normals are compared with one sign.
       const s = Math.sign(nrm.x || nrm.y || nrm.z) || 1;
-      out.push({ part, order, colour: o.material.color.getHexString(), n: nrm.clone().multiplyScalar(s), d: nrm.dot(v[0]) * s,
+      const vc = o.geometry.attributes.color, at = idx ? idx.getX(i) : i;
+      const colour = vc ? new THREE.Color(vc.getX(at), vc.getY(at), vc.getZ(at)).getHexString() : o.material.color.getHexString();
+      out.push({ part, order, colour, n: nrm.clone().multiplyScalar(s), d: nrm.dot(v[0]) * s,
         box: new THREE.Box3().setFromPoints(v) });
     }
   });
@@ -58,7 +62,7 @@ function clashes(root) {
       const key = `${Math.min(a.part, b.part)}-${Math.max(a.part, b.part)}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      found.push({ a: a.colour, b: b.colour, normal: a.n.toArray().map(x => +x.toFixed(2)), gap: +(b.d - a.d).toFixed(3) });
+      found.push({ a: a.colour, b: b.colour, normal: a.n.toArray().map(x => +x.toFixed(2)), gap: +(b.d - a.d).toFixed(3), at: overlap.getCenter(new THREE.Vector3()).toArray().map(x => +x.toFixed(2)) });
     }
   }
   return found;
@@ -68,10 +72,10 @@ const total = { compact: 0, realistic: 0 };
 const lines = [];
 for (const [brand, toy] of Object.entries(TOYS)) {
   if (who && brand !== who) continue;
-  const c = clashes(buildToy(toy)), r = clashes(buildTrain(styleFor(brand)));
+  const c = clashes(buildToy(toy, { pieces: true })), r = clashes(buildTrain({ ...styleFor(brand), model: toy.model }, { pieces: true }));
   total.compact += c.length; total.realistic += r.length;
   if (c.length || r.length) lines.push(`${brand}: compact ${c.length}, realistic ${r.length}`);
-  if (who) for (const x of [...c, ...r]) lines.push(`   #${x.a} on #${x.b}, facing ${x.normal}, ${x.gap} m apart`);
+  if (who) for (const x of [...c, ...r]) lines.push(`   #${x.a} on #${x.b}, facing ${x.normal}, ${x.gap} m apart, at ${x.at}`);
 }
 if (argv.includes('--json')) console.log(JSON.stringify(total));
 else {
