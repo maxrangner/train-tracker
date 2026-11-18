@@ -1,7 +1,8 @@
-// Is the view kept out of the address, and remembered? (Max, 2026-11-18: "Is that possible to hide?" → yes, and the
-// map remembers where it was left.) Opens a #view link: the map must open there and the address must lose #view (but
-// keep the rest, here #nothing=1). Then moves the map, reloads without a #view: the map must open where it was left.
-// Then a fresh browser without a #view: the middle of Sweden. The bug mail must still name the view.
+// Is the view kept out of the address, and not remembered? (Max, 2026-11-18: "Is that possible to hide?" → yes; then
+// "It should start with Sweden zoomed out like before": the last place no longer kept.) Opens a #view link: the map
+// must open there and the address must lose #view (but keep the rest, here #nothing=1). Then moves the map, reloads
+// without a #view: the map must open at the middle of Sweden, not where it was left. A place saved by the older version
+// (localStorage "view") is forgotten. Then a fresh browser: the middle of Sweden. The bug mail must still name the view.
 // Run (with `npm run dev` going): node tools/view-check.mjs
 import puppeteer from 'puppeteer-core';
 import { BROWSER_PATH, PAGE } from './lib/browser.mjs';
@@ -47,7 +48,13 @@ try {
   await page.goto(PAGE, { waitUntil: 'domcontentloaded' }); await sleep(6);
   const back = await viewIn(page);
   notes.push(`opened again without #view: ${back}`);
-  if (!near(back, moved)) fails.push(`the map did not open where it was left (${back}, left at ${moved})`);
+  if (!near(back, '4.3/62.5/16.5')) fails.push(`the map did not open at the middle of Sweden (${back}, left at ${moved})`);
+  // A place an older version saved: forgotten.
+  await page.evaluate(() => localStorage.setItem('view', '11/59.33/18.06'));
+  await page.goto(PAGE, { waitUntil: 'domcontentloaded' }); await sleep(6);
+  const old = await viewIn(page), kept = await page.evaluate(() => localStorage.getItem('view'));
+  notes.push(`with an older version's saved place: opens at ${old}, the saved place now ${kept}`);
+  if (!near(old, '4.3/62.5/16.5') || kept !== null) fails.push(`an older saved place was used or kept (${old}, ${kept})`);
   await ctx.close();
 
   const fresh = await browser.createBrowserContext();
@@ -59,5 +66,5 @@ try {
 } finally { await browser.close(); }
 
 for (const n of notes) console.log(`  ${n}`);
-console.log(fails.length ? `FAIL\n  ${fails.join('\n  ')}` : 'OK: the view stays out of the address and is remembered');
+console.log(fails.length ? `FAIL\n  ${fails.join('\n  ')}` : 'OK: the view stays out of the address; the map always starts at the middle of Sweden (or a link\'s #view)');
 process.exit(fails.length ? 1 : 0);
