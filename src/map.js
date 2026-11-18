@@ -75,6 +75,29 @@ const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools
 const MARCH = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
   [0, 0.5, 3, 3.5], [0, 1, 3, 3], [0, 1.5, 3, 2.5], [0, 2, 3, 2], [0, 2.5, 3, 1.5], [0, 3, 3, 1], [0, 3.5, 3, 0.5]];
 const FLAG_CODES = ['NO', 'DK', 'DE', 'AT', 'NL', 'IT', 'PT'];
+// The disruption layers' own filters (Settings → Disruptions on the map adds "no rail work" to them; showDisruptions).
+const isLine = ['==', ['geometry-type'], 'LineString'], isPoint = ['==', ['geometry-type'], 'Point'];
+const DIS_FILTER = {
+  'disruption-lines': ['all', isLine, ['!=', ['get', 'work'], 1]],
+  'disruption-works': ['all', isLine, ['==', ['get', 'work'], 1]],
+  'disruption-rings': ['all', isPoint, ['!', ['has', 'badge']]],
+  'disruption-icons': ['all', isPoint, ['has', 'badge']],
+};
+// A disruption's icon for the map: a round badge in the map's stop colour with ⚠ (a problem) or a cone (rail work) in
+// the level's colour, 2 px per screen pixel (the icons' shapes as src/icons.js warning / cone).
+const DIS_SHAPES = { warn: ['M12 4 21 19.5H3z', 'M12 10v4.2M12 16.8v.3'], cone: ['M10.2 4h3.6l4.4 15H5.8z', 'M8.5 9.5h7M7.4 14h9.2M3.5 19.5h17'] };
+function drawDisIcon(kind, colour, fill) {
+  const size = 52, c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  g.beginPath(); g.arc(size / 2, size / 2, size / 2 - 2, 0, 2 * Math.PI);
+  g.fillStyle = fill; g.fill(); g.lineWidth = 3; g.strokeStyle = colour; g.stroke();
+  g.save(); g.translate(size / 2 - 15, size / 2 - 16); g.scale(1.25, 1.25);
+  g.strokeStyle = colour; g.lineWidth = 2.2; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (const d of DIS_SHAPES[kind]) g.stroke(new Path2D(d));
+  g.restore();
+  return g.getImageData(0, 0, size, size);
+}
 const MASK_URL = '/sweden-mask.json';
 // The ranges of Outfit letters in public/glyphs/ (tools/glyphs.mjs GLYPH_RANGES).
 const GLYPH_RANGES = new Set(['0-255', '8192-8447', '8704-8959']);
@@ -192,7 +215,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-rings','station-dots', 'path-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -328,6 +351,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     if (map.getLayer('station-names')) map.setFilter('station-names', routeSigs.length ? ['!', ['in', ['get', 'sig'], ['literal', routeSigs]]] : null);
   }
 
+  // Settings → Disruptions on the map (2026-11-18): all, problems only (rail work left out), or none.
+  function showDisruptions() {
+    const mode = settings.disruptionsMap;
+    for (const [id, base] of Object.entries(DIS_FILTER)) {
+      if (!map.getLayer(id)) continue;
+      map.setLayoutProperty(id, 'visibility', mode === 'off' ? 'none' : 'visible');
+      map.setFilter(id, mode === 'problems' ? ['all', base, ['!=', ['get', 'work'], 1]] : base);
+    }
+  }
   // Our layers, with the colours, model zoom and language as they are now.
   function addLayers() {
     const C = colours(dark), MODEL_ZOOM = modelZoom(), T = TAG[dark ? 'dark' : 'light'];
@@ -387,13 +419,27 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     map.addLayer({ id: 'disruption-edge', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round', visibility: C.disEdge ? 'visible' : 'none' },
       paint: { 'line-color': C.disEdge ?? '#000000', 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 5, 8, 8, 14, 13] } });
-    map.addLayer({ id: 'disruption-lines', type: 'line', source: 'disruptions', filter: ['==', ['geometry-type'], 'LineString'],
+    map.addLayer({ id: 'disruption-lines', type: 'line', source: 'disruptions', filter: DIS_FILTER['disruption-lines'],
       layout: { 'line-cap': C.disDash ? 'butt' : 'round', 'line-join': 'round' },
       paint: { 'line-color': disColour, 'line-opacity': C.disDash ? 1 : 0.75, 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 3, 8, 5, 14, 9],
         ...(C.disDash ? { 'line-dasharray': [1.6, 1] } : {}) } });
-    map.addLayer({ id: 'disruption-rings', type: 'circle', source: 'disruptions', filter: ['==', ['geometry-type'], 'Point'],
+    // Rail work (Max's pick B for the map, 2026-11-18): the level's colour too, but a thin dotted line, and a thinner
+    // ring; each one's icon (a cone, or ⚠ for a problem) at its middle or its station.
+    map.addLayer({ id: 'disruption-works', type: 'line', source: 'disruptions', filter: DIS_FILTER['disruption-works'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': disColour, 'line-dasharray': [0.1, 2.2], 'line-width': ['interpolate', ['linear'], ['zoom'], 4, 2.5, 8, 3.5, 14, 6] } });
+    map.addLayer({ id: 'disruption-rings', type: 'circle', source: 'disruptions', filter: DIS_FILTER['disruption-rings'],
       paint: { 'circle-opacity': 0, 'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 6, 10, 11, 14, 15],
-        'circle-stroke-color': disColour, 'circle-stroke-width': 3.5 } });
+        'circle-stroke-color': disColour, 'circle-stroke-width': ['case', ['==', ['get', 'work'], 1], 2, 3.5] } });
+    for (const kind of ['warn', 'cone']) C.dis.forEach((colour, i) => {
+      const id = `dis-${kind}-${i + 1}`, img = drawDisIcon(kind, colour, C.stopFill);
+      if (map.hasImage(id)) map.updateImage(id, img); else map.addImage(id, img, { pixelRatio: 2 });
+    });
+    map.addLayer({ id: 'disruption-icons', type: 'symbol', source: 'disruptions', filter: DIS_FILTER['disruption-icons'],
+      layout: { 'icon-image': ['concat', ['case', ['==', ['get', 'work'], 1], 'dis-cone-', 'dis-warn-'], ['to-string', ['step', ['get', 'level'], 1, 3, 2, 4, 3]]],
+        'icon-anchor': 'bottom', 'icon-offset': [0, -2], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.6, 9, 0.85, 14, 1] } });
+    showDisruptions();
     // Passenger stations (setStations): a small ring from zoom 9, the name from zoom 11, under the trains.
     map.addLayer({
       id: 'station-dots',
@@ -666,8 +712,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // No train or station there: a disruption's ring or stretch?
       if (!nearest && onDisruptionTap) {
         const dp = 12;
-        const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-rings', 'disruption-lines'] });
-        const hit = dis.find(f => f.layer.id === 'disruption-rings') ?? dis[0];
+        const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-icons', 'disruption-rings', 'disruption-lines', 'disruption-works'] });
+        const hit = dis.find(f => f.layer.id === 'disruption-icons') ?? dis.find(f => f.layer.id === 'disruption-rings') ?? dis[0];
         if (hit) return onDisruptionTap(hit.properties.id);
       }
       onTrainTap?.(nearest?.properties.id ?? null);
@@ -1233,6 +1279,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     },
     // The passenger stations: [{ sig, name, lon, lat }].
     // The disruptions to show (src/disruptions.js): a GeoJSON of their stretches and marks ({ id, level }).
+    showDisruptions,   // Settings → Disruptions on the map changed
     async setDisruptions(geojson) {
       data.disruptions = geojson ?? empty();
       await ready;
