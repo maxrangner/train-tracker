@@ -1,5 +1,6 @@
 {
  "about": "The files' formats as released (tools/format-check.mjs): a path may be added, never removed or given another type. Written with --write; never edited by hand to drop a path.",
+ "enforced": false,
  "kinds": {
   "live": {
    "": [

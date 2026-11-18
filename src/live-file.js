@@ -2,7 +2,8 @@
 // and the page reads with them. Plain JavaScript, no page parts. Rows are short arrays to keep the files small; they
 // turn back into exactly the shapes the page already uses (src/trains-source.js toRecord, src/trafikverket.js
 // passingsOf / fetchPlannedRoutes), positions rounded to 5 decimals (about 1 m).
-// HARD RULE (Max, 2026-11-18): these files stay backwards compatible from the first app release on: fields, row
+// HARD RULE (Max, 2026-11-18): from the first app release to others on (until then they may change), these files stay
+// backwards compatible: fields, row
 // positions and kinds of file may only be ADDED (a new position at a row's end), never renamed, removed, moved, or given
 // another type or meaning; released pages and apps read them for years. Readers ignore what they don't know. A change
 // that can't keep that is a new set of files beside the old (FORMAT + 1), the old ones made until no released app reads

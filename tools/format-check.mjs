@@ -1,5 +1,7 @@
 // The files stay backwards compatible (HARD RULE, Max 2026-11-18: "data from the first app release and forward has to
-// be backwards compatible"). Every file the fetcher makes for the page and the apps (src/live-file.js, src/tap-files.js,
+// be backwards compatible"; "Changing now and up until first app release is fine"). Until the first app release to
+// others, tools/file-formats.json says enforced: false and a break is only a warning; at that release it is set to true
+// (and the formats written as released), and from then on a break fails. Every file the fetcher makes for the page and the apps (src/live-file.js, src/tap-files.js,
 // fetcher/files.mjs, fetcher/timetable.mjs) must stay readable by every page and app already released: fields, row
 // positions and file kinds may be ADDED (at the end of a row), never renamed, removed, moved or given another type or
 // meaning. A change that can't keep that comes as a new set of files beside the old ones (src/live-file.js FORMAT + 1),
@@ -95,6 +97,7 @@ for (const [kind, f] of Object.entries(files)) {
   }
 }
 if (WRITE) {
+  list.enforced ??= false;
   list.about = 'The files\' formats as released (tools/format-check.mjs): a path may be added, never removed or given another type. Written with --write; never edited by hand to drop a path.';
   writeFileSync(LIST, JSON.stringify(list, null, 1) + '\n');
 }
@@ -102,4 +105,5 @@ const kinds = Object.keys(files).filter(k => files[k]).length;
 if (missing.length) console.log(`note not read (gone or not answering): ${missing.join(', ')}`);
 if (added.length && !WRITE) console.log(`note ${added.length} new path(s), not yet in ${LIST} (add with --write once released): ${added.slice(0, 5).join(', ')}${added.length > 5 ? ' …' : ''}`);
 console.log(`${broken ? 'format-check FAILED' : 'format-check ok'}: ${kinds} kinds of file at ${BASE}${broken ? `, ${broken} path(s) broken` : ', nothing removed or changed'}${notSeen.length ? `; ${notSeen.length} not seen (empty lists)` : ''}${WRITE ? `; written to ${LIST}` : ''}`);
+if (broken && !list.enforced) { console.log('note: not enforced yet (until the first app release, tools/file-formats.json enforced: false): only a warning'); process.exit(0); }
 process.exit(broken ? 1 : 0);
