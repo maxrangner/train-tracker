@@ -215,6 +215,11 @@ if (filesCheck.status !== 0) failed++;
 const boardCheck = spawnSync('node', ['tools/board-check.mjs'], { stdio: 'inherit' });
 if (boardCheck.status !== 0) failed++;
 
+// The timetable stream through a 20-minute Trafikverket outage on a fast clock (batch 2, 2026-11-19): it asks less
+// and less often while every question fails, and loads today again when answers come back. About 15 s, offline.
+const followCheck = spawnSync('node', ['tools/follow-check.mjs'], { stdio: 'inherit' });
+if (followCheck.status !== 0) failed++;
+
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into

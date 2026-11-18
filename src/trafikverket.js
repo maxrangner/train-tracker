@@ -130,25 +130,31 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
     es.onerror = () => { if (es && es.readyState === EventSource.CLOSED) streamFailed('the stream closed'); };
   }
 
+  // While every question fails (no internet, Trafikverket down) it asks less and less often: 10, 20, 40, then every
+  // 60 s, and doesn't try the stream again until a question is answered (TODO 28, 2026-11-19: in an outage it asked every
+  // 10 s, plus three stream tries every few minutes; tools/follow-check.mjs: 114 questions in 20 minutes, now 23).
+  let pollFails = 0;
   async function poll() {
     if (stopped) return;
     try {
       const result = await ask(makeQuery({ changeId: lastChangeId, stream: false }));
       if (stopped) return;
       lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
+      pollFails = 0;
       onResult(result);
       onStatus({ mode: 'polling' });
     } catch (e) {
+      pollFails++;
       onStatus({ mode: 'polling', error: e.message });
     }
     // Every 5 minutes, try the live stream again (if it breaks three more times, back to asking every 10 s).
-    if (Date.now() - pollingSince >= retryStreamMs) {
+    if (!pollFails && Date.now() - pollingSince >= retryStreamMs) {
       pollingSince = null;
       failures = [];
       onStatus({ mode: 'reconnecting' });
       return openStream();
     }
-    setTimeout(poll, 10000);
+    setTimeout(poll, pollFails ? Math.min(60000, 10000 * 2 ** (pollFails - 1)) : 10000);
   }
 
   openStream();

@@ -100,13 +100,16 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   const stream = seed ? () => {} : follow({
     makeQuery: ({ changeId, stream: s }) => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" ${s ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
       `<FILTER><GT name="ModifiedTime" value="${new Date(Date.now() - CHANGES_BACK_MS).toISOString()}"/></FILTER>${FIELDS}</QUERY>`,
-    onResult: (r, { first = false } = {}) => {
+    // Any answer after a gap of nearly the 15 minutes the question reaches back: today again (until 2026-11-19 only when
+    // the gap came at the start, so a later break lost the changes before its last 15 minutes until 03:30; TODO 31,
+    // Codex's beta review point 7). A quiet stream is opened again after 3 minutes (silentMs), so a gap means a break.
+    onResult: (r) => {
       const gap = Date.now() - lastChange;
       lastChange = Date.now();
       let n = 0;
       for (const a of r.TrainAnnouncement ?? []) if (put(a)) n++;
       counts.changes += n;
-      if (first && gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
+      if (gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
       if (n) onChange();
     },
     onStatus: s => { if (s.error) log(`timetable changes: ${s.mode}: ${s.error}`); },
