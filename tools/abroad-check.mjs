@@ -141,9 +141,10 @@ try {
       return page.evaluate(want => {
         const m = window.__map, fs = m.queryRenderedFeatures({ layers: ['station-dots'] }).filter(f => /^(At|De|Dk|It|Nl|No|Pt)\./.test(f.properties.sig) === want);
         if (!fs.length) return { none: true };
-        // One with no train within 24 px (a train next to it takes the tap, rightly).
+        // One with no train within 60 px (a train next to it takes the tap, rightly; close in a 3D train is about 70 px
+        // long, so its point can be 35 px off while the model covers the station: 2026-11-18).
         const clear = f => { const q = m.project(f.geometry.coordinates);
-          return !m.queryRenderedFeatures([[q.x - 24, q.y - 24], [q.x + 24, q.y + 24]], { layers: ['train-dots'] }).length; };
+          return !m.queryRenderedFeatures([[q.x - 60, q.y - 60], [q.x + 60, q.y + 60]], { layers: ['train-dots'] }).length; };
         // None clear here at this moment (a train passing every station on screen): another spot is tried.
         const f = fs.find(clear);
         if (!f) return { busy: true };
