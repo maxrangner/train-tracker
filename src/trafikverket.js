@@ -389,6 +389,12 @@ export async function fetchStations() {
 
 // ---------- A station's board ----------
 
+// A train that no longer belongs on a board at moment at (ms): left (or arrived) before it, cancelled and planned more
+// than 5 minutes before it, or neither seen nor expected and planned more than 30 minutes before it. One rule for the
+// page (fetchBoard) and the fetcher's board files (fetcher/timetable.mjs). x: { planned, estimated, actual, canceled }.
+export const boardGone = (x, at) => Boolean((x.actual && x.actual < at) || (x.canceled && x.planned < at - 5 * 60000)
+  || (!x.actual && !x.estimated && x.planned < at - 30 * 60000));
+
 // The next trains at a station: departures ('Avgang') or arrivals ('Ankomst'), passenger stops only, at most n.
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
@@ -416,9 +422,8 @@ export async function fetchBoard(sig, activity, at, n) {
     product: a.ProductInformation?.[0]?.Description ?? null,
     from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
   }));
-  // Gone: left (or arrived) before now, or cancelled and planned more than 5 minutes ago. Then the next n.
-  const out = rows.filter(x => !(x.actual && x.actual < at) && !(x.canceled && x.planned < at - 5 * 60000)
-    && !(!x.actual && !x.estimated && x.planned < at - 30 * 60000)).slice(0, n);
+  // Gone trains out (boardGone), then the next n.
+  const out = rows.filter(x => !boardGone(x, at)).slice(0, n);
   out.asOf = r.asOf ?? null;   // from files: when they were made
   return out;
 }
