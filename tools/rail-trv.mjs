@@ -1,5 +1,5 @@
-// Download Trafikverket's rail network (their open INSPIRE map service, no key) into public/rail-trv.geojson, and
-// three of each track's properties into public/rail-trv-props.json: its design speed, whether it is public, and its
+// Download Trafikverket's rail network (their open INSPIRE map service, no key) into data/rail-trv.geojson, and
+// three of each track's properties into data/rail-trv-props.json: its design speed, whether it is public, and its
 // traffic direction (tools/rail-net.mjs turns them into one digit per line, for routes that prefer main tracks and the
 // right track of a double track; night of 2026-11-14, docs: night-1114/yard.md). Both files are rebuilt, not committed.
 // Run: node tools/rail-trv.mjs [--props]   (--props: only the properties; the lines the trains follow stay as they are)
@@ -26,7 +26,7 @@ async function page(type, start) {
     }
   }
 }
-mkdirSync(new URL('../public/', import.meta.url), { recursive: true });
+mkdirSync(new URL('../data/', import.meta.url), { recursive: true });   // (in data/ since 2026-11-18: in public/ they went into every build, 13 MB the page never loads)
 
 // ---- The properties: per link, the pieces of it each value covers (from-to as shares of the link) ----
 // Design speed: the length-weighted mean of the link's pieces, both directions together (0: none given).
@@ -67,7 +67,7 @@ async function property(type, valueOf) {
     const w = sp.reduce((s, p) => s + p.share, 0);
     links[id] = [w ? Math.round(sp.reduce((s, p) => s + p.share * p.value, 0) / w) : 0, ACCESS[most(access.get(id))] ?? 3, FLOW[most(flow.get(id))] ?? 0];
   }
-  writeFileSync(new URL('../public/rail-trv-props.json', import.meta.url), JSON.stringify({
+  writeFileSync(new URL('../data/rail-trv-props.json', import.meta.url), JSON.stringify({
     about: 'Trafikverket (CC0), INSPIRE TN_RailTransportNetwork: per link [design speed km/h (0 none), access (0 public, 1 private, 2 impossible, 3 not given), direction (0 both, 1 along, 2 against)]; tools/rail-trv.mjs',
     links }));
   console.log(`saved the properties of ${Object.keys(links).length} links`);
@@ -99,6 +99,6 @@ for (let start = 0; ; start += PAGE) {
   if (n < PAGE) break;
 }
 
-const out = new URL('../public/rail-trv.geojson', import.meta.url);
+const out = new URL('../data/rail-trv.geojson', import.meta.url);
 writeFileSync(out, JSON.stringify({ type: 'FeatureCollection', features }));
 console.log(`saved ${features.length} lines to ${out.pathname}`);

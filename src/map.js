@@ -56,7 +56,7 @@ const colourBase = dark => (dark
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
-// 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
+// 11 MB data/rail-trv.geojson, not in the page since 2026-11-18), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
 // removed 2026-11-12 (Max: decided, no need for the option).
 export const RAIL_SOURCES = {
   trv: { name: 'Trafikverket' },
