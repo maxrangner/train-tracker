@@ -47,7 +47,7 @@ function joinParts(train) {
       const place = new THREE.Matrix4().multiplyMatrices(toCar, p.matrixWorld);
       if (place.determinant() < 0) { odd = true; break; }   // a mirrored part would turn inside out
       const g = p.geometry.index ? p.geometry.toNonIndexed() : p.geometry.clone();
-      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name);
+      for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'color') g.deleteAttribute(name);   // colour: the faceted trains paint by corner
       g.applyMatrix4(place);
       (byPaint.get(p.material) ?? byPaint.set(p.material, []).get(p.material)).push(g);
     }
@@ -72,11 +72,26 @@ function joinParts(train) {
 // is set on the track there, so a train bends round a curve (without it, or where it gives null, the train is
 // drawn straight).
 const RING_MARGIN_PX = 8, RING_PX = 2.5;
+// At most this many car shadows at once (far more cars than a screen shows close in).
+const SHADOW_MAX = 1500;
+// A soft dark patch, darkest in the middle, gone at its edge (drawn once, shared by every layer).
+let shadowTexture = null;
+const shadowPaint = () => {
+  if (!shadowTexture) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 4, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(0,0,0,0.5)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.22)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    shadowTexture = new THREE.CanvasTexture(cv);
+  }
+  return new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false });
+};
 export function createTrainLayer({ getTrains, along = null, selection = null }) {
   let map, renderer, scene, camera;
   // The selected train's ring: a flat ring of radius 1 on the ground, scaled to the model. Its thickness is a share of
   // the radius, so a new shape is made only when that share changes by half a percent.
   let ring = null, ringShare = null;
+  let shadows = null;
   const ringPaint = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide });
   const TOY = isToy();   // fixed for this layer
   const shown = new Map();        // id -> { object, brand }
@@ -99,8 +114,9 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
       const stale = key.startsWith(STALE), brand = (stale ? key.slice(STALE.length) : key) || null;
       const style = TOY ? toyFor(brand) : styleFor(brand);
       const plain = TOY ? toyFor(null) : styleFor(null);
+      // Realistic trains: the company's own train model (toy-brands.js says which), in its realistic paint (brands.js).
       const train = TOY ? buildToy(stale ? { ...style, colours: plain.colours } : style)
-        : buildTrain(stale ? { ...style, colours: plain.colours } : style);
+        : buildTrain({ ...(stale ? { ...style, colours: plain.colours } : style), model: toyFor(brand).model });
       joinParts(train);
       if (stale) {
         train.traverse((o) => {
@@ -163,10 +179,20 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
       map = m;
       camera = new THREE.Camera();
       scene = new THREE.Scene();
-      // Light from the south-west and above, plus a soft fill, so sides and roofs read differently.
-      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+      // A warm sun from the south-west and above, and the sky's light from straight above with a warmer bounce from
+      // the ground (2026-11-18, the faceted trains: roofs, sides and noses read apart). Until then the sky light came
+      // from the side (three.js's own "up" is y; the map's is z).
+      const sun = new THREE.DirectionalLight(0xfff6ea, 2.0);
       sun.position.set(-0.6, -0.8, 1.2);
-      scene.add(sun, new THREE.HemisphereLight(0xffffff, 0x8a8f96, 1.3));
+      const sky = new THREE.HemisphereLight(0xf2f5ff, 0xa1978a, 1.5);
+      sky.position.set(0, 0, 1);
+      scene.add(sun, sky);
+      // The soft shadows under the cars: one flat, blurred patch per car, all drawn in one go (one instanced part).
+      shadows = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), shadowPaint(), SHADOW_MAX);
+      shadows.count = 0;
+      shadows.frustumCulled = false;
+      shadows.renderOrder = -2;   // first: under the ring and the models
+      scene.add(shadows);
       ring = new THREE.Mesh(new THREE.BufferGeometry(), ringPaint);
       ring.visible = false;
       ring.renderOrder = -1;   // before the models; they cover it where they lie over it
@@ -194,6 +220,7 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
         ringShare = null;
       }
       ringPaint.dispose();
+      if (shadows) { scene.remove(shadows); shadows.geometry.dispose(); shadows.dispose(); shadows = null; }
     },
 
     render(gl, args) {
@@ -233,6 +260,26 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
           }
           outlines.set(t.id, { lon: t.lon, lat: t.lat, bearing: t.bearing ?? 0,
             length: entry.object.userData.length * k, width: (templateFor(key).userData.width ?? 3) * k, cars: cars || null });
+        }
+
+        // The shadows: one under each car, as long as the car, a little wider, where the car is (bent trains too).
+        if (shadows) {
+          let n = 0;
+          const one = new THREE.Matrix4(), local = new THREE.Matrix4();
+          for (const id of wanted) {
+            const entry = shown.get(id);
+            if (!entry) continue;
+            entry.object.updateMatrixWorld(true);
+            const w = entry.object.userData.width ?? 3;
+            for (const c of entry.object.children) {
+              if (n >= SHADOW_MAX) break;
+              const [y0, y1] = c.userData.span, cy = (y0 + y1) / 2 - c.userData.p0[1];
+              local.makeScale(w + 1.6, y1 - y0 + 1.4, 1).setPosition(0, cy, 0.03);
+              shadows.setMatrixAt(n++, one.multiplyMatrices(c.matrixWorld, local));
+            }
+          }
+          shadows.count = n;
+          shadows.instanceMatrix.needsUpdate = true;
         }
 
         // The selected train's ring, on the ground under its model.
