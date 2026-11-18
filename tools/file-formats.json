@@ -119,6 +119,9 @@
    ],
    "stations[].advertised": [
     "boolean"
+   ],
+   "stations[].country": [
+    "string"
    ]
   },
   "disruptions": {
@@ -182,6 +185,9 @@
    ],
    "disruptions[].sections[][2]": [
     "string"
+   ],
+   "disruptions[].work": [
+    "boolean"
    ]
   },
   "stats": {
@@ -402,7 +408,8 @@
     "number"
    ],
    "r[][7]": [
-    "null"
+    "null",
+    "number"
    ],
    "r[][8]": [
     "null",
