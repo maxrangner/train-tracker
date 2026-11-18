@@ -220,8 +220,15 @@ if (boardCheck.status !== 0) failed++;
 const followCheck = spawnSync('node', ['tools/follow-check.mjs'], { stdio: 'inherit' });
 if (followCheck.status !== 0) failed++;
 
-// The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
+// The Linux PC's sparat command on a pretend Linux (batch 2, 2026-11-19): update, a damaged package or a wrong
+// fingerprint refused with nothing touched, a version that won't start rolled back, back and forth, status. ~20 s.
+const updateCheck = spawnSync('node', ['tools/linux-update-check.mjs'], { stdio: 'inherit' });
+if (updateCheck.status !== 0) failed++;
+
+// The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check, for quick runs;
+// in a release, SPARAT_RELEASE from tools/release.mjs, it fails: a release never goes out unchecked on screen).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
+if (ui.status === 2 && process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them; start npm run dev'); failed++; }
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into
 // its files on this computer (port 8095; with the key from .env, stations and disruptions are asked as well).
 let filesUi = { status: 0 };
