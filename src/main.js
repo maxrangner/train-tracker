@@ -28,6 +28,7 @@ import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
+import { esc } from './html.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -235,7 +236,6 @@ const raise = id => sheets.raise(document.getElementById(id));
 
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
-const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
 function showPicker(list) {
   panel.close();
   board.close();
@@ -243,7 +243,7 @@ function showPicker(list) {
   const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
   pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
-    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${escHtml(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${escHtml(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
+    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
   pickerEl.hidden = false;
   raise('picker');
   pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };

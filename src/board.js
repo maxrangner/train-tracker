@@ -5,7 +5,7 @@
 // messages(sig) -> Promise of the station's own messages [{ text }] (what its monitors show; trafikverket.js
 // fetchStationMessages), shown above the departures; asked when the board opens and every MESSAGES_MS while open.
 const time = t => (t ? hhmm(t) : '');
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { esc } from './html.js';
 const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 

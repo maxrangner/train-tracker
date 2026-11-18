@@ -13,7 +13,7 @@ import { settings } from './settings.js';
 import { glide } from './sheet.js';
 import { abroadEnds, flagSvg } from './abroad.js';
 
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { esc } from './html.js';
 
 const time = t => (t ? hhmm(t) : '');
 
@@ -334,7 +334,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       const now = i === nextIdx && i > 0
         ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>` : '';
       return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
-        `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
+        `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
     }).join('');
     // A trip that goes on abroad, or comes from there (src/abroad.js): one more row for that end, after the last stop
