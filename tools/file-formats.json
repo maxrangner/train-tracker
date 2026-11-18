@@ -1,0 +1,732 @@
+{
+ "about": "The files' formats as released (tools/format-check.mjs): a path may be added, never removed or given another type. Written with --write; never edited by hand to drop a path.",
+ "kinds": {
+  "live": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "trains": [
+    "array",
+    "rows"
+   ],
+   "trains[][0]": [
+    "string"
+   ],
+   "trains[][1]": [
+    "string"
+   ],
+   "trains[][2]": [
+    "number"
+   ],
+   "trains[][3]": [
+    "number"
+   ],
+   "trains[][4]": [
+    "null",
+    "number"
+   ],
+   "trains[][5]": [
+    "number"
+   ],
+   "trains[][6]": [
+    "number"
+   ],
+   "trains[][7]": [
+    "number"
+   ],
+   "passings": [
+    "array",
+    "rows"
+   ],
+   "passings[][0]": [
+    "string"
+   ],
+   "passings[][1]": [
+    "number"
+   ],
+   "passings[][2]": [
+    "string"
+   ],
+   "passings[][3]": [
+    "number"
+   ],
+   "passings[][4]": [
+    "null",
+    "string"
+   ],
+   "passings[][5]": [
+    "string"
+   ],
+   "files": [
+    "object"
+   ],
+   "files{}": [
+    "string"
+   ],
+   "feeds": [
+    "object"
+   ],
+   "feeds.positions": [
+    "string"
+   ],
+   "feeds.passings": [
+    "string"
+   ],
+   "feeds.lastRecordAt": [
+    "number"
+   ]
+  },
+  "stations": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "stations": [
+    "array"
+   ],
+   "stations[]": [
+    "object"
+   ],
+   "stations[].sig": [
+    "string"
+   ],
+   "stations[].name": [
+    "string"
+   ],
+   "stations[].lon": [
+    "number"
+   ],
+   "stations[].lat": [
+    "number"
+   ],
+   "stations[].advertised": [
+    "boolean"
+   ]
+  },
+  "disruptions": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "disruptions": [
+    "array"
+   ],
+   "disruptions[]": [
+    "object"
+   ],
+   "disruptions[].id": [
+    "string"
+   ],
+   "disruptions[].kind": [
+    "string"
+   ],
+   "disruptions[].header": [
+    "string"
+   ],
+   "disruptions[].text": [
+    "string"
+   ],
+   "disruptions[].since": [
+    "number"
+   ],
+   "disruptions[].until": [
+    "number"
+   ],
+   "disruptions[].level": [
+    "number"
+   ],
+   "disruptions[].point": [
+    "object"
+   ],
+   "disruptions[].point.lat": [
+    "number"
+   ],
+   "disruptions[].point.lon": [
+    "number"
+   ],
+   "disruptions[].sections": [
+    "array",
+    "rows"
+   ],
+   "disruptions[].sections[][0]": [
+    "string"
+   ],
+   "disruptions[].sections[][1]": [
+    "string"
+   ],
+   "disruptions[].sections[][2]": [
+    "string"
+   ]
+  },
+  "stats": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "day": [
+    "string"
+   ],
+   "cancelled": [
+    "number"
+   ]
+  },
+  "arrivals": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "day": [
+    "string"
+   ],
+   "rows": [
+    "array",
+    "rows"
+   ],
+   "rows[][0]": [
+    "string"
+   ],
+   "rows[][1]": [
+    "number"
+   ],
+   "rows[][2]": [
+    "number"
+   ]
+  },
+  "passings": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "passings": [
+    "array",
+    "rows"
+   ],
+   "passings[][0]": [
+    "string"
+   ],
+   "passings[][1]": [
+    "number"
+   ],
+   "passings[][2]": [
+    "string"
+   ],
+   "passings[][3]": [
+    "number"
+   ],
+   "passings[][4]": [
+    "null",
+    "string"
+   ],
+   "passings[][5]": [
+    "string"
+   ]
+  },
+  "card": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "t": [
+    "number"
+   ],
+   "b": [
+    "number"
+   ],
+   "d": [
+    "array"
+   ],
+   "d[]": [
+    "string"
+   ],
+   "r": [
+    "array",
+    "rows"
+   ],
+   "r[][0]": [
+    "string"
+   ],
+   "r[][1]": [
+    "string"
+   ],
+   "r[][2]": [
+    "number"
+   ],
+   "r[][3]": [
+    "string"
+   ],
+   "r[][4]": [
+    "string"
+   ],
+   "r[][5]": [
+    "number"
+   ],
+   "r[][6]": [
+    "number"
+   ],
+   "r[][7]": [
+    "null",
+    "number"
+   ],
+   "r[][8]": [
+    "null",
+    "number"
+   ],
+   "r[][9]": [
+    "string"
+   ],
+   "r[][10]": [
+    "number"
+   ],
+   "r[][11]": [
+    "number"
+   ],
+   "r[][12]": [
+    "number"
+   ],
+   "r[][13]": [
+    "number"
+   ],
+   "r[][14]": [
+    "number"
+   ],
+   "r[][15]": [
+    "number"
+   ],
+   "r[][16]": [
+    "number"
+   ],
+   "r[][17]": [
+    "number"
+   ]
+  },
+  "board": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "t": [
+    "number"
+   ],
+   "b": [
+    "number"
+   ],
+   "d": [
+    "array"
+   ],
+   "d[]": [
+    "string"
+   ],
+   "r": [
+    "array",
+    "rows"
+   ],
+   "r[][0]": [
+    "string"
+   ],
+   "r[][1]": [
+    "string"
+   ],
+   "r[][2]": [
+    "number"
+   ],
+   "r[][3]": [
+    "string"
+   ],
+   "r[][4]": [
+    "string"
+   ],
+   "r[][5]": [
+    "number"
+   ],
+   "r[][6]": [
+    "number"
+   ],
+   "r[][7]": [
+    "null"
+   ],
+   "r[][8]": [
+    "null",
+    "number"
+   ],
+   "r[][9]": [
+    "string"
+   ],
+   "r[][10]": [
+    "number"
+   ],
+   "r[][11]": [
+    "number"
+   ],
+   "r[][12]": [
+    "number"
+   ],
+   "r[][13]": [
+    "number"
+   ],
+   "r[][14]": [
+    "number"
+   ],
+   "r[][15]": [
+    "number"
+   ],
+   "r[][16]": [
+    "number"
+   ],
+   "r[][17]": [
+    "number"
+   ]
+  },
+  "taps-add": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "t": [
+    "number"
+   ],
+   "since": [
+    "number"
+   ],
+   "b": [
+    "number"
+   ],
+   "d": [
+    "array"
+   ],
+   "d[]": [
+    "string"
+   ],
+   "r": [
+    "array",
+    "rows"
+   ],
+   "r[][0]": [
+    "string"
+   ],
+   "r[][1]": [
+    "string"
+   ],
+   "r[][2]": [
+    "number"
+   ],
+   "r[][3]": [
+    "string"
+   ],
+   "r[][4]": [
+    "string"
+   ],
+   "r[][5]": [
+    "number"
+   ],
+   "r[][6]": [
+    "number"
+   ],
+   "r[][7]": [
+    "null",
+    "number"
+   ],
+   "r[][8]": [
+    "null",
+    "number"
+   ],
+   "r[][9]": [
+    "string"
+   ],
+   "r[][10]": [
+    "number"
+   ],
+   "r[][11]": [
+    "number"
+   ],
+   "r[][12]": [
+    "number"
+   ],
+   "r[][13]": [
+    "number"
+   ],
+   "r[][14]": [
+    "number"
+   ],
+   "r[][15]": [
+    "number"
+   ],
+   "r[][16]": [
+    "number"
+   ],
+   "r[][17]": [
+    "number"
+   ]
+  },
+  "planned": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "since": [
+    "null"
+   ],
+   "rows": [
+    "array",
+    "rows"
+   ],
+   "rows[][0]": [
+    "string"
+   ],
+   "rows[][1]": [
+    "string"
+   ],
+   "rows[][2]": [
+    "string"
+   ],
+   "rows[][3]": [
+    "number"
+   ],
+   "brands": [
+    "object"
+   ],
+   "brands{}": [
+    "string"
+   ]
+  },
+  "taps-index": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "t": [
+    "number"
+   ],
+   "groups": [
+    "number"
+   ],
+   "ops": [
+    "object"
+   ],
+   "ops{}": [
+    "string"
+   ]
+  },
+  "messages": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "t": [
+    "number"
+   ],
+   "at": [
+    "number"
+   ],
+   "messages": [
+    "array",
+    "rows"
+   ],
+   "messages[][0]": [
+    "string"
+   ],
+   "messages[][1]": [
+    "string"
+   ],
+   "messages[][2]": [
+    "string"
+   ],
+   "messages[][3]": [
+    "string"
+   ],
+   "messages[][4]": [
+    "string"
+   ]
+  },
+  "passings-add": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "since": [
+    "number"
+   ],
+   "passings": [
+    "array",
+    "rows"
+   ],
+   "passings[][0]": [
+    "string"
+   ],
+   "passings[][1]": [
+    "number"
+   ],
+   "passings[][2]": [
+    "string"
+   ],
+   "passings[][3]": [
+    "number"
+   ],
+   "passings[][4]": [
+    "null",
+    "string"
+   ],
+   "passings[][5]": [
+    "string"
+   ]
+  },
+  "planned-add": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "since": [
+    "number"
+   ],
+   "rows": [
+    "array",
+    "rows"
+   ],
+   "rows[][0]": [
+    "string"
+   ],
+   "rows[][1]": [
+    "string"
+   ],
+   "rows[][2]": [
+    "string"
+   ],
+   "rows[][3]": [
+    "number"
+   ],
+   "brands": [
+    "object"
+   ],
+   "brands{}": [
+    "string"
+   ]
+  },
+  "arrivals-add": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "day": [
+    "string"
+   ],
+   "rows": [
+    "array",
+    "rows"
+   ],
+   "rows[][0]": [
+    "string"
+   ],
+   "rows[][1]": [
+    "number"
+   ],
+   "rows[][2]": [
+    "number"
+   ]
+  }
+ }
+}

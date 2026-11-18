@@ -11,6 +11,7 @@
 // JSON); sig: LocationSignature; act: 'A' arrival (Ankomst) / 'D' departure (Avgang); flags: 1 Advertised,
 // 2 Canceled, 4 Deleted; adv, est, actual: seconds after the file's base `b` (null: none); track: '' none.
 // A file: { v, t, kind, b, d: [words], r: [rows] }.
+// Backwards compatible from the first app release on (HARD RULE, src/live-file.js): new fields go at a row's end.
 export const TAP_FIELDS = ['OperationalTrainNumber', 'AdvertisedTrainIdent', 'ScheduledDepartureDateTime', 'LocationSignature',
   'ActivityType', 'Advertised', 'Canceled', 'Deleted', 'AdvertisedTimeAtLocation', 'EstimatedTimeAtLocation', 'TimeAtLocation',
   'TrackAtLocation', 'FromLocation', 'ToLocation', 'ProductInformation', 'Deviation', 'OtherInformation', 'Booking', 'Service',
