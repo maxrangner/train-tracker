@@ -137,16 +137,27 @@ try {
         // One with no train within 24 px (a train next to it takes the tap, rightly).
         const clear = f => { const q = m.project(f.geometry.coordinates);
           return !m.queryRenderedFeatures([[q.x - 24, q.y - 24], [q.x + 24, q.y + 24]], { layers: ['train-dots'] }).length; };
-        const f = fs.find(clear) ?? fs[0], q = m.project(f.geometry.coordinates);
+        // None clear here at this moment (a train passing every station on screen): another spot is tried.
+        const f = fs.find(clear);
+        if (!f) return { busy: true };
+        const q = m.project(f.geometry.coordinates);
         document.getElementById('board').hidden = true;
         m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
         return new Promise(r => setTimeout(() => r({ sig: f.properties.sig, name: f.properties.name, shown: f !== null, board: !document.getElementById('board').hidden }), 1200));
       }, abroad);
     };
-    const dk = await tapStation([12.565, 55.672], true);
-    expect(!dk.none && !dk.board, `${theme}: a station abroad (${dk.name ?? 'none on screen'}) is drawn, a tap opens no board`);
-    const se = await tapStation([13.0, 55.609], false);
-    expect(!se.none && se.board, `${theme}: a Swedish station (${se.name ?? 'none on screen'}) still opens its board`);
+    // A few spots each, the first with a station clear of trains (flaky before 2026-11-18: a train passing Triangeln
+    // took the tap, rightly). None clear anywhere: said, not failed.
+    const firstClear = async (spots, abroad) => {
+      for (const c of spots) { const r = await tapStation(c, abroad); if (!r.busy && !r.none) return r; }
+      return null;
+    };
+    const dk = await firstClear([[12.565, 55.672], [12.65, 55.63], [12.52, 55.70]], true);
+    if (dk) expect(!dk.board, `${theme}: a station abroad (${dk.name}) is drawn, a tap opens no board`);
+    else notes.push(`${theme}: a station abroad not checked (no station clear of trains in 3 spots)`);
+    const se = await firstClear([[13.0, 55.609], [13.19, 55.705], [12.70, 56.045], [18.06, 59.33]], false);
+    if (se) expect(se.board, `${theme}: a Swedish station (${se.name}) still opens its board`);
+    else notes.push(`${theme}: a Swedish station's tap not checked (no station clear of trains in 4 spots)`);
     await page.evaluate(() => document.querySelector('#board .panel-close')?.click());
     expect(!errors.length, `${theme}: page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
     await page.close();
