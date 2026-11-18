@@ -31,7 +31,7 @@ try {
     fold: document.querySelector('#disruptions-body .dis-fold')?.textContent ?? null, open: document.querySelector('#disruptions-body .dis-fold')?.getAttribute('aria-expanded') }));
   let l = await list();
   const shownProblems = l.rows.filter(w => !w).length, works = Number(/\((\d+)\)/.exec(l.fold ?? '')?.[1] ?? 0);
-  expect(count === `(${shownProblems})`, `the menu counts problems only: "${count}", the list has ${shownProblems} problem(s)${works ? ` and ${works} rail work(s) folded` : ''}`);
+  expect(count === String(shownProblems), `the menu counts problems only: "${count}", the list has ${shownProblems} problem(s)${works ? ` and ${works} rail work(s) folded` : ''}`);
   expect(l.rows.every((w, i) => !w || l.rows.slice(i).every(Boolean)), 'the problems come first, rail work after');
   if (works) {
     const wasOpen = l.open === 'true';

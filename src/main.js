@@ -20,10 +20,11 @@ import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
-import { now, hhmm, hhmmss, swedishDay } from './clock.js';
+import { now, hhmm, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
 import { createStatsPage } from './stats-page.js';
+import { createConnection } from './connection.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
@@ -230,7 +231,7 @@ map.shown.then(() => {
 });
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
-const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'disruptions-page', 'help']
+const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
   .map(id => document.getElementById(id)));
 const raise = id => sheets.raise(document.getElementById(id));
 
@@ -301,9 +302,9 @@ function openTrain(id, { go = false } = {}) {
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-function openHelp() { statsPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
+function openHelp() { statsPage.hidden = true; connPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = () => { menu.close(); openHelp(); };   // in the menu sheet (2026-11-15)
+document.getElementById('help-button').onclick = () => { closeNav(); menu.close(); openHelp(); };   // in the menu (☰, 2026-11-18)
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
 // filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
@@ -368,7 +369,8 @@ versionEl.addEventListener('click', () => {
 // Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  const pages = [helpEl, settingsPage, statsPage, disruptionsPage];
+  if (!navEl.hidden) { closeNav(); return; }
+  const pages = [helpEl, settingsPage, statsPage, connPage, disruptionsPage];
   if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
   if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
 });
@@ -386,11 +388,37 @@ if (window.Capacitor?.isNativePlatform?.()) {
   const keyboardUp = () => Boolean(document.activeElement?.matches?.('input, textarea')) && innerHeight < tallest.h - 150;
   import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
     if (keyboardUp()) { document.activeElement.blur(); return; }
+    if (!navEl.hidden) { closeNav(); return; }
     if (!sheets.closeTop()) App.minimizeApp();
   }));
 }
 
-// ---- The menu: search for a train number or a station ----
+// ---- The menu (☰; Max's pick A, 2026-11-18: menu and search apart): a drawer from the left with Störningar, Statistik,
+// Inställningar and Om Spårat. Closes with ×, Esc, a tap outside, the phone's back, or by opening one of its pages. ----
+const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
+navEl.querySelector('.nav-logo').innerHTML = logoSvg({ small: true });
+for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
+const versionShort = typeof __VERSION__ === 'string' ? __VERSION__ : '?';
+const navFoot = () => { document.getElementById('nav-foot').textContent = t('navFoot', versionShort); };
+const navStats = () => { document.getElementById('nav-stats-line').textContent = t('navStatsLine', trains.count); };
+navFoot();
+function openNav() {
+  menu.close();
+  navStats();
+  navEl.hidden = false;
+  navButton.setAttribute('aria-expanded', 'true');
+  navEl.querySelector('.nav-row:not([hidden])')?.focus();
+}
+function closeNav() {
+  if (navEl.hidden) return;
+  navEl.hidden = true;
+  navButton.setAttribute('aria-expanded', 'false');
+}
+navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
+navEl.querySelector('.nav-close').onclick = closeNav;
+document.getElementById('nav-backdrop').onclick = closeNav;
+
+// ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
 const menu = createMenu({
   button: document.getElementById('menu-button'),
@@ -495,7 +523,9 @@ const settingsPage = document.getElementById('settings-page');
 const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
+  closeNav();
   menu.close();
+  connPage.hidden = true;
   helpEl.hidden = true;
   statsPage.hidden = true;
   settingsPage.hidden = false;
@@ -514,6 +544,7 @@ onSettingChange((key) => {
     menu.refresh();
     panel.relabel();
     if (!statsPage.hidden) drawStats();
+    navFoot(); navStats(); conn.relabel(); showConn();
     showFilter();
     board.relabel();
     pickerEl.hidden = true;
@@ -562,7 +593,7 @@ const closeKey = () => (settings.trainStyle === 'toy' ? 'toyClose' : 'realClose'
 closeSizeEl.oninput = () => { setSetting(closeKey(), closeSizeEl.value); showSettings(); };
 showSettings();
 
-// ---- The stats page: tap the "N trains · live" banner (Max, 2026-11-13). Its own page, like Settings. ----
+// ---- The stats page: ☰ → Statistik (Max, 2026-11-18; until then a tap on the live pill). Its own page, like Settings. ----
 const statsPage = document.getElementById('stats-page');
 const statsBody = document.getElementById('stats-body');
 // The page is built once and then only its numbers change (src/stats-page.js); a tap on a train or a station there
@@ -581,16 +612,40 @@ function drawStats(first = false) {
     trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
 }
 function openStats() {
+  closeNav();
   menu.close();
   helpEl.hidden = true;
   settingsPage.hidden = true;
+  connPage.hidden = true;
   statsPage.hidden = false;
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
   drawStats(true);
   statsPage.querySelector('.panel-close').focus();
 }
-document.getElementById('status').onclick = () => (statsPage.hidden ? openStats() : (statsPage.hidden = true));
+document.getElementById('open-stats').onclick = openStats;
+
+// ---- The connection screen: a tap on the live pill (Max's pick Y, 2026-11-18; src/connection.js). ----
+const connPage = document.getElementById('conn-page');
+const conn = createConnection(connPage, {
+  getTrains: () => frameAll,
+  reportTimeOf: id => trains.get(id)?.time ?? null,
+});
+let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
+function openConn() {
+  closeNav();
+  menu.close();
+  helpEl.hidden = true;
+  settingsPage.hidden = true;
+  statsPage.hidden = true;
+  disruptionsPage.hidden = true;
+  showConn();
+  connPage.hidden = false;
+  raise('conn-page');
+  connPage.querySelector('.panel-close').focus();
+}
+document.getElementById('status').onclick = () => (connPage.hidden ? openConn() : (connPage.hidden = true));
+connPage.querySelector('.panel-close').onclick = () => { connPage.hidden = true; };
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
 // A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the
 // page's other taps are its own (src/stats-page.js). While a finger is down on the page its numbers wait, so nothing
@@ -626,13 +681,15 @@ const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disrupti
   onData({ list, geojson }) {
     map.setDisruptions(geojson);
     // The menu's count: problems only, not rail work (Max, 2026-11-18).
-    document.getElementById('disruptions-count').textContent = `(${list.filter(d => !isWork(d)).length})`;
+    const problems = list.filter(d => !isWork(d)).length, countEl = document.getElementById('disruptions-count');
+    countEl.textContent = String(problems);
+    countEl.classList.toggle('none', !problems);   // the chip only when there are problems
     if (!disruptionsPage.hidden) drawDisruptions();
     const open = disruptionEl.dataset.id;
     if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
   } });
 if (live) {
-  document.getElementById('disruptions-section').hidden = false;
+  document.getElementById('open-disruptions').hidden = false;
   Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 }
 // The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
@@ -677,7 +734,9 @@ function openDisruption(id, { go = false } = {}) {
   else if (p) map.goTo(p, 9);
 }
 document.getElementById('open-disruptions').onclick = () => {
+  closeNav();
   menu.close();
+  connPage.hidden = true;
   helpEl.hidden = true;
   settingsPage.hidden = true;
   statsPage.hidden = true;
@@ -710,6 +769,7 @@ function onPassings(list) {
 const positionHandlers = {
   onRecords(records) {
     lastDataAt = now();
+    conn.onBatch(records.length);
     stats.onRecords(records, now());
     if (trains.halted) trains.setHalted(false);
     trains.update(records, now());
@@ -730,7 +790,7 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
       // keeps coming every 5 s while Trafikverket is silent, and that hid the "no data" halt (Codex's beta review point
       // 7). Taken as an age on the fetcher's own clock, so a phone clock that is off doesn't matter. Measured: even at
       // night some train in Sweden reports at least every 10 s (four night recordings), so NO_DATA_MS can stay a minute.
-      onFile: (fileT, lastRecordAt) => { lastDataAt = now() - (lastRecordAt ? Math.max(0, fileT - lastRecordAt) : 0); } });
+      onFile: (fileT, lastRecordAt) => { lastFileAt = Date.now(); lastDataAt = now() - (lastRecordAt ? Math.max(0, fileT - lastRecordAt) : 0); } });
     return;
   }
   if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
@@ -867,7 +927,6 @@ const statusCount = statusEl.querySelector('.count');
 const barLogo = document.querySelector('.searchbar .logo');
 barLogo.innerHTML = logoSvg({ small: true });
 barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
-const statusFullEl = document.getElementById('status-full');
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
 const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
@@ -892,6 +951,38 @@ function statusLine(st, noData) {
   return '';
 }
 
+// The connection screen: the state in words, the chain from Trafikverket to this phone, and three numbers (once a
+// second while it is open, src/connection.js).
+function showConn(st = null) {
+  const tNow = st?.tNow ?? now();
+  const noData = st?.noData ?? (lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS);
+  const paused = st?.paused ?? (status.positions === 'paused' && status.pausedSince !== null);
+  const outdated = st?.outdated ?? status.positions === 'outdated';
+  const error = st?.error ?? statusError();
+  const mode = status.positions;
+  const [state, title, text] = replay ? ['replay', t('connReplay'), t('connReplayText', hhmm(tNow))]
+    : outdated ? ['bad', t('needsUpdate'), t('connOutdatedText')]
+    : paused ? ['bad', t('livePausedSince', clock(status.pausedSince)), t('connPausedText')]
+    : noData ? ['bad', t('connNoData', clock(lastDataAt)), t('connNoDataText')]
+    : error ? ['bad', t('connProblem'), error]
+    : mode === 'starting' ? ['slow', modeText(mode), t('connStartText')]
+    : mode !== 'stream' ? ['slow', modeText(mode), t('connSlowText')]
+    : ['live', t('connLive'), t('connLiveText')];
+  const fresh = trains.reports().filter(r => r.time >= tNow - 60000).length;
+  const online = navigator.onLine !== false;
+  const trv = { icon: 'train', name: t('connTrv'), sub: noData ? t('connSilent') : mode === 'stream' ? t('connStream') : t('connEvery10'),
+    st: noData ? 'bad' : mode === 'stream' ? 'ok' : 'slow' };
+  const you = { icon: 'phone', name: t('connYou'), st: online ? 'ok' : 'bad',
+    sub: !online ? t('connOffline') : fromFiles && lastFileAt ? t('connAgo', Math.max(0, Math.round((Date.now() - lastFileAt) / 1000))) : t('connOnline') };
+  // The public page: Trafikverket → our server → the website → you. When files stop coming, the phone can't tell
+  // whether the server or the website failed: the website is marked, the server "not known".
+  const chain = replay ? [] : fromFiles ? [trv,
+    { icon: 'server', name: t('connServer'), sub: paused ? t('connUnknown') : t('connListening'), st: paused || !online ? 'unknown' : 'ok' },
+    { icon: 'globe', name: t('connWeb'), sub: t('connEvery5'), st: !online ? 'unknown' : paused ? 'bad' : 'ok' }, you] : [trv, you];
+  conn.update({ state, title, text, chain, trains: trains.count, fresh, behindS: DRAW_DELAY_MS / 1000,
+    nextAt: fromFiles && !replay ? positionsFeed?.nextAt?.() ?? null : null });
+}
+
 let beatSeen = null, beatAt = 0;
 setInterval(() => {
   const tNow = now();
@@ -906,7 +997,6 @@ setInterval(() => {
     if (wasFollowing) follow(to); else panel.setFollowing(false);
   }
   const error = statusError();
-  const ago = trains.lastReport ? Math.max(0, Math.round((tNow - trains.lastReport) / 1000)) : null;
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
   // The search bar's chip: the status in words, no count (Max, 2026-11-16: "remove the trains counter. Keep the status
@@ -929,13 +1019,9 @@ setInterval(() => {
     beatSeen = trains.lastReport; beatAt = tNow;
     statusEl.classList.remove('beat'); void statusEl.offsetWidth; statusEl.classList.add('beat');
   }
-  statusFullEl.textContent =
-    `${t('trainsCount', trains.count)} · ` +
-    (outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
-    ` · ${modeText(status.positions)}` +
-    (replay ? t('replayOf', hhmmss(tNow)) : '') +
-    (error ? ` · ${error}` : '');
   statusEl.classList.toggle('problem', Boolean(error) || noData || paused || outdated);
+  if (!connPage.hidden) showConn({ tNow, noData, paused, outdated, error });
+  if (!navEl.hidden) navStats();
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));

@@ -30,21 +30,26 @@ const expect = (ok, what) => { if (!ok) problems.push(what); };
 const browser = await launch();
 try {
   // ---- Both languages and looks start clean ----
-  for (const [lang, theme, word, statsWord] of [['en', 'light', 'Settings', 'Live statistics'], ['sv', 'dark', 'Inställningar', 'Statistik just nu']]) {
+  for (const [lang, theme, word, statsWord, connWord] of [['en', 'light', 'Settings', 'Live statistics', 'Connection'], ['sv', 'dark', 'Inställningar', 'Statistik just nu', 'Anslutning']]) {
     const page = await openMap(browser, { ...base, lang, theme });
     const s = await page.evaluate(() => ({ title: document.title, lang: document.documentElement.lang, theme: document.documentElement.dataset.theme,
       word: document.querySelector('#open-settings b').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
     expect(s.trains > 0, `${lang}/${theme}: no trains on the map (${s.status})`);
     expect(s.title === 'Spårat', `${lang}/${theme}: the title is "${s.title}"`);
     expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
-    // ---- The banner opens the stats page; × closes it ----
-    await page.click('#status');
+    // ---- ☰ → Statistik opens the stats page (2026-11-18; the live pill opened it before); × closes it ----
+    await page.evaluate(() => document.getElementById('nav-button').click());
+    await sleep(500);
+    const navRows = await page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden]) b')].map(b => b.textContent));
+    expect(navRows.length >= 3 && navRows.includes(word), `${lang}/${theme}: the menu lists ${JSON.stringify(navRows)}`);
+    await page.evaluate(() => document.getElementById('open-stats').click());
     await sleep(1200);
+    expect(await page.evaluate(() => document.getElementById('nav').hidden), `${lang}/${theme}: the menu stayed open over the stats page`);
     const st = await page.evaluate(() => ({ open: !document.getElementById('stats-page').hidden, title: document.getElementById('stats-title').textContent,
       first: document.querySelector('#stats-body .st-big')?.textContent ?? '', bars: document.querySelectorAll('#stats-body .st-bar').length,
       sections: document.querySelectorAll('#stats-body .st-sec').length, trains: window.__trains.count,
       map: document.querySelector('#stats-body canvas')?.width ?? 0 }));
-    expect(st.open && st.title === statsWord, `${lang}/${theme}: the banner opened ${st.open ? `"${st.title}"` : 'nothing'}`);
+    expect(st.open && st.title === statsWord, `${lang}/${theme}: ☰ → Statistik opened ${st.open ? `"${st.title}"` : 'nothing'}`);
     // The page's number is redrawn each second; from the files, trains come in 5-s batches, so the two may differ by
     // a few at the moment they are read (2026-11-16: "319" against 318).
     const sameCount = filesAt ? Math.abs(parseInt(st.first, 10) - st.trains) <= 3 : st.first.startsWith(String(st.trains));
@@ -84,12 +89,22 @@ try {
         title: document.querySelector('#panel .panel-title strong')?.textContent ?? '' }));
       expect(tapped && !card.stats && card.panel && card.title.startsWith(tapped),
         `a tap on train ${tapped ?? '(none to tap)'} on the stats page: page ${card.stats ? 'still open' : 'closed'}, card ${card.panel ? `"${card.title}"` : 'not open'}`);
-      await page.click('#status');
+      await page.evaluate(() => { document.getElementById('nav-button').click(); document.getElementById('open-stats').click(); });
       await sleep(800);
     }
     await page.click('#stats-page .panel-close');
     await sleep(300);
     expect(await page.evaluate(() => document.getElementById('stats-page').hidden), `${lang}/${theme}: × did not close the stats page`);
+    // ---- The live pill opens the connection screen (Max's pick Y, 2026-11-18): the state, Sweden drawn, the numbers ----
+    await page.click('#status');
+    await sleep(1500);
+    const cn = await page.evaluate(() => ({ open: !document.getElementById('conn-page').hidden, title: document.getElementById('conn-title').textContent,
+      state: document.querySelector('#conn-body .conn-hero')?.dataset.state, map: document.querySelector('#conn-body .conn-map canvas')?.width ?? 0,
+      trains: document.querySelector('#conn-body .n-trains')?.textContent }));
+    expect(cn.open && cn.title === connWord && cn.state && cn.map > 0 && Number(cn.trains) > 0,
+      `${lang}/${theme}: the live pill opened ${cn.open ? `"${cn.title}" (state ${cn.state}, Sweden ${cn.map ? 'drawn' : 'missing'}, ${cn.trains} trains)` : 'nothing'}`);
+    await page.click('#conn-page .panel-close');
+    await sleep(300);
     stats = st.sections;
     expect(!page.errors.length, `${lang}/${theme}: page errors: ${page.errors.slice(0, 2).join(' | ')}`);
     await page.close();
@@ -257,8 +272,9 @@ try {
   expect(search.onMap < 12 || search.scrolls, 'the search list does not scroll');
 
   // ---- A setting changes at once, without reloading the page ----
-  await page.evaluate(() => { document.getElementById('search').value = ''; });
-  await page.click('#open-settings');
+  await page.evaluate(() => { document.getElementById('search').value = ''; document.querySelector('#menu .menu-close').click(); });
+  await sleep(300);
+  await page.evaluate(() => { document.getElementById('nav-button').click(); document.getElementById('open-settings').click(); });
   await sleep(400);
   await page.click('#settings [data-key="theme"] [data-v="dark"]');
   await sleep(4000);

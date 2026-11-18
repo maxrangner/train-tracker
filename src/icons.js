@@ -15,6 +15,11 @@ const PATHS = {
   bug: '<rect x="7.5" y="7.5" width="9" height="12" rx="4.5"/><path d="M12 11v8.5M7.5 12.5H4M16.5 12.5H20M7.6 16.5l-3 2M16.4 16.5l3 2M9.5 7.8 8 5M14.5 7.8 16 5"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4 18 18M6 18l1.6-1.6M16.4 7.6 18 6"/>',
   menu: '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
+  // The menu and the connection screen (2026-11-18): Statistics, our server, the website, the phone.
+  stats: '<path d="M5 19.5V11M10 19.5V5M15 19.5v-6M20 19.5V9"/>',
+  server: '<rect x="4" y="4.5" width="16" height="6" rx="2"/><rect x="4" y="13.5" width="16" height="6" rx="2"/><path d="M8 7.5h.01M8 16.5h.01"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.4 5.4 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.4-3.4-8.5s1-6.1 3.4-8.5z"/>',
+  phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
   chevron: '<path d="m9.5 6 6 6-6 6"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
