@@ -392,9 +392,13 @@ export async function fetchStations() {
 // The next trains at a station: departures ('Avgang') or arrivals ('Ankomst'), passenger stops only, at most n.
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
+// The question (the key page) asks n + 100 rows: they start 90 minutes back, and the trains already gone are dropped
+// below, so a busy station needs room for them. It asked n × 4 until 2026-11-18 (Codex's beta review point 2): a board
+// of 4 or 8 rows got 0 trains at big stations at midday. Most gone in 90 minutes measured: 42 (Malmö C, midday);
+// an answer row is about 0.42 kB (Stockholm C, 200 rows 83 kB). The files (src/files-source.js) hand over every row.
 export async function fetchBoard(sig, activity, at, n) {
   const r = await askTap('board', { sig, act: activity, n, at },
-    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n * 4}">` +
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n + 100}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
     `<GT name="AdvertisedTimeAtLocation" value="${new Date(at - 90 * 60000).toISOString()}"/></FILTER>` +

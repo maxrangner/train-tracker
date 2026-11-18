@@ -726,7 +726,11 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
   // The public page: everything from the fetcher's files (positions, passings, planned routes, stations).
   if (fromFiles) {
     positionsFeed = startFilesSource(filesBase, { ...positionHandlers, onPassings, onPlanned: gotPlanned, onStations: gotStations,
-      onFile: () => { lastDataAt = now(); } });
+      // When the fetcher last got a position report (in each live file since 0.6.0), not when the file came: a file
+      // keeps coming every 5 s while Trafikverket is silent, and that hid the "no data" halt (Codex's beta review point
+      // 7). Taken as an age on the fetcher's own clock, so a phone clock that is off doesn't matter. Measured: even at
+      // night some train in Sweden reports at least every 10 s (four night recordings), so NO_DATA_MS can stay a minute.
+      onFile: (fileT, lastRecordAt) => { lastDataAt = now() - (lastRecordAt ? Math.max(0, fileT - lastRecordAt) : 0); } });
     return;
   }
   if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
@@ -740,8 +744,13 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
 // the "no data" halt waits a minute from now (otherwise every train came back braking, grey, until data came).
 const BACK_MS = 10 * 1000;
 let hiddenAt = null;
+// While hidden the files page asks for nothing (Codex's beta review point 6: the 5-s reads, the open board's and
+// card's refreshes went on behind another app or a locked phone); back, it reads at once.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { hiddenAt = now(); return; }
+  if (document.hidden) { hiddenAt = now(); positionsFeed?.pause?.(); return; }
+  positionsFeed?.resume?.();
+  board.wake?.();
+  panel.wake?.();
   if (hiddenAt === null) return;
   const was = hiddenAt;
   hiddenAt = null;
@@ -780,6 +789,8 @@ function gotStations(m) {
   stationsLoaded();
   routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
   stopPlacesReady.then(() => map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null).map(shownAt)));
+  // A card opened before the stations came drew its line without them (no places: nothing, or a part): again now.
+  panel.reroute();
 }
 // The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
 // left the page without station names, search, boards and planned routes until it was loaded again.)
@@ -903,7 +914,9 @@ setInterval(() => {
   // count, as its label (read by tools/shot.mjs and soak.mjs).
   // The public page: "live data paused since 14:32" when no new file has come for 30 s (src/files-source.js).
   const paused = status.positions === 'paused' && status.pausedSince !== null;
-  const state = paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
+  // Files in a format newer than this page reads (src/files-source.js; TODO 26): an app left un-updated says so.
+  const outdated = status.positions === 'outdated';
+  const state = outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
   const short = `${t('trainsCount', trains.count)} · ${state}`;
   statusCount.textContent = state;
   statusEl.title = short;
@@ -918,11 +931,11 @@ setInterval(() => {
   }
   statusFullEl.textContent =
     `${t('trainsCount', trains.count)} · ` +
-    (paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
+    (outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : ago === null ? t('noReportYet') : t('lastReport', ago)) +
     ` · ${modeText(status.positions)}` +
     (replay ? t('replayOf', hhmmss(tNow)) : '') +
     (error ? ` · ${error}` : '');
-  statusEl.classList.toggle('problem', Boolean(error) || noData || paused);
+  statusEl.classList.toggle('problem', Boolean(error) || noData || paused || outdated);
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));
