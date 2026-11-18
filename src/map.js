@@ -172,10 +172,11 @@ const readView = text => {
   if (![zoom, lat, lon, bearing, pitch].every(Number.isFinite)) return null;
   return { zoom, center: [lon, lat], bearing, pitch };
 };
-// Where the map opens (Max, 2026-11-18: the view is no longer shown in the address): a link's #view=... wins, then
-// the place this phone or computer last left the map at (VIEW_STORE), then the middle of Sweden.
+// Where the map opens (Max, 2026-11-18: the view is no longer shown in the address): a link's #view=..., else all of
+// Sweden zoomed out. The last place is not remembered any more (Max, 2026-11-18: "change it back ... It should start
+// with Sweden zoomed out like before"); a place an older version saved is forgotten.
 // The #view is then taken out of the address, the rest (#replay=... and the like) kept.
-const VIEW_STORE = 'view';
+const VIEW_STORE = 'view';   // (the key the older version used)
 const startView = () => {
   const now = new URLSearchParams(location.hash.slice(1));
   const linked = readView(now.get('view'));
@@ -184,9 +185,8 @@ const startView = () => {
     const rest = now.toString().replace(/%2F/g, '/');
     history.replaceState(null, '', `${location.pathname}${location.search}${rest ? `#${rest}` : ''}`);
   }
-  let last = null;
-  try { last = readView(localStorage.getItem(VIEW_STORE)); } catch { /* storage blocked: the start view */ }
-  return linked ?? last ?? { center: [16.5, 62.5], zoom: 4.3 };   // the middle of Sweden
+  try { localStorage.removeItem(VIEW_STORE); } catch { /* storage blocked: nothing kept anyway */ }
+  return linked ?? { center: [16.5, 62.5], zoom: 4.3 };   // the middle of Sweden
 };
 
 const empty = () => ({ type: 'FeatureCollection', features: [] });
@@ -1022,19 +1022,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const GLIDE_MS = 600;   // a tapped train is brought to its place on the screen in this time
   const SETTLE_MAX_MS = 700;
   let dragged = false;
-  // Where the map is left, remembered for the next visit (startView): at most once a second (following a train moves
-  // the camera in every frame), and when the page is closed or put away.
-  let viewTimer = null;
-  const saveView = () => {
-    clearTimeout(viewTimer); viewTimer = null;
-    try { localStorage.setItem(VIEW_STORE, viewText(map)); } catch { /* not remembered */ }
-  };
-  const saveViewSoon = () => { viewTimer ??= setTimeout(saveView, 1000); };
-  addEventListener('pagehide', saveView);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) saveView(); });
   map.on('dragstart', () => { dragged = true; });
   map.on('moveend', () => {
-    saveViewSoon();
     if (flying && !map._camera?.isEasing?.()) landed();
     if (!dragged || pointers.size) return;
     dragged = false;
