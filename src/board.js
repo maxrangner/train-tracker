@@ -135,14 +135,17 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     el.hidden = false;
     refresh(true);
     clearInterval(timer);
-    timer = setInterval(refresh, REFRESH_MS);
+    // Not while the page is hidden (another app in front, the phone locked; Codex's beta review point 6): wake() then.
+    timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
     askMessages();
     clearInterval(msgTimer);
-    if (messages) msgTimer = setInterval(askMessages, MESSAGES_MS);
+    if (messages) msgTimer = setInterval(() => { if (!document.hidden) askMessages(); }, MESSAGES_MS);
   }
 
   // Load and draw it again (Settings: language or number of rows changed).
   const relabel = () => { if (station) refresh(); };
+  // Back in front (src/main.js visibilitychange): the open board at once, not at its next refresh.
+  const wake = relabel;
 
-  return { open, close, relabel, get openSig() { return station?.sig ?? null; } };
+  return { open, close, relabel, wake, get openSig() { return station?.sig ?? null; } };
 }

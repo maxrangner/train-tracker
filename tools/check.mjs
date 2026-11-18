@@ -204,6 +204,12 @@ if (split.status !== 0) failed++;
 const netCheck = spawnSync('node', ['tools/net-check.mjs'], { stdio: 'inherit' });
 if (netCheck.status !== 0) failed++;
 
+// The public page's file reader and its boards against a pretend site (Codex's beta review, batch 1, 2026-11-18):
+// files asked again after a 404, nothing held up by a stalled file, few requests with home down, none hidden, an
+// unknown format not read, the board cut after the gone trains, the text protector. About 50 s, offline.
+const filesCheck = spawnSync('node', ['tools/files-check.mjs'], { stdio: 'inherit' });
+if (filesCheck.status !== 0) failed++;
+
 // The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into
