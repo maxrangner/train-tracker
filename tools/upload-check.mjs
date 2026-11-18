@@ -3,7 +3,7 @@
 // Each case sets up the web space, runs the uploader briefly, and checks what it wrote, renamed, deleted or refused.
 // Run: node tools/upload-check.mjs     exit code 0: all hold; 1: one failed
 import { EventEmitter } from 'node:events';
-import { createUploader, checkDir, MARK } from '../fetcher/upload.mjs';
+import { createUploader, checkDir, MARK, order } from '../fetcher/upload.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const err = (code, m) => Object.assign(new Error(m), { code });
@@ -175,6 +175,31 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   const st = up.stats(); await up.close();
   check('reconnect: the first file arrived', s.fs.has(`${DIR}/live-7.json`));
   check('reconnect: looked again and refused', /has no \.sparat-data/.test(st.refused ?? '') && !s.fs.has(`${DIR}/live-8.json`), st.refused);
+}
+
+// 9. After a break the map comes back first (2026-11-18): of the files waiting, only the newest of each kind made
+// before the newest live file go, then that live file, then newer files; deletes last; older files never.
+{
+  const put = (name, kind) => ({ op: 'put', name, f: { kind, gz: Buffer.from(name) } });
+  const q = [put('card-01-1.json', 'card-01'), put('live-1.json', 'live'), put('card-01-2.json', 'card-01'), { op: 'rm', name: 'stats-0.json' },
+    put('passings-3.json', 'passings'), put('live-2.json', 'live'), { op: 'rm', name: 'card-01-1.json' }, { op: 'rm', name: 'live-1.json' },
+    put('card-01-4.json', 'card-01')];
+  const { jobs, skipped } = order(q);
+  const got = jobs.map(j => `${j.op} ${j.name}`).join(', ');
+  check('order: newest of each kind, the live file, newer files, deletes', got === 'put card-01-2.json, put passings-3.json, put live-2.json, put card-01-4.json, rm stats-0.json', got);
+  check('order: older files skipped and counted', skipped === 2, String(skipped));
+  check('order: nothing to reorder without a live file', order(q.slice(0, 1)).jobs.length === 1 && order([put('a-1.json', 'a'), put('a-2.json', 'a')]).jobs.length === 2);
+
+  // The same through the uploader: everything made during a break, then the connection back.
+  const s = space(marked());
+  const logs = []; const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client });
+  await wait(30); up.breakFor(1500); await wait(30);
+  for (const j of q) j.op === 'put' ? up.add(j.name, j.f) : up.remove(j.name);
+  await wait(2500);
+  const st = up.stats(); await up.close();
+  const sent = s.ops.filter(o => o[0] === 'rename').map(o => o[2].slice(DIR.length + 1)).join(', ');
+  check('after a break: only what the map needs, the live file after what it names', sent === 'card-01-2.json, passings-3.json, live-2.json, card-01-4.json', sent);
+  check('after a break: the skipped files counted', st.skipped === 2 && st.waiting === 0, JSON.stringify(st));
 }
 
 console.log(failed ? `${failed} failed` : 'upload-check: all hold');
