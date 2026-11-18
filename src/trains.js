@@ -53,6 +53,7 @@ const LONG_SILENCE_MS = 10 * 60 * 1000;
 const SILENT_MS = 10 * 60 * 1000;    // no position and no passing for this long: the train is shown as stale (grey)...
 const SILENT_NO_ROUTE_MS = 2 * 60 * 1000;   // ...or this long, for a train whose timetable is not known
 const FINISHED_MS = 2 * 60 * 1000;   // a train that arrived at the end of its trip is removed after this long quiet
+const INACTIVE_KEEP_MS = 10 * 60 * 1000;   // a train reported inactive mid-trip stays (grey) this long (all 13 that came back did within 10 min)
 // A trip handed on to its next internal number (Trafikverket splits many trips: the same public number, another
 // internal number from a station on; 2026-11-17, all 12 recordings: about 30-45 an hour at rush hour). The old number
 // stayed on the map beside the new one for about a minute (at most 2), and a piece whose timetable ran on was drawn
@@ -291,7 +292,7 @@ export function createTrains(options = {}) {
   // position counts as something: it is still talking). t is the drawing moment (DELAY_MS behind).
   const silentLimit = tr => (ROUTES?.knows(tr.latest.id) ? SILENT_MS : SILENT_NO_ROUTE_MS);
   // (t is the common drawing moment; a train drawn further behind is judged at its own moment, t - tr.extra.)
-  const staleAt = (tr, t) => halted || t - (tr.extra ?? 0) + DELAY - tr.heard > silentLimit(tr);
+  const staleAt = (tr, t) => halted || Boolean(tr.inactiveSince) || t - (tr.extra ?? 0) + DELAY - tr.heard > silentLimit(tr);
   // What the target needs past the last report: whether it stood still, is stale, and its timetable (trackAhead).
   // Dwell: a train whose last report is at a planned stop (within 300 m), and not moving fast there, stands until it
   // is reported leaving, a new position shows it moved, or 2 minutes after its planned departure (+ delay) or its
@@ -335,9 +336,9 @@ export function createTrains(options = {}) {
     const dwellS = dw && tr.dwellUp?.dw === dw && tr.dwellUp.up && ext?.atPlace && dw.sig === ext.sig ? ext.stopAt : null;
     return { cap: ext?.stopAt ?? Infinity,
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
-        frozen: t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
+        frozen: Boolean(tr.inactiveSince) || (t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta)), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
+  const counts = { inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -735,7 +736,21 @@ export function createTrains(options = {}) {
     update(records, now = Date.now()) {
       let changed = false;
       for (let r of records) {
-        if (r.gone) { changed = byId.delete(r.id) || changed; continue; }
+        // Reported inactive (Status.Active false, or Deleted). At the end of its trip, or with no timetable known: gone
+        // at once, as before. Mid-trip (the timetable says it goes on): kept, grey and still ("No news"), until an
+        // active report brings it back, INACTIVE_KEEP_MS pass or the trip ends (prune). Max, 2026-11-18: VR 2031
+        // vanished at Alingsås and came back. Measured in the 6 recordings with saved routes: this rule kept all 7
+        // that came back (within 10 minutes) and removed all 55 that didn't (TODO 44; docs/reviews/2026-11-18-beta-check/
+        // inactive-split.mjs).
+        if (r.gone) {
+          const was = byId.get(r.id);
+          if (was && ROUTES && ROUTES.tripEnd(r.id) > now && !ROUTES.finished(r.id)) {
+            if (!was.inactiveSince) { was.inactiveSince = now; counts.inactiveKept++; changed = true; }
+            continue;
+          }
+          changed = byId.delete(r.id) || changed;
+          continue;
+        }
         if (!(r.time > now - MAX_AGE_MS)) continue;            // too old (the stream has sent 2-day-old ones)
         // A piece handed on (prune): its old reports sent again don't bring it back; a newer one does.
         const h = handed.get(r.id);
@@ -743,6 +758,7 @@ export function createTrains(options = {}) {
         if (h) handed.delete(r.id);
         let tr = byId.get(r.id);
         if (tr && tr.latest.time >= r.time) continue;           // not newer than what we have
+        if (tr?.inactiveSince) { tr.inactiveSince = null; counts.inactiveBack++; }   // active again
         // A report without a speed is a fixed place along the track, not GPS (about 1 report in 4; a third of the
         // trains send only these). Such a place is often sent again with Speed 0 or 1 while the train runs at full
         // speed, and that was taken for "it stands": the train was drawn standing, then fast-forwarded at the next
@@ -787,7 +803,9 @@ export function createTrains(options = {}) {
         // Gone after MAX_AGE_MS with nothing from it; sooner (FINISHED_MS) when it has arrived at the end of its trip.
         // A silent train still on its trip by the timetable stays (grey) until the trip should be over.
         const onTrip = ROUTES && ROUTES.tripEnd(id) > now && !ROUTES.finished(id);
-        if ((t.heard < now - MAX_AGE_MS && !onTrip) || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; }
+        if ((t.heard < now - MAX_AGE_MS && !onTrip) || (t.heard < now - FINISHED_MS && ROUTES?.finished(id))) { byId.delete(id); changed = true; continue; }
+        // Kept after an inactive report (update): gone when it stays inactive INACTIVE_KEEP_MS or its trip is over.
+        if (t.inactiveSince && (now - t.inactiveSince > INACTIVE_KEEP_MS || !onTrip)) { byId.delete(id); changed = true; }
       }
       // A trip handed on to its next internal number (HANDOVER_QUIET_MS): the pieces of one public number on one day.
       const pieces = new Map();
