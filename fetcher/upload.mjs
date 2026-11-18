@@ -2,7 +2,8 @@
 // measured"). One connection is kept open; each file is written under a temporary name and then renamed to its new
 // name, so a page never reads half a file (renaming onto a NEW name works there; onto an existing one it doesn't, and
 // every file has a new name anyway). Old names are deleted when the shelf lets go of them. A broken connection is
-// opened again (1 s, 2 s, 5 s ... 30 s) and the waiting files go then; of the live files only the newest is sent.
+// opened again (1 s, 2 s, 5 s ... 30 s) and the waiting files go then: only what the newest live file needs, that
+// file first after them, deletes last (order() below).
 // Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run).
 // Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
 // so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
@@ -70,6 +71,28 @@ export function folderCheck(cfg, { Client = ssh2.Client } = {}) {
   });
 }
 
+// The order of the waiting jobs, so the map comes back first after a break (2026-11-18: after 40 minutes offline
+// 1708 jobs waited, sent oldest first, and the map stayed empty ~3 minutes after the connection was back).
+// The newest live file names the newest file of every kind made before it (fetcher/files.mjs, liveTick; puts are
+// queued in the order they are made). So: of the files waiting before it, only the newest of each kind goes, then the
+// live file, then the files made after it; deletes last. The live file still goes after every file it names (a page
+// keeps a 404 for a name, src/files-source.js get()). Older files are never sent (no live file that is sent names
+// them), and their deletes are dropped (nothing there to delete). -> { jobs, skipped: puts not sent }
+export function order(queue) {
+  let last = -1;
+  for (let i = queue.length - 1; i >= 0 && last < 0; i--) if (queue[i].op === 'put' && queue[i].f.kind === 'live') last = i;
+  if (last < 0) return { jobs: queue, skipped: 0 };
+  const newest = new Map();   // kind -> index of its newest put before the live file
+  for (let i = 0; i < last; i++) if (queue[i].op === 'put') newest.set(queue[i].f.kind, i);
+  const before = [], after = [], removes = [], dropped = new Set();
+  queue.forEach((q, i) => {
+    if (q.op !== 'put') removes.push(q);
+    else if (i > last) after.push(q);
+    else if (i < last) { if (q.f.kind !== 'live' && newest.get(q.f.kind) === i) before.push(q); else dropped.add(q.name); }
+  });
+  return { jobs: [...before, queue[last], ...after, ...removes.filter(q => !dropped.has(q.name))], skipped: dropped.size };
+}
+
 // The folder setting: a plain absolute path; returns it without a trailing slash, or throws.
 export function checkDir(raw) {
   const dir = String(raw ?? '').replace(/\/$/, '');
@@ -84,7 +107,7 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
   const dir = checkDir(cfg.SFTP_DIR);
   const queue = [];         // [{ op: 'put' | 'rm', name, f }]
   const stats = { ok: 0, failed: 0, removed: 0, reconnects: 0, lastOkAt: null, lastMs: null, connected: false, swept: 0,
-    bytes: 0, lastError: null, lastErrorAt: null, refused: null };
+    bytes: 0, lastError: null, lastErrorAt: null, refused: null, skipped: 0 };
   let client = null, sftp = null, busy = false, closing = false, tries = 0, sweepTimer = null, retryTimer = null;
 
   const call = (fn, ...a) => callOn(sftp, fn, ...a);
@@ -147,6 +170,8 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     retryTimer = setTimeout(connect, wait);
   }
 
+  const done = job => { const i = queue.indexOf(job); if (i >= 0) queue.splice(i, 1); };
+
   // A temporary file is made only where no file of that name exists ('wx'); one left by a crash is removed first.
   async function putTmp(tmp, data) {
     try { await call('writeFile', tmp, data, { flag: 'wx' }); }
@@ -161,9 +186,11 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     if (busy || !sftp) return;
     busy = true;
     while (queue.length && sftp) {
-      // Of the live files waiting, only the newest is worth sending.
-      const lives = queue.filter(q => q.op === 'put' && q.f.kind === 'live');
-      for (const q of lives.slice(0, -1)) queue.splice(queue.indexOf(q), 1);
+      if (queue.length > 1) {
+        const { jobs, skipped } = order(queue);
+        queue.splice(0, queue.length, ...jobs);
+        if (skipped) { stats.skipped += skipped; if (skipped >= 10) log(`upload: ${skipped} waiting files out of date, not sent`); }
+      }
       const job = queue[0];
       const t = Date.now();
       try {
@@ -176,12 +203,12 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
           await call('unlink', `${dir}/${job.name}`).catch(e => { if (!gone(e)) throw e; });   // already gone: fine
           stats.removed++;
         }
-        queue.shift();
+        done(job);
       } catch (e) {
         stats.failed++; stats.lastError = e.message; stats.lastErrorAt = Date.now();
         if (!sftp) break;                  // the connection broke: the job waits for the next one
         log(`upload: ${job.op} ${job.name}: ${e.message}`);
-        queue.shift();                      // a job the server refuses is not tried forever
+        done(job);                          // a job the server refuses is not tried forever
       }
     }
     busy = false;
