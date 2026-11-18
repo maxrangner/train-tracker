@@ -56,7 +56,7 @@ const colourBase = dark => (dark
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
-// 11 MB rail-trv.geojson), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
+// 11 MB data/rail-trv.geojson, not in the page since 2026-11-18), handed over by main.js as railData.trv. The switch to OpenStreetMap's lines or none was
 // removed 2026-11-12 (Max: decided, no need for the option).
 export const RAIL_SOURCES = {
   trv: { name: 'Trafikverket' },
@@ -518,7 +518,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       minzoom: 6,
       // Hidden while models show, by the camera's zoom (switchModels), not by a maxzoom (that goes by each tile's zoom).
       layout: {
-        visibility: modelsAt(map.getZoom()) ? 'none' : 'visible',
+        visibility: labelsOnPage() ? 'none' : 'visible',
         // Written like the bubbles close in (round 4, Max 2026-11-15: "Fix"): "2311 +1 min", the minutes in their
         // lateness colour (the tags' text colour, readable on the halo); a group "3 trains", in the accent.
         'text-field': ['case', ['has', 'point_count'], ['format', ['concat', ['to-string', ['get', 'point_count']], t('nTrains')], {}],
@@ -641,15 +641,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
   // Where models show and where the stations' names are page elements, by the camera's zoom for the whole screen.
   const namesOnPage = () => map.getZoom() >= Math.max(11, modelZoom());
+  // Where the trains' labels are the page's bubbles (placeNearLabels), the map's own labels are hidden. Until
+  // 2026-11-18 that went by modelsAt, which is never true in Symbol mode, so from zoom 13 a symbol train showed both
+  // (Codex's beta review point 9; Max: "1a", the bubble only).
+  const labelsOnPage = () => map.getZoom() >= modelZoom();
   let switched = null;
   function switchModels() {
     if (!isReady) return;
-    const now = `${modelsAt(map.getZoom())}|${namesOnPage()}`;
+    const now = `${modelsAt(map.getZoom())}|${namesOnPage()}|${labelsOnPage()}`;
     if (now === switched) return;
     switched = now;
     if (!map.getLayer('train-labels')) return;
     applySelectionFilters();
-    map.setLayoutProperty('train-labels', 'visibility', modelsAt(map.getZoom()) ? 'none' : 'visible');
+    map.setLayoutProperty('train-labels', 'visibility', labelsOnPage() ? 'none' : 'visible');
     for (const id of ['station-names', 'route-names']) map.setLayoutProperty(id, 'visibility', namesOnPage() ? 'none' : 'visible');
   }
 
@@ -1229,7 +1233,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       data.trains = geojson;
       nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
-      if (!modelsAt(map.getZoom())) {
+      if (!labelsOnPage()) {   // (the map's labels hidden: their groups needn't be worked out)
         data['train-groups'] = selected ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
         map.getSource('train-groups')?.setData(data['train-groups']);
       }

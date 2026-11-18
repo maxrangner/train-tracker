@@ -13,7 +13,7 @@ import { settings } from './settings.js';
 import { glide } from './sheet.js';
 import { abroadEnds, flagSvg } from './abroad.js';
 
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+import { esc } from './html.js';
 
 const time = t => (t ? hhmm(t) : '');
 
@@ -74,6 +74,11 @@ function routeLate(stops) {
 // isStarred(number) / onStar(number) -> starred now: the ☆ for favourites.
 // lateOf(id): the train's minutes late now, as on the map (undefined: not on the map; null: not known).
 // station(sig): the station ({ name, lon, lat, country }), for a trip's end abroad (src/abroad.js).
+// What the map draws of a trip (src/main.js onRoute: the line, its stop names, the leg abroad), without the times:
+// two routes with the same shape draw the same.
+const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces,
+  (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
+
 export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf }) {
   let openId = null;
   let following = false;
@@ -107,25 +112,34 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
 
   // While a card is open its times are asked for again every minute (Max, 2026-11-14: they came only once, when
   // it opened, so new actual times never showed). The table keeps where it was scrolled to.
+  // Not while the page is hidden (Codex's beta review point 6); wake() asks at once when it is back in front.
+  // The map's line, its stop names and the leg abroad (onRoute) are drawn again when the trip itself changed: its
+  // stops in order, which are stops, which are cancelled, its ends (point 12: they were drawn once, so a diversion
+  // showed on the map only after reopening the card). Times alone don't redraw it (a new path search costs ~45 ms).
   const REFRESH_MS = 60000;
   let refreshTimer = null;
-  function refreshLater(train) {
+  function refreshLater(train, ms = REFRESH_MS) {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(async () => {
       if (openId !== train.id) return;
+      if (document.hidden) { refreshLater(train); return; }
       try {
         const route = await fetchRoute(train.operational, train.date, train.number);
         if (openId !== train.id) return;
         const first = !shown?.route;
+        const changed = first || tripShape(shown.route) !== tripShape(route);
         shown = { train, route };
-        if (first) onRoute?.(train.id, route);   // the first try had failed: its path too
+        if (changed) onRoute?.(train.id, route);
         draw(train, route, { keepScroll: !first });
       } catch (e) {
         console.warn('route refresh:', e.message);
       }
       refreshLater(train);
-    }, REFRESH_MS);
+    }, ms);
   }
+  const wake = () => { if (openId && shown?.train?.id === openId) refreshLater(shown.train, 0); };
+  // The open train's route given to onRoute again (src/main.js gotStations: the stations came after the card opened).
+  const reroute = () => { if (openId && shown?.route && shown.train?.id === openId) onRoute?.(openId, shown.route); };
 
   function close() {
     clearTimeout(refreshTimer);
@@ -334,7 +348,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       const now = i === nextIdx && i > 0
         ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>` : '';
       return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
-        `<span class="tl-node">${dot}</span><span class="tl-name">${stationName(s.station)}${dwell}</span>` +
+        `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
     }).join('');
     // A trip that goes on abroad, or comes from there (src/abroad.js): one more row for that end, after the last stop
@@ -435,5 +449,5 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     line.textContent = text;
   }
 
-  return { open, close, setFollowing, setStatus, relabel, get openId() { return openId; } };
+  return { open, close, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; } };
 }

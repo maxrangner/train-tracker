@@ -16,7 +16,7 @@ import OUTLINE from './sweden-outline.json';
 const FUN_EVERY_MS = 10 * 1000;     // "for fun": a new comparison this often (or at a tap)
 const COMPANIES_SHOWN = 6;          // "Show all" opens the rest
 const GAUGE_MAX = 250;              // km/h at the speedometer's end (the fastest reported in the recordings: 206)
-const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+import { esc } from './html.js';
 const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const num = (n, digits = 0) => Number(n).toLocaleString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { maximumFractionDigits: digits, minimumFractionDigits: digits });
 const pct = (n, all) => (all ? Math.round(100 * n / all) : 0);

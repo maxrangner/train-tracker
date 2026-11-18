@@ -1,4 +1,4 @@
-// Build the rail network the page uses (public/rail-net.json) from Trafikverket's rail lines (public/rail-trv.geojson,
+// Build the rail network the page uses (public/rail-net.json) from Trafikverket's rail lines (data/rail-trv.geojson,
 // from tools/rail-trv.mjs): small enough for a phone, connected so trains can follow the tracks (src/rail-net.js).
 // - A line end that touches another line mid-way (within JOIN_M) is joined to it: that line is split there.
 // - Each line is simplified, keeping every point within SIMPLIFY_M of the original.
@@ -11,7 +11,7 @@
 //   so no train "can" pass (Rörstorp 22.5 m, Olskroken 5.8 m, Haga 5.2 m: the only 3 in Sweden; 43 route pieces were
 //   drawn straight because of them; night of 2026-11-14, docs: night-1114/paths.md). The neighbour whose end piece is
 //   shorter has its end moved across, so the two neighbours meet; kept only where they then meet at 30° or less.
-// - Each line gets one digit (`c`, a string, one per line) from its link's properties (public/rail-trv-props.json, from
+// - Each line gets one digit (`c`, a string, one per line) from its link's properties (data/rail-trv-props.json, from
 //   tools/rail-trv.mjs): 3 for a slow (40 km/h or less) or not public track, else 0; plus its traffic direction (0 both
 //   ways, 1 along the line's points, 2 against them). src/rail-net.js makes routes prefer main tracks and the right
 //   track of a double track with it. Without the properties file the network is written without `c`.
@@ -33,14 +33,14 @@ const SIMPLIFY_M = 0.5;
 const CORNER_MIN_M = 300;
 const MAX_TURN = 60, SHARP_TURN = 120;   // as src/rail-net.js MAX_TURN and src/path.js SHARP_TURN
 const CORNER_ARM = 0.65;                 // the curve's control arms, as a share of the straight line's length
-const src = new URL('../public/rail-trv.geojson', import.meta.url);
+const src = new URL('../data/rail-trv.geojson', import.meta.url);
 const out = new URL('../public/rail-net.json', import.meta.url);
 
 const R = Math.PI / 180;
 const feats = JSON.parse(readFileSync(src, 'utf8')).features;
 const lines = feats.map(f => f.geometry.coordinates.map(([lon, lat]) => [Math.round(lon * 1e5), Math.round(lat * 1e5)]));
 const linkOf = feats.map(f => String(f.properties.id).replace(/^SE/, '').toLowerCase());   // each line's link (carried below)
-const propsFile = new URL('../public/rail-trv-props.json', import.meta.url);
+const propsFile = new URL('../data/rail-trv-props.json', import.meta.url);
 const props = existsSync(propsFile) ? JSON.parse(readFileSync(propsFile, 'utf8')).links : null;
 const key = p => `${p[0]},${p[1]}`;
 // Flat metres around a latitude, for distances (fine over a few hundred metres).
@@ -158,7 +158,7 @@ if (props) {
   }).join('');
   const slow = [...c].filter(x => x >= '3').length, oneWay = [...c].filter(x => x % 3 !== 0).length;
   console.log(`track properties: ${slow} of ${c.length} lines slow or not public, ${oneWay} one-way`);
-} else console.log('no public/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
+} else console.log('no data/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
 const curved = addCornerCurves(ready, c);
 c = curved.c;
 const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: curved.n, d: curved.d, ...(c ? { c } : {}) });
