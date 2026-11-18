@@ -1,0 +1,120 @@
+#!/bin/bash
+# sparat: Spårat's chores on the Linux PC, in one command (batch 2, 2026-11-19; TODO 25 and 33, Codex's reviews).
+#   sudo sparat update <package.tar.gz>   install a new version: checked, unpacked beside the running one, switched to
+#                                          only when it is whole; the previous version kept for `sparat back`
+#   sudo sparat back                       back to the previous version (run again: forward again)
+#   sparat status                          the version running, both services, the fetcher's newest log lines
+# Installed once with:  tar -xzf ~/sparat-<version>.tar.gz sparat/sparat && sudo install -m 755 sparat/sparat /usr/local/bin/sparat && rm -r sparat
+# (every update installs its own copy after that).
+# The package comes from tools/pack-linux.mjs: the code, its libraries, the two service files, MANIFEST.json (every
+# file with its SHA-256 fingerprint, the version and the commit it was made from) and this script.
+# Checks (tools/linux-update-check.mjs) run it on a pretend Linux: SPARAT_ROOT a folder standing for /, and
+# SPARAT_SYSTEMCTL / SPARAT_JOURNALCTL stand-ins.
+set -uo pipefail
+
+ROOT="${SPARAT_ROOT:-}"
+OPT="$ROOT/opt/sparat" NEW="$ROOT/opt/sparat-new" OLD="$ROOT/opt/sparat-old"
+UNITS="$ROOT/etc/systemd/system" BIN="$ROOT/usr/local/bin"
+SYSTEMCTL="${SPARAT_SYSTEMCTL:-systemctl}" JOURNALCTL="${SPARAT_JOURNALCTL:-journalctl}"
+SERVICES=(sparat-fetcher sparat-monitor)
+UNIT_FILES=(fetcher/sparat-fetcher.service monitor/sparat-monitor.service)
+
+say() { echo "sparat: $*"; }
+fail() { echo "sparat: $*" >&2; exit 1; }
+need_root() { [ -n "$ROOT" ] || [ "$(id -u)" = 0 ] || fail "needs sudo: sudo sparat $1"; }
+
+# Every file MANIFEST.json lists is there with its fingerprint, and Node can read the start files. Prints the version.
+verify() {
+  local dir="$1"
+  [ -f "$dir/MANIFEST.json" ] || { echo "no MANIFEST.json"; return 1; }
+  node - "$dir" <<'NODE' || return 1
+const { readFileSync, existsSync } = require('node:fs');
+const { createHash } = require('node:crypto');
+const dir = process.argv[2];
+const m = JSON.parse(readFileSync(`${dir}/MANIFEST.json`, 'utf8'));
+const bad = Object.entries(m.files).filter(([f, h]) => !existsSync(`${dir}/${f}`) ||
+  createHash('sha256').update(readFileSync(`${dir}/${f}`)).digest('hex') !== h).map(([f]) => f);
+if (bad.length) { console.log(`${bad.length} file(s) missing or changed: ${bad.slice(0, 5).join(', ')}`); process.exit(1); }
+console.log(`${m.version} (${m.commit}), ${Object.keys(m.files).length} files whole`);
+NODE
+  local f
+  for f in fetcher/main.mjs fetcher/self-check.mjs monitor/main.mjs monitor/top.mjs; do
+    node --check "$dir/$f" || { echo "Node can't read $f"; return 1; }
+  done
+}
+
+# The service files in the running version, handed to Linux when they differ from what it has.
+units() {
+  local changed=0 u
+  for u in "${UNIT_FILES[@]}"; do
+    if ! cmp -s "$OPT/$u" "$UNITS/$(basename "$u")"; then cp "$OPT/$u" "$UNITS/"; changed=1; say "service file $(basename "$u") updated"; fi
+  done
+  if [ "$changed" = 1 ]; then "$SYSTEMCTL" daemon-reload; fi
+  return 0
+}
+
+running() {
+  local s ok=0
+  for s in "${SERVICES[@]}"; do
+    if "$SYSTEMCTL" is-active --quiet "$s"; then say "$s: running"; else say "$s: NOT running"; ok=1; fi
+  done
+  return $ok
+}
+
+status() {
+  if [ -f "$OPT/MANIFEST.json" ]; then
+    node -e "const m=require(process.argv[1]);console.log('sparat: running '+m.version+' ('+m.commit+'), packed '+m.made)" "$OPT/MANIFEST.json"
+  else say "no MANIFEST.json in $OPT (a version from before 0.7)"; fi
+  [ -f "$OLD/MANIFEST.json" ] && node -e "const m=require(process.argv[1]);console.log('sparat: kept for sparat back: '+m.version+' ('+m.commit+')')" "$OLD/MANIFEST.json"
+  running
+  "$JOURNALCTL" -u sparat-fetcher -n 8 --no-pager
+  return 0
+}
+
+# Swap /opt/sparat and /opt/sparat-old (services stopped), hand over the service files, start, check.
+swap_and_start() {
+  "$SYSTEMCTL" stop "${SERVICES[@]}"
+  rm -rf "$OPT.swap"
+  mv "$OPT" "$OPT.swap" && mv "$OLD" "$OPT" && mv "$OPT.swap" "$OLD" || fail "could not swap the folders (look at $OPT, $OLD, $OPT.swap)"
+  units
+  "$SYSTEMCTL" start "${SERVICES[@]}"
+}
+
+case "${1:-}" in
+  update)
+    need_root update
+    pkg="${2:-}"
+    [ -f "$pkg" ] || fail "no package: sudo sparat update ~/sparat-<version>.tar.gz"
+    if [ -f "$pkg.sha256" ]; then
+      want="$(cut -d' ' -f1 "$pkg.sha256")"; got="$(sha256sum "$pkg" | cut -d' ' -f1)"
+      [ "$want" = "$got" ] || fail "the package's fingerprint is wrong (a broken copy?): nothing changed"
+      say "package fingerprint ok"
+    else say "no $pkg.sha256 beside it: fingerprint not checked"; fi
+    rm -rf "$NEW" && mkdir -p "$NEW" || fail "can't make $NEW"
+    tar -xzf "$pkg" -C "$NEW" --strip-components=1 --no-same-owner || { rm -rf "$NEW"; fail "unpacking failed: nothing changed"; }
+    if ! v="$(verify "$NEW")"; then echo "$v"; rm -rf "$NEW"; fail "the new version isn't whole: nothing changed"; fi
+    say "new version: $v"
+    # The new one becomes /opt/sparat-old for a moment, then swaps in: one swap routine for update and back.
+    rm -rf "$OLD" && mv "$NEW" "$OLD" || fail "can't move the new version into place: nothing changed"
+    swap_and_start
+    sleep "${SPARAT_SETTLE:-5}"
+    if ! running; then
+      say "a service didn't start: going back to the previous version"
+      swap_and_start
+      sleep "${SPARAT_SETTLE:-5}"; running
+      fail "update failed, the previous version runs again (its log: sudo journalctl -u sparat-fetcher -n 50)"
+    fi
+    [ -d "$BIN" ] && install -m 755 "$OPT/sparat" "$BIN/sparat"
+    status
+    say "done. Back to the previous version: sudo sparat back"
+    ;;
+  back)
+    need_root back
+    [ -d "$OLD" ] || fail "no previous version kept ($OLD)"
+    swap_and_start
+    sleep "${SPARAT_SETTLE:-5}"
+    status
+    ;;
+  status) status ;;
+  *) echo "sparat update <package.tar.gz> | back | status   (update and back need sudo)"; exit 2 ;;
+esac
