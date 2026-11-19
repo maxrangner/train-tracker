@@ -396,15 +396,9 @@ if (window.Capacitor?.isNativePlatform?.()) {
 // ---- The menu (☰; Max's pick A, 2026-11-18: menu and search apart): a drawer from the left with Störningar, Statistik,
 // Inställningar and Om Spårat. Closes with ×, Esc, a tap outside, the phone's back, or by opening one of its pages. ----
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
-navEl.querySelector('.nav-logo').innerHTML = logoSvg({ small: true });
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
-const versionShort = typeof __VERSION__ === 'string' ? __VERSION__ : '?';
-const navFoot = () => { document.getElementById('nav-foot').textContent = t('navFoot', versionShort); };
-const navStats = () => { document.getElementById('nav-stats-line').textContent = t('navStatsLine', trains.count); };
-navFoot();
 function openNav() {
   menu.close();
-  navStats();
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   navEl.querySelector('.nav-row:not([hidden])')?.focus();
@@ -415,8 +409,9 @@ function closeNav() {
   navButton.setAttribute('aria-expanded', 'false');
 }
 navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
-navEl.querySelector('.nav-close').onclick = closeNav;
 document.getElementById('nav-backdrop').onclick = closeNav;
+// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time.
+document.getElementById('menu-button').addEventListener('click', closeNav);
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -544,7 +539,7 @@ onSettingChange((key) => {
     menu.refresh();
     panel.relabel();
     if (!statsPage.hidden) drawStats();
-    navFoot(); navStats(); conn.relabel(); showConn();
+    conn.relabel(); showConn();
     showFilter();
     board.relabel();
     pickerEl.hidden = true;
@@ -1021,7 +1016,6 @@ setInterval(() => {
   }
   statusEl.classList.toggle('problem', Boolean(error) || noData || paused || outdated);
   if (!connPage.hidden) showConn({ tNow, noData, paused, outdated, error });
-  if (!navEl.hidden) navStats();
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));

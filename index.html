@@ -56,6 +56,7 @@
       gap: 6px;
       align-items: flex-start;
       pointer-events: none;
+      z-index: 5;   /* above the menu's tap-outside layer (#nav-backdrop), below the sheets */
     }
     #top > * { pointer-events: auto; }
     /* The search bar (the Soft look, 2026-11-15): logo, search (opens the menu sheet), the live count (opens the
@@ -81,29 +82,27 @@
       background: transparent; color: var(--ink); cursor: pointer; }
     #nav-button:hover { background: var(--hover); }
     #nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    /* The menu: a drawer from the left over a dimmed map (Esc, ×, a tap outside or the phone's back closes it). */
-    #nav { position: fixed; top: 0; bottom: 0; left: 0; z-index: 9; width: min(84vw, 340px); box-sizing: border-box; display: flex; flex-direction: column; gap: 4px;
-      padding: calc(14px + env(safe-area-inset-top, 0px)) 12px calc(14px + env(safe-area-inset-bottom, 0px)) calc(12px + env(safe-area-inset-left, 0px));
-      background: var(--card); color: var(--ink); box-shadow: var(--shadow); border-radius: 0 var(--radius) var(--radius) 0; overflow-y: auto;
-      transition: transform .28s cubic-bezier(.2, .9, .25, 1); }
-    #nav[hidden] { display: flex !important; transform: translateX(-105%); visibility: hidden; transition: transform .22s ease-in, visibility 0s .22s; }
-    #nav-backdrop { position: fixed; inset: 0; z-index: 8; background: rgba(0, 0, 0, 0.3); opacity: 0; pointer-events: none; transition: opacity .22s; }
-    #nav:not([hidden]) + #nav-backdrop { opacity: 1; pointer-events: auto; }
-    .nav-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px 8px; }
-    .nav-logo { width: 84px; display: flex; color: var(--ink); } .nav-logo svg { width: 100%; height: auto; }
-    .nav-close { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); display: grid; place-items: center; cursor: pointer; }
-    .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 8px; border: 0; border-radius: 14px; background: transparent;
-      color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    /* The menu (Max, 2026-11-19): a slim card that drops down under the top bar like the search card; the bar stays
+       free (☰ opens and closes it, Sök opens the search instead). A tap elsewhere on the map, Esc or the phone's back
+       closes it too. No dimming: a clear layer under the top bar catches the tap outside. */
+    #nav { position: fixed; z-index: 9; top: calc(68px + env(safe-area-inset-top, 0px)); left: calc(var(--gap) + env(safe-area-inset-left, 0px));
+      width: max-content; min-width: 210px; max-width: calc(100% - 2 * var(--gap)); max-height: calc(100% - 78px - env(safe-area-inset-top, 0px));
+      box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 6px;
+      background: var(--bg); color: var(--ink); box-shadow: var(--shadow); border-radius: var(--radius); overflow-y: auto;
+      transform-origin: top left; transition: transform .2s cubic-bezier(.2, .9, .25, 1), opacity .2s; }
+    @media (min-width: 440px) { #nav { top: calc(70px + env(safe-area-inset-top, 0px)); } }
+    #nav[hidden] { display: flex !important; transform: translateY(-14px); opacity: 0; visibility: hidden; transition: transform .15s ease-in, opacity .15s, visibility 0s .15s; }
+    #nav-backdrop { position: fixed; inset: 0; z-index: 4; display: none; }
+    #nav:not([hidden]) + #nav-backdrop { display: block; }
+    .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 14px 8px 8px; border: 0; border-radius: calc(var(--radius) - 6px); background: transparent;
+      color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
     .nav-row[hidden] { display: none; }
     .nav-row:hover, .nav-row:focus-visible { background: var(--hover); outline: none; }
-    .nav-ic { width: 36px; height: 36px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--hover); color: var(--accent); }
-    .nav-t { flex: 1; min-width: 0; display: grid; }
-    .nav-t b { font-size: 16px; font-weight: 600; }
-    .nav-t small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nav-ic { width: 32px; height: 32px; flex: none; border-radius: 10px; display: grid; place-items: center; color: var(--accent); }
+    .nav-t { flex: 1; min-width: 0; white-space: nowrap; }
     .nav-count { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: var(--t-late-bg); color: var(--t-late); }
     .nav-count:empty, .nav-count.none { display: none; }
-    .nav-foot { margin: auto 0 0; padding: 8px; color: var(--muted); font-size: 12px; }
-    @media (prefers-reduced-motion: reduce) { #nav, #nav[hidden], #nav-backdrop { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { #nav, #nav[hidden] { transition: none; } }
     /* While the map shows only some trains (src/filter.js): what it shows, on its own line, and × for all again. */
     #filter-bar { flex-basis: 100%; max-width: max-content; display: flex; align-items: center; gap: 4px; padding: 2px 2px 2px 10px; font-size: 14px; }
     #filter-bar[hidden] { display: none; }
@@ -678,13 +677,10 @@
   </div>
   <!-- The menu (Max's pick A, 2026-11-18): slides in from the left; Störningar, Statistik, Inställningar, Om Spårat. -->
   <nav id="nav" hidden aria-label="Menu" data-t-aria="navAria">
-    <div class="nav-head"><span class="nav-logo" aria-hidden="true"></span>
-      <button class="nav-close" type="button" aria-label="Close the menu" data-t-aria="closeMenu"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
-    <button id="open-disruptions" class="nav-row" type="button" hidden><span class="nav-ic" data-icon="warning"></span><span class="nav-t"><b data-t="disruptions">Disruptions</b><small data-t="navDisruptionsSub">Faults and rail work</small></span><span id="disruptions-count" class="nav-count"></span></button>
-    <button id="open-stats" class="nav-row" type="button"><span class="nav-ic" data-icon="stats"></span><span class="nav-t"><b data-t="navStats">Statistics</b><small id="nav-stats-line"></small></span></button>
-    <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t"><b data-t="settings">Settings</b><small data-t="navSettingsSub">Trains, look, language</small></span></button>
-    <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t"><b data-t="help">About</b><small data-t="navAboutSub">Where the data comes from, support</small></span></button>
-    <p class="nav-foot" id="nav-foot"></p>
+    <button id="open-disruptions" class="nav-row" type="button" hidden><span class="nav-ic" data-icon="warning"></span><span class="nav-t" data-t="disruptions">Disruptions</span><span id="disruptions-count" class="nav-count"></span></button>
+    <button id="open-stats" class="nav-row" type="button"><span class="nav-ic" data-icon="stats"></span><span class="nav-t" data-t="navStats">Statistics</span></button>
+    <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
+    <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="help">About</span></button>
   </nav>
   <div id="nav-backdrop"></div>
   <div id="settings-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
