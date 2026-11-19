@@ -38,12 +38,15 @@ try {
     const closeAll = async () => { for (let i = 0; i < 4; i++) { await page.keyboard.press('Escape'); await sleep(150); } };
     const viaMenu = id => async () => { await page.click('#nav-button'); await sleep(350); await page.evaluate(i => document.getElementById(i).click(), id); };
     const train = await page.evaluate(() => { const r = window.__trains.reports()[0]; return r ? String(r.number) : null; }).catch(() => null);
+    // The rail work fold, opened (never shut): the page remembers it between visits, so a plain tap shut it again on the
+    // second screen size, and on an evening with no problems there was then no row to tap (2026-11-19).
+    const openFold = () => page.evaluate(() => { const f = document.querySelector('#disruptions-body .dis-fold'); if (f?.getAttribute('aria-expanded') === 'false') f.click(); });
     const screens = [
       ['Settings', 'settings-page', viaMenu('open-settings')],
       ['About', 'help', viaMenu('help-button')],
       ['Statistics', 'stats-page', viaMenu('open-stats')],
-      ['Disruptions', 'disruptions-page', async () => { await viaMenu('open-disruptions')(); await sleep(500); await page.evaluate(() => document.querySelector('#disruptions-body .dis-fold')?.click()); }],
-      ['One disruption', 'disruption', async () => { await viaMenu('open-disruptions')(); await sleep(500); await page.evaluate(() => document.querySelector('#disruptions-body .dis-row')?.click()); }],
+      ['Disruptions', 'disruptions-page', async () => { await viaMenu('open-disruptions')(); await sleep(500); await openFold(); }],
+      ['One disruption', 'disruption', async () => { await viaMenu('open-disruptions')(); await sleep(500); await openFold(); await sleep(300); await page.evaluate(() => document.querySelector('#disruptions-body .dis-row')?.click()); }],
       ['Connection', 'conn-page', async () => { await page.click('#status'); }],
       ['Search', 'menu', async () => { await page.click('#menu-button'); }],
       ['Search typed', 'menu', async () => { await page.click('#menu-button'); await sleep(300); await page.type('#search', 'st'); }],
