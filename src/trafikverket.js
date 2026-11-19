@@ -132,7 +132,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
 
   // While every question fails (no internet, Trafikverket down) it asks less and less often: 10, 20, 40, then every
   // 60 s, and doesn't try the stream again until a question is answered (TODO 28, 2026-11-19: in an outage it asked every
-  // 10 s, plus three stream tries every few minutes; tools/follow-check.mjs: 114 questions in 20 minutes, now 23).
+  // 10 s, plus three stream tries every few minutes; tools/outage-check.mjs: 114 questions in 20 minutes, now 23).
   let pollFails = 0;
   async function poll() {
     if (stopped) return;

@@ -1,57 +1,132 @@
-// The fetcher's timetable stream (fetcher/timetable.mjs on src/trafikverket.js follow) against a pretend Trafikverket,
-// on a clock running 100 times faster (batch 2, 2026-11-19): Trafikverket unreachable for 20 minutes, then back.
-//   - while every question fails, the fallback asks less and less often (TODO 28: it asked every 10 s);
-//   - when answers come again after more than 15 minutes, today is loaded again (TODO 31: only a break at the start
-//     reloaded; a later one lost the changes before the last 15 minutes until 03:30).
-// About 15 s, offline. Run: node tools/follow-check.mjs     exit code 0: both hold; 1: not.
-const SPEED = 100, MIN = 60000;
-const realNow = Date.now.bind(Date), realSetTimeout = globalThis.setTimeout, realSetInterval = globalThis.setInterval;
-const t0 = realNow();
-Date.now = () => t0 + (realNow() - t0) * SPEED;
-globalThis.setTimeout = (fn, ms = 0, ...a) => realSetTimeout(fn, ms / SPEED, ...a);
-globalThis.setInterval = (fn, ms = 0, ...a) => realSetInterval(fn, ms / SPEED, ...a);
-const at = () => (Date.now() - t0) / MIN;   // minutes since the start, on the fast clock
+// Does the camera follow a tapped train? Taps the moving train nearest the middle, then measures (in screen pixels)
+// how far the train sits from the point the camera keeps it at; then drags the map a little and far (since
+// 2026-11-13 a drag keeps following and moves the point the train is kept at: the px after a drag are from the new
+// point, so 0), and presses Follow again (back to the usual point).
+// Run (with `npm run dev` going): node tools/follow-check.mjs [--view 12/59.33/18.06] [--size 400x800] [--wait 25] [--fastest]
+// --fastest taps the fastest-moving train on screen instead of the one nearest the middle.
+import puppeteer from 'puppeteer-core';
+import { BROWSER_PATH, PAGE } from './lib/browser.mjs';
+import { mkdirSync } from 'node:fs';
 
-const OUT_FROM = 2, OUT_TO = 22;   // Trafikverket unreachable from minute 2 to minute 22
-const asks = [];                   // { min, kind, ok }
-globalThis.fetch = async (url, opts = {}) => {
-  const body = String(opts.body ?? '');
-  const kind = body.includes('changeid=') ? 'changes' : body.includes('TrainStationMessage') ? 'messages' : 'day';
-  const down = at() >= OUT_FROM && at() < OUT_TO;
-  asks.push({ min: at(), kind, ok: !down });
-  if (down) throw new TypeError('fetch failed');
-  const result = kind === 'changes' ? { TrainAnnouncement: [], INFO: { LASTCHANGEID: String(asks.length), SSEURL: 'https://api.trafikinfo.trafikverket.se/v2/data.json?ssl=1' } }
-    : kind === 'messages' ? { TrainStationMessage: [] } : { TrainAnnouncement: [] };
-  return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ RESPONSE: { RESULT: [result] } }), text: async () => '' };
-};
-// A stream that opens and never sends anything (the fetcher reopens it after 3 minutes of silence); while Trafikverket
-// is down it closes at once.
-globalThis.EventSource = class {
-  static CLOSED = 2;
-  constructor() {
-    this.readyState = 0;
-    realSetTimeout(() => {
-      if (at() >= OUT_FROM && at() < OUT_TO) { this.readyState = 2; this.onerror?.(); } else { this.readyState = 1; this.onopen?.(); }
-    }, 5);
+const args = Object.fromEntries(process.argv.slice(2).join(' ').split('--').filter(Boolean)
+  .map(s => s.trim().split(/\s+/)).map(([k, v]) => [k, v ?? true]));
+const view = args.view ?? '12/59.33/18.06';
+const [width, height] = String(args.size ?? '400x800').split('x').map(Number);
+const sleep = s => new Promise(r => setTimeout(r, s * 1000));
+
+const browser = await puppeteer.launch({
+  executablePath: BROWSER_PATH,
+  headless: true,
+  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+});
+const page = await browser.newPage();
+await page.setViewport({ width, height, deviceScaleFactor: 1 });
+page.on('pageerror', e => console.log(`[page error] ${e.message}`));
+page.on('console', m => { if (m.type() === 'error' || m.type() === 'warn') console.log(`[console.${m.type()}] ${m.text()}`); });
+await page.goto(`${PAGE}#view=${view}`, { waitUntil: 'domcontentloaded' });
+await sleep(Number(args.wait ?? 25));
+
+// Where the train is drawn, against the point the camera holds it at (src/map.js: its focus; before 2026-11-13
+// evening the middle of the padded view).
+const measure = id => page.evaluate((id) => {
+  const map = window.__map, src = map.getSource('trains');
+  const f = (src._data?.geojson ?? src._data).features.find(x => x.properties.id === id);
+  if (!f) return null;
+  const at = map.project(f.geometry.coordinates), c = window.__followFocus?.() ?? map.project(map.getCenter());
+  return { off: Math.round(Math.hypot(at.x - c.x, at.y - c.y)), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
+}, id);
+const button = () => page.$eval('.panel-follow', b => b.textContent).catch(() => '(no panel)');
+
+// Pick the moving train nearest the middle: two readings 2 s apart.
+const read = () => page.evaluate(() => {
+  const map = window.__map, src = map.getSource('trains');
+  const { width, height } = map.getCanvas().getBoundingClientRect();
+  return (src._data?.geojson ?? src._data).features.map(f => ({ id: f.properties.id, label: f.properties.label, c: f.geometry.coordinates, p: map.project(f.geometry.coordinates) }))
+    .filter(t => t.p.x > 20 && t.p.y > 60 && t.p.x < width - 20 && t.p.y < height - 20);
+});
+const a = await read(); await sleep(2); const b = new Map((await read()).map(t => [t.id, t]));
+const moving = a.filter(t => b.has(t.id) && Math.hypot(b.get(t.id).p.x - t.p.x, b.get(t.id).p.y - t.p.y) > 0.5);
+if (!moving.length) { console.log('no moving train on screen'); await browser.close(); process.exit(1); }
+const moved = t => { const o = a.find(x => x.id === t.id); return Math.hypot(t.p.x - o.p.x, t.p.y - o.p.y); };
+const pick = moving.map(t => b.get(t.id)).sort(args.fastest
+  ? (x, y) => moved(y) - moved(x)
+  : (x, y) => Math.hypot(x.p.x - width / 2, x.p.y - height / 2) - Math.hypot(y.p.x - width / 2, y.p.y - height / 2))[0];
+console.log(`tapping ${pick.label} at ${Math.round(pick.p.x)},${Math.round(pick.p.y)} (${moving.length} moving trains on screen)`);
+await page.mouse.click(pick.p.x, pick.p.y);
+await sleep(0.5);
+const opened = await page.$eval('#panel .panel-head strong', el => el.textContent).catch(() => '(nothing)');
+if (!opened.startsWith(String(pick.label).split(' ')[0])) console.log(`the tap opened ${opened}, not ${pick.label}: the numbers below are for ${pick.label}`);
+
+const watch = async (what, seconds) => {
+  const offs = [];
+  let first, last;
+  for (let i = 0; i < seconds * 2; i++) {
+    await sleep(0.5);
+    const m = await measure(pick.id);
+    if (m) { offs.push(m.off); first ??= m; last = m; }
   }
-  close() { this.readyState = 2; }
+  const metres = first ? Math.round(Math.hypot((last.lon - first.lon) * Math.cos(first.lat * Math.PI / 180), last.lat - first.lat) * 111195) : 0;
+  console.log(`${what}: px from the follow point ${offs.join(' ')} · the train went ${metres} m · button "${await button()}"`);
+  return offs;
 };
+mkdirSync('shots', { recursive: true });
+await watch('following, 10 s', 10);
 
-const { createTimetable } = await import('../fetcher/timetable.mjs');
-const { setKey } = await import('../src/trafikverket.js');
-setKey('pretend');
-const logs = [];
-const tt = createTimetable({ log: m => logs.push({ min: at(), m }) });
-await new Promise(r => realSetTimeout(r, 26 * MIN / SPEED));
-tt.stop();
+// Smoothness while following, frame by frame: at every frame the map draws, where the followed train's 3D model
+// (as the 3D layer drew it) and its ring sit on screen, against the follow point. Steady = 0 change between frames.
+const frames = (zoom) => page.evaluate((id, zoom) => new Promise((done) => {
+  const map = window.__map;
+  map.jumpTo({ zoom });
+  const out = [];
+  let stopAt = null;
+  const onRender = () => {
+    const now = performance.now();
+    stopAt ??= now + 5000;
+    const c = window.__followFocus?.() ?? map.project(map.getCenter());
+    const t = (window.__last3d ?? []).find(x => x.id === id);
+    const at = p => { const q = map.project(p); return [q.x - c.x, q.y - c.y]; };
+    // The ring: the selection marker on top of the map (its middle, in the map's own pixels).
+    const el = document.querySelector('.sel-train'), box = map.getCanvas().getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    const ring = r ? [r.left + r.width / 2 - box.left - c.x, r.top + r.height / 2 - box.top - c.y] : null;
+    out.push({ ms: now, model: t ? at([t.lon, t.lat]) : null, ring });
+    if (now > stopAt) { map.off('render', onRender); done(out); }
+  };
+  map.on('render', onRender);
+  map.triggerRepaint();
+}), pick.id, zoom);
+for (const zoom of [11, 15]) {
+  const f = await frames(zoom);
+  const jumps = (key) => {
+    const d = [];
+    for (let i = 1; i < f.length; i++) if (f[i][key] && f[i - 1][key]) d.push(Math.hypot(f[i][key][0] - f[i - 1][key][0], f[i][key][1] - f[i - 1][key][1]));
+    d.sort((a, b) => a - b);
+    return d.length ? `median ${d[d.length >> 1].toFixed(1)} px, 90 % ${d[Math.floor(d.length * 0.9)].toFixed(1)} px, max ${d[d.length - 1].toFixed(1)} px` : 'not drawn';
+  };
+  const fps = (f.length - 1) / ((f[f.length - 1].ms - f[0].ms) / 1000);
+  console.log(`zoom ${zoom}: ${f.length} frames (${fps.toFixed(0)} a second); frame-to-frame jump of the 3D model ${jumps('model')}; of the ring ${jumps('ring')}`);
+}
+await page.evaluate(() => window.__map.jumpTo({ zoom: 12 }));
+await page.screenshot({ path: 'shots/follow-1.png' });
 
-let failed = 0;
-const ok = (good, what) => { console.log(`${good ? 'ok  ' : 'FAIL'} ${what}`); if (!good) failed++; };
-const during = asks.filter(a => a.kind === 'changes' && a.min >= OUT_FROM + 1 && a.min < OUT_TO);
-ok(during.length <= 40, `20 minutes without Trafikverket: ${during.length} questions from the changes stream (asked every 10 s: about 120)`);
-const reload = logs.find(l => /changes missed/.test(l.m) && l.min >= OUT_TO);
-ok(Boolean(reload), `back after 20 minutes: today loaded again${reload ? ` ("${reload.m}" at minute ${reload.min.toFixed(1)})` : ' (not done)'}`);
-const after = asks.filter(a => a.kind === 'changes' && a.min >= OUT_TO && a.ok);
-ok(after.length > 0 && after[0].min - OUT_TO < 1.5, `back to normal soon after: first answered question ${after.length ? `${(after[0].min - OUT_TO).toFixed(1)} min after` : 'never'}`);
-console.log(failed ? 'follow-check FAILED' : 'follow-check ok');
-process.exit(failed ? 1 : 0);
+const drag = async (dx, dy) => {
+  await page.mouse.move(width / 2, height * 0.3);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(width / 2 + dx * i / 10, height * 0.3 + dy * i / 10); await sleep(0.03); }
+  await page.mouse.up();
+};
+await drag(25, 10);
+await watch('after a small drag (25 px)', 4);
+await page.mouse.wheel({ deltaY: -300 });
+await watch('after a wheel zoom in', 4);
+await drag(-(width * 0.45), -(height * 0.25));
+await watch('after a long drag (re-framed)', 4);
+await page.screenshot({ path: 'shots/follow-2.png' });
+await page.click('.panel-follow');
+await watch('after pressing Follow', 4);
+await page.screenshot({ path: 'shots/follow-3.png' });
+await page.evaluate(() => document.querySelector('#panel .panel-close').click());   // the train card's × (hidden on a phone since 2026-11-15: pressed directly)
+await sleep(1);
+console.log(`after × : panel ${await page.$eval('#panel', el => el.hidden ? 'hidden' : 'open')}, padding`,
+  await page.evaluate(() => JSON.stringify(window.__map.getPadding())));
+await browser.close();
