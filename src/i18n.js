@@ -141,6 +141,7 @@ const EN = {
   noReportYet: 'no report yet',
   lastReport: s => `last report ${s} s ago`,
   replayOf: c => ` of ${c}`,
+  pillUpdate: 'update', pillReplay: 'replay', pillPaused: c => `paused ${c}`, pillNoData: c => `no data ${c}`, pillProblem: 'problem',
   mode: { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped', replay: 'replay', paused: 'paused' },
   // How a train's place is known (the panel's status line)
   notOnMap: 'Not on the map right now (not started yet, done, or nothing from it for 15 minutes).',
@@ -374,6 +375,7 @@ const SV = {
   noReportYet: 'ingen rapport än',
   lastReport: s => `senaste rapport för ${s} s sedan`,
   replayOf: c => ` av ${c}`,
+  pillUpdate: 'uppdatera', pillReplay: 'repris', pillPaused: c => `pausad ${c}`, pillNoData: c => `ingen data ${c}`, pillProblem: 'problem',
   mode: { starting: 'ansluter', stream: 'live', reconnecting: 'ansluter igen', polling: 'var 10:e s', stopped: 'stoppad', replay: 'uppspelning', paused: 'pausad' },
   notOnMap: 'Inte på kartan just nu (har inte startat, är framme, eller inget hörts från det på 15 minuter).',
   noDataFromTrv: c => `Ingen data från Trafikverket sedan ${c}.`,

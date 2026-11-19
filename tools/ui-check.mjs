@@ -33,14 +33,14 @@ try {
   for (const [lang, theme, word, statsWord, connWord] of [['en', 'light', 'Settings', 'Live statistics', 'Connection'], ['sv', 'dark', 'Inställningar', 'Statistik just nu', 'Anslutning']]) {
     const page = await openMap(browser, { ...base, lang, theme });
     const s = await page.evaluate(() => ({ title: document.title, lang: document.documentElement.lang, theme: document.documentElement.dataset.theme,
-      word: document.querySelector('#open-settings b').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
+      word: document.querySelector('#open-settings .nav-t').textContent, trains: window.__trains.count, status: document.getElementById('status').textContent }));
     expect(s.trains > 0, `${lang}/${theme}: no trains on the map (${s.status})`);
     expect(s.title === 'Spårat', `${lang}/${theme}: the title is "${s.title}"`);
     expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
     // ---- ☰ → Statistik opens the stats page (2026-11-18; the live pill opened it before); × closes it ----
     await page.evaluate(() => document.getElementById('nav-button').click());
     await sleep(500);
-    const navRows = await page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden]) b')].map(b => b.textContent));
+    const navRows = await page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden]) .nav-t')].map(b => b.textContent));
     expect(navRows.length >= 3 && navRows.includes(word), `${lang}/${theme}: the menu lists ${JSON.stringify(navRows)}`);
     await page.evaluate(() => document.getElementById('open-stats').click());
     await sleep(1200);
