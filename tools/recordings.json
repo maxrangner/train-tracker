@@ -16,7 +16,7 @@
     {
       "slot": "weekday midday",
       "core": null,
-      "coveredBy": "none with SL's GPS on yet: the Friday midday recording (SL's GPS off) is in the library, and Saturday 10:00 (also SL's GPS off, harder replay) holds that kind of hour in the core"
+      "coveredBy": "Saturday 10:00 holds the midday kind of hour in the core (SL's GPS off, the hardest replay); the weekday midday with SL's GPS on (Thu 19 Nov 11:30) is in the library: its replay is easier than Saturday's and its reporting close to the rush hours'"
     },
     {
       "slot": "saturday daytime",
@@ -124,6 +124,25 @@
       "routes": {
         "bytes": 12971238,
         "sha256": "0d011312b206648cd225a93e7b14db7649d64d43e6dfd034825bec85dd8dec31"
+      }
+    },
+    {
+      "name": "2026-11-19T10-30-00-013Z",
+      "role": "library",
+      "slot": "weekday midday",
+      "swedish": "Thu 19 Nov 2026 11:30-12:30",
+      "why": "Weekday midday with SL's GPS on (34-38 of 34-38 SL trains sent a speed in every 10 minutes; the Friday 13 Nov midday had it off). 273 trains at once (most 306), 33.7 % never send a speed (Fri 13 Nov 57 %), 40.2 % of train time in GPS silences of 30 s or more, 40 jumps, 13.4 % of trains 6 min or more late; routes saved for all trains at once. Replays at 90 % within 5.7 s, frozen 0.4 %, stops driven through 13.4 % (Saturday's core hour: 10.3 s, 18.6 %). Library, not core: easier than Saturday's hour, and its reporting is the rush hours' with fewer trains, both already in the core.",
+      "positions": {
+        "bytes": 51303915,
+        "sha256": "acb5e3923091357f167d75ba44ba53f10d76ed04a55b37f9e50b67fb09c2892a"
+      },
+      "timetable": {
+        "bytes": 10921845,
+        "sha256": "4b21c97975dec9d9cdd611668d0817127c1663c5c670b636d46e6fd0f8424384"
+      },
+      "routes": {
+        "bytes": 7811898,
+        "sha256": "f313e305b2812a87f9f23053af8b56393f0e1230bd22f3db62d4c1bf86aa0559"
       }
     },
     {
