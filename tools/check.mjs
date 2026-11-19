@@ -9,6 +9,19 @@
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { RUSH_HOUR } from './lib/browser.mjs';
+
+// A port nobody uses now (two sessions' checks at once each get their own; it was always 8095 until 2026-11-19).
+const freePort = () => new Promise((res, rej) => { const s = createServer().once('error', rej).listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); });
+// The file formats (TODO 37, 2026-11-19): a fetcher replaying the rush hour into its files on this computer, started
+// first because some kinds are made only minutes in (arrivals-add after ~5); checked near the end (format-check
+// --strict --wait: every kind made, readable, nothing removed or changed). With the key from .env it also asks
+// stations, disruptions, stats and arrivals; without it those kinds can't be made, so only types are checked.
+const HAS_KEY = existsSync('.env') && /^\s*(VITE_)?TRV_KEY\s*=\s*\S/m.test(readFileSync('.env', 'utf8'));
+const formatPort = await freePort();
+const formatFetcher = spawn('node', ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(formatPort), '--minutes', '60'], { stdio: 'ignore' });
 
 // Rules (must be 0) and limits, from the numbers measured 2026-11-11/12, with some room.
 const CHECKS = [
@@ -230,19 +243,25 @@ if (updateCheck.status !== 0) failed++;
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
 if (ui.status === 2 && process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them; start npm run dev'); failed++; }
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into
-// its files on this computer (port 8095; with the key from .env, stations and disruptions are asked as well).
+// its files on this computer (a free port; with the key from .env, stations and disruptions are asked as well).
 let filesUi = { status: 0 };
 if (ui.status !== 2) {
-  const { spawn } = await import('node:child_process');
-  const { RUSH_HOUR } = await import('./lib/browser.mjs');
-  const fetcher = spawn('node', ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', '8095', '--minutes', '8'], { stdio: 'ignore' });
+  const port = await freePort();
+  const fetcher = spawn('node', ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(port), '--minutes', '8'], { stdio: 'ignore' });
   await new Promise(r => setTimeout(r, 75000));   // a minute in, as the page's own replay starts (the first batch taken in)
-  filesUi = spawnSync('node', ['tools/ui-check.mjs', '--files', 'http://localhost:8095/'], { stdio: 'inherit' });
-  // The files this code makes stay readable by released pages and apps (HARD RULE, 2026-11-18; tools/format-check.mjs).
-  const fmt = spawnSync('node', ['tools/format-check.mjs', '--files', 'http://localhost:8095/'], { encoding: 'utf8' });
+  filesUi = spawnSync('node', ['tools/ui-check.mjs', '--files', `http://localhost:${port}/`], { stdio: 'inherit' });
+  fetcher.kill();
+}
+// The files this code makes stay readable by released pages and apps (HARD RULE, 2026-11-18): their types and every
+// kind (tools/format-check.mjs, on the fetcher started first) and their meaning to the released readers
+// (tools/format-read-check.mjs, made-up rows, offline).
+{
+  const fmt = spawnSync('node', ['tools/format-check.mjs', '--files', `http://localhost:${formatPort}/`, '--wait', '420', ...(HAS_KEY ? ['--strict'] : [])], { encoding: 'utf8' });
   console.log((fmt.stdout || '').trim());
   if (fmt.status === 1) failed++;
-  fetcher.kill();
+  formatFetcher.kill();
+  const read = spawnSync('node', ['tools/format-read-check.mjs'], { stdio: 'inherit' });
+  if (read.status !== 0) failed++;
 }
 // The site's files too (the code running on the Linux PC; tap files only there): the site not answering is a note.
 {

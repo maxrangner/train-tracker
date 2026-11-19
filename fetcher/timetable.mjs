@@ -27,7 +27,8 @@ const FIELDS = TAP_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 const Q = filter => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"><FILTER>${filter}</FILTER>${FIELDS}</QUERY>`;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-// seed (checks only, tools/board-check.mjs): { days, rows } put in at once; nothing asked, no stream, no timers.
+// seed (checks and replays: tools/board-check.mjs, fetcher/main.mjs --replay): { days, rows } put in at once; nothing
+// asked, no stream, no timers.
 export function createTimetable({ log, onChange = () => {}, onLoaded = () => {}, seed = null }) {
   const w = words();                  // one word list for everything in memory
   const rows = new Map();             // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
@@ -147,7 +148,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   };
   const all = () => [...rows.values()];
   return {
-    ready: () => days.has(swedishDay(Date.now())),
+    ready: () => Boolean(seed) || days.has(swedishDay(Date.now())),   // seeded: all there is, at once
     // Cards: today's and yesterday's trains (tomorrow's only on boards, until the day turns).
     card: (g, t) => { const today = swedishDay(t); return out(all().filter(x => x.day <= today && groupOf(x.r[1] || x.r[0]) === g), { kind: `card-${g}`, t }); },
     // Boards: per station and direction its next BOARD_ROWS advertised trains not gone at t (above). (Memory rows have

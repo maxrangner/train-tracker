@@ -8,7 +8,7 @@
 // the bar that appears shows them all again.
 // Not checkable here: a pinch (never zooms the page in this browser), the phone's keyboard, flicker, speed.
 // --files <address>: the same, on the page reading the fetcher's files there (public-plan step 3); tools/check.mjs
-// runs it with a fetcher replaying the rush hour (node fetcher/main.mjs --replay ... --serve 8095).
+// runs it with a fetcher replaying the rush hour (node fetcher/main.mjs --replay ... --serve <a free port>).
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { launch, openMap, sleep, PAGE, RUSH_HOUR, CARD_HOUR } from './lib/browser.mjs';

@@ -119,9 +119,10 @@ const onPositionRecords = rs => {
   for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
 };
 const onPassingList = (list, how) => state.addPassings(list, Date.now(), how);
+let replayTimetable = null;   // a replay's timetable rows, for its tap files (below)
 const stops = replayName
   ? [startReplay(replayName, { onRecords: onPositionRecords, onPassings: onPassingList, onPlanned: rows => state.addPlanned(rows, Date.now()),
-      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); } })]
+      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); }, onTimetable: rows => { replayTimetable = rows; } })]
   : [
     followPositions({ onRecords: onPositionRecords, onStatus: onFeed('positions'), retryStreamMs: MIN }),
     followPassings({ onPassings: onPassingList, onStatus: onFeed('passings'), retryStreamMs: MIN }),
@@ -236,9 +237,12 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
 // The card and board files in groups, made in turns: all at the first round (a page opening needs them), then the
 // oldest card and the oldest board every 30 s (each one about every 16 minutes), with a changes file every 30 s that brings every row changed
 // since the oldest of them, so a tap is at most ~30 s behind Trafikverket. The index every 10 minutes, the station
-// messages every 2 minutes. Live data only (a replay has no timetable).
+// messages every 2 minutes. A replay uses its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37:
+// the format check on this computer then sees the tap files of the code about to be released; no station messages).
 const groupAt = {};   // card-NN / board-NN -> when its file in use was made
-const timetable = KEY && !replayName ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
+const timetable = replayName
+  ? createTimetable({ log, seed: { days: [...new Set((replayTimetable ?? []).map(a => (a.ScheduledDepartureDateTime ?? '').slice(0, 10)))], rows: replayTimetable ?? [] } })
+  : KEY ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
 if (timetable) {
   stops.push(() => timetable.stop());
   const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`]);
