@@ -9,12 +9,21 @@ import { passingsOf, trainKey } from '../src/trafikverket.js';
 
 const lines = f => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
 
-// onRecords(records), onPassings(list, { first }), onPlanned(rows), onStatus({ mode, error }). Returns stop().
-export function startReplay(name, { onRecords, onPassings, onPlanned, onStatus }) {
+// onRecords(records), onPassings(list, { first }), onPlanned(rows), onStatus({ mode, error }), onTimetable(rows) (the
+// recording's TrainAnnouncement rows with their times moved to now, for the tap files; 2026-11-19, TODO 37: so the
+// format check sees cards and boards made by the code about to be released). Returns stop().
+const MOVED = ['AdvertisedTimeAtLocation', 'EstimatedTimeAtLocation', 'TimeAtLocation', 'ModifiedTime'];
+export function startReplay(name, { onRecords, onPassings, onPlanned, onStatus, onTimetable = () => {} }) {
   const pos = lines(`data/positions-${name}.jsonl`), tt = lines(`data/timetable-${name}.jsonl`);
   if (!pos.length) throw new Error(`no recording data/positions-${name}.jsonl`);
   const events = [...pos.map(x => ['p', Date.parse(x.got), x]), ...tt.map(x => ['t', Date.parse(x.got), x])].sort((a, b) => a[1] - b[1]);
   const shift = Date.now() - events[0][1];   // recording time + shift = now
+  // The day (ScheduledDepartureDateTime) stays as recorded: it is part of the trains' ids, as in the positions.
+  onTimetable(tt.map(a => {
+    const b = { ...a };
+    for (const k of MOVED) if (a[k]) b[k] = new Date(Date.parse(a[k]) + shift).toISOString();
+    return b;
+  }));
   onPlanned(tt.filter(a => !a.Deleted && a.OperationalTrainNumber && a.AdvertisedTimeAtLocation).map(a => ({
     key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime), sig: a.LocationSignature, activity: a.ActivityType,
     planned: Date.parse(a.AdvertisedTimeAtLocation) + shift, brand: a.ProductInformation?.[0]?.Description ?? null })));

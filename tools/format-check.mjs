@@ -9,10 +9,15 @@
 // This check holds the formats as released (tools/file-formats.json: every field's path and its types) and compares
 // files built by the code now: a path that is gone, or has a type it never had, fails. New paths are only listed; they
 // go into the list with --write once released (the list never loses a path).
-// Run: node tools/format-check.mjs --files <address of the files> [--write]
-//   tools/check.mjs runs it against its replaying fetcher (http://localhost:8095/: live, passings, planned, stations,
-//   disruptions, stats, arrivals) and against the site (https://sparat.rangner.com/data/: everything, tap files too;
-//   the site not answering is a note).
+// Every kind in the list is looked for (since 2026-11-19, TODO 37: a kind no longer made was never noticed). With
+// --strict (this computer's own fetcher) a kind not made, or a file it names that can't be read, fails; without it
+// (the site, which one.com sometimes answers slowly) both are notes. --wait <s>: until every kind is named by the live
+// file (some are first made minutes after the start), at most that long.
+// Types only: whether the values still MEAN the same to the released readers is tools/format-read-check.mjs.
+// Run: node tools/format-check.mjs --files <address of the files> [--strict] [--wait <s>] [--write]
+//   tools/check.mjs runs it against its own replaying fetcher (every kind, tap files from the recording's timetable;
+//   --strict) and against the site (https://sparat.rangner.com/data/: the code running there; the site not answering
+//   is a note).
 // Exit code 0: compatible; 1: not; 2: no files found.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { LIVE_MS } from '../src/live-file.js';
@@ -20,6 +25,8 @@ import { LIVE_MS } from '../src/live-file.js';
 const arg = n => { const i = process.argv.indexOf(n); return i < 0 ? null : process.argv[i + 1]; };
 const BASE = (arg('--files') ?? 'https://sparat.rangner.com/data/').replace(/\/?$/, '/');
 const WRITE = process.argv.includes('--write');
+const STRICT = process.argv.includes('--strict');
+const WAIT_MS = Number(arg('--wait') ?? 0) * 1000;
 const LIST = 'tools/file-formats.json';
 const MAPS = new Set(['files', 'ops', 'brands']);   // objects whose keys are data (a kind, a train number, a train)
 
@@ -56,20 +63,33 @@ async function json(name) {
   }
   return null;
 }
-let live = null;
-for (let k = 1; k <= 6 && !live; k++) live = await json(`live-${Math.floor(Date.now() / LIVE_MS) - k}.json`).catch(() => null);
+const list = existsSync(LIST) ? JSON.parse(readFileSync(LIST, 'utf8')) : { about: '', kinds: {} };
+const newestLive = async () => {
+  for (let k = 1; k <= 6; k++) { const f = await json(`live-${Math.floor(Date.now() / LIVE_MS) - k}.json`).catch(() => null); if (f) return f; }
+  return null;
+};
+const namedKinds = f => new Set(['live', ...Object.values(f?.files ?? {}).map(kindOf)]);
+let live = await newestLive();
+const until = Date.now() + WAIT_MS;
+while (Date.now() < until && Object.keys(list.kinds).some(k => !namedKinds(live).has(k))) {
+  await new Promise(res => setTimeout(res, 10000));
+  live = (await newestLive()) ?? live;
+}
 if (!live) { console.log(`format-check: no live file at ${BASE}`); process.exit(2); }
 const files = { live }, missing = [];
-const names = Object.entries(live.files ?? {});
-for (const [kind, name] of names) {
+for (const [kind, name] of Object.entries(live.files ?? {})) {
   const k = kindOf(name);
   if (files[k] || kind === 'live') continue;   // one of each: card-00 stands for every card group
   files[k] = await json(name).catch(() => null);
   if (!files[k]) missing.push(k);
 }
-
-const list = existsSync(LIST) ? JSON.parse(readFileSync(LIST, 'utf8')) : { about: '', kinds: {} };
 let broken = 0;
+// Every kind ever released must still be made (and readable).
+const notMade = Object.keys(list.kinds).filter(k => !(k in files));
+if (STRICT) {
+  for (const k of notMade) { console.log(`FAIL ${k}: no such file is made any more (not named by the live file)`); broken++; }
+  for (const k of missing) { console.log(`FAIL ${k}: named by the live file but can't be read`); broken++; }
+}
 const added = [], notSeen = [];
 for (const [kind, f] of Object.entries(files)) {
   if (!f) continue;
@@ -102,7 +122,8 @@ if (WRITE) {
   writeFileSync(LIST, JSON.stringify(list, null, 1) + '\n');
 }
 const kinds = Object.keys(files).filter(k => files[k]).length;
-if (missing.length) console.log(`note not read (gone or not answering): ${missing.join(', ')}`);
+if (!STRICT && missing.length) console.log(`note not read (gone or not answering): ${missing.join(', ')}`);
+if (!STRICT && notMade.length) console.log(`note not named by the live file: ${notMade.join(', ')}`);
 if (added.length && !WRITE) console.log(`note ${added.length} new path(s), not yet in ${LIST} (add with --write once released): ${added.slice(0, 5).join(', ')}${added.length > 5 ? ' …' : ''}`);
 console.log(`${broken ? 'format-check FAILED' : 'format-check ok'}: ${kinds} kinds of file at ${BASE}${broken ? `, ${broken} path(s) broken` : ', nothing removed or changed'}${notSeen.length ? `; ${notSeen.length} not seen (empty lists)` : ''}${WRITE ? `; written to ${LIST}` : ''}`);
 if (broken && !list.enforced) { console.log('note: not enforced yet (until the first app release, tools/file-formats.json enforced: false): only a warning'); process.exit(0); }
