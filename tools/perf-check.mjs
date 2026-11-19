@@ -15,6 +15,7 @@
 //   node tools/perf-check.mjs --only idle     one part: start, idle, tap or back
 //   node tools/perf-check.mjs --runs 5        tap, idle and back 5 times, each on a newly opened page: the page's
 //                                             work used to swing from load to load (zoom 11: 13 % or 95 %; 2026-11-17)
+//   node tools/perf-check.mjs --slow 4        the processor slowed 4 times (Chrome's throttling), nearer a phone
 import { launch, openMap, sleep, PHONE, address } from './lib/browser.mjs';
 
 const args = process.argv.slice(2);
@@ -22,15 +23,19 @@ const live = args.includes('--live');
 const size = args.includes('--phone') ? PHONE : { width: 1400, height: 850, deviceScaleFactor: 1 };
 const only = args.includes('--only') ? args[args.indexOf('--only') + 1] : null;
 const part = name => !only || only === name;
+const slow = args.includes('--slow') ? Math.max(1, Number(args[args.indexOf('--slow') + 1]) || 4) : 1;
 const runs = args.includes('--runs') ? Math.max(1, Number(args[args.indexOf('--runs') + 1]) || 1) : 1;
 const STOCKHOLM = [18.0585, 59.3308];
 const KARLBERG = [18.0345, 59.3405];   // trains away from a station's ring (a tap near one opens the station)
+// Close in where nothing moves: train 3725 (west coast, south of Uddevalla) stands for the first 2.5 minutes of the rush
+// replay, none moving within 8 km (found 2026-11-19; at Ystad a train starts creeping after a minute).
+const STANDING = [11.9205, 58.2265];
 const base = { size, theme: 'dark', ...(live ? {} : { replay: true }) };
 
 const browser = await launch();
 const out = [];
 const say = (...s) => { console.log(...s); out.push(s.join(' ')); };
-say(`perf-check: ${live ? 'live' : 'replay 07:01'}, ${size.width} x ${size.height}`);
+say(`perf-check: ${live ? 'live' : 'replay 07:01'}, ${size.width} x ${size.height}${slow > 1 ? `, processor slowed ${slow} times` : ''}`);
 
 // Work done by the page between two moments (Chrome's own counters), as a share of the time.
 async function counters(cdp) {
@@ -97,6 +102,7 @@ for (let run = 1; run <= runs && (part('idle') || part('tap') || part('back')); 
   const page = await openMap(browser, { ...base, view: `11/${STOCKHOLM[1]}/${STOCKHOLM[0]}` });
   const cdp = await page.createCDPSession();
   await cdp.send('Performance.enable');
+  if (slow > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: slow });
 
   if (part('tap')) {
     for (const which of ['first tap', 'second tap']) {
@@ -170,6 +176,19 @@ for (let run = 1; run <= runs && (part('idle') || part('tap') || part('back')); 
         say(`idle    zoom ${String(zoom).padEnd(4)} ${open ? `train open${openId ? '' : ' (FAILED to open)'}` : 'nothing open'}`.padEnd(42) +
           `map frames ${r.drawsPerSecond.toFixed(0).padStart(3)}/s   script ${share(a, b, 'ScriptDuration', r.seconds).padStart(4)}   all work ${share(a, b, 'TaskDuration', r.seconds).padStart(4)}`);
       }
+    }
+    // Close in with nothing moving in view: the map need not draw at all.
+    if (!live) {
+      await closePanel(page);
+      await page.evaluate(C => window.__map.jumpTo({ center: C, zoom: 14, bearing: 0, pitch: 0 }), STANDING);
+      await sleep(2500);
+      await startRecording(page);
+      const a = await counters(cdp);
+      await sleep(5000);
+      const b = await counters(cdp);
+      const r = await stopRecording(page);
+      say('idle    zoom 14   a train standing'.padEnd(42) +
+        `map frames ${r.drawsPerSecond.toFixed(0).padStart(3)}/s   script ${share(a, b, 'ScriptDuration', r.seconds).padStart(4)}   all work ${share(a, b, 'TaskDuration', r.seconds).padStart(4)}`);
     }
     await closePanel(page);
   }
