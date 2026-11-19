@@ -142,8 +142,20 @@
     .seg button { font: inherit; font-size: 14px; font-weight: 600; padding: 6px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); cursor: pointer; }
     .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
     .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    /* Settings → Accent colour: round swatches, the chosen one ringed (Max, 2026-11-15). */
-    .seg.swatches { background: none; padding: 0; gap: 8px; }
+    /* Settings → Accent colour: round swatches, the chosen one ringed (Max, 2026-11-15). Since 2026-11-19 (14 colours;
+       Max: "an expanding part of settings ... so the settings menu itself doesn't get over populated") the row shows the
+       chosen colour and its name; a tap folds the swatches open under it, two rows of seven; a pick folds them shut. */
+    .accent-open { display: flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink);
+      background: var(--hover); border: 0; border-radius: 999px; padding: 5px 10px 5px 6px; cursor: pointer; }
+    .accent-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .accent-open .icon { color: var(--muted); transition: transform .2s; }
+    .accent-open[aria-expanded="true"] .icon { transform: rotate(180deg); }
+    .accent-dot { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); flex: none; }
+    .accent-pick { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .2s ease; }
+    .accent-pick.open { grid-template-rows: 1fr; }
+    .accent-pick > div { overflow: hidden; min-height: 0; }
+    .seg.swatches { background: none; padding: 6px 6px 10px; display: grid; grid-template-columns: repeat(7, 30px); justify-content: space-between; gap: 12px 6px; }
+    @media (prefers-reduced-motion: reduce) { .accent-pick, .accent-open .icon { transition: none; } }
     .seg.swatches button { --sw: var(--sw-l); width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--sw); box-shadow: inset 0 0 0 2px var(--card); }
     :root[data-theme="dark"] .seg.swatches button { --sw: var(--sw-d); }
     .seg.swatches button[aria-pressed="true"] { background: var(--sw); outline: 2.5px solid var(--sw); outline-offset: 2px; }
@@ -700,7 +712,8 @@
       <div class="set-row"><span data-t="look">Look</span>
         <div class="seg" data-key="theme" role="group" aria-label="Look" data-t-aria="look"><button type="button" data-v="auto" data-t="auto">Auto</button><button type="button" data-v="light" data-t="light">Light</button><button type="button" data-v="dark" data-t="dark">Dark</button></div></div>
       <div class="set-row"><span data-t="accent">Accent colour</span>
-        <div class="seg swatches" data-key="accent" role="group" aria-label="Accent colour" data-t-aria="accent"></div></div>
+        <button type="button" id="accent-open" class="accent-open" aria-expanded="false" aria-controls="accent-pick"><i class="accent-dot"></i><span class="accent-name"></span><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button></div>
+      <div id="accent-pick" class="accent-pick" inert><div><div class="seg swatches" data-key="accent" role="group" aria-label="Accent colour" data-t-aria="accent"></div></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="debug-only set-section menu-label" data-t="debug">Debug</div>
