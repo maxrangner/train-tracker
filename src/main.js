@@ -218,6 +218,24 @@ creditEl.innerHTML = `© ${creditLink('https://www.openstreetmap.org/copyright',
   (ownMap ? '' : ` · ${creditLink('https://openfreemap.org/', 'OpenFreeMap')}`);
 const mapEl = document.getElementById('map');
 mapEl.appendChild(creditEl);
+// The phone's keyboard shrinks the page (interactive-widget=resizes-content, so the search list ends above it), and the
+// map shrank with it: its middle moved up, and back down when the keyboard went (Max, 2026-11-19). While a text field
+// has focus and the page is clearly lower than before, the map keeps its last full height and runs on behind the
+// keyboard, so it doesn't move; everything else still fits above the keyboard.
+{
+  let full = { w: innerWidth, h: innerHeight };
+  const fit = () => {
+    const typing = Boolean(document.activeElement?.matches?.('input, textarea'));
+    if (innerWidth !== full.w) full = { w: innerWidth, h: innerHeight };
+    if (typing && innerHeight < full.h - 150) {
+      mapEl.style.bottom = 'auto'; mapEl.style.height = `${full.h}px`;
+    } else {
+      full.h = innerHeight; mapEl.style.bottom = ''; mapEl.style.height = '';
+    }
+  };
+  addEventListener('resize', fit);
+  addEventListener('focusout', () => setTimeout(fit, 0));
+}
 map.shown.then(() => {
   const fade = (e) => {
     if (e?.target && creditEl.contains(e.target)) return;   // (a tap on one of its links opens it first)
