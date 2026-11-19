@@ -9,7 +9,11 @@ const git = cmd => { try { return execSync(`git ${cmd}`, { stdio: ['ignore', 'pi
 const commit = git('rev-parse --short HEAD') || 'unknown';
 const changed = git('status --porcelain --untracked-files=no') !== '';
 
+// No live link from the dev page back to this PC (Max, 2026-11-19): with it, the page reloaded itself every time the
+// phone dropped the link (going out of the browser and back, the wifi napping), every 10-20 s at times. The cost: after
+// a change in the code, the dev page is reloaded by hand. The public page and the app never had the link.
 export default {
+  server: { ws: false },
   define: {
     __VERSION__: JSON.stringify(version),
     __BUILD__: JSON.stringify(commit + (changed ? '+' : '')),

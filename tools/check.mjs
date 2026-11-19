@@ -262,4 +262,10 @@ if (ui.status !== 2) group = spawnSync('node', ['tools/group-check.mjs'], { stdi
 // Disruptions: rail work vs problems in the list and on the map, the map setting (live data; 2026-11-18).
 let dis = { status: 0 };
 if (ui.status !== 2) dis = spawnSync('node', ['tools/disruption-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
+// Room for the scrollbar in every scrolling area, phone and computer (Max, 2026-11-19).
+let scroll = { status: 0 };
+if (ui.status !== 2) scroll = spawnSync('node', ['tools/scroll-check.mjs'], { stdio: 'inherit' });
+// The live pill: every state in both languages one short line (Max, 2026-11-19).
+let pill = { status: 0 };
+if (ui.status !== 2) pill = spawnSync('node', ['tools/pill-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);

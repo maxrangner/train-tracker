@@ -24,6 +24,19 @@ const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+// The live pill's words (Max, 2026-11-19: some were "WAY too long", e.g. a feed's whole error text): two or three
+// words; the whole story is on this screen. tools/pill-check.mjs measures every one in both languages.
+// mode: the positions' mode (src/main.js status.positions); the times already as clock text.
+export function pillText({ mode, replayAt = null, outdated = false, pausedSince = null, noDataSince = null, error = false }) {
+  const word = t('mode')[mode] ?? t('pillProblem');
+  if (replayAt) return `${t('pillReplay')} ${replayAt}`;
+  if (outdated) return t('pillUpdate');
+  if (pausedSince) return t('pillPaused', pausedSince);
+  if (noDataSince) return t('pillNoData', noDataSince);
+  if (error) return ['polling', 'reconnecting', 'starting'].includes(mode) ? word : t('pillProblem');
+  return word;
+}
+
 export function createConnection(el, { getTrains, reportTimeOf }) {
   const body = el.querySelector('#conn-body');
   let info = null, raf = 0;

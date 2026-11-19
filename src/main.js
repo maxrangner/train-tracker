@@ -24,12 +24,13 @@ import { now, hhmm, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
 import { createStatsPage } from './stats-page.js';
-import { createConnection } from './connection.js';
+import { createConnection, pillText } from './connection.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
+import { addScrollbar } from './scrollbar.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -218,6 +219,24 @@ creditEl.innerHTML = `© ${creditLink('https://www.openstreetmap.org/copyright',
   (ownMap ? '' : ` · ${creditLink('https://openfreemap.org/', 'OpenFreeMap')}`);
 const mapEl = document.getElementById('map');
 mapEl.appendChild(creditEl);
+// The phone's keyboard shrinks the page (interactive-widget=resizes-content, so the search list ends above it), and the
+// map shrank with it: its middle moved up, and back down when the keyboard went (Max, 2026-11-19). While a text field
+// has focus and the page is clearly lower than before, the map keeps its last full height and runs on behind the
+// keyboard, so it doesn't move; everything else still fits above the keyboard.
+{
+  let full = { w: innerWidth, h: innerHeight };
+  const fit = () => {
+    const typing = Boolean(document.activeElement?.matches?.('input, textarea'));
+    if (innerWidth !== full.w) full = { w: innerWidth, h: innerHeight };
+    if (typing && innerHeight < full.h - 150) {
+      mapEl.style.bottom = 'auto'; mapEl.style.height = `${full.h}px`;
+    } else {
+      full.h = innerHeight; mapEl.style.bottom = ''; mapEl.style.height = '';
+    }
+  };
+  addEventListener('resize', fit);
+  addEventListener('focusout', () => setTimeout(fit, 0));
+}
 map.shown.then(() => {
   const fade = (e) => {
     if (e?.target && creditEl.contains(e.target)) return;   // (a tap on one of its links opens it first)
@@ -231,6 +250,8 @@ map.shown.then(() => {
 });
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
+// With a mouse, our own thin bar in every card that is there from the start, as Statistics has (src/scrollbar.js; Max, 2026-11-19).
+for (const sel of ['#settings', '.help-body', '#disruptions-body', '#conn-body', '#search-results']) addScrollbar(document.querySelector(sel));
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
   .map(id => document.getElementById(id)));
 const raise = id => sheets.raise(document.getElementById(id));
@@ -396,15 +417,9 @@ if (window.Capacitor?.isNativePlatform?.()) {
 // ---- The menu (☰; Max's pick A, 2026-11-18: menu and search apart): a drawer from the left with Störningar, Statistik,
 // Inställningar and Om Spårat. Closes with ×, Esc, a tap outside, the phone's back, or by opening one of its pages. ----
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
-navEl.querySelector('.nav-logo').innerHTML = logoSvg({ small: true });
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
-const versionShort = typeof __VERSION__ === 'string' ? __VERSION__ : '?';
-const navFoot = () => { document.getElementById('nav-foot').textContent = t('navFoot', versionShort); };
-const navStats = () => { document.getElementById('nav-stats-line').textContent = t('navStatsLine', trains.count); };
-navFoot();
 function openNav() {
   menu.close();
-  navStats();
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   navEl.querySelector('.nav-row:not([hidden])')?.focus();
@@ -415,8 +430,9 @@ function closeNav() {
   navButton.setAttribute('aria-expanded', 'false');
 }
 navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
-navEl.querySelector('.nav-close').onclick = closeNav;
 document.getElementById('nav-backdrop').onclick = closeNav;
+// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time.
+document.getElementById('menu-button').addEventListener('click', closeNav);
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -544,7 +560,7 @@ onSettingChange((key) => {
     menu.refresh();
     panel.relabel();
     if (!statsPage.hidden) drawStats();
-    navFoot(); navStats(); conn.relabel(); showConn();
+    conn.relabel(); showConn();
     showFilter();
     board.relabel();
     pickerEl.hidden = true;
@@ -1008,7 +1024,10 @@ setInterval(() => {
   const outdated = status.positions === 'outdated';
   const state = outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
   const short = `${t('trainsCount', trains.count)} · ${state}`;
-  statusCount.textContent = state;
+  // The pill itself: two or three words (Max, 2026-11-19: some were "WAY too long", the feeds' own error texts); the
+  // whole line stays its label and title, and the connection screen behind it tells the rest.
+  statusCount.textContent = pillText({ mode: status.positions, replayAt: replay ? hhmm(tNow) : null, outdated,
+    pausedSince: paused ? clock(status.pausedSince) : null, noDataSince: noData ? clock(lastDataAt) : null, error: Boolean(error) });
   statusEl.title = short;
   statusEl.ariaLabel = short;
   // Yellow when not streaming (asking every 10 s, reconnecting, starting). The streaming mode is 'stream' (shown as
@@ -1021,7 +1040,6 @@ setInterval(() => {
   }
   statusEl.classList.toggle('problem', Boolean(error) || noData || paused || outdated);
   if (!connPage.hidden) showConn({ tNow, noData, paused, outdated, error });
-  if (!navEl.hidden) navStats();
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));

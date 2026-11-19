@@ -10,9 +10,8 @@ export const lang = () => settings.language;
 const EN = {
   title: 'Spårat',
   // The menu and the connection screen (Max's picks A and Y, 2026-11-18).
-  navOpen: 'Menu', navAria: 'Menu', closeSearch: 'Close the search', navStats: 'Statistics', navStatsLine: n => `${n} trains on the map`,
-  navDisruptionsSub: 'Faults and rail work', navSettingsSub: 'Trains, look, language', navAboutSub: 'Where the data comes from, support',
-  navFoot: v => `Spårat ${v} · data from Trafikverket`,
+  navOpen: 'Menu', navAria: 'Menu', closeSearch: 'Close the search', navStats: 'Statistics',
+ 
   connTitle: 'Connection', connSweden: 'Sweden right now', connReporting: 'trains with new positions', connPulse: 'The pulse: new positions',
   connNumbers: 'Numbers', connOnMap: 'trains on the map', connFresh: 'with a new position in the last minute', connBehind: 'behind real time',
   connBehindNote: s => `The map shows the trains as they were ${s} s ago, so they glide smoothly between their reports.`,
@@ -142,6 +141,7 @@ const EN = {
   noReportYet: 'no report yet',
   lastReport: s => `last report ${s} s ago`,
   replayOf: c => ` of ${c}`,
+  pillUpdate: 'update', pillReplay: 'replay', pillPaused: c => `paused ${c}`, pillNoData: c => `no data ${c}`, pillProblem: 'problem',
   mode: { starting: 'connecting', stream: 'live', reconnecting: 'reconnecting', polling: 'every 10 s', stopped: 'stopped', replay: 'replay', paused: 'paused' },
   // How a train's place is known (the panel's status line)
   notOnMap: 'Not on the map right now (not started yet, done, or nothing from it for 15 minutes).',
@@ -251,9 +251,8 @@ const EN = {
 };
 
 const SV = {
-  navOpen: 'Meny', navAria: 'Meny', closeSearch: 'Stäng sökningen', navStats: 'Statistik', navStatsLine: n => `${n} tåg på kartan`,
-  navDisruptionsSub: 'Fel och banarbeten', navSettingsSub: 'Tåg, utseende, språk', navAboutSub: 'Var datan kommer ifrån, stöd',
-  navFoot: v => `Spårat ${v} · data från Trafikverket`,
+  navOpen: 'Meny', navAria: 'Meny', closeSearch: 'Stäng sökningen', navStats: 'Statistik',
+ 
   connTitle: 'Anslutning', connSweden: 'Sverige just nu', connReporting: 'tåg med nya positioner', connPulse: 'Pulsen: nya positioner',
   connNumbers: 'Siffror', connOnMap: 'tåg på kartan', connFresh: 'med ny position senaste minuten', connBehind: 'efter verkligheten',
   connBehindNote: s => `Kartan visar tågen som de var för ${s} s sedan, så att de glider jämnt mellan sina rapporter.`,
@@ -376,6 +375,7 @@ const SV = {
   noReportYet: 'ingen rapport än',
   lastReport: s => `senaste rapport för ${s} s sedan`,
   replayOf: c => ` av ${c}`,
+  pillUpdate: 'uppdatera', pillReplay: 'repris', pillPaused: c => `pausad ${c}`, pillNoData: c => `ingen data ${c}`, pillProblem: 'problem',
   mode: { starting: 'ansluter', stream: 'live', reconnecting: 'ansluter igen', polling: 'var 10:e s', stopped: 'stoppad', replay: 'uppspelning', paused: 'pausad' },
   notOnMap: 'Inte på kartan just nu (har inte startat, är framme, eller inget hörts från det på 15 minuter).',
   noDataFromTrv: c => `Ingen data från Trafikverket sedan ${c}.`,
