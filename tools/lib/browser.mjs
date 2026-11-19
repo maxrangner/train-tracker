@@ -43,8 +43,9 @@ export async function openMap(browser, { size = PHONE, wait = 30000, ...hash } =
   await page.setViewport(size);
   page.errors = [];
   page.on('pageerror', e => page.errors.push(e.message));
+  // (The dev page has no live link back since 2026-11-19, vite.config.js: vite's client says so twice as it starts.)
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/highway-shield|road_shield|Failed to load resource/.test(m.text())) page.errors.push(m.text().slice(0, 200));
+    if (m.type() === 'error' && !/highway-shield|road_shield|Failed to load resource|\[vite\] failed to connect to websocket|Failed to send error to Vite server/.test(m.text())) page.errors.push(m.text().slice(0, 200));
   });
   await page.goto(address(hash), { waitUntil: 'domcontentloaded' });
   const t0 = Date.now();
