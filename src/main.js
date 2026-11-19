@@ -30,6 +30,7 @@ import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
+import { addScrollbar } from './scrollbar.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -249,6 +250,8 @@ map.shown.then(() => {
 });
 
 // ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
+// With a mouse, our own thin bar in every card that is there from the start, as Statistics has (src/scrollbar.js; Max, 2026-11-19).
+for (const sel of ['#settings', '.help-body', '#disruptions-body', '#conn-body', '#search-results']) addScrollbar(document.querySelector(sel));
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
   .map(id => document.getElementById(id)));
 const raise = id => sheets.raise(document.getElementById(id));
