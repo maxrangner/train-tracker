@@ -69,10 +69,17 @@ function placesOf(key) {
 
 const R = Math.PI / 180;
 const metres = (a, b) => Math.hypot((b[0] - a[0]) * Math.cos(a[1] * R), b[1] - a[1]) * R * 6371000;
-// Whether place p lies beyond an end of line c (its nearest point is an end, and not within ON_M of it).
+// Whether place p lies beyond an end of line c: its nearest point on c is c's first or last point, over ON_M away.
 function pastEnd(c, p) {
-  const n = c.length, near = (a, b, x) => { const k = Math.cos(x[1] * R); return ((x[0] - a[0]) * (b[0] - a[0]) * k * k + (x[1] - a[1]) * (b[1] - a[1])) < 0; };
-  return (n > 1 && near(c[n - 1], c[n - 2], p) && metres(c[n - 1], p) > ON_M) || (n > 1 && near(c[0], c[1], p) && metres(c[0], p) > ON_M);
+  const k = Math.cos(p[1] * R) * 111320, kl = 110540;
+  let best = Infinity, atEnd = false;
+  for (let i = 1; i < c.length; i++) {
+    const ax = (c[i - 1][0] - p[0]) * k, ay = (c[i - 1][1] - p[1]) * kl, bx = (c[i][0] - p[0]) * k, by = (c[i][1] - p[1]) * kl;
+    const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy, f = L ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L)) : 0;
+    const d = Math.hypot(ax + f * dx, ay + f * dy);
+    if (d < best) { best = d; atEnd = (i === 1 && f === 0) || (i === c.length - 1 && f === 1); }
+  }
+  return atEnd && best > ON_M;
 }
 function distTo(c, p) {
   const k = Math.cos(p[1] * R) * 111320, kl = 110540;
@@ -163,8 +170,10 @@ else {
   console.log(`  drawn train on its line (<= ${ON_M} m): ${out.onLine} %   (on the timetable's route alone, as before: ${out.onBase} %)`);
   console.log(`  line changes: ${s.changes} (${out.changesPerTrainHour} per train-hour), ${out.nearChanges} starting within ${NEAR_M} m of the train; flips back: ${out.flipBacks}; full re-routes: ${out.full}`);
   console.log(`  slide size: median ${out.slideMedianM} m, 90 % ${out.slide90M} m; an update: median ${out.updateMsMedian} ms, 99 % ${out.updateMs99} ms, slowest ${out.updateMsMax} ms`);
-  if (argv.includes('--list')) for (const [id, t] of [...per].sort((a, b) => b[1].changes - a[1].changes || a[1].on / a[1].n - b[1].on / b[1].n).slice(0, 15))
+  if (argv.includes('--list')) for (const [id, t] of [...per].filter(([, t]) => t.n).sort((a, b) => b[1].changes - a[1].changes).slice(0, 10))
     console.log(`  ${id}: ${(100 * t.on / t.n).toFixed(0)} % of ${t.n} s, ${t.changes} changes`);
+  if (argv.includes('--list')) for (const [id, t] of [...per].filter(([, t]) => t.n && t.on < t.n).sort((a, b) => (b[1].n - b[1].on) - (a[1].n - a[1].on)).slice(0, 10))
+    console.log(`  off longest: ${id}: ${t.n - t.on} of ${t.n} s off its line, ${t.changes} changes`);
 }
 let bad = 0;
 if (MIN_ON !== null && out.onLine < MIN_ON) { console.log(`FAIL on the line ${out.onLine} % < ${MIN_ON} %`); bad++; }

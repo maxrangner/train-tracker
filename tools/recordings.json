@@ -242,6 +242,25 @@
         "bytes": 3455674,
         "sha256": "a406969ae6f5dd27d4d0d2373ae463c1a7264288907283fd01cdbcf2e4e1bfb5"
       }
+    },
+    {
+      "name": "2026-11-19T22-28-02-750Z",
+      "role": "library",
+      "slot": "weekday late evening",
+      "swedish": "Thu 19 Nov 2026 23:28-23:48",
+      "why": "Max's three screenshots at 23:26 (7875 north of Stockholm C, 2576 at Stockholm City, 2277 at Älvsjö): trains drawn beside their painted route. The route-follows-the-train work (src/path-follow.js) was measured on it; tools/check.mjs holds 2576 and 2277 on their line (tools/route-follow-check.mjs; on main before: 2576 17 m beside it at 23:29). 155 trains.",
+      "positions": {
+        "bytes": 8056451,
+        "sha256": "ff8b2d41e30fa2602eb22519fa5e826bb3f184ef81211e5a4732869b0e336c47"
+      },
+      "timetable": {
+        "bytes": 3183537,
+        "sha256": "bcfe90eaa9c16339fb1663a9684d0b5f44e508a267a67ba629e65e5a6d8e0b0d"
+      },
+      "routes": {
+        "bytes": 3082275,
+        "sha256": "4fed94bed2f03bad754d2addb83340f33d14307501436f40f491895781f2d586"
+      }
     }
   ],
   "stations": {

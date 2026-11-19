@@ -92,7 +92,8 @@ const recordings = (MODE === 'all' ? inData.filter(f => statSync(`data/${f}`).si
 // What the replay's result depends on: these files' contents, and the replayed recordings' names and contents
 // (their SHA-256; names and sizes before, so a changed recording of the same size passed as unchanged).
 const REPLAY_INPUTS = ['src/trains.js', 'src/rail-net.js', 'src/routes.js', 'src/path.js', 'src/clock.js',
-  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'tools/lib/branch.mjs', 'tools/path-check.mjs', 'src/report-time.js', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
+  'tools/motion-check.mjs', 'tools/lib/records.mjs', 'tools/lib/branch.mjs', 'tools/path-check.mjs', 'src/report-time.js',
+  'src/path-follow.js', 'tools/route-follow-check.mjs', 'tools/check.mjs', 'tools/recordings.json', 'tools/baseline.json', 'public/rail-net.json', 'data/stations.json'];
 const PASSED = 'data/.check-passed.json';
 const stamp = createHash('sha256')
   .update(MODE)
@@ -198,12 +199,39 @@ for (const f of skipReplay ? [] : recordings) {
     if (p.straight) failed++;
   } catch (e) { console.log(`FAIL routes ${f}: ${e.message.split('\n')[0]}`); failed++; }
 }
+// The open train's line follows the train (src/path-follow.js; Max, 2026-11-19: "avoid a line flipping back and
+// forth"): in the first FOLLOW_MIN minutes of each recording every train is opened; the drawn train is on its line at
+// least FOLLOW_ON % of the time, and the line goes back to a way it just left at most FOLLOW_FLIPS times a train-hour
+// (2026-11-20: 98.8 % and 0.48 in the morning rush; 99.9 % and 1.0 on 19 Nov 23:28). Its inputs are replay inputs.
+const FOLLOW_MIN = 10, FOLLOW_ON = 98, FOLLOW_FLIPS = 1.5;
+for (const f of skipReplay ? [] : recordings) {
+  try {
+    const p = JSON.parse(execFileSync('node', ['tools/route-follow-check.mjs', `data/${f}`, '--minutes', String(FOLLOW_MIN), '--json'],
+      { encoding: 'utf8', maxBuffer: 1e8 }).trim().split('
+').at(-1));
+    const bad = p.onLine < FOLLOW_ON || p.flipsPerTrainHour > FOLLOW_FLIPS;
+    console.log(`${bad ? 'FAIL' : 'ok  '} line follows ${f.slice(10, 29)}: on its line ${p.onLine} % (min ${FOLLOW_ON}; the timetable's route alone ${p.onBase} %), flips back ${p.flipsPerTrainHour} a train-hour (max ${FOLLOW_FLIPS}), slowest update ${p.updateMsMax} ms`);
+    if (bad) failed++;
+  } catch (e) { console.log(`FAIL line follows ${f}: ${e.message.split('
+')[0]}`); failed++; }
+}
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
     ` (replay ${Math.round((Date.now() - replayStart) / 1000)} s)`);
   if (!failed && !REBASE) writeFileSync(PASSED, JSON.stringify({ ...(passedAll.stamp ? {} : passedAll),
     [MODE]: { stamp, recordings: recordings.length, when: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC' } }));
 }
+
+// Max's screenshots of 19 Nov 23:26 (trains beside their painted route): 2576 and 2277 stay on their line in the
+// recording made just after (on main before: 2576 17 m beside it). Seconds, so always run (when the recording is here).
+const FOLLOW_CASE = 'data/positions-2026-11-19T22-28-02-750Z.jsonl';
+if (existsSync(FOLLOW_CASE)) {
+  const r = spawnSync('node', ['tools/route-follow-check.mjs', FOLLOW_CASE, '--train', '2576,2277', '--min-on', '99.9', '--max-flips', '0'], { encoding: 'utf8' });
+  const line = (r.stdout ?? '').split('
+').find(l => l.includes('on its line')) ?? '';
+  console.log(`${r.status === 0 ? 'ok  ' : 'FAIL'} case 2576/2277 on their line (19 Nov 23:28):${line.split(':').slice(1).join(':')}`);
+  if (r.status !== 0) { console.log(r.stdout); failed++; }
+} else console.log(`note case 2576/2277 skipped: ${FOLLOW_CASE} is not here`);
 
 // The cases (tools/recordings.json): seconds, so always run. A case marked knownFailing shows but doesn't fail.
 const cases = spawnSync('node', ['tools/cases.mjs'], { stdio: 'inherit' });

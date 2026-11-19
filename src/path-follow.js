@@ -19,6 +19,13 @@ export const ON_M = 3, HOLD_MS = 30_000, NEAR_M = 300, JOIN_M = 1500, FIND_M = 3
 // ahead for AHEAD_M when there is none that near.
 const FAR_M = 40_000, AHEAD_M = 10_000;
 const JOIN_LONGER = 1.3, JOIN_SLACK_M = 500;
+// The last resort's step across to L at most STEP_M; never two changes within MIN_GAP_MS; a train whose way has left
+// its route is looked at again after LOST_MS.
+const STEP_M = 50, MIN_GAP_MS = 2000, LOST_MS = 30_000;
+// The fallback's tries stop after BUDGET_MS (each try is a timetable way over a few places: up to 200 ms each in the
+// morning rush of 12 Nov, 660 ms in all for 910 and 262).
+const BUDGET_MS = 40;
+const clock = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 const SAME_M = 0.5;   // closer than this, a point of the line has not moved (no slide for it)
 const R = Math.PI / 180, EARTH = R * 6371000;
 const metres = (a, b) => Math.hypot((b[0] - a[0]) * Math.cos(a[1] * R), b[1] - a[1]) * EARTH;
@@ -76,7 +83,8 @@ export function followPath(base, places, net, options = {}) {
   let mTrain = 0;               // where on it the train was last seen (metres along it)
   let changedAt = -Infinity;    // when it last changed
   let wantsFull = false;        // no join along the rails: the rest from the timetable again (full())
-  const counts = { changes: 0, held: 0, full: 0, noJoin: 0, noWay: 0 };
+  let lostAt = -Infinity;       // when the train's way was last found to leave its route (no way back: LOST_MS)
+  const counts = { changes: 0, held: 0, full: 0, noJoin: 0, noWay: 0, lost: 0 };
 
   // The point of the way at metre s along it.
   const wayPoint = (way, s) => {
@@ -162,8 +170,9 @@ export function followPath(base, places, net, options = {}) {
         for (let n = 1; n < near.length; n *= 2) tries.push(n);
         if (near.length) tries.push(near.length);
         else tries.push(0);   // no place that near: the track ahead, towards the next one
+        const t0 = clock();
         for (const n of tries) {
-          if (!own) break;
+          if (!own || clock() - t0 > BUDGET_MS) break;
           const ahead = near.slice(0, n);
           let piece;
           if (ahead.length) {
@@ -193,8 +202,14 @@ export function followPath(base, places, net, options = {}) {
           if (toEnd) kTarget = Infinity; else ({ kTarget, tail } = back);
           break;
         }
-        // Still none: onto L where the way's end is nearest (a short jog, as the line was before 2026-11-19).
-        if (kTarget < 0) { counts.noWay++; kTarget = pe.k + 1; tail = [pe.point]; }
+        // Still none: onto L where the way's end is nearest, a short step across (as the line was before 2026-11-19),
+        // when L is that near. Further off, the train has left its route (a diversion: 1266 near Eslöv, 19 Nov 11:29,
+        // was stepped 13 km across, again each update): the line stays as it is (lost, compose's caller).
+        if (kTarget < 0) {
+          counts.noWay++;
+          if (pe.d > STEP_M) return { lost: true };
+          kTarget = pe.k + 1; tail = [pe.point];
+        }
       }
     }
     if (!Number.isFinite(kTarget)) {
@@ -260,6 +275,7 @@ export function followPath(base, places, net, options = {}) {
       if (!way?.coords.length || base.coords.length < 2 || !net) return null;
       const W = way.coords, train = wayPoint(way, way.at);
       if (line === null) {
+        if (now - lostAt < LOST_MS) return null;
         // First: the way joined into the timetable's route, from its first point along it.
         const L = baseLine();
         mTrain = mOf(L, nearest(L.coords, train.p));
@@ -281,20 +297,31 @@ export function followPath(base, places, net, options = {}) {
       const endM = L.cum[L.coords.length - 1];
       if (mTrain >= endM - 1) return null;   // past its route's end: the line stays as it is
       let off = n.d > ON_M ? train.j : -1, mk = mTrain;
-      for (let j = train.j; off < 0 && j < W.length; j++) {
+      for (let j = train.j; off < 0 && j < W.length && way.s[j] <= way.report + 0.01; j++) {
         const m = nearest(L.coords, W[j], indexAt(L.cum, mk - 20), upTo(L.cum, mk + 600));
         if (mOf(L, m) >= endM - 1) break;   // the way from here on is past the line's end
+        // Past its last report the way is a guess (the track it would coast on): it changes the line only once the
+        // train itself is off it (above). Else a report a second later on the other track put the line back (2576 at
+        // Sundbyberg, 19 Nov 23:42:24-26).
         if (m.d > ON_M) off = j; else mk = mOf(L, m);
       }
       if (off < 0) return null;
       const aheadM = off === train.j ? 0 : way.s[off] - way.at;
       if (now - changedAt < HOLD_MS && aheadM > NEAR_M) { counts.held++; return null; }
+      if (now - changedAt < MIN_GAP_MS || now - lostAt < LOST_MS) { counts.held++; return null; }
+      // A train that had left its route: looked at again only once its way comes back near the line (cheap).
+      if (lostAt > -Infinity) {
+        const back = nearest(L.coords, W[W.length - 1], indexAt(L.cum, mTrain - 500), upTo(L.cum, mTrain + 5000));
+        if (back.d > STEP_M) { lostAt = now; counts.held++; return null; }
+        lostAt = -Infinity;
+      }
       // From the last point of the way on the line before it leaves it (behind the train when the train is off it).
       let j0 = Math.max(0, off - 1);
       while (j0 > 0 && way.s[j0] > way.at - 1000 && nearest(L.coords, W[j0], indexAt(L.cum, mTrain - 1500), upTo(L.cum, mTrain + 3000)).d > ON_M) j0--;
       const c = compose(L, way, j0);
       if (!c) return null;
       if (c.needFull) { wantsFull = true; return null; }
+      if (c.lost) { lostAt = now; counts.lost++; return null; }
       const r = apply(c, now, L);
       mTrain = mOf(line, nearest(line.coords, train.p, Math.max(0, c.from - 2)));
       return r;
@@ -312,6 +339,7 @@ export function followPath(base, places, net, options = {}) {
       }
       const c = compose(L, way, j0, true);
       if (!c) return null;
+      if (c.lost) { lostAt = now; counts.lost++; return null; }
       const r = apply(c, now, line);
       mTrain = mOf(line, nearest(line.coords, train.p));
       return r;
