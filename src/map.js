@@ -928,6 +928,45 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const LABEL_DY = 16;   // the bubble's top (its pointer's tip) below the train's point
   // A bubble never covers a station's name (they are placed first: placeStationNames; the Soft look, 2026-11-15).
   let nameBoxes = [];
+  // Where a bubble goes: under its train, else above it, else beside it (right, then left), its pointer towards the
+  // train; never pushed further away (Max, 2026-11-15: bubbles pushed down past a name ended up far from their
+  // trains). Where every place is taken: the one covering the least, the name still on top. A bubble keeps its place
+  // while that is free, and goes back to one before it only when that one is free with SPARE_PX to spare, so it
+  // doesn't jump to and fro as its train moves (Max's pick B, 2026-11-19).
+  const SIDES = ['down', 'up', 'right', 'left'];
+  const SIDE_DX = 22;        // a bubble beside its train: its pointer's tip this far from the train's point
+  const BUBBLE_MARGIN = 10;  // room kept left and right of a bubble (as before: half its width + 10)
+  const SPARE_PX = 6;
+  // A bubble's box (with its margin) at a side; w is half its width plus the margin, h its height.
+  function bubbleBox(side, x, y, w, h) {
+    if (side === 'down' || side === 'up') {
+      const t = side === 'down' ? y + LABEL_DY : y - LABEL_DY - h;
+      return { l: x - w, r: x + w, t, b: t + h };
+    }
+    const bw = 2 * (w - BUBBLE_MARGIN), t = y - h / 2;
+    const l = side === 'right' ? x + SIDE_DX - BUBBLE_MARGIN : x - SIDE_DX - bw - BUBBLE_MARGIN;
+    return { l, r: l + bw + 2 * BUBBLE_MARGIN, t, b: t + h };
+  }
+  // How much of the stations' names a bubble at a side would cover (square pixels; pad: grown by that much).
+  function coveredAt(side, x, y, w, h, pad = 0) {
+    const b = bubbleBox(side, x, y, w, h);
+    let a = 0;
+    for (const o of nameBoxes) {
+      const dx = Math.min(b.r + pad, o.r) - Math.max(b.l - pad, o.l), dy = Math.min(b.b + pad, o.bt) - Math.max(b.t - pad, o.t);
+      if (dx > 0 && dy > 0) a += dx * dy;
+    }
+    return a;
+  }
+  function placeBubble(x, y, w, h, current) {
+    const keep = current && coveredAt(current, x, y, w, h) === 0;
+    for (const s of SIDES) {
+      if (s === current && keep) return s;
+      if (coveredAt(s, x, y, w, h, keep ? SPARE_PX : 0) === 0) return s;
+    }
+    let best = current ?? 'down', least = coveredAt(best, x, y, w, h);
+    for (const s of SIDES) { const a = coveredAt(s, x, y, w, h); if (a < least) { best = s; least = a; } }
+    return best;
+  }
   function placeNearLabels() {
     if (!isReady) return;
     const { clientWidth: W, clientHeight: H } = box, pts = [];
@@ -963,12 +1002,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         if (one) {
           const { company, label, stale } = g[0].pr;
           const { number, minutes, rest } = splitLabel(label);
-          n.el.className = `near-label${stale ? ' stale' : ''}`;
+          n.el.className = `near-label${stale ? ' stale' : ''}${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
           n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
             ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
-          n.el.className = 'near-label group';
+          n.el.className = `near-label group${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           n.el.textContent = text;
         }
       }
@@ -976,13 +1015,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
       const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
       const h = one && g[0].pr.company ? 40 : 26;
-      // Under its train; over a station's name there, above its train instead; if a name is in the way there too, under
-      // it anyway (Max, 2026-11-15: bubbles pushed down past a name ended up far from their trains).
-      const covers = top => nameBoxes.some(o => o.l < x + w && x - w < o.r && o.t < top + h && top < o.bt);
-      const up = covers(y + LABEL_DY) && !covers(y - LABEL_DY - h);
-      if (up !== n.el.classList.contains('up')) n.el.classList.toggle('up', up);
-      const top = up ? y - LABEL_DY - h : y + LABEL_DY;
-      n.el.style.transform = `translate(${x.toFixed(1)}px, ${top.toFixed(1)}px) translateX(-50%)`;
+      // The station's name stays readable, the bubble moves (Max, 2026-11-19: "B", after the "2 trains" bubble lay under
+      // "Stockholm C"): placeBubble.
+      const side = placeBubble(x, y, w, h, n.side);
+      if (side !== n.side) {
+        if (n.side && n.side !== 'down') n.el.classList.remove(n.side);
+        if (side !== 'down') n.el.classList.add(side);
+        n.side = side;
+      }
+      const b = bubbleBox(side, x, y, w, h);
+      n.el.style.transform = side === 'down' || side === 'up' ? `translate(${x.toFixed(1)}px, ${b.t.toFixed(1)}px) translateX(-50%)`
+        : `translate(${(b.l + BUBBLE_MARGIN).toFixed(1)}px, ${b.t.toFixed(1)}px)`;
     }
     // A bubble that goes fades out (round 4; it fades in by CSS), then is removed.
     for (const [key, n] of nearEls) if (!keep.has(key)) { n.el.classList.add('out'); setTimeout(() => n.el.remove(), 160); nearEls.delete(key); }
