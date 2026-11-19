@@ -9,17 +9,10 @@ import { buildToy } from './toy-trains.js';
 import { toyFor } from './toy-brands.js';
 import { settings } from './settings.js';
 import { modelScale } from './model-size.js';
+import { isToy, modelsAt } from './model-zoom.js';
 
-// Toy or real-size trains, the toy size and from which zoom: src/settings.js, read when used. A change of toy or real
-// makes the map add a new layer (map.js), whose trains are then built the new way.
-export const isToy = () => settings.trainStyle === 'toy';
-// 'symbol': never a model, the dot or triangle at every zoom (Max, 2026-11-14: "Add toggle to never show 3d model.
-// Only dot/triangle"). modelZoom() stays 13 then: the close-in labels and station names change over there as with
-// real-size trains.
-export const symbolOnly = () => settings.trainStyle === 'symbol';
-export const modelZoom = () => (isToy() ? settings.toyZoom : 13);
-// Whether trains are drawn as models at this zoom.
-export const modelsAt = zoom => !symbolOnly() && zoom >= modelZoom();
+// From which zoom the models show: src/model-zoom.js (kept apart so the map needn't load this file to know).
+export { isToy, symbolOnly, modelZoom, modelsAt } from './model-zoom.js';
 const EARTH = 40075016.686;   // metres round the equator
 
 // Kept for as long as the page lives, shared by every layer made (a settings change makes a new layer, map.js):

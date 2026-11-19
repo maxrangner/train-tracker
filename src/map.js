@@ -5,7 +5,7 @@ import { Map, Marker, NavigationControl, GeolocateControl, LngLat, Point, setWor
 import { Protocol } from 'pmtiles';
 import { splitLabel, minutesText } from './tag.js';
 import { lateClass } from './lateness.js';
-import { createTrainLayer, modelZoom, modelsAt, symbolOnly, isToy } from './trains-3d.js';
+import { modelZoom, modelsAt as modelsAtZoom, symbolOnly, isToy } from './model-zoom.js';
 import { settings, isDark } from './settings.js';
 import { t } from './i18n.js';
 import { progressAlong } from './path.js';
@@ -116,6 +116,8 @@ const FIRST_VIEW_MAX_MS = 8000;
 
 // The fastest a drawn train moves, in metres a second (250 km/h): for how often the dots are refreshed (trainsEvery).
 const FASTEST_MS = 70;
+// The 3D code is fetched this long after the first view (load3d), so it doesn't hold up the trains' first showing.
+const LOAD_3D_AFTER_MS = 3000;
 // Trains closer than this on the screen (pixels) share one label close in ("3 trains").
 const GROUP_PX = 40;
 // Far out, the map groups labels of trains closer than this (smaller than close in: a label there is one short line,
@@ -225,6 +227,30 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
+  // The 3D code (three.js, about 146 kB of the page's 526 kB packed; 2026-11-19) comes on its own: 3 s after the
+  // first view, or at once when the view is near the models' zoom (load3d, below). Until it is here, close in shows
+  // the trains as Symbol mode does (Max, 2026-11-19: "Yes, add the small pause").
+  let createTrainLayer = null, loading3d = null;
+  const modelsAt = zoom => Boolean(layer3d) && modelsAtZoom(zoom);
+  function load3d() {
+    if (!getTrains3d || loading3d) return;
+    loading3d = import('./trains-3d.js').then((m) => {
+      createTrainLayer = m.createTrainLayer;
+      // Our layers on the map (not a base map swap under way, which adds this one with the others): add it now.
+      if (map.getLayer('trains-3d') || !map.getLayer('train-labels')) return;
+      add3d();
+      switched = null;
+      dotsHeld = null;
+      switchModels();
+      map.triggerRepaint();
+    }).catch((e) => { loading3d = null; console.warn('3D trains:', e.message); });   // tried again at the next zoom
+  }
+  function add3d() {
+    if (!getTrains3d || !createTrainLayer) return;
+    layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
+      selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) });
+    map.addLayer(layer3d, map.getLayer('train-labels') ? 'train-labels' : undefined);   // under the labels, as always
+  }
   let shownRail = null;  // the rail lines shown (a key of RAIL_SOURCES)
   let pathProgress = 0;   // how far along the shown path the train is (setPathProgress)
   let pathMetres = 0;     // the shown path's length
@@ -508,8 +534,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       },
       paint: { 'icon-opacity': dotOpacity(selected ?? '', modelsAt(map.getZoom())) },
     });
-    if (getTrains3d) { layer3d = createTrainLayer({ getTrains: getTrains3d, along: alongTrack,
-      selection: () => (selected ? { id: selected, colour: dotColours(dark)[selStale ? 'unknown' : selLate] ?? dotColours(dark).unknown, faded: selStale } : null) }); map.addLayer(layer3d); }
+    add3d();   // (once the 3D code is here: load3d)
     // Labels further out: one per train, and the map leaves out labels that would overlap.
     map.addLayer({
       id: 'train-labels',
@@ -852,11 +877,20 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.getCanvasContainer().appendChild(namesBox);
   const nameEls = new globalThis.Map();   // station signature -> its element
   const NAME_DY = 15.4;   // the name's bottom above the station's point (as the map's: 1.1 em of 14 px)
+  // What the names were last placed for: the camera, the map's size, the stations and the open train's route. The
+  // names were placed again after every drawing of the map, also when only a train had moved (every station in
+  // Sweden projected each time; Codex's beta review point 9, 2026-11-19).
+  let namesFor = null;
   function placeStationNames(W, H) {
     if (map.getZoom() < Math.max(11, modelZoom())) {
       if (nameEls.size) { namesBox.replaceChildren(); nameEls.clear(); }
+      namesFor = null;
       return;
     }
+    const c = map.getCenter();
+    const key = [c.lng, c.lat, map.getZoom(), map.getBearing(), map.getPitch(), W, H, routeSigs, data.stations, data['route-names']];
+    if (namesFor && key.every((v, i) => v === namesFor[i])) return;
+    namesFor = key;
     const placed = [], keep = new Set(), onRoute = new Set(routeSigs);
     const order = onRoute.size ? [...data['route-names'].features, ...data.stations.features.filter(f => !onRoute.has(f.properties.sig))] : data.stations.features;
     for (const f of order) {
@@ -1135,16 +1169,46 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const remove = [];
     for (const id of dotsHeld.keys()) if (!seen.has(id)) remove.push(id);
     for (const id of remove) dotsHeld.delete(id);
-    if (add.length || remove.length) src.updateData({ add, remove });
+    if (add.length || remove.length) { src.updateData({ add, remove }); return true; }
+    return false;
+  }
+  // Metres in a pixel at the view's middle.
+  const metresPerPx = () => 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** map.getZoom());
+  // Close in: would sendDots change anything (a dot moved a quarter pixel, changed, came or went)?
+  function dotsChanged(geojson) {
+    if (!dotsHeld || dotsHeld.size !== geojson.features.length) return true;
+    const quarterPx = 0.25 * metresPerPx();
+    return geojson.features.some((f) => { const was = dotsHeld.get(f.properties.id); return !was || dotMoved(was, f, quarterPx); });
+  }
+  // Close in: the trains as the map was last drawn for (setTrains), id -> feature; null: draw next time.
+  let drawnHeld = null;
+  let groupsFor;   // the selected train when the groups were last sent (setTrains)
+  // Has a train in the view (or a fifth of it beyond, as the 3D layer takes them) moved a tenth of a pixel, turned a
+  // fifth of a degree (the end of a long toy model moves about a tenth of a pixel), changed its words or colours,
+  // come or gone, since the map was last drawn for them?
+  function modelsChanged(geojson) {
+    if (!drawnHeld) return true;
+    const b = map.getBounds(), padLon = (b.getEast() - b.getWest()) * 0.2, padLat = (b.getNorth() - b.getSouth()) * 0.2;
+    const w = b.getWest() - padLon, e = b.getEast() + padLon, s = b.getSouth() - padLat, n = b.getNorth() + padLat;
+    const inView = ([lon, lat]) => lon >= w && lon <= e && lat >= s && lat <= n;
+    const tenthPx = 0.1 * metresPerPx(), seen = new Set();
+    for (const f of geojson.features) {
+      if (!inView(f.geometry.coordinates)) continue;
+      const id = f.properties.id, was = drawnHeld.get(id);
+      seen.add(id);
+      if (!was || dotMoved(was, f, tenthPx, 0.2)) return true;
+    }
+    for (const [id, f] of drawnHeld) if (!seen.has(id) && inView(f.geometry.coordinates)) return true;
+    return false;
   }
   // Has a dot changed enough to be sent again? Its place by a quarter pixel (in metres), its heading by half a degree
   // (the tip of the largest arrow moves about a quarter pixel), or any other of its words or colours.
-  function dotMoved(was, now, quarterPx) {
+  function dotMoved(was, now, quarterPx, degrees = 0.5) {
     const [x0, y0] = was.geometry.coordinates, [x1, y1] = now.geometry.coordinates;
     const metres = Math.hypot((x1 - x0) * Math.cos(y0 * Math.PI / 180), y1 - y0) * 111319.5;
     if (metres >= quarterPx) return true;
     const a = was.properties, b = now.properties;
-    if (Math.abs((((a.bearing ?? 0) - (b.bearing ?? 0)) % 360 + 540) % 360 - 180) >= 0.5) return true;
+    if (Math.abs((((a.bearing ?? 0) - (b.bearing ?? 0)) % 360 + 540) % 360 - 180) >= degrees) return true;
     for (const k in b) if (k !== 'bearing' && a[k] !== b[k]) return true;
     for (const k in a) if (!(k in b)) return true;
     return false;
@@ -1188,6 +1252,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     map.on('render', check);
     map.on('idle', check);
   });
+  // The 3D code: 3 s after the first view, or at once when the view is (or comes) near the models' zoom.
+  const near3d = () => { if (map.getZoom() >= modelZoom() - 2) load3d(); };
+  ready.then(near3d);
+  map.on('zoom', near3d);
+  shown.then(() => setTimeout(load3d, LOAD_3D_AFTER_MS));
 
   // Show the whole of a box ([[west, south], [east, north]]) in the map left free by the panel or card
   // (a train's path; a disruption's stretches: Max, 2026-11-16, "Show everything").
@@ -1233,16 +1302,34 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       data.trains = geojson;
       nearProps = new globalThis.Map(geojson.features.map(f => [f.properties.id, f.properties]));   // the close-in labels' words
       if (!isReady) return;
-      if (!labelsOnPage()) {   // (the map's labels hidden: their groups needn't be worked out)
+      const t = performance.now();
+      if (modelsAt(map.getZoom())) {
+        // Close in the models and their bubbles are drawn again only when one in view moved a tenth of a pixel,
+        // turned, changed or came or went (a moving camera draws the map anyway). Until 2026-11-19 the map was drawn
+        // 30 times a second here even with every train in view standing (Codex's beta review point 9).
+        if (map.isMoving() || modelsChanged(geojson)) {
+          drawnHeld = new globalThis.Map(geojson.features.map(f => [f.properties.id, f]));
+          map.triggerRepaint();
+        }
+        // The dots are unseen here; they only help a tap find a train: sent twice a second, and only when one changed
+        // (every send makes the map draw again).
+        if (t - lastTrainsSent >= 500) {
+          lastTrainsSent = t;
+          if (dotsChanged(geojson)) sendDots(geojson);
+        }
+        return;
+      }
+      drawnHeld = null;
+      lastTrainsSent = t;
+      const sent = sendDots(geojson);
+      // The map's labels and their "3 trains" groups (hidden where the labels are the page's bubbles: then they
+      // needn't be worked out). A group source rebuilds every tile in view on any change, so it is sent only when a
+      // dot was (a train moved a quarter pixel, changed, came or went) or the selected train changed (2026-11-19).
+      if (!labelsOnPage() && (sent || groupsFor !== selected)) {
+        groupsFor = selected;
         data['train-groups'] = selected ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
         map.getSource('train-groups')?.setData(data['train-groups']);
       }
-      // From the model zoom the dots are unseen; they only help a tap find a train. They are sent twice a second
-      // there, and in between the map is only drawn again (the models move); every refresh used to cost two draws.
-      const t = performance.now();
-      if (modelsAt(map.getZoom()) && t - lastTrainsSent < 500) { map.triggerRepaint(); return; }
-      lastTrainsSent = t;
-      sendDots(geojson);
     },
     // Follow a train: hold it in the middle of the view above the train panel (which covers up to 45 % of the
     // screen's bottom). getPlace() -> { lon, lat } where the train is drawn now, or null when it is gone.
@@ -1405,6 +1492,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Ring the train with this id (null: none). Its dot and label are then drawn by the selection marker.
     async select(id) {
       selected = id;
+      drawnHeld = null;   // close in, the ring under the model comes or goes at the next drawing (setTrains)
       await ready;
       if (isReady) applySelectionFilters();
       if (!id && selShown) { selMarker.remove(); selShown = false; selLabel.hidden = true; map.off('move', holdLabel); }
