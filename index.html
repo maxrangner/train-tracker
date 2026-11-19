@@ -313,6 +313,9 @@
     .near-label .m.late { color: var(--t-late); } .near-label .m.unknown { color: var(--t-unknown); }
     .near-label.stale { opacity: 0.5; }
     .near-label.up::before { top: auto; bottom: -4px; border-radius: 0 0 2px 0; }   /* above its train: the pointer down */
+    /* Beside its train (a station's name under and above it; Max's pick B, 2026-11-19): the pointer sideways to it. */
+    .near-label.right::before { left: -4px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 0 0 2px; }
+    .near-label.left::before { left: auto; right: -4px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 2px 0 0; }
     .near-label.group { font-size: 13px; font-weight: 800; color: var(--accent); }
     /* Lateness tags (src/tag.js): the card's heading, boards, the picker. */
     .tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;

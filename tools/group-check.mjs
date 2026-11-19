@@ -1,8 +1,9 @@
 // A tap on a train shown inside a "N trains" group opens the group's list, not the train (2026-11-18, Max: "Should
 // only show the menu for choosing all n number of trains"); a train with its own label still opens its card.
-// Far out (the map's grouped labels) and close in (the page's bubbles), on the rush-hour replay.
+// Far out (the map's grouped labels) and close in (the page's bubbles), on the rush-hour replay. Also: close in no
+// bubble lies over a station's name (Max's pick B, 2026-11-19).
 // node tools/group-check.mjs (with npm run dev; PAGE= for another port).
-import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
+import { launch, address, sleep, PHONE, CARD_HOUR, RUSH_HOUR } from './lib/browser.mjs';
 
 const fails = [], notes = [];
 const expect = (ok, what) => { (ok ? notes : fails).push(what); };
@@ -68,8 +69,11 @@ try {
     const b = document.querySelector('.near-label.group');
     if (!b) return null;
     const n = parseInt(b.textContent, 10), r = b.getBoundingClientRect(), box = window.__map.getContainer().getBoundingClientRect();
-    // The group's trains are just above its bubble (a bubble starts 16 px below its train): the nearest dot there.
-    const x = (r.left + r.right) / 2 - box.left, y = r.top - box.top - 16;
+    // The group's trains are next to its bubble: 16 px above it (src/map.js LABEL_DY), below it when it is above them
+    // ('up'), 22 px to its left or right when it is beside them (SIDE_DX): the nearest dot there.
+    const c = b.classList, mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
+    const x = (c.contains('right') ? r.left - 22 : c.contains('left') ? r.right + 22 : mx) - box.left;
+    const y = (c.contains('up') ? r.bottom + 16 : c.contains('right') || c.contains('left') ? my : r.top - 16) - box.top;
     const m = window.__map, dot = m.queryRenderedFeatures([[x - 30, y - 30], [x + 30, y + 30]], { layers: ['train-dots'] })[0];
     if (!dot) return { n, none: true };
     const q = m.project(dot.geometry.coordinates);
@@ -83,6 +87,31 @@ try {
     expect(s.picker && s.rows === near.n && !s.card, `close in: a tap on a train under a "${near.n} trains" bubble lists ${s.rows} (card ${s.card || 'not opened'})`);
   }
   expect(!errors.length, `page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
+
+  // ---- Close in: no bubble over a station's name (Max's pick B, 2026-11-19) ----
+  // In the morning rush at 07:01 a "2 trains" bubble at Stockholm C lay under the name "Stockholm C" (before:
+  // 40 looks of 40): now the bubble moves beside its train. Watched for 10 s.
+  const rush = await browser.newPage();
+  await rush.setViewport(PHONE);
+  const rushErrors = [];
+  rush.on('pageerror', e => rushErrors.push(e.message));
+  await rush.goto(address({ replay: RUSH_HOUR, lang: 'en', theme: 'light', view: '14/59.3308/18.0585' }), { waitUntil: 'domcontentloaded' });
+  for (let t0 = Date.now(); Date.now() - t0 < 40000; await sleep(400)) {
+    if (await rush.evaluate(() => (window.__trains?.count ?? 0) > 0 && Boolean(window.__map?.getLayer('trains-3d'))).catch(() => false)) break;
+  }
+  await sleep(2000);
+  let looks = 0, over = 0, beside = 0;
+  for (let i = 0; i < 20; i++, await sleep(500)) {
+    const r = await rush.evaluate(() => {
+      const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+      const names = [...document.querySelectorAll('.station-name')].map(n => n.getBoundingClientRect());
+      return [...document.querySelectorAll('.near-label:not(.out)')].map(b => ({ over: names.some(n => hit(b.getBoundingClientRect(), n)),
+        beside: b.classList.contains('right') || b.classList.contains('left') }));
+    });
+    for (const b of r) { looks++; over += b.over; beside += b.beside; }
+  }
+  expect(looks > 0 && over === 0, `close in at Stockholm C (rush 07:01): bubbles over a station's name ${over} of ${looks} looks (${beside} beside their trains)`);
+  expect(!rushErrors.length, `page errors (rush): ${rushErrors.slice(0, 3).join(' | ') || 'none'}`);
 } finally { await browser.close(); }
 
 for (const n of notes) console.log(`  ok   ${n}`);
