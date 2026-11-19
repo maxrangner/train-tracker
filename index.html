@@ -74,7 +74,9 @@
       font: 700 14px/1 var(--font); font-variant-numeric: tabular-nums; background: var(--t-ontime-bg); color: var(--t-ontime); white-space: nowrap; }
     #status .live { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 25%, transparent); }
     #status.slow { background: var(--t-some-bg); color: var(--t-some); }
-    #status.problem { background: var(--t-late-bg); color: var(--t-late); white-space: normal; }
+    #status.problem { background: var(--t-late-bg); color: var(--t-late); }
+    /* One line, never wider than this (Max, 2026-11-19: some texts were "WAY too long"; tools/pill-check.mjs). */
+    #status .count { max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; }
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .menu-icon { display: inline-flex; margin-right: 8px; color: var(--muted); vertical-align: -3px; }
     /* ☰ (Max's pick A, 2026-11-18): first in the bar, where people look for a menu. */

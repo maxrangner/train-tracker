@@ -24,7 +24,7 @@ import { now, hhmm, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
 import { createStatsPage } from './stats-page.js';
-import { createConnection } from './connection.js';
+import { createConnection, pillText } from './connection.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
 import kofiCup from './kofi-cup.png';
@@ -1024,7 +1024,10 @@ setInterval(() => {
   const outdated = status.positions === 'outdated';
   const state = outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
   const short = `${t('trainsCount', trains.count)} · ${state}`;
-  statusCount.textContent = state;
+  // The pill itself: two or three words (Max, 2026-11-19: some were "WAY too long", the feeds' own error texts); the
+  // whole line stays its label and title, and the connection screen behind it tells the rest.
+  statusCount.textContent = pillText({ mode: status.positions, replayAt: replay ? hhmm(tNow) : null, outdated,
+    pausedSince: paused ? clock(status.pausedSince) : null, noDataSince: noData ? clock(lastDataAt) : null, error: Boolean(error) });
   statusEl.title = short;
   statusEl.ariaLabel = short;
   // Yellow when not streaming (asking every 10 s, reconnecting, starting). The streaming mode is 'stream' (shown as
