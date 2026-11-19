@@ -3,30 +3,35 @@
 // stream of changes (corrections, delays, tracks, cancellations, new and deleted trains); and every station's monitor
 // messages. From it fetcher/main.mjs makes the tap files (src/tap-files.js is their format):
 //   card-NN   the rows of the trains whose number is in group NN (a train's card; the number search)
-//   board-NN  the advertised rows of the stations in group NN, from 90 minutes ago on (a station's board)
+//   board-NN  the stations in group NN: each one's next trains not yet gone, per direction (a station's board)
 //   taps-add  every row changed since the oldest card or board file now in use, at its newest state
 //   taps-index  internal number -> public number (a card asked by internal number finds its group)
 //   messages  every station's monitor messages in force or coming
 // Trafikverket is asked: a whole day in 6-hour slices of planned time (halved while an answer is too big; measured
 // 2026-11-17: 7 questions, 21 s, 94k rows), one question a second; a day at start, at the day's turn, tomorrow at 18:00
 // and today again at 03:30 (a clean copy); the changes stream (one stream); messages every 2 minutes.
-import { ask, follow } from '../src/trafikverket.js';
+import { ask, follow, boardGone } from '../src/trafikverket.js';
 import { swedishDay } from '../src/clock.js';
-import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey } from '../src/tap-files.js';
+import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey, BOARD_BACK_MS } from '../src/tap-files.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
 const KEEP_RUNNING_MS = 6 * HOUR;     // yesterday's rows kept while planned less than this ago
-const BOARD_BACK_MS = 90 * MIN;       // a board shows from 90 minutes ago (as src/trafikverket.js fetchBoard)
-const BOARD_ROWS = 120;               // rows per station and direction (30 shown at most, asked 4 times as many)
+// A board file holds per station and direction its next BOARD_ROWS trains not yet gone (src/trafikverket.js
+// boardGone), planned from BOARD_BACK_MS ago on (a very late train still counts). Until 2026-11-19 it held the first
+// 120 rows from 90 minutes back, gone or not (Codex's beta review point 2). Measured on the day of 17 Nov: a board of
+// 40 (the most a page shows) read 25 minutes after its file was made needs at most 59 such rows (Göteborg C arrivals,
+// 07:30); the old rule left it short 11 times in 7,027 station-quarter-hours, this one 0.
+const BOARD_ROWS = 80;
 const CHANGES_BACK_MS = 15 * MIN;     // the changes stream starts from changes in the last 15 minutes
 const FIELDS = TAP_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 const Q = filter => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"><FILTER>${filter}</FILTER>${FIELDS}</QUERY>`;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-export function createTimetable({ log, onChange = () => {}, onLoaded = () => {} }) {
+// seed (checks only, tools/board-check.mjs): { days, rows } put in at once; nothing asked, no stream, no timers.
+export function createTimetable({ log, onChange = () => {}, onLoaded = () => {}, seed = null }) {
   const w = words();                  // one word list for everything in memory
   const rows = new Map();             // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
-  const days = new Set();             // days loaded (YYYY-MM-DD)
+  const days = new Set(seed?.days ?? []);   // days loaded (YYYY-MM-DD)
   let messages = [], messagesAt = null, lastChange = Date.now(), stopped = false, loading = null;
   const counts = { asks: 0, loads: 0, changes: 0, rows: 0 };
 
@@ -91,16 +96,20 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {} 
 
   // Changes: one live stream of every TrainAnnouncement changed from 15 minutes ago on. After a break longer than
   // that, today is loaded again (a change could have been missed).
-  const stream = follow({
+  if (seed) for (const a of seed.rows) put(a);
+  const stream = seed ? () => {} : follow({
     makeQuery: ({ changeId, stream: s }) => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" ${s ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
       `<FILTER><GT name="ModifiedTime" value="${new Date(Date.now() - CHANGES_BACK_MS).toISOString()}"/></FILTER>${FIELDS}</QUERY>`,
-    onResult: (r, { first = false } = {}) => {
+    // Any answer after a gap of nearly the 15 minutes the question reaches back: today again (until 2026-11-19 only when
+    // the gap came at the start, so a later break lost the changes before its last 15 minutes until 03:30; TODO 31,
+    // Codex's beta review point 7). A quiet stream is opened again after 3 minutes (silentMs), so a gap means a break.
+    onResult: (r) => {
       const gap = Date.now() - lastChange;
       lastChange = Date.now();
       let n = 0;
       for (const a of r.TrainAnnouncement ?? []) if (put(a)) n++;
       counts.changes += n;
-      if (first && gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
+      if (gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
       if (n) onChange();
     },
     onStatus: s => { if (s.error) log(`timetable changes: ${s.mode}: ${s.error}`); },
@@ -120,14 +129,14 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {} 
 
   // Timers: the days every minute (cheap when nothing is due), today again at 03:30, messages every 2 minutes.
   let resyncDay = swedishDay(Date.now());   // today is loaded fresh at start: the clean copy is from tomorrow 03:30 on
-  const dayTimer = setInterval(() => {
+  const dayTimer = seed ? null : setInterval(() => {
     const hm = new Date().toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' });
     const today = swedishDay(Date.now());
     if (hm >= '03:30' && resyncDay !== today && days.has(today)) { resyncDay = today; days.delete(today); }
     keepDays();
   }, MIN);
-  const msgTimer = setInterval(loadMessages, 2 * MIN);
-  keepDays(); loadMessages();
+  const msgTimer = seed ? null : setInterval(loadMessages, 2 * MIN);
+  if (!seed) { keepDays(); loadMessages(); }
 
   // ---------- the files' contents ----------
   const out = (list, extra) => {   // rows from memory (base 0, the memory's words) -> a file body
@@ -141,12 +150,14 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {} 
     ready: () => days.has(swedishDay(Date.now())),
     // Cards: today's and yesterday's trains (tomorrow's only on boards, until the day turns).
     card: (g, t) => { const today = swedishDay(t); return out(all().filter(x => x.day <= today && groupOf(x.r[1] || x.r[0]) === g), { kind: `card-${g}`, t }); },
-    // Boards: per station and direction its next BOARD_ROWS advertised rows from 90 minutes ago (a board shows at most
-    // 30, src/trafikverket.js fetchBoard asks for 4 times as many).
+    // Boards: per station and direction its next BOARD_ROWS advertised trains not gone at t (above). (Memory rows have
+    // base 0: their times are seconds since 1970.)
     board: (g, t) => {
       const by = new Map();
+      const ms = v => (v === null || v === undefined ? null : v * 1000);
       for (const x of rows.values()) {
-        if (!(x.r[5] & 1) || x.r[6] * 1000 < t - BOARD_BACK_MS || groupOf(x.r[3]) !== g) continue;
+        if (!(x.r[5] & 1) || (x.r[5] & 4) || x.r[6] * 1000 < t - BOARD_BACK_MS || groupOf(x.r[3]) !== g) continue;
+        if (boardGone({ planned: x.r[6] * 1000, estimated: ms(x.r[7]), actual: ms(x.r[8]), canceled: Boolean(x.r[5] & 2) }, t)) continue;
         const k = x.r[3] + x.r[4];
         if (!by.has(k)) by.set(k, []);
         by.get(k).push(x);

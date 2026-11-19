@@ -130,25 +130,31 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
     es.onerror = () => { if (es && es.readyState === EventSource.CLOSED) streamFailed('the stream closed'); };
   }
 
+  // While every question fails (no internet, Trafikverket down) it asks less and less often: 10, 20, 40, then every
+  // 60 s, and doesn't try the stream again until a question is answered (TODO 28, 2026-11-19: in an outage it asked every
+  // 10 s, plus three stream tries every few minutes; tools/follow-check.mjs: 114 questions in 20 minutes, now 23).
+  let pollFails = 0;
   async function poll() {
     if (stopped) return;
     try {
       const result = await ask(makeQuery({ changeId: lastChangeId, stream: false }));
       if (stopped) return;
       lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
+      pollFails = 0;
       onResult(result);
       onStatus({ mode: 'polling' });
     } catch (e) {
+      pollFails++;
       onStatus({ mode: 'polling', error: e.message });
     }
     // Every 5 minutes, try the live stream again (if it breaks three more times, back to asking every 10 s).
-    if (Date.now() - pollingSince >= retryStreamMs) {
+    if (!pollFails && Date.now() - pollingSince >= retryStreamMs) {
       pollingSince = null;
       failures = [];
       onStatus({ mode: 'reconnecting' });
       return openStream();
     }
-    setTimeout(poll, 10000);
+    setTimeout(poll, pollFails ? Math.min(60000, 10000 * 2 ** (pollFails - 1)) : 10000);
   }
 
   openStream();
@@ -389,6 +395,12 @@ export async function fetchStations() {
 
 // ---------- A station's board ----------
 
+// A train that no longer belongs on a board at moment at (ms): left (or arrived) before it, cancelled and planned more
+// than 5 minutes before it, or neither seen nor expected and planned more than 30 minutes before it. One rule for the
+// page (fetchBoard) and the fetcher's board files (fetcher/timetable.mjs). x: { planned, estimated, actual, canceled }.
+export const boardGone = (x, at) => Boolean((x.actual && x.actual < at) || (x.canceled && x.planned < at - 5 * 60000)
+  || (!x.actual && !x.estimated && x.planned < at - 30 * 60000));
+
 // The next trains at a station: departures ('Avgang') or arrivals ('Ankomst'), passenger stops only, at most n.
 // A train still counts while it hasn't left (or arrived), however late. at: the page's clock (ms).
 // [{ key, operational, date, number, planned, estimated, actual, track, canceled, product, from, to }]
@@ -416,9 +428,8 @@ export async function fetchBoard(sig, activity, at, n) {
     product: a.ProductInformation?.[0]?.Description ?? null,
     from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
   }));
-  // Gone: left (or arrived) before now, or cancelled and planned more than 5 minutes ago. Then the next n.
-  const out = rows.filter(x => !(x.actual && x.actual < at) && !(x.canceled && x.planned < at - 5 * 60000)
-    && !(!x.actual && !x.estimated && x.planned < at - 30 * 60000)).slice(0, n);
+  // Gone trains out (boardGone), then the next n.
+  const out = rows.filter(x => !boardGone(x, at)).slice(0, n);
   out.asOf = r.asOf ?? null;   // from files: when they were made
   return out;
 }

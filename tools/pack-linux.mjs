@@ -7,16 +7,22 @@
 // The libraries go inside the package (npm ci --omit=dev --ignore-scripts here: the lock file's exact versions and
 // checksums, no library's own install program run; all 9 are plain JavaScript), so the Linux PC needs Node only, not
 // npm (2026-11-17: Ubuntu's npm would have pulled in hundreds of packages).
-// Run: node tools/pack-linux.mjs     -> dist-linux/sparat/ and dist-linux/sparat-<version>.tar.gz
-// On the Linux PC (docs/deploy.md section 4): unpack into /opt/sparat, restart the services.
-import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync, existsSync } from 'node:fs';
-import { dirname, join, posix } from 'node:path';
-import { spawnSync } from 'node:child_process';
+// Since 2026-11-19 (batch 2) the package also holds `sparat` (linux/sparat: update, back, status on the Linux PC) and
+// MANIFEST.json: the version, the commit it was made from, and every file with its SHA-256 fingerprint (libraries and
+// service files included). `sparat update` checks every fingerprint before it switches; tools/release.mjs compares
+// manifests to say exactly what changed for the Linux PC. Beside the package: <name>.sha256, its own fingerprint.
+// Run: node tools/pack-linux.mjs     -> dist-linux/sparat/, dist-linux/sparat-<version>.tar.gz and .tar.gz.sha256
+// On the Linux PC: sudo sparat update ~/sparat-<version>.tar.gz (docs/deploy.md section 4).
+import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, posix, relative } from 'node:path';
+import { spawnSync, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const OUT = 'dist-linux', DIR = `${OUT}/sparat`;
 const STARTS = ['fetcher/main.mjs', 'fetcher/self-check.mjs', 'monitor/main.mjs', 'monitor/top.mjs'];
 const ALSO = ['fetcher/data.htaccess', 'fetcher/example.env', 'fetcher/sparat-fetcher.service',
   'monitor/page.html', 'monitor/example.env', 'monitor/sparat-monitor.service', 'LICENSE', 'NOTICE'];
+const SCRIPT = 'linux/sparat';
 const LIBS = ['ssh2', 'nodemailer'];
 
 // Every project file reached by import from the start files (import/export … from '…' at a line's start, and import('…')).
@@ -50,16 +56,34 @@ while (todo.length) {
   keep[key] = e;
   todo.push(...Object.keys(e.dependencies ?? {}), ...Object.keys(e.optionalDependencies ?? {}));
 }
-const out = { name: 'sparat-linux', version: pkg.version, private: true, type: 'module', license: pkg.license, dependencies: deps };
+// Its version is a fixed 0.0.0: the real one is in MANIFEST.json, and a version here would make every release look like
+// a change for the Linux PC (tools/release.mjs compares the package file by file).
+const out = { name: 'sparat-linux', version: '0.0.0', private: true, type: 'module', license: pkg.license, dependencies: deps };
 writeFileSync(join(DIR, 'package.json'), JSON.stringify(out, null, 2) + '\n');
 writeFileSync(join(DIR, 'package-lock.json'), JSON.stringify({ name: out.name, version: out.version, lockfileVersion: 3, requires: true,
   packages: { '': { name: out.name, version: out.version, license: out.license, dependencies: deps }, ...keep } }, null, 2) + '\n');
 
 const libs = spawnSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund', { cwd: DIR, stdio: 'inherit', shell: true });
 if (libs.status !== 0) { console.log('pack-linux: installing the libraries failed'); process.exit(1); }
+// The Linux PC's command (Linux line endings, whatever this PC's copy has).
+writeFileSync(join(DIR, 'sparat'), readFileSync(SCRIPT, 'utf8').replace(/\r\n/g, '\n'));
 const search = spawnSync(process.execPath, ['tools/key-search.mjs', DIR], { stdio: 'inherit' });
 if (search.status !== 0) { rmSync(OUT, { recursive: true, force: true }); console.log('pack-linux: stopped, the package was deleted'); process.exit(1); }
+// The manifest: every file in the package with its fingerprint, the version, the commit (with "+" when the working
+// folder had uncommitted changes, so a package can't pass for a commit it doesn't match).
+const sha = p => createHash('sha256').update(readFileSync(p)).digest('hex');
+const manifestFiles = {};
+(function walk(d) {
+  for (const n of readdirSync(d).sort()) {
+    const p = join(d, n);
+    if (statSync(p).isDirectory()) walk(p); else manifestFiles[relative(DIR, p).replaceAll('\\', '/')] = sha(p);
+  }
+})(DIR);
+const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim() +
+  (execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim() ? '+' : '');
+writeFileSync(join(DIR, 'MANIFEST.json'), JSON.stringify({ version: pkg.version, commit, made: new Date().toISOString(), files: manifestFiles }, null, 1) + '\n');
 const tar = `sparat-${pkg.version}.tar.gz`;
 const t = spawnSync('tar', ['-czf', tar, 'sparat'], { cwd: OUT, stdio: 'inherit' });
 if (t.status !== 0) process.exit(1);
-console.log(`pack-linux: ${files.size + ALSO.length + 2} files, libraries ${Object.keys(keep).map(k => k.slice(13)).join(', ')} -> ${OUT}/${tar}`);
+writeFileSync(join(OUT, `${tar}.sha256`), `${sha(join(OUT, tar))}  ${tar}\n`);
+console.log(`pack-linux: ${Object.keys(manifestFiles).length} files (libraries ${Object.keys(keep).map(k => k.slice(13)).join(', ')}), ${pkg.version} at ${commit} -> ${OUT}/${tar} (+ .sha256)`);

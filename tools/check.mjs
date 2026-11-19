@@ -210,8 +210,25 @@ if (netCheck.status !== 0) failed++;
 const filesCheck = spawnSync('node', ['tools/files-check.mjs'], { stdio: 'inherit' });
 if (filesCheck.status !== 0) failed++;
 
-// The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check).
+// The boards end to end: a saved day through the fetcher's own board files and the page's reader (batch 2,
+// 2026-11-19): every board full at 4, 12 and 40 rows, read 25 minutes after its file. About 70 s, offline.
+const boardCheck = spawnSync('node', ['tools/board-check.mjs'], { stdio: 'inherit' });
+if (boardCheck.status !== 0) failed++;
+
+// The timetable stream through a 20-minute Trafikverket outage on a fast clock (batch 2, 2026-11-19): it asks less
+// and less often while every question fails, and loads today again when answers come back. About 15 s, offline.
+const followCheck = spawnSync('node', ['tools/follow-check.mjs'], { stdio: 'inherit' });
+if (followCheck.status !== 0) failed++;
+
+// The Linux PC's sparat command on a pretend Linux (batch 2, 2026-11-19): update, a damaged package or a wrong
+// fingerprint refused with nothing touched, a version that won't start rolled back, back and forth, status. ~20 s.
+const updateCheck = spawnSync('node', ['tools/linux-update-check.mjs'], { stdio: 'inherit' });
+if (updateCheck.status !== 0) failed++;
+
+// The screens (exit code 2 from it: the page isn't running, which is said and doesn't fail the check, for quick runs;
+// in a release, SPARAT_RELEASE from tools/release.mjs, it fails: a release never goes out unchecked on screen).
 const ui = spawnSync('node', ['tools/ui-check.mjs'], { stdio: 'inherit' });
+if (ui.status === 2 && process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them; start npm run dev'); failed++; }
 // The same screens on the page reading the fetcher's files (public-plan step 3): a fetcher replays the rush hour into
 // its files on this computer (port 8095; with the key from .env, stations and disruptions are asked as well).
 let filesUi = { status: 0 };
