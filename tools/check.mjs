@@ -217,8 +217,8 @@ if (boardCheck.status !== 0) failed++;
 
 // The timetable stream through a 20-minute Trafikverket outage on a fast clock (batch 2, 2026-11-19): it asks less
 // and less often while every question fails, and loads today again when answers come back. About 15 s, offline.
-const followCheck = spawnSync('node', ['tools/follow-check.mjs'], { stdio: 'inherit' });
-if (followCheck.status !== 0) failed++;
+const outageCheck = spawnSync('node', ['tools/outage-check.mjs'], { stdio: 'inherit' });
+if (outageCheck.status !== 0) failed++;
 
 // The Linux PC's sparat command on a pretend Linux (batch 2, 2026-11-19): update, a damaged package or a wrong
 // fingerprint refused with nothing touched, a version that won't start rolled back, back and forth, status. ~20 s.
