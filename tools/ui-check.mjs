@@ -283,12 +283,25 @@ try {
   expect(after.same, 'changing the look reloaded the page');
   expect(after.theme === 'dark' && after.layers === 4, `after choosing Dark: look ${after.theme}, ${after.layers} of 4 of our map layers`);
   // The accent colour (Settings → Accent colour, 2026-11-15): a swatch sets the page's accent and the route's colour.
+  // Since 2026-11-19 the swatches are folded under the row: a tap on it opens them (14), a pick folds them shut and
+  // the row shows the colour's name.
+  const folded = () => page.evaluate(() => ({ open: document.getElementById('accent-open').getAttribute('aria-expanded'),
+    h: Math.round(document.getElementById('accent-pick').getBoundingClientRect().height), inert: document.getElementById('accent-pick').inert,
+    n: document.querySelectorAll('#settings [data-key="accent"] button').length, name: document.querySelector('#accent-open .accent-name').textContent }));
+  const before = await folded();
+  expect(before.open === 'false' && before.h === 0 && before.inert, `accent colours not folded at first: ${JSON.stringify(before)}`);
+  await page.click('#accent-open');
+  await sleep(600);
+  const opened = await folded();
+  expect(opened.open === 'true' && opened.h > 60 && !opened.inert && opened.n === 14, `accent colours didn't fold open: ${JSON.stringify(opened)}`);
   await page.click('#settings [data-key="accent"] [data-v="ocean"]');
   await sleep(3000);
   const accent = await page.evaluate(() => ({ css: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
     route: JSON.stringify(window.__map.getPaintProperty('path-line', 'line-gradient')), pressed: document.querySelector('#settings [data-key="accent"] [aria-pressed="true"]')?.dataset.v }));
   expect(accent.css === '#5fa8ff' && accent.route.includes('#5fa8ff') && accent.pressed === 'ocean',
     `after choosing Ocean in dark: --accent ${accent.css}, route ${accent.route.slice(0, 60)}, pressed ${accent.pressed}`);
+  const picked = await folded();
+  expect(picked.open === 'false' && picked.h === 0 && /^(Havsblå|Ocean)$/.test(picked.name), `after a pick the colours didn't fold shut with the name: ${JSON.stringify(picked)}`);
   await page.evaluate(() => localStorage.removeItem('settings'));
   expect(!page.errors.length, `page errors: ${page.errors.slice(0, 2).join(' | ')}`);
 

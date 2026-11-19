@@ -11,7 +11,7 @@ import { pathOf, progressAlong, progressAt } from './path.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
-import { ACCENTS } from './colours.js';
+import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
 import { initSheets } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
@@ -545,6 +545,7 @@ document.getElementById('open-settings').onclick = () => {
   helpEl.hidden = true;
   statsPage.hidden = true;
   settingsPage.hidden = false;
+  foldAccents(false);   // the accent colours start folded
   settingsPage.querySelector('.panel-close').focus();
 };
 settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
@@ -587,17 +588,28 @@ function showSettings() {
   const close = settings[closeKey()];
   closeSizeEl.value = close;
   closeSizeOut.textContent = `×${close}`;
+  accentName.textContent = (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT]).name[lang()];
 }
 // Settings → Accent colour: one round swatch per curated colour (src/colours.js; Max, 2026-11-15), each in the light
-// and the dark shade (the page's style picks one).
+// and the dark shade (the page's style picks one). 14 since 2026-11-19: the row shows the chosen colour and its name,
+// a tap folds the swatches open under it (index.html .accent-pick); a pick, or the row again, folds them shut.
 const swatchesEl = settingsEl.querySelector('.seg.swatches');
 swatchesEl.innerHTML = Object.entries(ACCENTS).map(([k, a]) =>
   `<button type="button" data-v="${k}" style="--sw-l:${a.light.c};--sw-d:${a.dark.c}"></button>`).join('');
 const nameSwatches = () => { for (const b of swatchesEl.children) b.title = b.ariaLabel = ACCENTS[b.dataset.v].name[lang()]; };
 nameSwatches();
+const accentOpen = document.getElementById('accent-open'), accentPick = document.getElementById('accent-pick');
+const accentName = accentOpen.querySelector('.accent-name');
+function foldAccents(open) {
+  accentOpen.setAttribute('aria-expanded', String(open));
+  accentPick.classList.toggle('open', open);
+  accentPick.inert = !open;   // folded: its swatches can't be reached by Tab
+}
+accentOpen.onclick = () => foldAccents(accentOpen.getAttribute('aria-expanded') !== 'true');
 for (const seg of settingsEl.querySelectorAll('.seg')) {
   for (const b of seg.querySelectorAll('button')) b.onclick = () => {
     setSetting(seg.dataset.key, b.dataset.v);
+    if (seg === swatchesEl) { foldAccents(false); accentOpen.focus(); }
   };
 }
 const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');

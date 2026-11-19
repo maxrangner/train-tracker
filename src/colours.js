@@ -41,15 +41,38 @@ export const PAGE = {
 // pass docs/look-1115/accent-check.mjs (far enough from the lateness and disruption colours, also for red-green colour
 // blindness; visible on the map; readable button text). Lime (from his concept pictures) was tried and failed: too
 // close to the green "on time", and with red-green colour blindness close to yellow and orange (2026-11-15).
+// 14 since 2026-11-19 (Max: "Add 1-14" from the round-2 sheet, docs/look-1115/accent-round2/; "sort the colors more
+// naturally"): round the colour wheel, teal to pink, then the greys; a brighter one beside its plain one. The keys are
+// what a phone has saved: a key is never renamed or removed (an unknown one falls back to the default).
 export const ACCENTS = {
-  periwinkle: { name: { sv: 'Blålila', en: 'Periwinkle' },
-    light: { c: '#5c64e6', ink: '#ffffff', done: '#3d43b0' }, dark: { c: '#9aa0ff', ink: '#141726', done: '#6c72d6' } },
+  teal: { name: { sv: 'Blågrön', en: 'Teal' },
+    light: { c: '#0e7c86', ink: '#ffffff', done: '#0a575e' }, dark: { c: '#3cc6cf', ink: '#08201f', done: '#2b8f95' } },
+  aqua: { name: { sv: 'Akvamarin', en: 'Aqua' },
+    light: { c: '#009aba', ink: '#14161c', done: '#006c82' }, dark: { c: '#13dcf6', ink: '#14161c', done: '#0e9eb1' } },
+  cerulean: { name: { sv: 'Cerulean', en: 'Cerulean' },
+    light: { c: '#0b7a9a', ink: '#ffffff', done: '#08556c' }, dark: { c: '#77d2f5', ink: '#14161c', done: '#5697b0' } },
   ocean: { name: { sv: 'Havsblå', en: 'Ocean' },
     light: { c: '#1f6fc9', ink: '#ffffff', done: '#14508f' }, dark: { c: '#5fa8ff', ink: '#0d1626', done: '#3a7fd0' } },
-  violet: { name: { sv: 'Viol', en: 'Violet' },
+  royal: { name: { sv: 'Kungsblå', en: 'Royal blue' },
+    light: { c: '#0a54dd', ink: '#ffffff', done: '#073b9b' }, dark: { c: '#4f82ff', ink: '#14161c', done: '#395eb8' } },
+  periwinkle: { name: { sv: 'Blålila', en: 'Periwinkle' },
+    light: { c: '#5c64e6', ink: '#ffffff', done: '#3d43b0' }, dark: { c: '#9aa0ff', ink: '#141726', done: '#6c72d6' } },
+  ultramarine: { name: { sv: 'Ultramarin', en: 'Ultramarine' },
+    light: { c: '#3b19e6', ink: '#ffffff', done: '#2911a1' }, dark: { c: '#8483ff', ink: '#14161c', done: '#5f5eb8' } },
+  violet: { name: { sv: 'Violett', en: 'Violet' },
     light: { c: '#8b4fd6', ink: '#ffffff', done: '#6533a6' }, dark: { c: '#bb8cff', ink: '#1a1030', done: '#9466dd' } },
+  electric: { name: { sv: 'Elektrisk lila', en: 'Electric violet' },
+    light: { c: '#7d00e4', ink: '#ffffff', done: '#5700a0' }, dark: { c: '#b973ff', ink: '#14161c', done: '#8553b8' } },
+  fuchsia: { name: { sv: 'Fuchsia', en: 'Fuchsia' },
+    light: { c: '#b420a0', ink: '#ffffff', done: '#7e1670' }, dark: { c: '#fb79e3', ink: '#14161c', done: '#b557a3' } },
+  wine: { name: { sv: 'Vinröd', en: 'Wine' },
+    light: { c: '#743355', ink: '#ffffff', done: '#51243b' }, dark: { c: '#f6a9cd', ink: '#14161c', done: '#b17a94' } },
+  dusk: { name: { sv: 'Skymning', en: 'Dusk' },
+    light: { c: '#685477', ink: '#ffffff', done: '#493b53' }, dark: { c: '#d0bae2', ink: '#14161c', done: '#9686a3' } },
   slate: { name: { sv: 'Skiffer', en: 'Slate' },
     light: { c: '#3c4660', ink: '#ffffff', done: '#252c3e' }, dark: { c: '#c9d1e6', ink: '#1a1f2c', done: '#98a1ba' } },
+  graphite: { name: { sv: 'Grafit', en: 'Graphite' },
+    light: { c: '#2b2b2b', ink: '#ffffff', done: '#1e1e1e' }, dark: { c: '#e6e6e6', ink: '#161616', done: '#a6a6a6' } },
 };
 export const DEFAULT_ACCENT = 'periwinkle';
 
