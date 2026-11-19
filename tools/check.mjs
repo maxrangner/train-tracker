@@ -207,13 +207,11 @@ const FOLLOW_MIN = 10, FOLLOW_ON = 98, FOLLOW_FLIPS = 1.5;
 for (const f of skipReplay ? [] : recordings) {
   try {
     const p = JSON.parse(execFileSync('node', ['tools/route-follow-check.mjs', `data/${f}`, '--minutes', String(FOLLOW_MIN), '--json'],
-      { encoding: 'utf8', maxBuffer: 1e8 }).trim().split('
-').at(-1));
+      { encoding: 'utf8', maxBuffer: 1e8 }).trim().split('\n').at(-1));
     const bad = p.onLine < FOLLOW_ON || p.flipsPerTrainHour > FOLLOW_FLIPS;
     console.log(`${bad ? 'FAIL' : 'ok  '} line follows ${f.slice(10, 29)}: on its line ${p.onLine} % (min ${FOLLOW_ON}; the timetable's route alone ${p.onBase} %), flips back ${p.flipsPerTrainHour} a train-hour (max ${FOLLOW_FLIPS}), slowest update ${p.updateMsMax} ms`);
     if (bad) failed++;
-  } catch (e) { console.log(`FAIL line follows ${f}: ${e.message.split('
-')[0]}`); failed++; }
+  } catch (e) { console.log(`FAIL line follows ${f}: ${e.message.split('\n')[0]}`); failed++; }
 }
 if (!skipReplay) {
   console.log((failed ? `${failed} of ${recordings.length} recordings failed` : `all ${recordings.length} ${MODE} recordings pass`) +
@@ -227,8 +225,7 @@ if (!skipReplay) {
 const FOLLOW_CASE = 'data/positions-2026-11-19T22-28-02-750Z.jsonl';
 if (existsSync(FOLLOW_CASE)) {
   const r = spawnSync('node', ['tools/route-follow-check.mjs', FOLLOW_CASE, '--train', '2576,2277', '--min-on', '99.9', '--max-flips', '0'], { encoding: 'utf8' });
-  const line = (r.stdout ?? '').split('
-').find(l => l.includes('on its line')) ?? '';
+  const line = (r.stdout ?? '').split('\n').find(l => l.includes('on its line')) ?? '';
   console.log(`${r.status === 0 ? 'ok  ' : 'FAIL'} case 2576/2277 on their line (19 Nov 23:28):${line.split(':').slice(1).join(':')}`);
   if (r.status !== 0) { console.log(r.stdout); failed++; }
 } else console.log(`note case 2576/2277 skipped: ${FOLLOW_CASE} is not here`);
