@@ -59,7 +59,7 @@ export const ACCENTS = {
     light: { c: '#5c64e6', ink: '#ffffff', done: '#3d43b0' }, dark: { c: '#9aa0ff', ink: '#141726', done: '#6c72d6' } },
   ultramarine: { name: { sv: 'Ultramarin', en: 'Ultramarine' },
     light: { c: '#3b19e6', ink: '#ffffff', done: '#2911a1' }, dark: { c: '#8483ff', ink: '#14161c', done: '#5f5eb8' } },
-  violet: { name: { sv: 'Viol', en: 'Violet' },
+  violet: { name: { sv: 'Violett', en: 'Violet' },
     light: { c: '#8b4fd6', ink: '#ffffff', done: '#6533a6' }, dark: { c: '#bb8cff', ink: '#1a1030', done: '#9466dd' } },
   electric: { name: { sv: 'Elektrisk lila', en: 'Electric violet' },
     light: { c: '#7d00e4', ink: '#ffffff', done: '#5700a0' }, dark: { c: '#b973ff', ink: '#14161c', done: '#8553b8' } },
