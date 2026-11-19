@@ -155,7 +155,7 @@ const EN = {
   closeDisruptions: 'Close disruptions',
   noDisruptions: 'No disruptions right now.',
   disruptionsNote: 'Trafikverket\'s current messages (in Swedish). Tap one to see it on the map.',
-  disruptionUntil: (a, b) => `${a} – about ${b}`,
+  disruptionUntil: (a, b) => `${a} – about\u00a0${b}`,
   disruptionSince: a => `since ${a}, no end time`,
   disruptionSource: 'Trafikverket\'s own text.',
   // The stats page (src/stats-page.js; the new look, Max 2026-11-15: "exactly as your demo", sketch D)
@@ -182,7 +182,7 @@ const EN = {
   stPunctuality: 'Punctuality',
   stLegOnTime: 'On time',
   stLegSome: '+3–5 min',
-  stLegLate: '+6 or more',
+  stLegLate: '+6 min or more',
   stLegUnknown: 'Unknown',
   stMostLate: 'Most delayed',
   stToday: 'Today, arrivals per hour',
@@ -375,7 +375,7 @@ const SV = {
   closeDisruptions: 'Stäng störningar',
   noDisruptions: 'Inga störningar just nu.',
   disruptionsNote: 'Trafikverkets aktuella meddelanden. Tryck på ett för att se det på kartan.',
-  disruptionUntil: (a, b) => `${a} – ca ${b}`,
+  disruptionUntil: (a, b) => `${a} – ca\u00a0${b}`,
   disruptionSince: a => `sedan ${a}, sluttid okänd`,
   disruptionSource: 'Trafikverkets egen text.',
   // Statistiksidan (src/stats-page.js)
