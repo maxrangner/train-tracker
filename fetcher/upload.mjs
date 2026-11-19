@@ -4,6 +4,10 @@
 // every file has a new name anyway). Old names are deleted when the shelf lets go of them. A broken connection is
 // opened again (1 s, 2 s, 5 s ... 30 s) and the waiting files go then: only what the newest live file needs, that
 // file first after them, deletes last (order() below).
+// While the line is down the waiting list doesn't grow (2026-11-19, TODO 40; Codex's beta review point 4: 1,427 jobs
+// and 23 MB an hour before): a file the shelf lets go of before it was sent is simply forgotten (its upload and its
+// delete both dropped), so only what is still current waits, plus the deletes of files already on one.com. A file
+// one.com refuses is tried again, 3 times in all, 5 s apart (it was dropped at once while the live files named it).
 // Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run).
 // Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
 // so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
@@ -26,6 +30,7 @@ import { readFileSync } from 'node:fs';
 import ssh2 from 'ssh2';
 
 const WAITS = [1000, 2000, 5000, 10000, 30000];
+const TRIES = 3, TRY_AGAIN_MS = 5000;   // a refused file
 const REFUSED_WAIT = 10 * 60000;
 export const MARK = '.sparat-data';
 export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|taps-add|taps-index|messages)-\d+\.json$/;
@@ -101,14 +106,16 @@ export function checkDir(raw) {
   return dir;
 }
 
-export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Client } = {}) {
+export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Client, tryAgainMs = TRY_AGAIN_MS } = {}) {
   for (const k of ['SFTP_HOST', 'SFTP_USER', 'SFTP_PASS', 'SFTP_DIR', 'SFTP_HOSTKEY'])
     if (!cfg[k]) throw new Error(`--upload needs ${k} in the settings file`);
   const dir = checkDir(cfg.SFTP_DIR);
   const queue = [];         // [{ op: 'put' | 'rm', name, f }]
   const stats = { ok: 0, failed: 0, removed: 0, reconnects: 0, lastOkAt: null, lastMs: null, connected: false, swept: 0,
-    bytes: 0, lastError: null, lastErrorAt: null, refused: null, skipped: 0 };
+    bytes: 0, lastError: null, lastErrorAt: null, refused: null, skipped: 0, forgotten: 0 };
   let client = null, sftp = null, busy = false, closing = false, tries = 0, sweepTimer = null, retryTimer = null;
+  let sending = null;               // the job being sent now
+  const again = new Map();          // name -> timer: a refused file waiting for its next try
 
   const call = (fn, ...a) => callOn(sftp, fn, ...a);
   let blockedUntil = 0;   // breakFor(): a pretend outage (the live test)
@@ -193,6 +200,7 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
       }
       const job = queue[0];
       const t = Date.now();
+      sending = job;
       try {
         if (job.op === 'put') {
           const tmp = `${dir}/${job.name}.tmp`;
@@ -207,9 +215,13 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
       } catch (e) {
         stats.failed++; stats.lastError = e.message; stats.lastErrorAt = Date.now();
         if (!sftp) break;                  // the connection broke: the job waits for the next one
-        log(`upload: ${job.op} ${job.name}: ${e.message}`);
-        done(job);                          // a job the server refuses is not tried forever
-      }
+        done(job);                          // a job the server refuses is tried a few times, not forever
+        job.tries = (job.tries ?? 1) + 1;
+        if (job.op === 'put' && job.tries <= TRIES && !closing) {
+          log(`upload: put ${job.name}: ${e.message}; trying again in ${tryAgainMs / 1000} s`);
+          again.set(job.name, setTimeout(() => { again.delete(job.name); queue.push(job); work(); }, tryAgainMs));
+        } else log(`upload: ${job.op} ${job.name}: ${e.message}${job.op === 'put' ? `; given up after ${TRIES} tries` : ''}`);
+      } finally { sending = null; }
     }
     busy = false;
   }
@@ -245,7 +257,15 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
   connect();
   return {
     add(name, f) { if (ours('write', name)) { queue.push({ op: 'put', name, f }); work(); } },
-    remove(name) { if (ours('delete', name, true)) { queue.push({ op: 'rm', name }); work(); } },
+    // Let go of by the shelf: a file still waiting to be sent (or to be tried again) is forgotten, nothing to delete;
+    // one being sent right now, or already sent, is deleted.
+    remove(name) {
+      if (!ours('delete', name, true)) return;
+      const i = queue.findIndex(q => q.op === 'put' && q.name === name);
+      if (i >= 0 && queue[i] !== sending) { queue.splice(i, 1); stats.forgotten++; return; }
+      if (again.has(name)) { clearTimeout(again.get(name)); again.delete(name); stats.forgotten++; return; }
+      queue.push({ op: 'rm', name }); work();
+    },
     stats: () => ({ ...stats, waiting: queue.length }),
     sweep,
     // The live test (main.mjs --test-breaks): drop the connection and refuse to connect for ms, like a lost internet.
@@ -253,6 +273,7 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     close() {
       closing = true;
       clearInterval(sweepTimer); clearTimeout(retryTimer); clearTimeout(firstSweep);
+      for (const t of again.values()) clearTimeout(t);
       return new Promise(res => { if (!client) return res(); client.once('close', res); client.end(); setTimeout(res, 3000); });
     },
   };

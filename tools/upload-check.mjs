@@ -4,6 +4,7 @@
 // Run: node tools/upload-check.mjs     exit code 0: all hold; 1: one failed
 import { EventEmitter } from 'node:events';
 import { createUploader, checkDir, MARK, order } from '../fetcher/upload.mjs';
+import { createShelf, KINDS } from '../fetcher/files.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const err = (code, m) => Object.assign(new Error(m), { code });
@@ -27,7 +28,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
   const at = p => { const r = resolve(parent(p)); return r && `${r === '/' ? '' : r}/${p.slice(p.lastIndexOf('/') + 1)}`; };
   const st = e => ({ isDirectory: () => e.type === 'dir', isFile: () => e.type === 'file', isSymbolicLink: () => e.type === 'link' });
   const later = (cb, e, v) => setImmediate(() => cb(e, v));
-  let failNext = null;
+  let failNext = null, failWrites = 0;
   const sftp = {
     realpath: (p, cb) => { const r = resolve(p); later(cb, r ? null : err(2, 'no such file'), r && (r === '/' ? top || '/' : top + r)); },
     lstat: (p, cb) => {
@@ -40,6 +41,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
       const q = at(p);
       if (!q) return later(cb, err(2, 'no such folder'));
       if (o?.flag === 'wx' && fs.has(q)) return later(cb, err(4, 'exists'));
+      if (failWrites > 0 && !q.endsWith('.htaccess')) { failWrites--; return later(cb, err(3, 'refused')); }
       let target = q;
       for (let n = 0; fs.get(target)?.type === 'link' && n < 10; n++) target = fs.get(target).to;   // writing through a link
       fs.set(target, { type: 'file', data: Buffer.from(data) }); ops.push(['write', target]);
@@ -60,7 +62,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
     sftp(cb) { setImmediate(() => cb(null, sftp)); }
     end() { setImmediate(() => this.emit('close')); }
   }
-  return { fs, ops, Client, failLstat: path => { failNext = { op: 'lstat', path }; } };
+  return { fs, ops, Client, failLstat: path => { failNext = { op: 'lstat', path }; }, failWrites: n => { failWrites = n; } };
 }
 
 const cfg = dir => ({ SFTP_HOST: 'x', SFTP_USER: 'x', SFTP_PASS: 'x', SFTP_DIR: dir, SFTP_HOSTKEY: 'x' });
@@ -199,7 +201,56 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   const st = up.stats(); await up.close();
   const sent = s.ops.filter(o => o[0] === 'rename').map(o => o[2].slice(DIR.length + 1)).join(', ');
   check('after a break: only what the map needs, the live file after what it names', sent === 'card-01-2.json, passings-3.json, live-2.json, card-01-4.json', sent);
-  check('after a break: the skipped files counted', st.skipped === 2 && st.waiting === 0, JSON.stringify(st));
+  check('after a break: the skipped files counted', st.skipped + st.forgotten === 2 && st.waiting === 0, JSON.stringify(st));
+}
+
+// 10. Six hours without one.com (2026-11-19, TODO 40): the waiting list holds only what is still current, not every
+// file made (before: 1,427 jobs an hour with live files alone). The fetcher's real shelf and kinds, a made-up clock.
+{
+  const s = space(marked());
+  const logs = []; const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client });
+  await wait(30); const back = Date.now() + 8000; up.breakFor(8000); await wait(30);
+  const sentBefore = new Set(s.ops.filter(o => o[0] === 'rename').map(o => o[2]));
+  const shelf = createShelf({ onAdd: (n, f) => up.add(n, f), onRemove: n => up.remove(n) });
+  const kinds = [...Object.entries(KINDS).map(([k, [every]]) => [k, every]),
+    ...Array.from({ length: 32 }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [[`card-${g}`, 16 * 60000], [`board-${g}`, 16 * 60000]])];
+  const T0 = Math.floor(Date.now() / 5000) * 5000;
+  let made = 0, most = 0;
+  for (let t = T0; t <= T0 + 6 * 3600e3; t += 5000) {
+    for (const [k, every] of kinds) if ((t - T0) % every === 0) { shelf.put(k, t, { k, t }); made++; }
+    shelf.sweep(t);
+    most = Math.max(most, up.stats().waiting);
+  }
+  const held = shelf.all().length;
+  check('six hours offline: the waiting list stays small', most <= held + 200 && Date.now() < back, `at most ${most} waiting, ${held} files on the shelf, ${made} made; still offline: ${Date.now() < back}`);
+  await wait(Math.max(0, back - Date.now()) + 2000);
+  const st = up.stats(); await up.close();
+  const live = Object.entries(shelf.names()).find(([k]) => k === 'live')[1];
+  const named = Object.values(shelf.names());
+  check('six hours offline, then back: every current file is there', named.every(n => s.fs.has(`${DIR}/${n}`)), named.filter(n => !s.fs.has(`${DIR}/${n}`)).join(', '));
+  check('six hours offline, then back: only current files sent', s.ops.filter(o => o[0] === 'rename' && !sentBefore.has(o[2])).length <= held && st.waiting === 0, JSON.stringify(st));
+  check('six hours offline, then back: the newest live file is there', s.fs.has(`${DIR}/${live}`));
+  console.log(`     (${made} files made in 6 h; at most ${most} waiting; ${st.forgotten} forgotten unsent; ${held} on the shelf)`);
+}
+
+// 11. A file one.com refuses is tried again, 3 times in all (2026-11-19, TODO 40; it was dropped at once).
+{
+  const s = space(marked());
+  const logs = []; const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, tryAgainMs: 100 });
+  await wait(30);
+  s.failWrites(4);   // two tries (each writes the temporary file twice: once, then again after clearing it)
+  up.add('card-03-1.json', { kind: 'card-03', gz: Buffer.from('c') });
+  await wait(600);
+  check('refused twice: there on the third try', s.fs.has(`${DIR}/card-03-1.json`), logs.join(' | '));
+  s.failWrites(6);
+  up.add('card-03-2.json', { kind: 'card-03', gz: Buffer.from('c') });
+  await wait(600);
+  check('refused three times: given up, said in the log', !s.fs.has(`${DIR}/card-03-2.json`) && logs.some(l => /card-03-2\.json.*given up after 3 tries/.test(l)), logs.join(' | '));
+  s.failWrites(2);
+  up.add('card-03-3.json', { kind: 'card-03', gz: Buffer.from('c') });
+  await wait(20); up.remove('card-03-3.json'); await wait(400);
+  const st = up.stats(); await up.close();
+  check('refused, then let go of before the next try: not sent, nothing deleted', !s.fs.has(`${DIR}/card-03-3.json`) && !s.ops.some(o => o[0] === 'delete' && o[1].endsWith('card-03-3.json')) && st.waiting === 0, JSON.stringify(st));
 }
 
 console.log(failed ? `${failed} failed` : 'upload-check: all hold');
