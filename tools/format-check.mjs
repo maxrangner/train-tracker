@@ -100,9 +100,10 @@ for (const [kind, f] of Object.entries(files)) {
   for (const [p, types] of Object.entries(known)) {
     const parent = p.replace(/(\[\](\[\d+\])?|\{\})(\.[^[{]*)?$/, '').replace(/\[\]$/, '');
     if (!now[p]) {
-      // Under an empty list nothing can be seen; otherwise the path is gone.
+      // Under an empty list or map nothing can be seen (a replay's taps-index has no public numbers: ops is {});
+      // otherwise the path is gone.
       const under = [...seen].some(s => p.startsWith(s));
-      if (!under && p.includes('[')) { notSeen.push(`${kind}: ${p}`); continue; }
+      if (!under && /[[{]/.test(p)) { notSeen.push(`${kind}: ${p}`); continue; }
       console.log(`FAIL ${kind}: "${p}" is gone (was ${types.join('/')})`); broken++; continue;
     }
     // Empty (null) and a value are both normal for one field (an expected time is often empty); a field only ever
