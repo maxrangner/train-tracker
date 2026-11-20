@@ -100,6 +100,30 @@ try {
   check(!(await shown('nav')), 'menu open: a tap on the map closes it');
   check(!(await shown('panel')), 'menu open: that tap did nothing else');
 
+  // ---- Statistik's map on Lateness before the lateness has come: grey and "Laddar…", not green ("on time") ----
+  const heat = await page.evaluate(async () => {
+    const { createSwedenMap } = await import('/src/stats-sweden.js');
+    const m = createSwedenMap();
+    document.body.append(m.el);
+    m.el.style.cssText = 'position:fixed;left:0;top:0;z-index:99';
+    const dots = late => Array.from({ length: 40 }, (_, i) => ({ id: String(i), lon: 15 + (i % 8) * 0.3, lat: 58 + Math.floor(i / 8) * 0.3, late }));
+    const read = () => { const d = m.el.querySelector('canvas').getContext('2d').getImageData(0, 0, 400, 600).data; let green = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 100 && d[i + 1] > d[i] + 40 && d[i + 1] > d[i + 2] + 20) green++;
+      return { wait: !m.el.querySelector('.st-se-wait').hidden, green }; };
+    m.setMode('lateness');
+    m.update({ dots: dots(undefined) });
+    await new Promise(r => setTimeout(r, 100));
+    const before = read();
+    m.update({ dots: dots('ontime') });
+    await new Promise(r => setTimeout(r, 100));
+    const after = read();
+    m.setMode('trains');
+    m.el.remove();
+    return { before, after };
+  });
+  check(heat.before.wait && heat.before.green === 0, `Statistik's lateness map, no lateness known: "Laddar…" and no green (${JSON.stringify(heat.before)})`);
+  check(!heat.after.wait && heat.after.green > 0, `…and once it is known: the colours, no "Laddar…" (${JSON.stringify(heat.after)})`);
+
   // ---- the far south above a phone's card: zoomed out, the map may go far enough south that Köpenhamn (55.7°)
   // stands above the card (until 2026-11-20 it stopped at 52°, with Hyllie and Köpenhamn at the card's edge) ----
   const south = await page.evaluate(async () => {

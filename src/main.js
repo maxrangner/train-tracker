@@ -793,7 +793,8 @@ function drawDisruptions() {
   const list = disruptions.list, problems = list.filter(d => !isWork(d));
   const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
   const row = d => rowHtml(d, stationName, now());
-  document.getElementById('disruptions-body').innerHTML = (!list.length ? stateHtml('empty', t('noDisruptions'))
+  document.getElementById('disruptions-body').innerHTML = (!disruptions.loaded ? stateHtml('loading', t('loading'))
+    : !list.length ? stateHtml('empty', t('noDisruptions'))
     : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
     problems.map(row).join('') +
     (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
