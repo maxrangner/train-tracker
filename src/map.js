@@ -11,6 +11,7 @@ import { t } from './i18n.js';
 import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
+import { reduceMotion } from './motion.js';
 import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -797,7 +798,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // A station abroad is shown but not tappable (Max, 2026-11-18): Trafikverket has no trains stopping there, so its
       // board would be empty; the tap goes on to whatever else is there.
       const named = onStationTap && stationNameAt(e.point);
-      if (named && !isAbroad(named)) return onStationTap(named);
+      if (named && !isAbroad(named)) {
+        popSign(map.queryRenderedFeatures({ layers: ['station-dots'], filter: ['==', ['get', 'sig'], named] })[0]);
+        return onStationTap(named);
+      }
       // Close in, a label: a "3 trains" label lists exactly the trains it was drawn for (the open train is in no
       // group); a train's own label opens it.
       const near = nearLabelAt(e.point);
@@ -827,18 +831,46 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const st = map.queryRenderedFeatures([[e.point.x - sp, e.point.y - sp], [e.point.x + sp, e.point.y + sp]], { layers: ['station-dots', 'station-names'] })
           .filter(f => !isAbroad(f.properties.sig, { country: f.properties.country || undefined }))   // (abroad: not tappable)
           .reduce((best, f) => (!best || dist(f) < dist(best) ? f : best), null);
-        if (st) return onStationTap(st.properties.sig);
+        if (st) { popSign(st); return onStationTap(st.properties.sig); }
       }
       // No train or station there: a disruption's ring or stretch?
       if (!nearest && onDisruptionTap) {
         const dp = 12;
         const dis = map.queryRenderedFeatures([[e.point.x - dp, e.point.y - dp], [e.point.x + dp, e.point.y + dp]], { layers: ['disruption-icons', 'disruption-rings', 'disruption-lines', 'disruption-works'] });
         const hit = dis.find(f => f.layer.id === 'disruption-icons') ?? dis.find(f => f.layer.id === 'disruption-rings') ?? dis[0];
-        if (hit) return onDisruptionTap(hit.properties.id);
+        if (hit) { if (hit.layer.id === 'disruption-icons') popSign(hit); return onDisruptionTap(hit.properties.id); }
       }
       if (nearest) return tapTrain(nearest.properties.id, e.point);
       onTrainTap?.(null);
     });
+    // A tapped disruption sign or station answers: a copy of it over it grows to 130% and back (index.html .sign-pop;
+    // Max's pick 8, 2026-11-20). A page element riding on the map (a Marker), so the map itself doesn't draw again;
+    // drawn as the map draws them (disruption-icons, station-dots: the same sizes at this zoom).
+    const atZoom = (stops) => { const z = map.getZoom(); let i = 0; while (i < stops.length - 2 && z > stops[i + 1][0]) i++;
+      const [z0, a] = stops[i], [z1, b] = stops[i + 1]; return a + (b - a) * Math.min(1, Math.max(0, (z - z0) / (z1 - z0))); };
+    function popSign(f) {
+      if (!f || reduceMotion()) return;
+      const C = colours(dark);
+      let el, anchor = 'center', offset = [0, 0];
+      if (f.layer.id === 'disruption-icons') {
+        const p = f.properties, img = drawDisIcon(p.work === 1 ? 'cone' : 'warn', C.dis[p.level >= 4 ? 2 : p.level >= 3 ? 1 : 0], C.stopFill);
+        el = document.createElement('canvas');
+        el.width = img.width; el.height = img.height;
+        el.getContext('2d').putImageData(img, 0, 0);
+        const k = atZoom([[4, 0.6], [9, 0.85], [14, 1]]);
+        el.style.width = el.style.height = `${img.width / 2 * k}px`;
+        anchor = 'bottom'; offset = [0, -2 * k];
+      } else {
+        const r = atZoom([[9, 2.5], [14, 6]]), w = atZoom([[9, 1], [14, 2]]);
+        el = document.createElement('div');
+        Object.assign(el.style, { width: `${2 * r}px`, height: `${2 * r}px`, borderRadius: '50%', background: C.ringFill, border: `${w}px solid ${C.ring}` });
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'sign-pop';
+      wrap.append(el);
+      const m = new Marker({ element: wrap, anchor, offset }).setLngLat(f.geometry.coordinates).addTo(map);
+      setTimeout(() => m.remove(), 360);
+    }
     // A train shown inside a "N trains" group opens the group's list, not the train (Max, 2026-11-18: "Should only show
     // the menu for choosing all n number of trains"); a train on its own opens. pt: where the tap was.
     function tapTrain(id, pt) {

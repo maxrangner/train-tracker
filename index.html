@@ -409,6 +409,37 @@
     @keyframes sheet-in { from { transform: translateY(100%); } }
     @keyframes sheet-down { from { transform: translateY(-14px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet { animation: none; transition: none; } }
+    /* Motion (Max, 2026-11-20: "feels a bit static and stiff"; his picks on https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe;
+       the code: src/motion.js). Only movement and see-through changes (the graphics chip); none with "reduce motion".
+       Buttons give a little while pressed and spring back (the scale property, so a button's own transform stays). */
+    button { transition: scale .14s cubic-bezier(.2, .9, .25, 1); }
+    button:active { scale: .94; transition-duration: .06s; }
+    :is(.nav-row, .dis-row, .dis-fold, .bd-row, #search-results button, .cd-row, .about-btn):active { scale: .98; }
+    /* Rows that weren't in a list before come in one after another (motion.js arrive sets --i). */
+    .arrive { animation: row-in .3s cubic-bezier(.2, .9, .25, 1) backwards; animation-delay: calc(40ms + var(--i, 0) * 25ms); }
+    @keyframes row-in { from { opacity: 0; transform: translateY(10px); } }
+    /* The ☰ menu's rows follow it in, one after another. */
+    #nav:not([hidden]) .nav-row { animation: nav-in .26s cubic-bezier(.2, .9, .25, 1) backwards; }
+    #nav:not([hidden]) .nav-row:nth-child(2) { animation-delay: 30ms; }
+    #nav:not([hidden]) .nav-row:nth-child(3) { animation-delay: 60ms; }
+    #nav:not([hidden]) .nav-row:nth-child(4) { animation-delay: 90ms; }
+    #nav:not([hidden]) .nav-row:nth-child(5) { animation-delay: 120ms; }
+    @keyframes nav-in { from { opacity: 0; transform: translateY(-8px); } }
+    /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
+    .cd-late { position: relative; }
+    .cd-late.flash { animation: late-pop .5s cubic-bezier(.2, .9, .25, 1); }
+    .cd-late.flash::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: late-ring .7s ease-out forwards; }
+    @keyframes late-pop { 30% { scale: 1.06; } }
+    @keyframes late-ring { from { box-shadow: 0 0 0 0 currentColor; opacity: .5; } to { box-shadow: 0 0 0 12px currentColor; opacity: 0; } }
+    /* A tapped disruption sign or station: a copy of it over it grows and goes back (src/map.js popSign). */
+    .sign-pop { pointer-events: none; }
+    .sign-pop > * { display: block; animation: sign-pop .32s cubic-bezier(.2, .9, .25, 1) forwards; }
+    @keyframes sign-pop { 40% { scale: 1.3; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .22)); } }
+    @media (prefers-reduced-motion: reduce) {
+      button, button:active { transition: none; scale: none; }
+      .arrive, #nav:not([hidden]) .nav-row, .cd-late.flash, .cd-late.flash::after { animation: none; }
+      .sign-pop { display: none; }
+    }
     /* The search opens from the search bar (Max, 2026-11-15: on the phone the keyboard hid the results). */
     #menu.sheet { top: calc(68px + env(safe-area-inset-top, 0px)); bottom: auto; left: calc(var(--gap) + env(safe-area-inset-left, 0px));
       right: calc(var(--gap) + env(safe-area-inset-right, 0px)); padding: 14px 16px; border-radius: var(--radius); box-shadow: var(--shadow);

@@ -17,26 +17,14 @@ const FUN_EVERY_MS = 10 * 1000;     // "for fun": a new comparison this often (o
 const COMPANIES_SHOWN = 6;          // "Show all" opens the rest
 const GAUGE_MAX = 250;              // km/h at the speedometer's end (the fastest reported in the recordings: 206)
 import { esc } from './html.js';
+import { roll } from './motion.js';
 const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const num = (n, digits = 0) => Number(n).toLocaleString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { maximumFractionDigits: digits, minimumFractionDigits: digits });
 const pct = (n, all) => (all ? Math.round(100 * n / all) : 0);
 const h = (html) => { const tpl = document.createElement('template'); tpl.innerHTML = html.trim(); return tpl.content.firstElementChild; };
 const $ = (el, sel) => el.querySelector(sel);
 
-// A number that rolls from its last value to the new one (0.7 s).
-function roll(el, v, digits = 0, suffix = '') {
-  const from = el._v ?? v;
-  el._v = v;
-  cancelAnimationFrame(el._raf);
-  if (reduce() || from === v || document.hidden) { el.textContent = num(v, digits) + suffix; return; }
-  const t0 = performance.now(), dur = 700;
-  const step = (now) => {
-    const k = Math.min(1, (now - t0) / dur), e = 1 - (1 - k) ** 3;
-    el.textContent = num(from + (v - from) * e, digits) + suffix;
-    if (k < 1) el._raf = requestAnimationFrame(step);
-  };
-  el._raf = requestAnimationFrame(step);
-}
+// A number that rolls from its last value to the new one: roll() in src/motion.js (shared since 2026-11-20).
 // Swap an element's inside only when its text would change (keeps focus and taps on rows that stay the same).
 const put = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
 

@@ -6,6 +6,7 @@
 // fetchStationMessages), shown above the departures; asked when the board opens and every MESSAGES_MS while open.
 const time = t => (t ? hhmm(t) : '');
 import { esc } from './html.js';
+import { arrive } from './motion.js';
 const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
@@ -21,6 +22,7 @@ import { glide } from './sheet.js';
 export function createBoard(el, { load, stationName, onPickTrain, onClose, isStarred, onStar, messages = null }) {
   let station = null;     // { sig, name }
   let activity = 'Avgang';
+  let rowsSeen = new Set();   // the rows shown since the board or its tab opened (their trains' keys)
   let timer = null, msgTimer = null;
   let asked = 0;
   let msgs = [];          // the station's own messages
@@ -75,6 +77,7 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
     for (const b of el.querySelectorAll('[data-act]')) b.onclick = () => {
       if (b.dataset.act === activity) return;
       activity = b.dataset.act;
+      rowsSeen = new Set();
       for (const x of el.querySelectorAll('[data-act]')) x.setAttribute('aria-pressed', String(x.dataset.act === activity));
       el.querySelector('.panel-table, .state')?.classList.add('busy');
       refresh(false, { top: true });
@@ -125,11 +128,15 @@ export function createBoard(el, { load, stationName, onPickTrain, onClose, isSta
       const r = rows[Number(b.dataset.i)];
       b.onclick = () => onPickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number });
     }
+    // Rows that weren't on the board before come in one after another (Max's pick 6, 2026-11-20): the refresh each
+    // minute moves only new trains. rowsSeen: since the board (or its tab) opened.
+    arrive(el.querySelectorAll('.bd-row'), rowsSeen, b => rows[Number(b.dataset.i)].key ?? b.textContent);
   }
 
   function open(st) {
     station = { sig: st.sig, name: st.name };
     activity = 'Avgang';
+    rowsSeen = new Set();
     msgs = [];
     msgsOpen = false;
     el.hidden = false;
