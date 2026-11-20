@@ -6,6 +6,10 @@
 //   lateness: the app's lateness colours, green -> yellow -> red by the average of the trains there (those whose
 //             lateness is known), brighter where more trains run.
 // Worked out once a second, and only while the map can be seen (the page open, scrolled into view, the tab shown).
+// Lateness not known yet (the first minute after the start, before the passings have come) is not "on time": where
+// no train's lateness is known the spots are grey, and while fewer than LOADING_SHARE of the trains have one, the map
+// says "Laddar…" over it (Max, 2026-11-20: the switch to Lateness seemed to do nothing until the data came; every
+// spot was drawn green, as on time).
 import OUTLINE from './sweden-outline.json';
 import { HEAT, LATE } from './colours.js';
 import { t } from './i18n.js';
@@ -14,6 +18,7 @@ const LON0 = 10.4, LON1 = 24.4, LAT0 = 55.0, LAT1 = 69.2, KX = Math.cos(62 * Mat
 export const MAP_H = 290, MAP_W = Math.round(MAP_H * (LON1 - LON0) * KX / (LAT1 - LAT0));
 const SIG = 3.8, R = 10, FULL = 10;
 const SCORE = { ontime: 0, some: 0.5, late: 1 };   // lateness as 0..1 (not known: left out of the colour)
+const LOADING_SHARE = 0.25;
 const KERNEL = [];
 for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
   const w = Math.exp(-(dx * dx + dy * dy) / (2 * SIG * SIG));
@@ -34,7 +39,8 @@ export function createSwedenMap() {
   box.className = 'st-se-map';
   const cv = document.createElement('canvas');
   cv.setAttribute('role', 'img');
-  box.append(cv);
+  const wait = Object.assign(document.createElement('div'), { className: 'st-se-wait', hidden: true });
+  box.append(cv, wait);
   const W = MAP_W, H = MAP_H, dpr = Math.min(2, devicePixelRatio || 1);
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = `${W}px`; cv.style.height = `${H}px`;
   const ctx = cv.getContext('2d');
@@ -68,7 +74,10 @@ export function createSwedenMap() {
       }
     }
     const th = dark() ? 'dark' : 'light', hot = HEAT[th].map(rgb), L = LATE[th];
-    const green = rgb(L.ontime), yellow = rgb(L.some), red = rgb(L.late);
+    const green = rgb(L.ontime), yellow = rgb(L.some), red = rgb(L.late), grey = rgb(L.unknown);
+    const known = snap.dots.filter(d => SCORE[d.late] !== undefined).length;
+    const loading = mode === 'lateness' && snap.dots.length > 0 && known < snap.dots.length * LOADING_SHARE;
+    if (wait.hidden === loading) { wait.hidden = !loading; wait.textContent = t('loading'); }
     const img = gctx.createImageData(W, H), a = img.data;
     for (let j = 0; j < dens.length; j++) {
       const d = dens[j];
@@ -76,8 +85,8 @@ export function createSwedenMap() {
       const k = Math.min(1, d / FULL) ** 0.55;
       let c;
       if (mode === 'lateness') {
-        const s = lateW[j] > 0.02 ? lateSum[j] / lateW[j] : 0;
-        c = s < 0.5 ? mix(green, yellow, s * 2) : mix(yellow, red, (s - 0.5) * 2);
+        if (lateW[j] <= 0.02) c = grey;   // no lateness known here (yet)
+        else { const s = lateSum[j] / lateW[j]; c = s < 0.5 ? mix(green, yellow, s * 2) : mix(yellow, red, (s - 0.5) * 2); }
       } else c = ramp(k, hot);
       const o = j * 4;
       a[o] = c[0]; a[o + 1] = c[1]; a[o + 2] = c[2]; a[o + 3] = Math.round(255 * Math.min(1, 0.06 + k * 0.94));

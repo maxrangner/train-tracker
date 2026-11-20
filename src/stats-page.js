@@ -55,6 +55,7 @@ function donut(size, width, classes, mid) {
       const len = vals[i] / total * C, gap = vals[i] && len > width ? width + 2 : 0;   // round ends: a 2 px gap between parts
       a.style.strokeDasharray = `${Math.max(0.01, len - gap)} ${C}`;
       a.style.strokeDashoffset = String(-(off + gap / 2));
+      a.style.opacity = vals[i] ? '' : '0';   // none of a kind: no dot (its round end showed alone, 2026-11-20)
       off += len;
     });
   };
@@ -213,7 +214,11 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     el.update = (s) => {
       const g = s.groups, known = g.ontime + g.some + g.late;
       ring.update([g.ontime, g.some, g.late]);
-      roll($(ring, '.st-p'), pct(g.ontime, known), 0, ' %');
+      // Lateness not in yet (the first minute after the start): "…" and "Laddar…", not "0 % i tid" (2026-11-20).
+      const waiting = known < (known + g.unknown) * 0.25, p = $(ring, '.st-p'), under = $(ring, 'small');
+      const word = t(waiting ? 'loading' : 'stKeyOnTime');
+      if (under.textContent !== word) under.textContent = word;
+      if (waiting) { cancelAnimationFrame(p._raf); p._v = undefined; p.textContent = '…'; } else roll(p, pct(g.ontime, known), 0,' %');
       roll($(leg, '.st-a'), g.ontime); roll($(leg, '.st-b'), g.some); roll($(leg, '.st-c'), g.late); roll($(leg, '.st-u'), g.unknown);
       worst.hidden = !(s.worst && s.worst.minutes > 0);
       if (!worst.hidden) {

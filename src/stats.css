@@ -45,6 +45,12 @@
 .st-se { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: stretch; }
 .st-se-map { position: relative; border-radius: 18px; background: var(--hover); padding: 8px; }
 .st-se-map canvas { display: block; }
+/* Lateness not in yet (src/stats-sweden.js): "Laddar…" over the map. */
+.st-se-wait { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 600; font-size: 14px; color: var(--muted);
+  pointer-events: none; }
+.st-se-wait[hidden] { display: none; }
+.st-se-wait::before { content: ''; position: absolute; inset: 0; border-radius: 18px; background: var(--hover); opacity: .55; }
+.st-se-wait { z-index: 1; }
 .st-se-side { display: grid; align-content: start; gap: 10px; min-width: 0; }
 .st-se-side .st-big { font-size: 44px; }
 .st-apart { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
