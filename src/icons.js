@@ -21,6 +21,7 @@ const PATHS = {
   globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.4 5.4 3.4 8.5s-1 6.1-3.4 8.5c-2.4-2.4-3.4-5.4-3.4-8.5s1-6.1 3.4-8.5z"/>',
   phone: '<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/>',
   chevron: '<path d="m9.5 6 6 6-6 6"/>',
+  back: '<path d="m14.5 6-6 6 6 6"/>',   // a disruption opened from the list: back to it (2026-11-20)
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
   chevronUp: '<path d="m6 15 6-6 6 6"/>',
   warning: '<path d="M12 4 21 19.5H3z"/><path d="M12 10v4.2M12 16.8v.3"/>',
