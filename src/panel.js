@@ -159,7 +159,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     picking = false;
     onSelect?.(train.id);
     el.hidden = false;
-    el.classList.toggle('full', settings.trainCard === 'expanded');   // Settings → Train card
+    el.classList.remove('full');   // always opens compact (the Train card setting went, Max 2026-11-20)
     shown = { train, route: null };
     el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
