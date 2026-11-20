@@ -775,7 +775,10 @@ if (live) {
   Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 }
 // The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
-// end, ending soonest first; open or folded is remembered on this device.
+// end, ending soonest first; open or folded is remembered on this device. The fold glides open and shut (Max,
+// 2026-11-20: "Expanding and condensing störningar does not animate"): the rows are always there, in a box whose
+// height goes from none to all of them (index.html .dis-works; none of it for less motion), shut ones out of reach
+// (inert).
 const WORKS_KEY = 'railWorksOpen';
 let worksOpen = false;
 try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
@@ -787,22 +790,47 @@ function drawDisruptions() {
     : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
     problems.map(row).join('') +
     (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
-      `<span>${t('railWorks')} (${works.length})</span>${icon(worksOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` + (worksOpen ? works.map(row).join('') : '') : '');
-  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
-  const fold = disruptionsPage.querySelector('.dis-fold');
-  if (fold) fold.onclick = () => { worksOpen = !worksOpen; try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ } drawDisruptions(); };
+      `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
+      `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '');
+  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => {
+    listScroll = document.getElementById('disruptions-body').scrollTop;
+    disruptionsPage.hidden = true;
+    openDisruption(b.dataset.id, { go: true, fromList: true });
+  };
+  const fold = disruptionsPage.querySelector('.dis-fold'), box = disruptionsPage.querySelector('.dis-works');
+  if (fold) fold.onclick = () => {
+    worksOpen = !worksOpen;
+    try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ }
+    fold.setAttribute('aria-expanded', String(worksOpen));
+    box.classList.toggle('open', worksOpen);
+    box.inert = !worksOpen;
+  };
 }
+// A disruption opened from the list has a back arrow (Max, 2026-11-20: "Back arrow when in a specific störning"):
+// back to the list, where it was scrolled to (the map stays where the disruption put it).
+let fromList = false, listScroll = 0;
 function drawDisruption(id) {
   const d = disruptions.byId(id);
   if (!d) return;
   disruptionEl.dataset.id = id;
   disruptionEl.innerHTML = cardHtml(d, stationName, now());
   disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
+  if (!fromList) return;
+  const back = Object.assign(document.createElement('button'), { type: 'button', className: 'panel-back', innerHTML: icon('back') });
+  back.setAttribute('aria-label', t('backToList'));
+  back.onclick = () => {
+    disruptionEl.hidden = true;
+    drawDisruptions();
+    openPage(disruptionsPage);
+    document.getElementById('disruptions-body').scrollTop = listScroll;
+  };
+  disruptionEl.querySelector('.panel-head').prepend(back);
 }
 // Open a disruption's card where a train's panel sits; go: show all of its stretches (one station: fly to it).
-function openDisruption(id, { go = false } = {}) {
+function openDisruption(id, { go = false, fromList: listed = false } = {}) {
   const d = disruptions.byId(id);
   if (!d) return;
+  fromList = listed;
   if (panel.openId) panel.close();
   board.close();
   pickerEl.hidden = true;

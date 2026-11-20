@@ -358,6 +358,19 @@
       background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 4px; margin-top: 4px; cursor: pointer; text-align: left; }
     .dis-fold > span:nth-child(2) { flex: 1; }
     .dis-fold .icon { color: var(--muted); }
+    /* The rail work under the fold glides open and shut (src/main.js drawDisruptions; Max, 2026-11-20). */
+    .dis-fold > .icon { transition: transform .26s cubic-bezier(.2, .9, .25, 1); }
+    .dis-fold[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+    .dis-works { display: grid; grid-template-rows: 0fr; align-self: start; margin-top: -6px; transition: grid-template-rows .26s cubic-bezier(.2, .9, .25, 1), margin-top .26s; }
+    .dis-works.open { grid-template-rows: 1fr; margin-top: 0; }
+    .dis-works-in { min-height: 0; overflow: hidden; display: grid; gap: 6px; align-content: start; }
+    @media (prefers-reduced-motion: reduce) { .dis-works, .dis-fold > .icon { transition: none; } }
+    /* A disruption opened from the list: the back arrow before its title (src/main.js drawDisruption). */
+    .panel-back { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-right: 2px;
+      border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
+    .panel-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #disruption .panel-head:has(.panel-back) { justify-content: flex-start; }
+    #disruption .panel-head:has(.panel-back) > strong { flex: 1; min-width: 0; }
     #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
     .dis-source { font-size: 12px; margin: 8px 0 0; }
