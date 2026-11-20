@@ -8,7 +8,7 @@
 //   - a swipe down on an expanded card's timetable (scrolled to its top) makes the card compact.
 // node tools/screens-check.mjs (with npm run dev; PAGE= for another port). Not seen here: the phone's keyboard, the
 // real smoothness of the moves.
-import { launch, address, sleep, PHONE, RUSH_HOUR } from './lib/browser.mjs';
+import { launch, address, sleep, PHONE, RUSH_HOUR, CARD_HOUR } from './lib/browser.mjs';
 
 const browser = await launch();
 const fails = [];
@@ -112,20 +112,48 @@ try {
   const p2 = await page.evaluate(() => window.__map.getPitch());
   check(p2 < 1, `the compass makes it flat again (${p2.toFixed(0)}°)`);
 
-  // ---- a swipe down on the expanded card's timetable ----
+  // ---- a swipe down on the expanded card's timetable (the evening recording: its trains' timetables are saved) ----
+  await page.goto('about:blank');
+  await page.goto(address({ replay: CARD_HOUR, lang: 'en', view: '12/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
+  for (let t0 = Date.now(); Date.now() - t0 < 30000; await sleep(300)) {
+    if (await page.evaluate(() => (window.__trains?.count ?? 0) > 0 && Boolean(window.__map?.loaded())).catch(() => false)) break;
+  }
+  await sleep(1500);
   await openTrain();
-  await page.evaluate(() => document.getElementById('panel').classList.add('full'));
-  await sleep(500);
-  const list = await page.evaluate(() => { const l = document.querySelector('#panel .panel-table, #panel .cd-list');
-    if (!l) return null; l.scrollTop = 0; const r = l.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 40 }; });
-  if (!list) fails.push('swipe: no timetable list in the card');
-  else {
-    await page.touchscreen.touchStart(list.x, list.y);
-    for (let i = 1; i <= 10; i++) { await page.touchscreen.touchMove(list.x, list.y + i * 9); await sleep(16); }
+  for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) {
+    if (await page.evaluate(() => Boolean(document.querySelector('#panel .panel-more')))) break;
+  }
+  await page.evaluate(() => document.querySelector('#panel .panel-more')?.click());   // "All stops": the expanded card
+  await sleep(800);
+  const swipe = async (x, y, dy) => {
+    await page.touchscreen.touchStart(x, y);
+    for (let i = 1; i <= 10; i++) { await page.touchscreen.touchMove(x, y + i * dy / 10); await sleep(16); }
     await page.touchscreen.touchEnd();
     await sleep(800);
-    const full = await page.evaluate(() => document.getElementById('panel').classList.contains('full'));
-    check(!full && (await shown('panel')), 'a swipe down on the timetable (at its top) makes the card compact');
+  };
+  const isFull = () => page.evaluate(() => document.getElementById('panel').classList.contains('full'));
+  const listAt = () => page.evaluate(() => { const l = document.querySelector('#panel .panel-table');
+    if (!l) return null; l.scrollTop = 0; const r = l.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 40 }; });
+  let list = await listAt();
+  if (!list) fails.push('swipe: no timetable list in the card');
+  else {
+    // up in the list: it scrolls, the card stays expanded
+    await swipe(list.x, list.y + 200, -150);
+    const top = await page.evaluate(() => document.querySelector('#panel .panel-table').scrollTop);
+    check(top > 20 && (await isFull()), `a swipe up on the timetable scrolls it (${Math.round(top)} px), the card stays expanded`);
+    list = await listAt();
+    await swipe(list.x, list.y, 90);
+    check(!(await isFull()) && (await shown('panel')), 'a swipe down on the timetable (at its top) makes the card compact');
+    // on a button: a swipe down makes it compact, a tap is still the button's
+    await page.evaluate(() => document.querySelector('#panel .panel-more')?.click());
+    await sleep(800);
+    const more = await page.evaluate(() => { const r = document.querySelector('#panel .panel-more').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await swipe(more.x, more.y, 90);
+    check(!(await isFull()), 'a swipe down that starts on a button makes the card compact');
+    const more2 = await page.evaluate(() => { const r = document.querySelector('#panel .panel-more').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await page.touchscreen.tap(more2.x, more2.y);
+    await sleep(800);
+    check(await isFull(), 'a tap on that button still works (All stops)');
   }
   check(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 } finally {

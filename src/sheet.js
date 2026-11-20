@@ -99,14 +99,41 @@ export function initSheets(els) {
 function dragging(el) {
   let start = null;   // { y, t, id, h }
   const close = () => el.querySelector('.panel-close, .menu-close')?.click();
-  el.addEventListener('pointerdown', (e) => {
-    if (!bottomSheet(el) || e.button > 0 || e.target.closest(`button, input, a, select, label, ${SCROLLERS}`)) return;
-    start = { y: e.clientY, t: performance.now(), id: e.pointerId, h: el.getBoundingClientRect().height,
-      handle: e.clientY - el.getBoundingClientRect().top < HANDLE_PX };
-    el.setPointerCapture(e.pointerId);
+  // A drag can start anywhere on the sheet (Max, 2026-11-20: "when train card is expanded: swiping down from where
+  // ever on the card should minimize it"): on a button or link once the finger has moved (a press that stays put is
+  // the button's tap, and a drag's click is swallowed), and in a scrolling list with a swipe down while the list is at
+  // its top (touchmove below; a list scrolled down scrolls up first, and a swipe up always scrolls it).
+  let wait = null;          // a press on a button or link, not moved yet: { id, y }
+  let inList = null;        // a finger down in a list: { id, y }
+  let swallowUntil = 0;     // a drag that began on a button: its click (if one comes) does nothing
+  const begin = (id, y, fromButton = false) => {
+    start = { y, t: performance.now(), id, h: el.getBoundingClientRect().height,
+      handle: y - el.getBoundingClientRect().top < HANDLE_PX, fromButton };
+    try { el.setPointerCapture(id); } catch { /* the pointer is gone */ }
     el.classList.add('dragging');
+  };
+  el.addEventListener('click', (e) => { if (performance.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); } }, true);
+  el.addEventListener('pointerdown', (e) => {
+    wait = null;
+    inList = null;
+    if (!bottomSheet(el) || e.button > 0 || e.target.closest('input, select, label, textarea')) return;
+    if (e.target.closest(SCROLLERS)) { inList = { id: e.pointerId, y: e.clientY }; return; }
+    if (e.target.closest('button, a')) { wait = { id: e.pointerId, y: e.clientY }; return; }
+    begin(e.pointerId, e.clientY);
   });
+  el.addEventListener('touchmove', (e) => {
+    if (start?.fromList) { if (e.cancelable) e.preventDefault(); return; }   // (the list never takes over the drag)
+    if (!inList || start || e.touches.length !== 1) return;
+    const from = inList, list = e.target.closest?.(SCROLLERS);
+    inList = null;   // decided on the first move: the list's own scroll, or the sheet
+    const dy = e.touches[0].clientY - from.y;
+    if (!list || dy <= 0 || list.scrollTop > 0) return;
+    e.preventDefault();   // (no scroll: the sheet follows the finger)
+    begin(from.id, from.y);
+    start.fromList = true;
+  }, { passive: false });
   el.addEventListener('pointermove', (e) => {
+    if (wait && e.pointerId === wait.id && Math.abs(e.clientY - wait.y) > 8) { const { id, y } = wait; wait = null; begin(id, y, true); }
     if (!start || e.pointerId !== start.id) return;
     const dy = e.clientY - start.y;
     if (dy < 0) {   // taller, following the finger, up to full height
@@ -126,8 +153,11 @@ function dragging(el) {
     }
   });
   const end = (e) => {
+    wait = null;
+    inList = null;
     if (!start || e.pointerId !== start.id) return;
     const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew } = start;
+    if (start.fromButton) swallowUntil = performance.now() + 400;
     start = null;
     if (grew && dy > CLOSE_PX) {   // grown, then pulled far down: slides away and closes, as from small
       el.classList.remove('dragging');
