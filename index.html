@@ -178,7 +178,10 @@
     /* The connection screen (src/connection.js; its own look: src/connection.css). */
     #conn-page { display: flex; flex-direction: column; gap: 6px; }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
-    #settings-page:not([hidden]) + #settings-backdrop { display: block; }
+    #settings-page:not([hidden]) + #settings-backdrop { display: block; transition: opacity .2s; }
+    /* Settings swiped away: its dimming fades with it and lets taps through at once (Max, 2026-11-20: the menu didn't
+       react until the card had slid away; the dimming, over the top bar too, caught the tap on ☰ for those 0.2 s). */
+    #settings-page.leaving + #settings-backdrop { opacity: 0; pointer-events: none; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
     .set-data { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
     /* The stats page's own look: src/stats.css (loaded by src/stats-page.js). */
@@ -397,7 +400,7 @@
       animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1);
       transition: max-height .26s cubic-bezier(.2, .9, .25, 1), height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
     .sheet.dragging { transition: none; }
-    .sheet.leaving { transition: transform .2s ease-in; }
+    .sheet.leaving { transition: transform .2s ease-in; pointer-events: none; }   /* (sliding away: never catches a tap) */
     /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
     .sheet .panel-table, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
     .sheet::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }

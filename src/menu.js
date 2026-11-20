@@ -17,9 +17,11 @@ import { stateEl } from './state.js';
 // All matches are listed (Max, 2026-11-12: 8 was too few; "2" matches 66 trains at rush hour); the list scrolls.
 const MAX_ROWS = 200;
 import { esc } from './html.js';
+import { onTap } from './sheet.js';
 
+// onOpen(): the search opened by its button (main.js closes the ☰ menu then).
 export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation,
-  favourites, onPickFavouriteTrain }) {
+  favourites, onPickFavouriteTrain, onOpen }) {
   const input = el.querySelector('#search');
   const list = el.querySelector('#search-results');
   let closedAt = 0;
@@ -39,7 +41,7 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
     input.blur();
     closedAt = performance.now();
   }
-  button.onclick = () => (el.hidden ? open() : close());
+  onTap(button, () => { if (el.hidden) { onOpen?.(); open(); } else close(); });   // (at once also after a swipe: sheet.js)
   el.querySelector('.menu-close').onclick = close;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
   // A tap outside the menu closes it (and that tap does nothing else, see justClosed).

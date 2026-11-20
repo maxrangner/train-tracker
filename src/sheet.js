@@ -19,6 +19,25 @@ const TOP_GAP = 78;      // full height leaves this much at the top (the search 
 const bottomSheet = el => Boolean(NARROW?.matches) && el.id !== 'menu';
 const GLIDE_MS = 280;    // a little over the CSS height transition (.sheet, .26 s)
 
+// A button that answers a finger at once, also right after a swipe (Max, 2026-11-20: "the menu doesn't react
+// directly when a screen is dismissed"). Measured in the test browser: for about 0.4 s after a swipe ends, a tap gets
+// its pointerdown and pointerup but no click (the browser takes it as stopping the swipe), so ☰ did nothing until the
+// card had slid away. Here a finger lifted on the button, not moved, acts; the click that may follow is skipped. A
+// mouse, a pen, the keyboard and tools' .click() still go through the click.
+export function onTap(el, fn) {
+  let down = null, tappedAt = -Infinity;
+  el.addEventListener('pointerdown', (e) => { down = e.pointerType === 'touch' ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null; });
+  el.addEventListener('pointercancel', () => { down = null; });
+  el.addEventListener('pointerup', (e) => {
+    const d = down;
+    down = null;
+    if (!d || e.pointerId !== d.id || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 12) return;
+    tappedAt = performance.now();
+    fn(e);
+  });
+  el.addEventListener('click', (e) => { if (performance.now() - tappedAt > 700) fn(e); });
+}
+
 // A size change that glides (Max's phone test, 2026-11-17: Mer, the handle tap and a short drag down "snap down very
 // fast"): the change itself (a class, new content) is made with the transitions off, so the new natural height can
 // be measured at once (the height limit changes with it); then the height goes from what it was (or `from`, a dragged
