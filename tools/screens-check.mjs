@@ -100,6 +100,18 @@ try {
   check(!(await shown('nav')), 'menu open: a tap on the map closes it');
   check(!(await shown('panel')), 'menu open: that tap did nothing else');
 
+  // ---- the far south above a phone's card: zoomed out, the map may go far enough south that Köpenhamn (55.7°)
+  // stands above the card (until 2026-11-20 it stopped at 52°, with Hyllie and Köpenhamn at the card's edge) ----
+  const south = await page.evaluate(async () => {
+    window.__map.jumpTo({ zoom: 5, center: [13.5, 53.5] });
+    await new Promise(r => setTimeout(r, 300));
+    const p = window.__map.project([12.57, 55.68]);
+    return { lat: window.__map.getCenter().lat, y: p.y, h: window.innerHeight };
+  });
+  check(south.y < south.h * 0.55 - 20, `zoomed out, Köpenhamn can stand above a card (centre ${south.lat.toFixed(1)}°, at ${Math.round(south.y)} of ${south.h} px)`);
+  await page.evaluate(() => window.__map.jumpTo({ zoom: 12, center: [18.06, 59.33] }));
+  await sleep(800);
+
   // ---- the compass: 3D when flat ----
   const btn = '.maplibregl-ctrl-compass';
   const flatInfo = await page.evaluate((s) => { const b = document.querySelector(s); const r = b?.getBoundingClientRect();
