@@ -69,6 +69,22 @@ try {
     await page.evaluate(i => { document.getElementById(i).hidden = true; }, id);
   }
 
+  // ---- search → ☰ with a keyboard (stood in for: the page 430 px shorter while typing, gone 150 ms after ☰): the map
+  // keeps its height the whole way (Max, 2026-11-20: a flicker; it went 851 → 421 → 851 px) ----
+  await click('#menu-button'); await sleep(300);
+  await page.type('#search', '1');
+  await page.setViewport({ ...PHONE, height: PHONE.height - 430 });
+  await sleep(600);
+  await page.evaluate(() => { window.__mapHs = new Set(); const m = document.getElementById('map'), t0 = performance.now();
+    const step = () => { window.__mapHs.add(m.clientHeight); if (performance.now() - t0 < 900) requestAnimationFrame(step); }; requestAnimationFrame(step); });
+  await touchTap('#nav-button');
+  await sleep(150);
+  await page.setViewport(PHONE);
+  await sleep(900);
+  const hs = await page.evaluate(() => [...window.__mapHs]);
+  check(hs.length === 1 && hs[0] === PHONE.height, `search → ☰ with the keyboard going: the map's height stays (${hs.join(', ')} px)`);
+  await click('#nav-button'); await sleep(300);
+
   // ---- the three choices for a screen over a train ----
   for (const mode of ['card', 'follow', 'clear']) {
     await setOver(mode);

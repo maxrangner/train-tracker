@@ -245,19 +245,29 @@ mapEl.appendChild(creditEl);
 // map shrank with it: its middle moved up, and back down when the keyboard went (Max, 2026-11-19). While a text field
 // has focus and the page is clearly lower than before, the map keeps its last full height and runs on behind the
 // keyboard, so it doesn't move; everything else still fits above the keyboard.
+// The field let go (the search closed, ☰ tapped), the keyboard takes a moment to go: the map keeps its full height
+// until the page is tall again (or KEYBOARD_GONE_MS has passed), not shrinking to the short page first and growing
+// back a moment later (Max, 2026-11-20: "a flicker on both menu and map going from search to menu"; measured with a
+// stand-in keyboard: the map went 851 -> 421 -> 851 px within 0.2 s).
 {
-  let full = { w: innerWidth, h: innerHeight };
+  const KEYBOARD_GONE_MS = 1000;
+  let full = { w: innerWidth, h: innerHeight }, letGoAt = -Infinity;
   const fit = () => {
     const typing = Boolean(document.activeElement?.matches?.('input, textarea'));
-    if (innerWidth !== full.w) full = { w: innerWidth, h: innerHeight };
-    if (typing && innerHeight < full.h - 150) {
+    if (innerWidth !== full.w) { full = { w: innerWidth, h: innerHeight }; letGoAt = -Infinity; }
+    const going = !typing && performance.now() - letGoAt < KEYBOARD_GONE_MS;   // the keyboard on its way down
+    if ((typing || going) && innerHeight < full.h - 150) {
       mapEl.style.bottom = 'auto'; mapEl.style.height = `${full.h}px`;
     } else {
       full.h = innerHeight; mapEl.style.bottom = ''; mapEl.style.height = '';
     }
   };
   addEventListener('resize', fit);
-  addEventListener('focusout', () => setTimeout(fit, 0));
+  addEventListener('focusout', () => {
+    letGoAt = performance.now();
+    setTimeout(fit, 0);
+    setTimeout(fit, KEYBOARD_GONE_MS + 50);   // (it never went: the page's own height again)
+  });
 }
 map.shown.then(() => {
   const fade = (e) => {
