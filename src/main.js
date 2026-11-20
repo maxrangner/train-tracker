@@ -13,7 +13,7 @@ import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
-import { initSheets } from './sheet.js';
+import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
@@ -106,8 +106,15 @@ const propsFor = (r, sim) => ({
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
-// A short buzz when a train is opened or followed (round 4; Android: iPhones don't let a web page vibrate).
-const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
+// A short buzz when a train is opened or followed (round 4). In the app through Capacitor's haptics plugin (Max,
+// 2026-11-20: "No haptics in app": the app never had Android's permission to vibrate, so the page's vibrate did
+// nothing; the plugin brings it, and works on iPhones too); on the web page navigator.vibrate (Android browsers only).
+const native = Boolean(window.Capacitor?.isNativePlatform?.());
+const haptics = native ? import('@capacitor/haptics').catch(() => null) : null;
+const buzz = () => {
+  if (haptics) { haptics.then(h => h?.Haptics.impact({ style: h.ImpactStyle.Light })).catch(() => { /* not here */ }); return; }
+  try { navigator.vibrate?.(8); } catch { /* not allowed here */ }
+};
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
@@ -186,6 +193,12 @@ const panel = createPanel(document.getElementById('panel'), {
   },
 });
 const map = createMap('map', {
+  // A plain tap on the map (not a drag): with the menu open it only closes the menu.
+  onMapTap() {
+    if (navEl.hidden) return false;
+    closeNav();
+    return true;
+  },
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
   getTrains3d: () => frameTrains,
@@ -232,19 +245,29 @@ mapEl.appendChild(creditEl);
 // map shrank with it: its middle moved up, and back down when the keyboard went (Max, 2026-11-19). While a text field
 // has focus and the page is clearly lower than before, the map keeps its last full height and runs on behind the
 // keyboard, so it doesn't move; everything else still fits above the keyboard.
+// The field let go (the search closed, ☰ tapped), the keyboard takes a moment to go: the map keeps its full height
+// until the page is tall again (or KEYBOARD_GONE_MS has passed), not shrinking to the short page first and growing
+// back a moment later (Max, 2026-11-20: "a flicker on both menu and map going from search to menu"; measured with a
+// stand-in keyboard: the map went 851 -> 421 -> 851 px within 0.2 s).
 {
-  let full = { w: innerWidth, h: innerHeight };
+  const KEYBOARD_GONE_MS = 1000;
+  let full = { w: innerWidth, h: innerHeight }, letGoAt = -Infinity;
   const fit = () => {
     const typing = Boolean(document.activeElement?.matches?.('input, textarea'));
-    if (innerWidth !== full.w) full = { w: innerWidth, h: innerHeight };
-    if (typing && innerHeight < full.h - 150) {
+    if (innerWidth !== full.w) { full = { w: innerWidth, h: innerHeight }; letGoAt = -Infinity; }
+    const going = !typing && performance.now() - letGoAt < KEYBOARD_GONE_MS;   // the keyboard on its way down
+    if ((typing || going) && innerHeight < full.h - 150) {
       mapEl.style.bottom = 'auto'; mapEl.style.height = `${full.h}px`;
     } else {
       full.h = innerHeight; mapEl.style.bottom = ''; mapEl.style.height = '';
     }
   };
   addEventListener('resize', fit);
-  addEventListener('focusout', () => setTimeout(fit, 0));
+  addEventListener('focusout', () => {
+    letGoAt = performance.now();
+    setTimeout(fit, 0);
+    setTimeout(fit, KEYBOARD_GONE_MS + 50);   // (it never went: the page's own height again)
+  });
 }
 map.shown.then(() => {
   const fade = (e) => {
@@ -264,6 +287,28 @@ for (const sel of ['#settings', '.help-body', '#disruptions-body', '#conn-body',
 const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
   .map(id => document.getElementById(id)));
 const raise = id => sheets.raise(document.getElementById(id));
+
+// ---- One screen at a time (Max, 2026-11-20: Störningar, then Statistik from the menu, left both open; closing one
+// showed the other). Every menu screen opens through openPage, which closes the others. What becomes of a card under
+// it (a train, a board, a disruption, the "3 trains" list) is a Debug choice for now (Settings → Debug → Screen over a
+// train; Max: "Make a debug toggle for the three options"): 'card' the card waits under the screen and is back when it
+// closes (as before); 'follow' the cards go, the open train stays picked and followed (a tap on it brings its card
+// back, a tap on the map lets it go); 'clear' the cards go and the train is let go. ----
+const pageEls = () => [settingsPage, statsPage, connPage, disruptionsPage, helpEl];
+function openPage(el) {
+  closeNav();
+  menu.close();
+  for (const p of pageEls()) if (p !== el) p.hidden = true;
+  const mode = settings.pageOverTrain;
+  if (mode !== 'card') {
+    board.close();
+    pickerEl.hidden = true;
+    disruptionEl.hidden = true;
+    if (panel.openId) { if (mode === 'clear') panel.close(); else panel.hide(); }
+  }
+  el.hidden = false;
+  raise(el.id);
+}
 
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
@@ -316,6 +361,12 @@ function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
   buzz();
+  if (panel.openId === id && panel.hidden && !go) {   // its card put away by a screen (openPage, 'follow'): back
+    panel.show();
+    raise('panel');
+    follow(id);
+    return true;
+  }
   board.close();
   pickerEl.hidden = true;
   disruptionEl.hidden = true;
@@ -332,9 +383,9 @@ function openTrain(id, { go = false } = {}) {
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-function openHelp() { statsPage.hidden = true; connPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
+function openHelp() { openPage(helpEl); helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = () => { closeNav(); menu.close(); openHelp(); };   // in the menu (☰, 2026-11-18)
+document.getElementById('help-button').onclick = openHelp;   // in the menu (☰, 2026-11-18)
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
 // filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
@@ -400,7 +451,7 @@ versionEl.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!navEl.hidden) { closeNav(); return; }
-  const pages = [helpEl, settingsPage, statsPage, connPage, disruptionsPage];
+  const pages = pageEls();
   if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
   if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
 });
@@ -438,10 +489,11 @@ function closeNav() {
   navEl.hidden = true;
   navButton.setAttribute('aria-expanded', 'false');
 }
-navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
-document.getElementById('nav-backdrop').onclick = closeNav;
-// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time.
-document.getElementById('menu-button').addEventListener('click', closeNav);
+onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
+// The map works with the menu open (Max, 2026-11-20: "Map doesn't work with menu open, but cards do"; until then a
+// see-through layer over the map only closed the menu): a drag or pinch moves the map and the menu stays; a plain tap
+// on the map closes the menu and does nothing else (as the search does; createMap onMapTap).
+// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time (createMenu onOpen).
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -464,6 +516,7 @@ const menu = createMenu({
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
+  onOpen: () => closeNav(),
   favourites: () => ({
     trains: favourites.trains.map((number) => {
       const r = trains.reports().find(x => String(x.number) === number);
@@ -574,12 +627,7 @@ const settingsPage = document.getElementById('settings-page');
 const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
-  closeNav();
-  menu.close();
-  connPage.hidden = true;
-  helpEl.hidden = true;
-  statsPage.hidden = true;
-  settingsPage.hidden = false;
+  openPage(settingsPage);
   foldAccents(false);   // the accent colours start folded
   settingsPage.querySelector('.panel-close').focus();
 };
@@ -675,12 +723,7 @@ function drawStats(first = false) {
     trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
 }
 function openStats() {
-  closeNav();
-  menu.close();
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  connPage.hidden = true;
-  statsPage.hidden = false;
+  openPage(statsPage);
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
   drawStats(true);
@@ -696,18 +739,11 @@ const conn = createConnection(connPage, {
 });
 let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
 function openConn() {
-  closeNav();
-  menu.close();
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  statsPage.hidden = true;
-  disruptionsPage.hidden = true;
   showConn();
-  connPage.hidden = false;
-  raise('conn-page');
+  openPage(connPage);
   connPage.querySelector('.panel-close').focus();
 }
-document.getElementById('status').onclick = () => (connPage.hidden ? openConn() : (connPage.hidden = true));
+onTap(document.getElementById('status'), () => (connPage.hidden ? openConn() : (connPage.hidden = true)));
 connPage.querySelector('.panel-close').onclick = () => { connPage.hidden = true; };
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
 // A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the
@@ -756,7 +792,10 @@ if (live) {
   Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 }
 // The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
-// end, ending soonest first; open or folded is remembered on this device.
+// end, ending soonest first; open or folded is remembered on this device. The fold glides open and shut (Max,
+// 2026-11-20: "Expanding and condensing störningar does not animate"): the rows are always there, in a box whose
+// height goes from none to all of them (index.html .dis-works; none of it for less motion), shut ones out of reach
+// (inert).
 const WORKS_KEY = 'railWorksOpen';
 let worksOpen = false;
 try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
@@ -764,26 +803,52 @@ function drawDisruptions() {
   const list = disruptions.list, problems = list.filter(d => !isWork(d));
   const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
   const row = d => rowHtml(d, stationName, now());
-  document.getElementById('disruptions-body').innerHTML = (!list.length ? stateHtml('empty', t('noDisruptions'))
+  document.getElementById('disruptions-body').innerHTML = (!disruptions.loaded ? stateHtml('loading', t('loading'))
+    : !list.length ? stateHtml('empty', t('noDisruptions'))
     : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
     problems.map(row).join('') +
     (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
-      `<span>${t('railWorks')} (${works.length})</span>${icon(worksOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` + (worksOpen ? works.map(row).join('') : '') : '');
-  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => { disruptionsPage.hidden = true; openDisruption(b.dataset.id, { go: true }); };
-  const fold = disruptionsPage.querySelector('.dis-fold');
-  if (fold) fold.onclick = () => { worksOpen = !worksOpen; try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ } drawDisruptions(); };
+      `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
+      `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '');
+  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => {
+    listScroll = document.getElementById('disruptions-body').scrollTop;
+    disruptionsPage.hidden = true;
+    openDisruption(b.dataset.id, { go: true, fromList: true });
+  };
+  const fold = disruptionsPage.querySelector('.dis-fold'), box = disruptionsPage.querySelector('.dis-works');
+  if (fold) fold.onclick = () => {
+    worksOpen = !worksOpen;
+    try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ }
+    fold.setAttribute('aria-expanded', String(worksOpen));
+    box.classList.toggle('open', worksOpen);
+    box.inert = !worksOpen;
+  };
 }
+// A disruption opened from the list has a back arrow (Max, 2026-11-20: "Back arrow when in a specific störning"):
+// back to the list, where it was scrolled to (the map stays where the disruption put it).
+let fromList = false, listScroll = 0;
 function drawDisruption(id) {
   const d = disruptions.byId(id);
   if (!d) return;
   disruptionEl.dataset.id = id;
   disruptionEl.innerHTML = cardHtml(d, stationName, now());
   disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
+  if (!fromList) return;
+  const back = Object.assign(document.createElement('button'), { type: 'button', className: 'panel-back', innerHTML: icon('back') });
+  back.setAttribute('aria-label', t('backToList'));
+  back.onclick = () => {
+    disruptionEl.hidden = true;
+    drawDisruptions();
+    openPage(disruptionsPage);
+    document.getElementById('disruptions-body').scrollTop = listScroll;
+  };
+  disruptionEl.querySelector('.panel-head').prepend(back);
 }
 // Open a disruption's card where a train's panel sits; go: show all of its stretches (one station: fly to it).
-function openDisruption(id, { go = false } = {}) {
+function openDisruption(id, { go = false, fromList: listed = false } = {}) {
   const d = disruptions.byId(id);
   if (!d) return;
+  fromList = listed;
   if (panel.openId) panel.close();
   board.close();
   pickerEl.hidden = true;
@@ -797,14 +862,8 @@ function openDisruption(id, { go = false } = {}) {
   else if (p) map.goTo(p, 9);
 }
 document.getElementById('open-disruptions').onclick = () => {
-  closeNav();
-  menu.close();
-  connPage.hidden = true;
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  statsPage.hidden = true;
   drawDisruptions();
-  disruptionsPage.hidden = false;
+  openPage(disruptionsPage);
   disruptionsPage.querySelector('.panel-close').focus();
 };
 disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };

@@ -28,15 +28,18 @@ const DEFAULTS = {
   // The accent colour: buttons, the chosen train's route (Max, 2026-11-15: a setting, a few curated colours;
   // src/colours.js ACCENTS).
   accent: DEFAULT_ACCENT,
-  // How a train's card opens (Max, 2026-11-15): 'compact' (the glance: lateness, minutes to a stop, the trip as a
-  // line) or 'expanded' (every stop).
-  trainCard: 'compact',
+  // (trainCard, 'compact' or 'expanded', was a setting until 2026-11-20, Max: "Remove tågkort setting"; the card
+  // always opens compact. A phone's saved value is left unread.)
   // A stop Trafikverket gives no expected time for, counted down to (Max, 2026-11-15, 1B, with a Debug switch to A):
   // 'guess', its planned time plus the lateness now (shown with ≈), or 'planned'.
   noEstimate: 'guess',
   // Disruptions on the map (Max, 2026-11-18): 'all' (problems and rail work, the default: "Alla"), 'problems' (faults
   // and incidents only: "Fel") or 'off'. The menu's list always has them all.
   disruptionsMap: 'all',
+  // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
+  // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
+  // followed) or 'clear' (card and train let go).
+  pageOverTrain: 'card',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -53,9 +56,9 @@ const KEYS = {
   boardRows: { param: 'boardrows' },
   trainSymbol: { param: 'symbol' },
   accent: { param: 'accent' },
-  trainCard: { param: 'card' },
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
+  pageOverTrain: { param: 'overtrain' },
 };
 const STORE = 'settings';
 
@@ -78,9 +81,9 @@ const valid = {
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
   trainSymbol: v => (['circle', 'triangle', 'dart', 'drop'].includes(v) ? v : undefined),
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
-  trainCard: v => (['compact', 'expanded'].includes(v) ? v : undefined),
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
+  pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>

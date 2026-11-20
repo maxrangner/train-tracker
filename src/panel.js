@@ -159,7 +159,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     picking = false;
     onSelect?.(train.id);
     el.hidden = false;
-    el.classList.toggle('full', settings.trainCard === 'expanded');   // Settings → Train card
+    el.classList.remove('full');   // always opens compact (the Train card setting went, Max 2026-11-20)
     shown = { train, route: null };
     el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
@@ -449,5 +449,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     line.textContent = text;
   }
 
-  return { open, close, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; } };
+  // The card put away with the train still open (a screen over it, Settings → Debug → Screen over a train: 'follow'),
+  // and shown again; it stays up to date meanwhile.
+  const hide = () => { el.hidden = true; };
+  const show = () => { if (openId) el.hidden = false; };
+  return { open, close, hide, show, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }

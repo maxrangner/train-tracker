@@ -69,7 +69,13 @@ export const RAIL_SOURCES = {
 const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
 // Wide east-west: on a wide screen at the furthest zoom (Sweden's height decides it) the map can still be panned
 // sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
-const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// South to 44° since 2026-11-20 (52° before; Max: a train to the far south, zoomed out, "cuts out part of the route
+// because the map wont allow panning that far down"): the limit counts the map behind a phone's card too, so at 52°
+// a route's end near Malmö or Köpenhamn stayed behind the card. Measured with Öresundståg 1084 (to Hyllie and
+// Köpenhamn) at zoom 5-6: the view stopped at 52° with the route's end at the card's edge.
+const MAX_BOUNDS = [[-20, 44], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// The legs abroad are drawn only within the old limits (Austria, Italy: the card still names them; 2026-11-17).
+const ABROAD_BOUNDS = [[-20, 52], [60, 72]];
 // The leg abroad's dashes, one step every 100 ms: a dash of 3, a gap of 4 (line widths), moved half a width a step
 // (MapLibre can't shift a dash pattern, so the pattern is cut where it has moved to).
 const MARCH = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
@@ -223,7 +229,7 @@ const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
 // onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
-export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onDisruptionTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
+export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onDisruptionTap, onMapTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
@@ -339,15 +345,34 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
-  // + and − only with a mouse; the compass only while the map is turned or tilted (index.html, the Soft look 2026-11-15).
+  // + and − only with a mouse (index.html, the Soft look 2026-11-15). The compass button is always there (Max,
+  // 2026-11-20: "when view is at default position it should say "3d" and tilt the camera so the 3d trains show"):
+  // flat and north up it says "3D" and a tap tilts the view to TILT_3D (zoom and place kept; "just tilt"); turned or
+  // tilted it is the compass (a tap: flat, north up). Until then it showed only while the map was turned or tilted.
+  const TILT_3D = 60;
   const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
   const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
   showPointer();
   mouse?.addEventListener('change', showPointer);
-  const showTurned = () => {
-    const turned = Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
-    if (turned !== map.getContainer().classList.contains('turned')) map.getContainer().classList.toggle('turned', turned);
+  const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
+  compass?.append(Object.assign(document.createElement('span'), { className: 'ctrl-3d', textContent: '3D', ariaHidden: 'true' }));
+  const isTurned = () => Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
+  const nameCompass = () => {
+    const name = t(isTurned() ? 'viewFlat' : 'view3d');
+    if (compass && compass.title !== name) { compass.title = name; compass.setAttribute('aria-label', name); }
   };
+  const showTurned = () => {
+    const turned = isTurned();
+    if (turned !== map.getContainer().classList.contains('turned')) { map.getContainer().classList.toggle('turned', turned); nameCompass(); }
+  };
+  // Flat: our tap (tilt), before MapLibre's own (which would only make it flat and north up again).
+  compass?.addEventListener('click', (e) => {
+    if (isTurned()) return;
+    e.stopImmediatePropagation();
+    map.easeTo({ pitch: TILT_3D, duration: 700 });
+  }, true);
+  showTurned();
+  nameCompass();
   map.on('rotate', showTurned);
   map.on('pitch', showTurned);
 
@@ -767,6 +792,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Tapping a train: on its label, anywhere on its model (close in), or near its dot (a generous area, since dots
     // are small on a phone). The nearest wins.
     map.on('click', (e) => {
+      if (onMapTap?.(e) === true) return;   // the tap was used up (it closed the menu: src/main.js)
       // Close in, a station's name is drawn on top of everything, so a tap on it opens the station.
       // A station abroad is shown but not tappable (Max, 2026-11-18): Trafikverket has no trains stopping there, so its
       // board would be empty; the tap goes on to whatever else is there.
@@ -1519,7 +1545,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The open train's legs abroad (src/abroad.js abroadEnds, with coords: [from, to] the way the train goes); null
     // or []: none. A foreign station outside the map's bounds (Austria, Italy) gets none (the card still names it).
     async setAbroad(legs) {
-      const inside = ([lon, lat]) => lon >= MAX_BOUNDS[0][0] && lon <= MAX_BOUNDS[1][0] && lat >= MAX_BOUNDS[0][1] && lat <= MAX_BOUNDS[1][1];
+      const inside = ([lon, lat]) => lon >= ABROAD_BOUNDS[0][0] && lon <= ABROAD_BOUNDS[1][0] && lat >= ABROAD_BOUNDS[0][1] && lat <= ABROAD_BOUNDS[1][1];
       const shown = (legs ?? []).filter(l => l.coords.every(inside));
       const end = l => (l.dir === 'to' ? l.coords[1] : l.coords[0]);
       data.abroad = { type: 'FeatureCollection', features: shown.flatMap(l => [

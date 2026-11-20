@@ -27,7 +27,8 @@ try {
   // ---- The list ----
   await page.evaluate(() => document.getElementById('open-disruptions').click());
   await sleep(700);
-  const list = () => page.evaluate(() => ({ rows: [...document.querySelectorAll('#disruptions-body .dis-row')].map(r => r.querySelector('.dis-ic')?.classList.contains('work')),
+  // (the rail work rows are always there; shut, they sit in a box with no height: only open ones count as shown)
+  const list = () => page.evaluate(() => ({ rows: [...document.querySelectorAll('#disruptions-body .dis-row')].filter(r => !r.closest('.dis-works:not(.open)')).map(r => r.querySelector('.dis-ic')?.classList.contains('work')),
     fold: document.querySelector('#disruptions-body .dis-fold')?.textContent ?? null, open: document.querySelector('#disruptions-body .dis-fold')?.getAttribute('aria-expanded') }));
   let l = await list();
   const shownProblems = l.rows.filter(w => !w).length, works = Number(/\((\d+)\)/.exec(l.fold ?? '')?.[1] ?? 0);
@@ -35,7 +36,17 @@ try {
   expect(l.rows.every((w, i) => !w || l.rows.slice(i).every(Boolean)), 'the problems come first, rail work after');
   if (works) {
     const wasOpen = l.open === 'true';
-    await page.evaluate(() => document.querySelector('#disruptions-body .dis-fold').click()); await sleep(400);
+    // the fold glides (Max, 2026-11-20): the box's height measured while it moves lies between shut and open
+    const heights = await page.evaluate(async () => {
+      const box = document.querySelector('#disruptions-body .dis-works'), hs = [box.getBoundingClientRect().height];
+      document.querySelector('#disruptions-body .dis-fold').click();
+      for (let i = 0; i < 6; i++) { await new Promise(r => setTimeout(r, 40)); hs.push(box.getBoundingClientRect().height); }
+      await new Promise(r => setTimeout(r, 300));
+      hs.push(box.getBoundingClientRect().height);
+      return hs;
+    });
+    const lo = Math.min(heights[0], heights.at(-1)), hi = Math.max(heights[0], heights.at(-1));
+    expect(heights.slice(1, -1).filter(h => h > lo + 2 && h < hi - 2).length >= 2, `the fold glides (heights ${heights.map(Math.round).join(' → ')} px)`);
     l = await list();
     const workRows = l.rows.filter(Boolean).length;
     expect(wasOpen ? workRows === 0 : workRows === works, `"Banarbeten (${works})" ${wasOpen ? 'folds' : 'unfolds'}: ${workRows} rail work row(s) shown, each with a cone`);
@@ -47,6 +58,26 @@ try {
     expect(again.open === String(!wasOpen), `the fold is remembered after a reload (${again.open})`);
     if (again.open === 'true') { await page.evaluate(() => document.querySelector('#disruptions-body .dis-fold').click()); await sleep(300); }
   } else notes.push('no rail work in force now: the fold not checked');
+  // A disruption opened from the list has a back arrow, back to the list where it was (Max, 2026-11-20); one opened
+  // from the map has none.
+  const visibleRows = () => page.evaluate(() => [...document.querySelectorAll('#disruptions-body .dis-row')].filter(r => !r.closest('.dis-works:not(.open)')).length);
+  const problemsShown = await visibleRows();
+  if (problemsShown || works) {
+    if (!problemsShown) { await page.evaluate(() => document.querySelector('#disruptions-body .dis-fold').click()); await sleep(400); }
+    const at = await page.evaluate(() => { const b = document.getElementById('disruptions-body'); b.scrollTop = 40; return b.scrollTop; });
+    await page.evaluate(() => [...document.querySelectorAll('#disruptions-body .dis-row')].find(r => !r.closest('.dis-works:not(.open)'))?.click());
+    await sleep(600);
+    const card = await page.evaluate(() => ({ open: !document.getElementById('disruption').hidden, back: Boolean(document.querySelector('#disruption .panel-back')) }));
+    expect(card.open && card.back, `a disruption from the list: its card, with a back arrow (${JSON.stringify(card)})`);
+    await page.evaluate(() => document.querySelector('#disruption .panel-back')?.click());
+    await sleep(600);
+    const backAt = await page.evaluate(() => ({ list: !document.getElementById('disruptions-page').hidden, card: !document.getElementById('disruption').hidden,
+      top: document.getElementById('disruptions-body').scrollTop }));
+    expect(backAt.list && !backAt.card && Math.abs(backAt.top - at) < 2, `the back arrow: the list again, scrolled where it was (${backAt.top} of ${at} px), the card closed`);
+    if (!problemsShown) { await page.evaluate(() => document.querySelector('#disruptions-body .dis-fold').click()); await sleep(300); }
+    await page.evaluate(() => window.__map.jumpTo({ center: [16.5, 62.5], zoom: 4.6, bearing: 0, pitch: 0 }));   // (opening it flew the map there)
+    await sleep(1200);
+  }
   await page.evaluate(() => document.querySelector('#disruptions-page .panel-close')?.click());
   await sleep(500);
 

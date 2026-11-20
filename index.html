@@ -56,7 +56,7 @@
       gap: 6px;
       align-items: flex-start;
       pointer-events: none;
-      z-index: 5;   /* above the menu's tap-outside layer (#nav-backdrop), below the sheets */
+      z-index: 5;   /* below the sheets */
     }
     #top > * { pointer-events: auto; }
     /* The search bar (the Soft look, 2026-11-15): logo, search (opens the menu sheet), the live count (opens the
@@ -86,7 +86,7 @@
     #nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* The menu (Max, 2026-11-19): a slim card that drops down under the top bar like the search card; the bar stays
        free (☰ opens and closes it, Sök opens the search instead). A tap elsewhere on the map, Esc or the phone's back
-       closes it too. No dimming: a clear layer under the top bar catches the tap outside. */
+       closes it too. No dimming, and the map works while it is open (a plain tap on the map closes it; 2026-11-20). */
     #nav { position: fixed; z-index: 9; top: calc(68px + env(safe-area-inset-top, 0px)); left: calc(var(--gap) + env(safe-area-inset-left, 0px));
       width: max-content; min-width: 210px; max-width: calc(100% - 2 * var(--gap)); max-height: calc(100% - 78px - env(safe-area-inset-top, 0px));
       box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 6px;
@@ -94,8 +94,6 @@
       transform-origin: top left; transition: transform .2s cubic-bezier(.2, .9, .25, 1), opacity .2s; }
     @media (min-width: 440px) { #nav { top: calc(70px + env(safe-area-inset-top, 0px)); } }
     #nav[hidden] { display: flex !important; transform: translateY(-14px); opacity: 0; visibility: hidden; transition: transform .15s ease-in, opacity .15s, visibility 0s .15s; }
-    #nav-backdrop { position: fixed; inset: 0; z-index: 4; display: none; }
-    #nav:not([hidden]) + #nav-backdrop { display: block; }
     .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 14px 8px 8px; border: 0; border-radius: calc(var(--radius) - 6px); background: transparent;
       color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
     .nav-row[hidden] { display: none; }
@@ -180,7 +178,10 @@
     /* The connection screen (src/connection.js; its own look: src/connection.css). */
     #conn-page { display: flex; flex-direction: column; gap: 6px; }
     #settings-backdrop { display: none; position: fixed; inset: 0; z-index: 6; background: rgba(0, 0, 0, 0.3); }
-    #settings-page:not([hidden]) + #settings-backdrop { display: block; }
+    #settings-page:not([hidden]) + #settings-backdrop { display: block; transition: opacity .2s; }
+    /* Settings swiped away: its dimming fades with it and lets taps through at once (Max, 2026-11-20: the menu didn't
+       react until the card had slid away; the dimming, over the top bar too, caught the tap on ☰ for those 0.2 s). */
+    #settings-page.leaving + #settings-backdrop { opacity: 0; pointer-events: none; }
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
     .set-data { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
     /* The stats page's own look: src/stats.css (loaded by src/stats-page.js). */
@@ -215,8 +216,8 @@
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(var(--gap) + env(safe-area-inset-right, 0px)); }
-    /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15),
-       the compass only while the map is turned or tilted (src/map.js sets .touch and .turned on the map). */
+    /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15);
+       src/map.js sets .touch and .turned on the map. */
     .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
@@ -228,8 +229,11 @@
     .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
     .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { width: 48px; height: 48px; }
     .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
-    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass { display: none; }
-    .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
+    /* The compass: "3D" while the map is flat and north up (a tap tilts it), the needle while turned or tilted (src/map.js;
+       Max, 2026-11-20). */
+    .maplibregl-ctrl-compass .ctrl-3d { font: 700 14px/1 var(--font); letter-spacing: .02em; color: var(--ink); }
+    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass .maplibregl-ctrl-icon { display: none; }
+    .maplibregl-map.turned .maplibregl-ctrl-compass .ctrl-3d { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
     .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); right: calc(72px + env(safe-area-inset-right, 0px));
@@ -357,6 +361,19 @@
       background: none; border: 0; border-top: 1px solid var(--line); padding: 12px 4px; margin-top: 4px; cursor: pointer; text-align: left; }
     .dis-fold > span:nth-child(2) { flex: 1; }
     .dis-fold .icon { color: var(--muted); }
+    /* The rail work under the fold glides open and shut (src/main.js drawDisruptions; Max, 2026-11-20). */
+    .dis-fold > .icon { transition: transform .26s cubic-bezier(.2, .9, .25, 1); }
+    .dis-fold[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+    .dis-works { display: grid; grid-template-rows: 0fr; align-self: start; margin-top: -6px; transition: grid-template-rows .26s cubic-bezier(.2, .9, .25, 1), margin-top .26s; }
+    .dis-works.open { grid-template-rows: 1fr; margin-top: 0; }
+    .dis-works-in { min-height: 0; overflow: hidden; display: grid; gap: 6px; align-content: start; }
+    @media (prefers-reduced-motion: reduce) { .dis-works, .dis-fold > .icon { transition: none; } }
+    /* A disruption opened from the list: the back arrow before its title (src/main.js drawDisruption). */
+    .panel-back { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-right: 2px;
+      border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
+    .panel-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    #disruption .panel-head:has(.panel-back) { justify-content: flex-start; }
+    #disruption .panel-head:has(.panel-back) > strong { flex: 1; min-width: 0; }
     #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
     .dis-source { font-size: 12px; margin: 8px 0 0; }
@@ -383,7 +400,7 @@
       animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1);
       transition: max-height .26s cubic-bezier(.2, .9, .25, 1), height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
     .sheet.dragging { transition: none; }
-    .sheet.leaving { transition: transform .2s ease-in; }
+    .sheet.leaving { transition: transform .2s ease-in; pointer-events: none; }   /* (sliding away: never catches a tap) */
     /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
     .sheet .panel-table, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
     .sheet::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
@@ -699,7 +716,6 @@
     <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
     <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="help">About</span></button>
   </nav>
-  <div id="nav-backdrop"></div>
   <div id="settings-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
       <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
@@ -708,8 +724,6 @@
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
       <div class="set-row real-only"><span data-t="trueSize">Realistic size</span>
         <div class="seg" data-key="trueSize" role="group" aria-label="Realistic size" data-t-aria="trueSize"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
-      <div class="set-row"><span data-t="trainCard">Train card</span>
-        <div class="seg" data-key="trainCard" role="group" aria-label="Train card" data-t-aria="trainCard"><button type="button" data-v="compact" data-t="cardCompact">Compact</button><button type="button" data-v="expanded" data-t="cardExpanded">Expanded</button></div></div>
       <div class="set-row"><span data-t="disruptionsMap">Disruptions on the map</span>
         <div class="seg" data-key="disruptionsMap" role="group" aria-label="Disruptions on the map" data-t-aria="disruptionsMap"><button type="button" data-v="off" data-t="disOff">Off</button><button type="button" data-v="problems" data-t="disProblems">Problems</button><button type="button" data-v="all" data-t="disAll">All</button></div></div>
       <div class="set-row"><span data-t="look">Look</span>
@@ -735,6 +749,8 @@
         <div class="seg" data-key="noEstimate" role="group" aria-label="With no expected time" data-t-aria="noEstimate"><button type="button" data-v="guess" data-t="guessLate">Planned + late</button><button type="button" data-v="planned" data-t="plannedOnly">Planned</button></div></div>
       <div class="debug-only set-row"><span data-t="trainSymbol">Train symbol</span>
         <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
+      <div class="debug-only set-row"><span data-t="pageOverTrain">Screen over a train</span>
+        <div class="seg" data-key="pageOverTrain" role="group" aria-label="Screen over a train" data-t-aria="pageOverTrain"><button type="button" data-v="card" data-t="overCard">Card back</button><button type="button" data-v="follow" data-t="overFollow">Followed</button><button type="button" data-v="clear" data-t="overClear">Let go</button></div></div>
     </div>
   </div>
   <div id="settings-backdrop"></div>
