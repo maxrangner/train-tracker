@@ -18,6 +18,7 @@ import { stateEl } from './state.js';
 const MAX_ROWS = 200;
 import { esc } from './html.js';
 import { onTap } from './sheet.js';
+import { arrive } from './motion.js';
 
 // onOpen(): the search opened by its button (main.js closes the ☰ menu then).
 export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation,
@@ -26,9 +27,15 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
   const list = el.querySelector('#search-results');
   let closedAt = 0;
   let asked = 0;   // counts searches, so a late timetable answer for an old search is dropped
+  // Result rows that weren't there before come in one after another (Max's pick 6, 2026-11-20): a letter that keeps
+  // the same results moves nothing. seen: the rows shown since the search opened.
+  let seen = new Set();
+  const rowsIn = () => arrive([...list.children].filter(li => li.querySelector('button')), seen);
 
   function open() {
+    seen = new Set();
     show(input.value.trim());
+    rowsIn();
     el.hidden = false;
     button.setAttribute('aria-expanded', 'true');
     input.focus();
@@ -54,6 +61,7 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
   input.addEventListener('input', () => {
     clearTimeout(timer);
     show(input.value.trim());
+    rowsIn();
   });
   input.addEventListener('keydown', (e) => {   // Enter picks the first result
     if (e.key === 'Enter') list.querySelector('button')?.click();
@@ -110,6 +118,7 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
           () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
       }
       if (!trains.length && !more.length) list.append(stateEl('empty', t('noTrainToday', q), 'li'));
+      rowsIn();
     }, 350);
   }
 

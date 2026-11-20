@@ -12,6 +12,7 @@
 //   onBatch(count): a batch of new positions came (a file, or the stream's next message).
 // Animations run only while the page is open, and none when the phone asks for less motion.
 import { t } from './i18n.js';
+import { roll, forgetRoll } from './motion.js';
 import { icon } from './icons.js';
 import OUTLINE from './sweden-outline.json';
 import './connection.css';
@@ -74,9 +75,10 @@ export function createConnection(el, { getTrains, reportTimeOf }) {
     $('.conn-hero').dataset.state = info.state;
     $('.conn-title').textContent = info.title;
     $('.conn-text').textContent = info.text;
-    $('.conn-n').textContent = info.fresh;
-    $('.n-trains').textContent = info.trains;
-    $('.n-fresh').textContent = info.fresh;
+    // (the numbers roll to new ones, src/motion.js; Max's pick 4, 2026-11-20; at once when the screen opens)
+    roll($('.conn-n'), info.fresh);
+    roll($('.n-trains'), info.trains);
+    roll($('.n-fresh'), info.fresh);
     $('.n-behind').textContent = `~${Math.round(info.behindS)} s`;
     $('.conn-behind-note').textContent = t('connBehindNote', Math.round(info.behindS));
     $('.conn-ring').style.display = info.nextAt ? '' : 'none';
@@ -163,7 +165,7 @@ export function createConnection(el, { getTrains, reportTimeOf }) {
   }
   const start = () => { if (!raf) raf = requestAnimationFrame(frame); };
   // Open: draw (and keep drawing); hidden again: stop.
-  new MutationObserver(() => { if (!el.hidden) start(); }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(() => { if (!el.hidden) { for (const s of ['.conn-n', '.n-trains', '.n-fresh']) forgetRoll(body.querySelector(s)); if (info) show(); start(); } }).observe(el, { attributes: true, attributeFilter: ['hidden'] });
   document.addEventListener('visibilitychange', () => { if (!document.hidden && !el.hidden) start(); });
 
   build();

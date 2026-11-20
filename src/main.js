@@ -32,6 +32,7 @@ import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
+import { roll, arrive } from './motion.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -75,6 +76,7 @@ const routes = createRoutes();
 trains.useRoutes(routes);
 netReady.then(net => { if (net) routes.setNet(net); });
 const lateness = createLateness();
+if (import.meta.env.DEV) window.__lateness = lateness;   // (tools/ui-motion-check.mjs changes a train's minutes)
 const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
 // Which trains the map shows (src/filter.js): chosen by tapping companies and kinds on the stats page.
 const filter = createFilter();
@@ -224,6 +226,10 @@ const map = createMap('map', {
     showPicker(list);
   },
 });
+
+// Buttons press in while held (index.html "Motion"; Max's pick 1, 2026-11-20). An iPhone shows :active on a touch
+// only when the page listens for touches.
+document.addEventListener('touchstart', () => {}, { passive: true });
 
 // The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
 const splash = document.getElementById('splash');
@@ -782,7 +788,7 @@ const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disrupti
     map.setDisruptions(geojson);
     // The menu's count: problems only, not rail work (Max, 2026-11-18).
     const problems = list.filter(d => !isWork(d)).length, countEl = document.getElementById('disruptions-count');
-    countEl.textContent = String(problems);
+    roll(countEl, problems);   // (rolls to a new number: Max's pick 4, 2026-11-20)
     countEl.classList.toggle('none', !problems);   // the chip only when there are problems
     if (!disruptionsPage.hidden) drawDisruptions();
     const open = disruptionEl.dataset.id;
@@ -800,6 +806,9 @@ if (live) {
 const WORKS_KEY = 'railWorksOpen';
 let worksOpen = false;
 try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
+// The list's rows come in one after another when it opens from the menu, and new ones when new data comes (Max's
+// pick 6, 2026-11-20); disSeen: the rows shown since it opened (by id; 'fold' for Banarbeten).
+let disSeen = new Set();
 function drawDisruptions() {
   const list = disruptions.list, problems = list.filter(d => !isWork(d));
   const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
@@ -811,6 +820,8 @@ function drawDisruptions() {
     (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
       `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
       `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '');
+  const body = document.getElementById('disruptions-body');
+  arrive(body.querySelectorAll(':scope > .dis-row, :scope > .dis-fold'), disSeen, r => r.dataset.id ?? 'fold');
   for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => {
     listScroll = document.getElementById('disruptions-body').scrollTop;
     disruptionsPage.hidden = true;
@@ -823,6 +834,7 @@ function drawDisruptions() {
     fold.setAttribute('aria-expanded', String(worksOpen));
     box.classList.toggle('open', worksOpen);
     box.inert = !worksOpen;
+    if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
   };
 }
 // A disruption opened from the list has a back arrow (Max, 2026-11-20: "Back arrow when in a specific störning"):
@@ -863,6 +875,7 @@ function openDisruption(id, { go = false, fromList: listed = false } = {}) {
   else if (p) map.goTo(p, 9);
 }
 document.getElementById('open-disruptions').onclick = () => {
+  disSeen = new Set();
   drawDisruptions();
   openPage(disruptionsPage);
   disruptionsPage.querySelector('.panel-close').focus();

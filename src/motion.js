@@ -1,0 +1,66 @@
+// Small animations (Max, 2026-11-20: "The app feels a bit static and stiff now"; his picks on the example page
+// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe: numbers roll, rows arrive, the lateness flashes, map signs
+// answer a tap). The looks are in index.html ("Motion"); here the parts that need code. Nothing here makes the map
+// draw again: only page elements move, mostly by CSS (the graphics chip). None of it with "reduce motion".
+
+import { lang } from './i18n.js';
+
+export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// A number that rolls from its last value to the new one (0.7 s, easing out; first in Statistik, src/stats-page.js).
+// The first value is shown at once; so is any value while the page is hidden or with "reduce motion".
+// fmt(n, end): the text for n (end: the last step, e.g. "I tid" where the steps say "0 min"); the default: the
+// number as stats-page.js writes it (digits, suffix).
+export function roll(el, v, digits = 0, suffix = '', fmt = null) {
+  const text = fmt ?? ((n) => Number(n).toLocaleString(lang() === 'sv' ? 'sv-SE' : 'en-GB',
+    { maximumFractionDigits: digits, minimumFractionDigits: digits }) + suffix);
+  const from = el._v ?? v;
+  el._v = v;
+  cancelAnimationFrame(el._raf);
+  if (reduceMotion() || from === v || document.hidden) { el.textContent = text(v, true); return; }
+  const t0 = performance.now(), dur = 700;
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / dur), e = 1 - (1 - k) ** 3;
+    el.textContent = k === 1 ? text(v, true) : text(digits ? from + (v - from) * e : Math.round(from + (v - from) * e), false);
+    if (k < 1) el._raf = requestAnimationFrame(step);
+  };
+  el._raf = requestAnimationFrame(step);
+}
+// Forget a number's last value (a screen opening shows its numbers at once; only a change after that rolls).
+export function forgetRoll(el) { if (!el) return; cancelAnimationFrame(el._raf); el._v = undefined; }
+
+// Rows that weren't in this list before come in one after another (index.html .arrive): 25 ms apart, at most 9
+// steps, so a long list doesn't wait. seen: the keys already shown (a Set, kept by the list's owner and emptied when
+// the list starts again); key(row): what makes a row the same row (default: its text).
+// Only the first 16 new rows move (a screenful; the rest just show): 105 search rows, each animated, cost about 120 ms
+// more at 4x slower (measured 2026-11-20). The page is laid out again only for a row still arriving (to restart it).
+const ARRIVE_MAX = 16;
+export function arrive(rows, seen, key = r => r.textContent.trim()) {
+  let i = 0;
+  const still = reduceMotion() || document.hidden;
+  for (const r of rows) {
+    const k = key(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (still || i >= ARRIVE_MAX) continue;
+    r.style.setProperty('--i', Math.min(i++, 9));
+    if (r.classList.contains('arrive')) { r.classList.remove('arrive'); void r.offsetWidth; }
+    r.classList.add('arrive');
+    r.addEventListener('animationend', () => { r.classList.remove('arrive'); r.style.removeProperty('--i'); }, { once: true });
+  }
+}
+
+// A one-off animation (a CSS class) from its start again.
+export function flash(el, cls = 'flash') {
+  if (!el || reduceMotion()) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  // (the class goes when all its animations are done, its ::after's too: the lateness ring outlasts the pulse)
+  const done = () => {
+    if (el.getAnimations({ subtree: true }).some(a => a.playState === 'running')) return;
+    el.classList.remove(cls);
+    el.removeEventListener('animationend', done);
+  };
+  el.addEventListener('animationend', done);
+}

@@ -5,6 +5,7 @@
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
+import { roll, arrive, flash } from './motion.js';
 import { stateHtml } from './state.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
@@ -152,6 +153,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // follow: false for a train that isn't on the map (picked from the timetable search).
   async function open(train, { follow = true } = {}) {
     openId = train.id;
+    lateSeen = null;   // (a card opening shows its lateness at once)
     number = train.number ?? null;
     following = follow;   // opening a train on the map starts following it (main.js)
     canFollow = follow;
@@ -268,12 +270,31 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     for (const r of el.querySelectorAll('.cd-row')) r.onclick = () => { target = r.dataset.sig; shut(); };
   }
   let glanceSeen = '';
+  // The lateness tile (Max's picks 4 and 7, 2026-11-20): when the open train's minutes change, the number rolls to
+  // the new ones and the tile pulses once. The tiles are drawn again each second something on them changes (the trip
+  // bar moves often): a tile still rolling or pulsing is kept while its end state is what is drawn.
+  let lateSeen = null;   // { id, m } the minutes last shown, and for which train
+  function lateIn(box, oldTile, m) {
+    const tile = box.querySelector('.cd-late'), b = tile?.querySelector('b');
+    if (!tile) return;
+    const drawn = tile.outerHTML;
+    if (oldTile?._drawn === drawn) { tile.replaceWith(oldTile); return; }
+    tile._drawn = drawn;
+    const before = lateSeen?.id === openId ? lateSeen.m : undefined;
+    lateSeen = { id: openId, m };
+    if (typeof m !== 'number' || typeof before !== 'number' || before === m) return;
+    b._v = before;
+    const end = b.textContent;
+    roll(b, m, 0, '', (n, last) => (last ? end : n === 0 ? '0 min' : minutesText(n)));
+    flash(tile);
+  }
   function showGlance() {
     if (closing) return;   // sliding shut: left as it is for those 0.18 s
     const stops = shown?.stops;
     const box = el.querySelector('.cd');
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
+    const late = lateNow(stops);
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
     const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}${g.trip}`;
@@ -281,7 +302,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (html === glanceSeen) return;   // each second: only when something on it changed
     glanceSeen = html;
     const scrolled = box.querySelector('.cd-list')?.scrollTop;
+    const oldTile = box.querySelector('.cd-late');
     box.innerHTML = html;
+    lateIn(box, oldTile, late);
     const list = box.querySelector('.cd-list');
     if (list) {
       if (scrolled !== undefined) list.scrollTop = scrolled;
@@ -415,6 +438,14 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (scrolled !== undefined) { const box = el.querySelector('.panel-table'); if (box) box.scrollTop = scrolled; } else toNext();
   }
   // Scroll the timeline (only it) so the train's place is in view; it shows only on the full card.
+  // The timeline's rows in view come in one after another as the card opens full (src/motion.js; Max's pick 6,
+  // 2026-11-20). Its redraw each minute moves nothing (new rows, no .arrive).
+  function rowsIn() {
+    const box = el.querySelector('.panel-table');
+    if (!box) return;
+    const top = box.scrollTop - 60, bottom = box.scrollTop + window.innerHeight;
+    arrive([...box.querySelectorAll('.tl-row, .tl-now')].filter(r => r.offsetTop > top && r.offsetTop < bottom), new Set());
+  }
   function toNext() {
     const box = el.querySelector('.panel-table'), next = el.querySelector('.tl-now') ?? el.querySelector('.tl-row.next');
     if (box && next && box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
@@ -422,7 +453,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let wasFull = el.classList.contains('full');
   new MutationObserver(() => {
     const full = el.classList.contains('full');
-    if (full && !wasFull) requestAnimationFrame(toNext);
+    if (full && !wasFull) requestAnimationFrame(() => { toNext(); rowsIn(); });
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });
 
