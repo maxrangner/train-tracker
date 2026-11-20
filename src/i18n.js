@@ -13,7 +13,7 @@ const EN = {
   navOpen: 'Menu', navAria: 'Menu', closeSearch: 'Close the search', navStats: 'Statistics',
  
   connTitle: 'Connection', connSweden: 'Sweden right now', connReporting: 'trains with new positions', connPulse: 'The pulse: new positions',
-  connNumbers: 'Numbers', connOnMap: 'trains on the map', connFresh: 'with a new position in the last minute', connBehind: 'behind live',
+  connNumbers: 'Numbers', connOnMap: 'trains on the map', connFresh: 'trains with a new position in the last minute', connBehind: 'behind live',
   connBehindNote: s => `The map runs ${s} s behind, so the trains glide smoothly between reports.`,
   connMeaning: 'What it means', connPausedTag: 'paused', connGreyTag: 'grey train',
   connLegendLive: 'Positions stream in from Trafikverket. Everything works.',
@@ -63,7 +63,6 @@ const EN = {
   messagesCount: n => `${n} message${n === 1 ? '' : 's'} from the station`,
   arrivesIn: s => `In ${s}`, arrivesAbout: s => `In about ${s}`, arrivesNow: 'Arriving now',
   leavesIn: s => `Leaves in ${s}`, leavesAbout: s => `Leaves in about ${s}`, leavesNow: 'Leaving now',
-  trainCard: 'Train card', cardCompact: 'Compact', cardExpanded: 'Expanded',
   noEstimate: 'With no expected time', guessLate: 'Planned + late', plannedOnly: 'Planned',
   accent: 'Accent colour',
   auto: 'Auto',
@@ -242,7 +241,7 @@ const SV = {
   navOpen: 'Meny', navAria: 'Meny', closeSearch: 'Stäng sökningen', navStats: 'Statistik',
  
   connTitle: 'Anslutning', connSweden: 'Sverige just nu', connReporting: 'tåg med nya positioner', connPulse: 'Pulsen: nya positioner',
-  connNumbers: 'I siffror', connOnMap: 'tåg på kartan', connFresh: 'ny position senaste minuten', connBehind: 'eftersläpning',
+  connNumbers: 'I siffror', connOnMap: 'tåg på kartan', connFresh: 'tåg med nya positioner senaste minuten', connBehind: 'eftersläpning',
   connBehindNote: s => `Kartan ligger ${s} s efter, så att tågen glider mjukt mellan rapporterna.`,
   connMeaning: 'Vad betyder det?', connPausedTag: 'pausad', connGreyTag: 'grått tåg',
   connLegendLive: 'Positionerna strömmar in från Trafikverket. Allt fungerar.',
@@ -291,7 +290,6 @@ const SV = {
   messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`,
   arrivesIn: s => `Om ${s}`, arrivesAbout: s => `Om ca ${s}`, arrivesNow: 'Ankommer nu',
   leavesIn: s => `Avgår om ${s}`, leavesAbout: s => `Avgår om ca ${s}`, leavesNow: 'Avgår nu',
-  trainCard: 'Tågkort', cardCompact: 'Kompakt', cardExpanded: 'Stort',
   noEstimate: 'Utan ny tid', guessLate: 'Plan + försening', plannedOnly: 'Tidtabell',
   accent: 'Accentfärg',
   auto: 'Auto',

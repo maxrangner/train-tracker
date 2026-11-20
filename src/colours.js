@@ -74,7 +74,8 @@ export const ACCENTS = {
   graphite: { name: { sv: 'Grafit', en: 'Graphite' },
     light: { c: '#2b2b2b', ink: '#ffffff', done: '#1e1e1e' }, dark: { c: '#e6e6e6', ink: '#161616', done: '#a6a6a6' } },
 };
-export const DEFAULT_ACCENT = 'periwinkle';
+// The default since 2026-11-20: Azurblå (Max: "Use Azurblå default color"); periwinkle (Blålila) before.
+export const DEFAULT_ACCENT = 'cerulean';
 
 // The CSS variables for a theme and accent, as { '--name': value }.
 export function cssVars(dark, accent) {

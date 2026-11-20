@@ -28,9 +28,8 @@ const DEFAULTS = {
   // The accent colour: buttons, the chosen train's route (Max, 2026-11-15: a setting, a few curated colours;
   // src/colours.js ACCENTS).
   accent: DEFAULT_ACCENT,
-  // How a train's card opens (Max, 2026-11-15): 'compact' (the glance: lateness, minutes to a stop, the trip as a
-  // line) or 'expanded' (every stop).
-  trainCard: 'compact',
+  // (trainCard, 'compact' or 'expanded', was a setting until 2026-11-20, Max: "Remove tågkort setting"; the card
+  // always opens compact. A phone's saved value is left unread.)
   // A stop Trafikverket gives no expected time for, counted down to (Max, 2026-11-15, 1B, with a Debug switch to A):
   // 'guess', its planned time plus the lateness now (shown with ≈), or 'planned'.
   noEstimate: 'guess',
@@ -53,7 +52,6 @@ const KEYS = {
   boardRows: { param: 'boardrows' },
   trainSymbol: { param: 'symbol' },
   accent: { param: 'accent' },
-  trainCard: { param: 'card' },
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
 };
@@ -78,7 +76,6 @@ const valid = {
   boardRows: v => (v !== null && v !== undefined && Number.isFinite(Number(v)) ? Math.max(4, Math.min(40, Number(v))) : undefined),
   trainSymbol: v => (['circle', 'triangle', 'dart', 'drop'].includes(v) ? v : undefined),
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
-  trainCard: v => (['compact', 'expanded'].includes(v) ? v : undefined),
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
 };
