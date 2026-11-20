@@ -86,7 +86,7 @@
     #nav-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* The menu (Max, 2026-11-19): a slim card that drops down under the top bar like the search card; the bar stays
        free (☰ opens and closes it, Sök opens the search instead). A tap elsewhere on the map, Esc or the phone's back
-       closes it too. No dimming: a clear layer under the top bar catches the tap outside. */
+       closes it too. No dimming, and the map works while it is open (a plain tap on the map closes it; 2026-11-20). */
     #nav { position: fixed; z-index: 9; top: calc(68px + env(safe-area-inset-top, 0px)); left: calc(var(--gap) + env(safe-area-inset-left, 0px));
       width: max-content; min-width: 210px; max-width: calc(100% - 2 * var(--gap)); max-height: calc(100% - 78px - env(safe-area-inset-top, 0px));
       box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 6px;
