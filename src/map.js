@@ -69,7 +69,13 @@ export const RAIL_SOURCES = {
 const SEA = dark => (dark ? 'rgb(27, 27, 29)' : 'rgb(194, 200, 202)');   // OpenFreeMap's water, if its layer isn't found
 // Wide east-west: on a wide screen at the furthest zoom (Sweden's height decides it) the map can still be panned
 // sideways (Max, 2026-11-15: "you can pan vertically but not horizontally" at the furthest zoom on a PC).
-const MAX_BOUNDS = [[-20, 52], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// South to 44° since 2026-11-20 (52° before; Max: a train to the far south, zoomed out, "cuts out part of the route
+// because the map wont allow panning that far down"): the limit counts the map behind a phone's card too, so at 52°
+// a route's end near Malmö or Köpenhamn stayed behind the card. Measured with Öresundståg 1084 (to Hyllie and
+// Köpenhamn) at zoom 5-6: the view stopped at 52° with the route's end at the card's edge.
+const MAX_BOUNDS = [[-20, 44], [60, 72]];   // within the mask's own area (tools/sweden-mask.mjs BOX)
+// The legs abroad are drawn only within the old limits (Austria, Italy: the card still names them; 2026-11-17).
+const ABROAD_BOUNDS = [[-20, 52], [60, 72]];
 // The leg abroad's dashes, one step every 100 ms: a dash of 3, a gap of 4 (line widths), moved half a width a step
 // (MapLibre can't shift a dash pattern, so the pattern is cut where it has moved to).
 const MARCH = [[0, 4, 3], [0.5, 4, 2.5], [1, 4, 2], [1.5, 4, 1.5], [2, 4, 1], [2.5, 4, 0.5], [3, 4, 0],
@@ -1539,7 +1545,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The open train's legs abroad (src/abroad.js abroadEnds, with coords: [from, to] the way the train goes); null
     // or []: none. A foreign station outside the map's bounds (Austria, Italy) gets none (the card still names it).
     async setAbroad(legs) {
-      const inside = ([lon, lat]) => lon >= MAX_BOUNDS[0][0] && lon <= MAX_BOUNDS[1][0] && lat >= MAX_BOUNDS[0][1] && lat <= MAX_BOUNDS[1][1];
+      const inside = ([lon, lat]) => lon >= ABROAD_BOUNDS[0][0] && lon <= ABROAD_BOUNDS[1][0] && lat >= ABROAD_BOUNDS[0][1] && lat <= ABROAD_BOUNDS[1][1];
       const shown = (legs ?? []).filter(l => l.coords.every(inside));
       const end = l => (l.dir === 'to' ? l.coords[1] : l.coords[0]);
       data.abroad = { type: 'FeatureCollection', features: shown.flatMap(l => [
