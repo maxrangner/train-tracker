@@ -13,7 +13,7 @@ import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
-import { initSheets } from './sheet.js';
+import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
@@ -479,12 +479,11 @@ function closeNav() {
   navEl.hidden = true;
   navButton.setAttribute('aria-expanded', 'false');
 }
-navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
+onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
 // The map works with the menu open (Max, 2026-11-20: "Map doesn't work with menu open, but cards do"; until then a
 // see-through layer over the map only closed the menu): a drag or pinch moves the map and the menu stays; a plain tap
 // on the map closes the menu and does nothing else (as the search does; createMap onMapTap).
-// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time.
-document.getElementById('menu-button').addEventListener('click', closeNav);
+// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time (createMenu onOpen).
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -507,6 +506,7 @@ const menu = createMenu({
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
+  onOpen: () => closeNav(),
   favourites: () => ({
     trains: favourites.trains.map((number) => {
       const r = trains.reports().find(x => String(x.number) === number);
@@ -733,7 +733,7 @@ function openConn() {
   openPage(connPage);
   connPage.querySelector('.panel-close').focus();
 }
-document.getElementById('status').onclick = () => (connPage.hidden ? openConn() : (connPage.hidden = true));
+onTap(document.getElementById('status'), () => (connPage.hidden ? openConn() : (connPage.hidden = true)));
 connPage.querySelector('.panel-close').onclick = () => { connPage.hidden = true; };
 statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
 // A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the

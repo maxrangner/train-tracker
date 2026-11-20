@@ -50,6 +50,25 @@ try {
   await click('#stats-page .panel-close'); await sleep(300);
   check(!(await shown('disruptions-page')) && !(await shown('stats-page')), 'Statistik closed: no screen left');
 
+  // ---- ☰ answers at once after a screen is swiped away (Max, 2026-11-20): Settings' dimming let taps through as it
+  // slid away, and a tap within ~0.4 s of a swipe got no click (sheet.js onTap acts on the finger lifted) ----
+  const centre = s => page.evaluate(q => { const r = document.querySelector(q).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, s);
+  const touchTap = async (s) => { const c = await centre(s); await page.touchscreen.tap(c.x, c.y); };
+  for (const [name, button, id] of [['Settings', 'open-settings', 'settings-page'], ['Statistics', 'open-stats', 'stats-page']]) {
+    await touchTap('#nav-button'); await sleep(400);
+    await touchTap(`#${button}`); await sleep(700);
+    const top = await page.evaluate(i => { const b = document.getElementById(i).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + 12 }; }, id);
+    await page.touchscreen.touchStart(top.x, top.y);
+    for (let k = 1; k <= 8; k++) { await page.touchscreen.touchMove(top.x, top.y + k * 25); await sleep(16); }
+    await page.touchscreen.touchEnd();
+    await sleep(30);
+    await touchTap('#nav-button');
+    await sleep(300);
+    check(await shown('nav'), `${name} swiped away, ☰ tapped 30 ms later: the menu opens`);
+    await click('#nav-button'); await sleep(300);
+    await page.evaluate(i => { document.getElementById(i).hidden = true; }, id);
+  }
+
   // ---- the three choices for a screen over a train ----
   for (const mode of ['card', 'follow', 'clear']) {
     await setOver(mode);
