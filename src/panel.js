@@ -1,7 +1,9 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 // Compact (Max, 2026-11-15, sketch C): the number, two tiles (the lateness now; the minutes to a stop, the end station
 // unless another is picked from the stops ahead) and the trip as one line. "All stops", or a drag up on a phone, opens
-// it full (class "full", src/sheet.js): the star, Trafikverket's notes and the timeline of every stop.
+// it full (class "full", src/sheet.js): the star, Trafikverket's notes and the timeline of every stop. On the full card
+// "i" next to the star (class "info"; Max, 2026-11-20) swaps the notes and the stops for the train's own numbers
+// (src/train-info.js, drawn by options.info each second while shown); "i" again brings the stops back.
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
@@ -80,7 +82,7 @@ function routeLate(stops) {
 const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces,
   (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
 
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf }) {
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -89,12 +91,14 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let target = null;      // the station counted down to (null: the end station); kept while the card is open
   let picking = false;    // the list of stops to count down to is open
   let opening = false, closing = false;   // it slides open (only when it opens, not at each redraw) and closed
+  let infoOn = false;     // the train's own numbers instead of its stops ("i")
 
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
   const head = (train, company) =>
     `<div class="panel-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
     (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span><span class="panel-buttons">` +
+    (info ? `<button class="panel-info" type="button" aria-pressed="${infoOn}" aria-label="${t('tiButton')}">${icon('about')}</button>` : '') +
     (number && isStarred ? star(isStarred(number)) : '') +
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${icon('follow', 15)}<span>${t(following ? 'following' : 'follow')}</span></button>` : '') +
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>`;
@@ -104,7 +108,20 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (f) f.onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
     const s = el.querySelector('.panel-star');
     if (s) s.onclick = () => { const on = onStar(number); s.outerHTML = star(on); wireHead(); };
+    const i = el.querySelector('.panel-info');
+    if (i) i.onclick = () => setInfo(!infoOn);
   }
+  function setInfo(on) {
+    infoOn = on;
+    el.classList.toggle('info', on);
+    el.querySelector('.panel-info')?.setAttribute('aria-pressed', String(on));
+    if (on) { const box = el.querySelector('.panel-info-box'); if (box) box.scrollTop = 0; drawInfo(); }
+    else requestAnimationFrame(toNext);
+  }
+  const drawInfo = () => {
+    if (!infoOn || !shown?.route || !el.classList.contains('full')) return;
+    info?.(el.querySelector('.panel-info-box'), { id: openId, number, stops: shown.stops ?? [], route: shown.route });
+  };
   function setFollowing(on) {
     following = on;
     const b = el.querySelector('.panel-follow span');
@@ -167,6 +184,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     onSelect?.(train.id);
     el.hidden = false;
     el.classList.remove('full');   // always opens compact (the Train card setting went, Max 2026-11-20)
+    infoOn = false; el.classList.remove('info');
     shown = { train, route: null };
     if (swap) {
       const old = el.querySelector('.panel-head');
@@ -405,6 +423,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // keepScroll: a refresh; the table stays where it was scrolled to (otherwise it scrolls to the next stop).
   function draw(train, route, { keepScroll = false } = {}) {
     const scrolled = keepScroll ? el.querySelector('.panel-table')?.scrollTop : undefined;
+    const infoScrolled = el.querySelector('.panel-info-box')?.scrollTop;
     const status = el.querySelector('.panel-status')?.textContent ?? '';
     const stops = stopsOf(route);
     shown.stops = stops;
@@ -488,7 +507,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
-          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>`
+          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>` +
+          (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
@@ -496,6 +516,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const fold = el.querySelector('.tv-toggle');
     if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
     showGlance();
+    drawInfo();
+    if (infoScrolled) el.querySelector('.panel-info-box').scrollTop = infoScrolled;
     if (status) setStatus(status);   // the line on how its place is known stays (main.js updates it each second)
     if (scrolled !== undefined) { const box = el.querySelector('.panel-table'); if (box) box.scrollTop = scrolled; } else toNext();
   }
@@ -515,7 +537,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let wasFull = el.classList.contains('full');
   new MutationObserver(() => {
     const full = el.classList.contains('full');
-    if (full && !wasFull) requestAnimationFrame(() => { toNext(); rowsIn(); });
+    if (full && !wasFull) requestAnimationFrame(() => { if (infoOn) drawInfo(); else { toNext(); rowsIn(); } });
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });
 
@@ -531,6 +553,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // "No report for 3 min"; and the tiles, when their minutes changed.
   function setStatus(text) {
     showGlance();
+    drawInfo();
     let line = el.querySelector('.panel-status');
     if (!text) { line?.remove(); return; }
     if (!line) {

@@ -402,7 +402,7 @@
     .sheet.dragging { transition: none; }
     .sheet.leaving { transition: transform .2s ease-in; pointer-events: none; }   /* (sliding away: never catches a tap) */
     /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
-    .sheet .panel-table, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
+    .sheet .panel-table, .sheet .panel-info-box, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
     .sheet::before { content: ''; position: absolute; top: 9px; left: 50%; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: var(--line); }
     .sheet.page, .sheet.full { max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); }
     .sheet.behind { visibility: hidden; }
@@ -480,11 +480,11 @@
       background: var(--bg); color: var(--ink); cursor: pointer;
     }
     .panel-follow[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-    .panel-close, .panel-star, .menu-close {
+    .panel-close, .panel-star, .panel-info, .menu-close {
       width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
       border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0;
     }
-    .panel-close:focus-visible, .menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .panel-close:focus-visible, .panel-info:focus-visible, .menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .panel-follow { display: inline-flex; align-items: center; gap: 6px; }
     /* The train card (src/panel.js; Max, 2026-11-15, sketch C). Compact: the number big with its company, two tiles
        (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line, "All stops".
@@ -494,6 +494,9 @@
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     #panel:not(.full) .panel-star, #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
+    /* "i" (src/train-info.js; Max, 2026-11-20): on the full card, the train's own numbers instead of the notes and stops. */
+    #panel:not(.full) .panel-info, #panel:not(.full) .panel-info-box, #panel:not(.info) .panel-info-box, #panel.info .tv-box, #panel.info .panel-table { display: none; }
+    .panel-info[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
        disruption's card too (his answer 2A). */
@@ -588,6 +591,90 @@
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }
+    /* The train's own numbers (src/train-info.js; Max, 2026-11-20, sketch docs/train-info-1120): sections in soft
+       tiles, the speedometer, the line-up of moving trains, the speed graph, the trip, the lateness, the day. */
+    .panel-info-box { overflow: auto; min-height: 0; padding: 4px 10px 14px 0; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable;
+      display: flex; flex-direction: column; gap: 10px; }
+    .ti-sec { background: var(--hover); border-radius: 18px; padding: 12px 14px 14px; flex: none; }
+    .ti-sec h3 { margin: 0 0 6px; font-size: 12.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+      display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .ti-sec h3 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+    .ti-sec svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .ti-sec text { font-family: var(--font); fill: var(--muted); font-size: 10.5px; }
+    .ti-sec p { margin: 0; }
+    .ti-gwrap { position: relative; }
+    .ti-read { position: absolute; left: 0; right: 0; top: 44%; text-align: center; pointer-events: none; display: flex; flex-direction: column; }
+    .ti-read b { font-size: 50px; font-weight: 750; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .ti-read span { font-size: 14px; color: var(--muted); }
+    .ti-gauge .ti-arc-bg { fill: none; stroke: var(--line); stroke-width: 16; stroke-linecap: round; }
+    .ti-gauge .ti-arc { fill: none; stroke: url(#tiGrad); stroke-width: 16; stroke-linecap: round; }
+    .ti-g0 { stop-color: var(--accent); stop-opacity: 0.55; } .ti-g1 { stop-color: var(--accent); }
+    .ti-gauge .ti-tick { stroke: var(--muted); stroke-width: 1; stroke-opacity: 0.5; stroke-linecap: round; }
+    .ti-gauge .ti-tick.big { stroke-width: 2; stroke-opacity: 0.9; }
+    .ti-sec .ti-gauge .ti-num { font-size: 12.5px; font-weight: 500; text-anchor: middle; }
+    .ti-mark { fill: var(--ink); }
+    .ti-knob circle:first-child { fill: var(--accent); fill-opacity: 0.25; }
+    .ti-knob circle:last-child { fill: var(--bg); stroke: var(--accent); stroke-width: 4; }
+    .ti-sub { text-align: center; font-size: 13.5px; color: var(--muted); }
+    .ti-sub b { color: var(--ink); font-weight: 650; }
+    .ti-sec .ti-rank { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 2px; }
+    .ti-rank b { font-size: 20px; font-weight: 700; }
+    .ti-rank span { color: var(--muted); font-size: 13.5px; text-align: right; }
+    .ti-axis { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+    .ti-dot { fill: var(--muted); fill-opacity: 0.55; }
+    .ti-me { fill: var(--accent); stroke: var(--hover); stroke-width: 2.5; }
+    .ti-sec .ti-me-t { fill: var(--accent); font-weight: 650; font-size: 11.5px; text-anchor: middle; }
+    .ti-off { text-align: center; padding: 18px 8px 12px; }
+    .ti-off b { font-size: 40px; font-weight: 700; color: var(--muted); }
+    .ti-sec .ti-off p { margin-top: 6px; color: var(--muted); font-size: 14px; }
+    .ti-grid { stroke: var(--line); stroke-width: 1; }
+    .ti-pass { stroke: var(--muted); stroke-opacity: 0.25; }
+    .ti-sec .ti-pass-t { font-size: 9.5px; }
+    .ti-track { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 4 4; }
+    .ti-a0 { stop-color: var(--accent); stop-opacity: 0.35; } .ti-a1 { stop-color: var(--accent); stop-opacity: 0.02; }
+    .ti-area { fill: url(#tiArea); }
+    .ti-line { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+    .ti-end { fill: var(--accent); stroke: var(--hover); stroke-width: 2; }
+    .ti-sec .ti-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+    .ti-legend i { display: inline-block; width: 16px; border-top: 3px solid var(--accent); border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+    .ti-legend i.dash { border-top: 2px dashed var(--muted); }
+    .ti-legend .ti-since { margin-left: auto; }
+    .ti-progress { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+    .ti-km { font-size: 28px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .ti-km small { font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 4px; letter-spacing: 0; }
+    .ti-of { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+    .ti-route { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+    .ti-route.done { stroke: var(--accent); }
+    .ti-stop { fill: var(--bg); stroke: var(--muted); stroke-width: 2; }
+    .ti-stop.done { fill: var(--accent); stroke: var(--hover); }
+    .ti-sec .ti-stop-t { font-size: 12px; font-weight: 500; }
+    .ti-sec .ti-stop-t.next { fill: var(--ink); font-weight: 700; }
+    .ti-train { fill: var(--accent); stroke: var(--hover); stroke-width: 3; }
+    .ti-train-ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0.45; }
+    .ti-strip-none { fill: var(--line); }
+    .ti-strip-left { fill: var(--hover); fill-opacity: 0.55; }
+    .ti-strip-at { fill: var(--ink); }
+    .ti-next { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+    .ti-next b { font-weight: 650; }
+    .ti-m { color: var(--muted); }
+    .ti-band.ontime { fill: var(--c-ontime); fill-opacity: 0.13; } .ti-band.some { fill: var(--c-some); fill-opacity: 0.13; } .ti-band.late { fill: var(--c-late); fill-opacity: 0.13; }
+    .ti-zero { stroke: var(--muted); stroke-opacity: 0.5; stroke-dasharray: 3 3; }
+    .ti-late-line { fill: none; stroke: var(--ink); stroke-opacity: 0.55; stroke-width: 2; stroke-linejoin: round; }
+    .ti-late-dot { stroke: var(--hover); stroke-width: 2; }
+    .ti-late-dot.ontime { fill: var(--c-ontime); } .ti-late-dot.some { fill: var(--c-some); } .ti-late-dot.late { fill: var(--c-late); }
+    .ti-sec .ti-late-v { fill: var(--ink); font-weight: 650; text-anchor: middle; }
+    .ti-ahead { fill: var(--bg); stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 2 2; }
+    .ti-sec .ti-late-sum { font-size: 14px; color: var(--muted); margin-top: 4px; }
+    .ti-late-sum b { color: var(--ink); font-weight: 650; }
+    .ti-tag { border-radius: 8px; padding: 1px 7px; font-weight: 650; }
+    .ti-tag.ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .ti-tag.some { background: var(--t-some-bg); color: var(--t-some); }
+    .ti-tag.late { background: var(--t-late-bg); color: var(--t-late); } .ti-tag.unknown { background: var(--t-unknown-bg); color: var(--t-unknown); }
+    .ti-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .ti-tiles > div { background: var(--bg); border-radius: 14px; padding: 9px 12px; display: flex; flex-direction: column; }
+    .ti-tiles b { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+    .ti-tiles b small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+    .ti-tiles span { font-size: 12.5px; color: var(--muted); }
+    .ti-sec .ti-avg { font-size: 12px; color: var(--muted); margin-top: 8px; }
     .panel-table { overflow: auto; min-height: 0; position: relative; padding-right: 10px; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable; }
     /* The trip as a timeline (src/panel.js; the Soft look, 2026-11-15). Columns: time, the line with its dot, the
        station, the track. The line is the accent up to the train, then grey. */

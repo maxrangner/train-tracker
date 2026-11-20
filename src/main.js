@@ -5,6 +5,8 @@ import { createTrains } from './trains.js';
 import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, ownMap } from './map.js';
 import { createPanel } from './panel.js';
+import { drawInfo } from './train-info.js';
+import { createSpeedLog } from './speed-log.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
@@ -120,11 +122,18 @@ const buzz = () => {
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
+const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers, "i")
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
   isStarred: number => favourites.has('train', number),
   lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
+  // The train's own numbers ("i" on the full card; src/train-info.js), each second while shown.
+  info: (box, c) => {
+    const r = trains.get(c.id);
+    drawInfo(box, { ...c, t: now() - DRAW_DELAY_MS, now: now(), log: speedLog, net, stationName, station: sig => stations.get(sig),
+      path: shownPath?.id === c.id ? shownPath.path : null, place: frameById.get(c.id) ?? null, late: r ? minutesOf(r) : null });
+  },
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
@@ -907,6 +916,7 @@ const positionHandlers = {
     lastDataAt = now();
     conn.onBatch(records.length);
     stats.onRecords(records, now());
+    speedLog.add(records, now());
     if (trains.halted) trains.setHalted(false);
     trains.update(records, now());
   },

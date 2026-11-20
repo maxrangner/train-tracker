@@ -108,6 +108,9 @@ export function netFromJSON(json) {
     wBack[li] = (slow ? SLOW_W : 1) * (flow === 1 ? AGAINST_W : 1);
   }
   const W = (li, d) => (d > 0 ? wAlong[li] : wBack[li]);
+  // Each line's design speed in km/h (tools/rail-net.mjs `v`; 0 or missing: not known). Not the limit right now:
+  // signals, works and lower limits through stations aren't in the open data.
+  const designSpeed = Array.isArray(json.v) && json.v.length === L && json.joined ? json.v : null;
 
   // ---- Nodes: line ends meeting at the same point ----
   const nodeOf = new Int32Array(2 * L);   // line end (li*2 + 0 start / 1 end) -> node
@@ -355,6 +358,8 @@ export function netFromJSON(json) {
     get lines() { return L; },
     // Whether the lines carry costs; the largest cost a metre can have; whether line li is a fast public track.
     costed: costs, maxWeight: costs ? SLOW_W * AGAINST_W : 1, isFast: li => fast[li] === 1,
+    // What the track nearest a place (within 30 m) is built for, km/h; null: not known.
+    speedAt(place) { if (!designSpeed) return null; const s = snap(place, null, 30); return (s && designSpeed[s.li]) || null; },
     // All lines as one GeoJSON feature, for drawing.
     toGeoJSON() {
       const coordinates = [];
