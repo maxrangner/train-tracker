@@ -63,27 +63,32 @@ function candidates(net, p, { step, rings, max }, passFast = false) {
 }
 
 // places: [{ lon, lat, stop }] in the train's order; net: the rail network, or null.
+// A place may carry snap: its one track (a snapped place, rail-net.js), not looked for: where a line that follows its
+// train goes on from the train's own track (src/path-follow.js).
 // A place may carry mark: { lon, lat }, where its station's ring is drawn (the measured stopping place): its stop dot
 // goes to the path's point nearest that.
 // Returns { coords: [[lon, lat], ...], at: [index in coords of each place], stops: [[lon, lat], ...] (the passenger
 // stops' dots), stopAt: [index in coords where each stop's piece starts], stopF: [0 to 1 along that piece] }.
 // options (for comparing, tools/route-check.mjs): costed (default: when the network has costs), passFast (default: true).
+// wide (default true): look further for pieces still straight (the second and third rounds); false where time counts
+// more (src/path-follow.js: a failing way from a fixed track searched for over a second). The result's straight: how
+// many pieces are still straight.
 // reversals: stations where a train may turn round ([{ lon, lat }], the page's advertised stations), or null.
-export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = true, reversals = null } = {}) {
+export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = true, reversals = null, wide = true } = {}) {
   const opts = { costed, maxW: costed ? net.maxWeight : 1 };
   // Per place, its candidate tracks (a place with none is itself the one candidate: null).
-  const C = places.map(p => (net ? candidates(net, p, QUICK, passFast && costed) : []));
+  const C = places.map(p => (p.snap && net ? [p.snap] : net ? candidates(net, p, QUICK, passFast && costed) : []));
   for (let i = 0; i < C.length; i++) if (!C[i].length) C[i] = [null];
   let chosen = choose(places, net, C, opts);
   // Pieces still straight: try again with more tracks at their two places; then with tracks further away.
   const straightAt = () => { const w = new Set(); chosen.forEach((c, i) => { if (i > 0 && !c.poly && net) { w.add(i - 1); w.add(i); } }); return w; };
-  let wider = straightAt();
+  let wider = wide ? straightAt() : new Set();
   if (wider.size) {
-    for (const i of wider) { const w = candidates(net, places[i], WIDE); if (w.length) C[i] = w; }
+    for (const i of wider) { const w = places[i].snap ? [] : candidates(net, places[i], WIDE); if (w.length) C[i] = w; }
     chosen = choose(places, net, C, opts);
     wider = straightAt();
     if (wider.size) {
-      for (const i of wider) { const w = farCandidates(net, places[i], FAR_M, FAR_MAX); if (w.length) C[i] = w; }
+      for (const i of wider) { const w = places[i].snap ? [] : farCandidates(net, places[i], FAR_M, FAR_MAX); if (w.length) C[i] = w; }
       chosen = choose(places, net, C, opts);
     }
   }
@@ -110,15 +115,21 @@ export function pathOf(places, net, { costed = Boolean(net?.costed), passFast = 
     else add(s?.lon ?? p.lon, s?.lat ?? p.lat);
     at.push(coords.length - 1);
   });
-  // Each stop's dot: the path's point nearest the station's ring (p.mark, else the place itself), looked for between
-  // the places before and after it (Max, 2026-11-15, "A": the dots were a median 58 m from the rings, Södra 249 m).
+  const straight = net ? chosen.filter((c, i) => i > 0 && !c.poly).length : 0;
+  return { coords, at, ...stopsOf(coords, at, places), straight };
+}
+
+// Each stop's dot: the path's point nearest the station's ring (p.mark, else the place itself), looked for between
+// the places before and after it (Max, 2026-11-15, "A": the dots were a median 58 m from the rings, Södra 249 m).
+// Also for a line that follows its train (src/path-follow.js).
+export function stopsOf(coords, at, places) {
   const stops = [], stopAt = [], stopF = [];
   places.forEach((p, i) => {
     if (!p.stop) return;
     const n = nearestOn(coords, p.mark ?? p, at[Math.max(0, i - 1)], at[Math.min(at.length - 1, i + 1)]);
     stops.push(n.point); stopAt.push(n.k); stopF.push(n.f);
   });
-  return { coords, at, stops, stopAt, stopF };
+  return { stops, stopAt, stopF };
 }
 
 // The point of coords between indexes lo and hi nearest to place m: { point: [lon, lat], k (the piece's first

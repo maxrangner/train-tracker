@@ -8,6 +8,7 @@ import { createPanel } from './panel.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
+import { followPath } from './path-follow.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
@@ -61,7 +62,8 @@ const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
 netReady.then((n) => { net = n; });
-let shownPath = null;   // { id, path, places }: the open train's path
+let shownPath = null;   // { id, path, places, key, follow }: the open train's path (follow: src/path-follow.js)
+const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
 // The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
 let reversalList = null, reversalFrom = null;
@@ -129,7 +131,7 @@ const panel = createPanel(document.getElementById('panel'), {
     // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
     const cachedPath = (places) => {
       if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
-      const key = places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
+      const key = placesKey(places);
       let path = pathCache.get(key);
       if (path) pathCache.delete(key);
       else path = pathOf(places, net, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
@@ -154,7 +156,14 @@ const panel = createPanel(document.getElementById('panel'), {
     // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
     map.whenSettled().then(() => {
       if (panel.openId !== id) return;   // closed, or another train opened meanwhile
-      shownPath = { id, path: cachedPath(places), places };
+      // The line follows the train itself (src/path-follow.js; Max, 2026-11-19: trains drawn beside their route). The
+      // same trip again (its stations unchanged): the line as it stands, not the timetable's again (that would jump).
+      const key = placesKey(places);
+      if (!(shownPath?.id === id && shownPath.key === key && shownPath.follow)) {
+        const base = cachedPath(places);
+        const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
+        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow };
+      }
       const here = placeNow(id);
       let done = 0;
       if (here) done = progressAt(shownPath.path, here);
@@ -486,7 +495,16 @@ const menu = createMenu({
 // models, as soon as the fastest could have moved half a pixel). Between, only the open train moves on (trains.placedOne): the
 // camera and its marker need it every frame. Until 2026-11-15 every train was worked out in every frame, 60 times a
 // second, for dots refreshed 7 times a second at zoom 11 (Max: "Optimization is KEY here").
-let lastDraw = 0, lastProgress = 0;
+let lastDraw = 0, lastProgress = 0, lastFollow = 0, fullAsked = false;
+// The open train's line is checked against the train's own way this often (src/path-follow.js).
+const FOLLOW_MS = 250;
+const whenIdle = cb => (window.requestIdleCallback ? window.requestIdleCallback(cb, { timeout: 500 }) : setTimeout(cb, 50));
+// The open train's line changed to follow it: drawn, the changed stretch sliding into place.
+function showFollowed(r, place) {
+  shownPath.path = r.path;
+  map.setPath(r.path, r.slide);
+  if (place) map.setPathProgress(progressAt(r.path, place));
+}
 // frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
@@ -522,6 +540,23 @@ function frame(ts) {
   const r = sel && trains.get(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
   // How far along its route the open train is: at most 10 times a second (it took a fifth of the frame's time).
+  // The open train's line follows its train (src/path-follow.js): checked FOLLOW_MS apart; the rare full re-route of
+  // the way ahead (tens of ms) waits for a quiet moment.
+  const follow = sel && shownPath?.id === sel.id ? shownPath.follow : null;
+  if (follow && ts - lastFollow >= FOLLOW_MS) {
+    lastFollow = ts;
+    const r = follow.update(trains.wayOf(sel.id), ts);
+    if (r) showFollowed(r, sel);
+    else if (follow.wantsFull && !fullAsked) {
+      fullAsked = true;
+      whenIdle(() => {
+        fullAsked = false;
+        if (shownPath?.follow !== follow) return;
+        const r2 = follow.full(trains.wayOf(shownPath.id), performance.now());
+        if (r2) showFollowed(r2, frameById.get(shownPath.id));
+      });
+    }
+  }
   if (sel && shownPath?.id === sel.id && ts - lastProgress >= 100) {
     lastProgress = ts;
     map.setPathProgress(progressAt(shownPath.path, sel));

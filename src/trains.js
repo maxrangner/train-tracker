@@ -841,6 +841,37 @@ export function createTrains(options = {}) {
     historyOf(id) { return byId.get(id)?.hist ?? null; },
     // Every train's latest report.
     reports() { return [...byId.values()].map(tr => tr.latest); },
+    // Train id's own way along the rails, for its route line (src/path-follow.js; Max, 2026-11-19: trains drawn beside
+    // their route): from its first kept report (after its last jump) to the further of its last report and where it
+    // is drawn. { coords: [[lon, lat], ...], s: [metres along its path at each point], at: where it is drawn (s),
+    // report: s of its last report }, or null. Without the small offset of a train gliding onto a new way.
+    wayOf(id) {
+      const tr = byId.get(id), sim = tr?.sim, h = tr?.hist;
+      if (!sim || !h?.length) return null;
+      let k0 = 0;
+      for (let k = h.length - 1; k > 0; k--) if (h[k].jump) { k0 = k; break; }
+      const coords = [], s = [];
+      const push = (lon, lat, at) => {
+        const l = coords[coords.length - 1];
+        if (l && Math.abs(l[0] - lon) < 1e-7 && Math.abs(l[1] - lat) < 1e-7) return;
+        coords.push([lon, lat]); s.push(at);
+      };
+      push(h[k0].lon, h[k0].lat, h[k0].s);
+      for (let k = k0 + 1; k < h.length; k++) {
+        const e = h[k], r = e.route;
+        if (r) for (let j = 1; j < r.lon.length; j++) push(r.lon[j], r.lat[j], h[k - 1].s + r.cum[j]);
+        else push(e.lon, e.lat, e.s);
+      }
+      const last = h[h.length - 1], at = Math.max(h[k0].s, sim.s);
+      // Drawn past its last report (coasting, or moving on by its timetable without GPS): the whole track it goes on
+      // along (else the line, joined on from the train, was left again at once: 1937 near Hässleholm, 19 Nov 23:37).
+      if (at > last.s + 0.01) {
+        const poly = trackAhead(tr)?.poly;
+        if (poly) for (let j = 1; j < poly.lon.length; j++) push(poly.lon[j], poly.lat[j], last.s + poly.cum[j]);
+        if (!poly || at > last.s + poly.cum[poly.cum.length - 1]) { const p = pointAt(tr, at); push(p.lon, p.lat, at); }
+      }
+      return { coords, s, at, report: last.s };
+    },
     // Where train id is drawn at time t.
     placeOf(id, t) {
       advance(t);

@@ -217,7 +217,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -255,9 +255,61 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let pathProgress = 0;   // how far along the shown path the train is (setPathProgress)
   let pathMetres = 0;     // the shown path's length
   // The path's colours now: the line by its line progress, its stops by their share of the way (f).
+  // While a stretch of the route slides to its new place (setPath with a slide; Max, 2026-11-19: "Can it be
+  // animated?"), the line leaves it out (see-through from slideGap.a to .b, in line progress) and path-slide draws it.
+  let slideGap = null;
+  const CLEAR = 'rgba(0,0,0,0)';
+  // A line-gradient: colourAt(x) for x in 0..1, changing only at the cuts.
+  const rampOf = (colourAt, cuts) => {
+    const e = ['step', ['line-progress'], colourAt(-1)];
+    let last = -Infinity;
+    for (const x of cuts.filter(x => x > 0 && x < 1).sort((m, n) => m - n)) if (x > last) { e.push(x, colourAt(x)); last = x; }
+    return e.length > 3 ? e : ['step', ['line-progress'], colourAt(-1), 2, colourAt(-1)];
+  };
+  let sliding = null;   // the slide in progress (setPath), with t0 (its first frame's time) and the line in full
+  // The route's colours as they stand now (the train's progress, a slide's gap).
+  function paintPath() {
+    if (!isReady || !map.getLayer('path-line')) return;
+    const c = pathColours();
+    map.setPaintProperty('path-line', 'line-gradient', c.line);
+    map.setPaintProperty('path-casing', 'line-gradient', c.casing);
+    map.setPaintProperty('path-slide-line', 'line-gradient', c.slide);
+    map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
+    map.setPaintProperty('path-slide-stops', 'circle-stroke-color', c.stops);
+  }
+  // One frame of a slide: the stretch eased from its old place towards the new (slow, faster, slow), its dots with
+  // it; at the end the line whole again.
+  function stepSlide(now) {
+    const sl = sliding;
+    if (!sl || !isReady) return;
+    if (sl.t0 === null) sl.t0 = now;
+    const u = Math.min(1, (now - sl.t0) / sl.ms);
+    const e = u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2;
+    const mix = (p, q) => [p[0] + (q[0] - p[0]) * e, p[1] + (q[1] - p[1]) * e];
+    if (u >= 1) {
+      sliding = null;
+      slideGap = null;
+      data.path = sl.full;
+      data['path-slide'] = empty();
+      map.getSource('path').setData(data.path);
+      map.getSource('path-slide').setData(data['path-slide']);
+      paintPath();
+      return;
+    }
+    data['path-slide'] = { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: sl.from.map((p, k) => mix(p, sl.to[k])) } },
+      ...sl.dots.map((d, k) => ({ type: 'Feature', properties: { f: sl.dotF[k] }, geometry: { type: 'Point', coordinates: mix(d.from, d.to) } }))] };
+    map.getSource('path-slide').setData(data['path-slide']);
+  }
   const pathColours = () => {
-    const C = colours(dark);
-    return { line: ['step', ['line-progress'], C.routeDone, pathProgress, C.route],
+    const C = colours(dark), g = slideGap;
+    const inGap = x => g && x >= g.a && x < g.b;
+    const cuts = g ? [pathProgress, g.a, g.b] : [pathProgress];
+    // The sliding stretch's own colours: its line progress runs 0..1 over a..b of the route's.
+    const p = g && g.b > g.a ? (pathProgress - g.a) / (g.b - g.a) : 0;
+    return { line: rampOf(x => (inGap(x) ? CLEAR : x < pathProgress ? C.routeDone : C.route), cuts),
+      casing: rampOf(x => (inGap(x) ? CLEAR : C.casing), cuts),
+      slide: rampOf(x => (x < p ? C.routeDone : C.route), [p]),
       stops: ['case', ['<=', ['get', 'f'], pathProgress], C.routeDone, C.route] };
   };
   const map = new Map({
@@ -342,7 +394,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
   // What our sources show, kept so it can be put back after the base map is swapped (light/dark).
-  const data = { path: empty(), abroad: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
+  const data = { path: empty(), 'path-slide': empty(), abroad: empty(), stations: empty(), trains: empty(), disruptions: empty(), 'route-names': empty(), 'train-groups': empty() };
   let routeSigs = [];   // the open train's stations (setRouteStations): their names in pills
   let abroadNames = [];   // the open train's ends abroad (setAbroad): their names in pills too
   let marchTimer = null, marchStep = 0;   // the leg abroad's dashes marching (setAbroad)
@@ -352,6 +404,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     add('sweden-mask', { data: MASK_URL });
     for (const id of Object.keys(RAIL_SOURCES)) add(`rail-${id}`);
     add('path', { lineMetrics: true });   // line progress: the travelled part's colour (pathColours)
+    add('path-slide', { lineMetrics: true });   // a stretch of it sliding to its new place (setPath)
     add('abroad');   // the open train's leg abroad and its flag (setAbroad)
     add('stations');
     // The dots' tiles are made no finer than zoom 12 (about a metre's precision; closer in they are enlarged): the
@@ -421,13 +474,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The open train's whole path (setPath), start to finish: green ahead of the train, darker green behind it (Max,
     // 2026-11-13; the travelled part was once grey, which in the dark look was the rail lines' grey, so it looked
     // missing). Its stops: path-stops, below.
+    // The casing is a gradient too (one colour), so the sliding stretch's gap shows through it.
+    const casingWidth = ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11], lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7];
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-color': C.casing, 'line-width': ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11] } });
+      paint: { 'line-gradient': pathColours().casing, 'line-width': casingWidth } });
+    // The sliding stretch (setPath): its casing under both lines, so no dark notch where it meets the route.
+    map.addLayer({ id: 'path-slide-casing', type: 'line', source: 'path-slide', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': C.casing, 'line-width': casingWidth } });
     map.addLayer({ id: 'path-line', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: { 'line-gradient': pathColours().line,
-        'line-width': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7] } });
+      paint: { 'line-gradient': pathColours().line, 'line-width': lineWidth } });
+    map.addLayer({ id: 'path-slide-line', type: 'line', source: 'path-slide', filter: ['==', ['geometry-type'], 'LineString'],
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-gradient': pathColours().slide, 'line-width': lineWidth } });
     // The leg abroad (setAbroad; Max, 2026-11-18: "dashed is good"): from the path's Swedish end to the foreign
     // station, in the route's colour, the dashes marching the way the train goes (MARCH).
     map.addLayer({ id: 'path-abroad', type: 'line', source: 'abroad', filter: ['==', ['geometry-type'], 'LineString'],
@@ -483,10 +544,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
     // The open train's stops: a white circle with a ring in the path's colour (Max, 2026-11-13, like a map app's
     // line), above the stations' own grey rings, which hid them; a little larger than those.
-    map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['==', ['geometry-type'], 'Point'],
-      paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
-        'circle-stroke-color': pathColours().stops,
-        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] } });
+    // (A stop dot on a sliding stretch is hidden here and slides along with it: path-slide-stops.)
+    const stopPaint = () => ({ 'circle-radius': ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7], 'circle-color': C.stopFill,
+      'circle-stroke-color': pathColours().stops,
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 5, 1.5, 14, 3] });
+    map.addLayer({ id: 'path-stops', type: 'circle', source: 'path', filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'hide'], 1]],
+      paint: stopPaint() });
+    map.addLayer({ id: 'path-slide-stops', type: 'circle', source: 'path-slide', filter: ['==', ['geometry-type'], 'Point'],
+      paint: stopPaint() });
     // The foreign end: its round flag in a ring of the route's colour (src/abroad.js drawFlag).
     for (const code of [...FLAG_CODES, 'none']) {
       const img = drawFlag(code, 56, C.route), id = `flag-${code}`;
@@ -1401,6 +1466,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     get modelsShown() { return modelsAt(map.getZoom()); },
     // Called every drawing frame: move the camera along with the followed train.
     tick(now) {
+      stepSlide(performance.now());   // a route stretch sliding to its new place (setPath)
       if (!following || !isReady) return;
       const p = following.getPlace();
       if (!p) return stopFollowing();
@@ -1482,7 +1548,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       routeNames();
     },
     // Draw a train's whole path (path.js) and its stops; null: none.
-    async setPath(path) {
+    // The open train's route line. slide (src/path-follow.js, when the line changed to follow its train): the changed
+    // stretch moves from its old place to its new one in slide.ms instead of jumping ({ a, b: where it lies in the new
+    // line, in line progress; from, to: its points before and after, as many each; dots: stop dots that move with it,
+    // [{ i, from, to }] }).
+    async setPath(path, slide = null) {
       const features = [];
       if (path && path.coords.length > 1) {
         features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: path.coords } });
@@ -1496,9 +1566,25 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const [a, b] = [path.coords[i - 1], path.coords[i]], k = Math.cos(a[1] * Math.PI / 180);
         pathMetres += Math.hypot((b[0] - a[0]) * k, b[1] - a[1]) * 111195;
       }
-      data.path = { type: 'FeatureCollection', features };
+      const full = { type: 'FeatureCollection', features };
+      if (slide && path) {
+        // Its dots' colour share (f) as on the new line; hidden on the line while they slide.
+        const moving = new Set(slide.dots.map(d => d.i));
+        sliding = { ...slide, t0: null, full, dotF: slide.dots.map(d => features[1 + d.i]?.properties.f ?? 0) };
+        data.path = { type: 'FeatureCollection', features: features.map((x, k) => (k > 0 && moving.has(k - 1) ? { ...x, properties: { ...x.properties, hide: 1 } } : x)) };
+        slideGap = { a: slide.a, b: slide.b };
+      } else {
+        sliding = null;
+        slideGap = null;
+        data.path = full;
+        data['path-slide'] = empty();
+      }
       await ready;
-      if (isReady) map.getSource('path').setData(data.path);
+      if (!isReady) return;
+      map.getSource('path').setData(data.path);
+      if (!sliding) map.getSource('path-slide')?.setData(data['path-slide']);
+      else stepSlide(performance.now());
+      paintPath();
     },
     // How far along the shown path the train is (0 to 1, as path.js progressAt): the darker green ends there.
     setPathProgress(f) {
@@ -1508,10 +1594,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (pathMetres && Math.abs(f - pathProgress) * pathMetres < 0.5 * metresPerPx && !(f === 0 || f === 1)) return;
       if (Math.abs(f - pathProgress) < 1e-6) return;
       pathProgress = f;
-      if (!isReady || !map.getLayer('path-line')) return;
-      const c = pathColours();
-      map.setPaintProperty('path-line', 'line-gradient', c.line);
-      map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
+      paintPath();
     },
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
