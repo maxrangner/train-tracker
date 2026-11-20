@@ -314,4 +314,8 @@ if (ui.status !== 2) scroll = spawnSync('node', ['tools/scroll-check.mjs'], { st
 // The live pill: every state in both languages one short line (Max, 2026-11-19).
 let pill = { status: 0 };
 if (ui.status !== 2) pill = spawnSync('node', ['tools/pill-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
+// Max's notes of 2026-11-20: one screen at a time, the debug choice, the menu and the map, the menu after a swipe,
+// search -> menu without a flicker, 3D, the far south, Statistik's map while loading, a swipe down on the card.
+let screens = { status: 0 };
+if (ui.status !== 2) screens = spawnSync('node', ['tools/screens-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || screens.status === 1 || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
