@@ -36,6 +36,10 @@ const DEFAULTS = {
   // Disruptions on the map (Max, 2026-11-18): 'all' (problems and rail work, the default: "Alla"), 'problems' (faults
   // and incidents only: "Fel") or 'off'. The menu's list always has them all.
   disruptionsMap: 'all',
+  // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
+  // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
+  // followed) or 'clear' (card and train let go).
+  pageOverTrain: 'card',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -54,6 +58,7 @@ const KEYS = {
   accent: { param: 'accent' },
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
+  pageOverTrain: { param: 'overtrain' },
 };
 const STORE = 'settings';
 
@@ -78,6 +83,7 @@ const valid = {
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
+  pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
