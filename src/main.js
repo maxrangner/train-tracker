@@ -106,8 +106,15 @@ const propsFor = (r, sim) => ({
 });
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
-// A short buzz when a train is opened or followed (round 4; Android: iPhones don't let a web page vibrate).
-const buzz = () => { try { navigator.vibrate?.(8); } catch { /* not allowed here */ } };
+// A short buzz when a train is opened or followed (round 4). In the app through Capacitor's haptics plugin (Max,
+// 2026-11-20: "No haptics in app": the app never had Android's permission to vibrate, so the page's vibrate did
+// nothing; the plugin brings it, and works on iPhones too); on the web page navigator.vibrate (Android browsers only).
+const native = Boolean(window.Capacitor?.isNativePlatform?.());
+const haptics = native ? import('@capacitor/haptics').catch(() => null) : null;
+const buzz = () => {
+  if (haptics) { haptics.then(h => h?.Haptics.impact({ style: h.ImpactStyle.Light })).catch(() => { /* not here */ }); return; }
+  try { navigator.vibrate?.(8); } catch { /* not allowed here */ }
+};
 const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELAY_MS);
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));

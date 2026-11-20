@@ -2,13 +2,16 @@
 // says "native", the @capacitor/app module is replaced by a stub that keeps the page's back handler), then "back" is
 // pressed: search on top of a train card → the search closes; again → the card; again → the app goes to the
 // background. node tools/back-check.mjs (with npm run dev; PAGE= for another port). Not the real phone: the press is
-// the handler called directly.
+// the handler called directly. Also the buzz (2026-11-20): in the app it goes through the haptics plugin, here a stub
+// that counts the calls; opening a train must buzz.
 import { launch, address, sleep, PHONE, RUSH_HOUR } from './lib/browser.mjs';
 
 const STUB = `export const App = {
   addListener(name, fn) { if (name === 'backButton') window.__back = fn; return Promise.resolve({ remove() {} }); },
   minimizeApp() { window.__minimized = true; return Promise.resolve(); },
 };`;
+const HAPTICS = `export const ImpactStyle = { Light: 'LIGHT' };
+export const Haptics = { impact(o) { window.__buzz = (window.__buzz ?? 0) + 1; window.__buzzStyle = o?.style; return Promise.resolve(); } };`;
 
 const browser = await launch();
 const fails = [];
@@ -19,8 +22,9 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   await page.evaluateOnNewDocument(() => { window.Capacitor = { isNativePlatform: () => true }; });
   await page.setRequestInterception(true);
-  page.on('request', r => (/capacitor_app\.js|@capacitor\/app/.test(r.url())
-    ? r.respond({ status: 200, contentType: 'text/javascript', body: STUB }) : r.continue()));
+  page.on('request', r => (/capacitor_app\.js|@capacitor\/app/.test(r.url()) ? r.respond({ status: 200, contentType: 'text/javascript', body: STUB })
+    : /capacitor_haptics\.js|@capacitor\/haptics/.test(r.url()) ? r.respond({ status: 200, contentType: 'text/javascript', body: HAPTICS })
+      : r.continue()));
   await page.goto(address({ replay: RUSH_HOUR, lang: 'en', view: '11/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
   for (let t0 = Date.now(); Date.now() - t0 < 30000; await sleep(300)) {
     if (await page.evaluate(() => (window.__trains?.count ?? 0) > 0 && Boolean(window.__map?.loaded()) && Boolean(window.__back)).catch(() => false)) break;
@@ -42,6 +46,8 @@ try {
     await page.evaluate(() => { document.getElementById('menu-button').click(); });
     await sleep(500);
     const s0 = await state();
+    const buzzes = await page.evaluate(() => ({ n: window.__buzz ?? 0, style: window.__buzzStyle ?? null }));
+    if (buzzes.n < 1 || buzzes.style !== 'LIGHT') fails.push(`opening a train in the app: ${buzzes.n} buzz(es) through the haptics plugin (want at least 1, light)`);
     if (!s0.card || !s0.search) fails.push(`setup: card ${s0.card}, search ${s0.search} (both should be open)`);
     const s1 = await back();
     if (s1.search || !s1.card || s1.away) fails.push(`1st back: search ${s1.search}, card ${s1.card}, away ${s1.away} (want: search closed, card open)`);
