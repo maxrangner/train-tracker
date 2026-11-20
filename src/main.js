@@ -186,6 +186,12 @@ const panel = createPanel(document.getElementById('panel'), {
   },
 });
 const map = createMap('map', {
+  // A plain tap on the map (not a drag): with the menu open it only closes the menu.
+  onMapTap() {
+    if (navEl.hidden) return false;
+    closeNav();
+    return true;
+  },
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
   getTrains3d: () => frameTrains,
@@ -467,7 +473,9 @@ function closeNav() {
   navButton.setAttribute('aria-expanded', 'false');
 }
 navButton.onclick = () => (navEl.hidden ? openNav() : closeNav());
-document.getElementById('nav-backdrop').onclick = closeNav;
+// The map works with the menu open (Max, 2026-11-20: "Map doesn't work with menu open, but cards do"; until then a
+// see-through layer over the map only closed the menu): a drag or pinch moves the map and the menu stays; a plain tap
+// on the map closes the menu and does nothing else (as the search does; createMap onMapTap).
 // Opening the search (Sök or the logo) closes the menu: one card under the bar at a time.
 document.getElementById('menu-button').addEventListener('click', closeNav);
 
