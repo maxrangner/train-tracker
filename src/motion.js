@@ -18,6 +18,7 @@ export function roll(el, v, digits = 0, suffix = '', fmt = null) {
   el._v = v;
   cancelAnimationFrame(el._raf);
   if (reduceMotion() || from === v || document.hidden) { el.textContent = text(v, true); return; }
+  el.textContent = text(from, false);   // (at once: the new text drawn in its place would show for a frame)
   const t0 = performance.now(), dur = 700;
   const step = (now) => {
     const k = Math.min(1, (now - t0) / dur), e = 1 - (1 - k) ** 3;

@@ -77,7 +77,8 @@ try {
   await sleep(500);
 
   // ---- a card: no roll as it opens; the lateness rolls and pulses; the timeline's rows arrive ----
-  const id = await page.evaluate(() => {
+  // a tap on the lone train nearest the middle (not `except`); its id
+  const tapLone = except => page.evaluate((except) => {
     const m = window.__map, c = m.project(m.getCenter());
     const d = f => { const q = m.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
     // a train with a label of its own, not under a "3 trains" bubble or a station's name (as tools/ui-check.mjs)
@@ -91,12 +92,13 @@ try {
     const covered = q => groups.some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
       || m.queryRenderedFeatures([[q.x - 8, q.y - 8], [q.x + 8, q.y + 8]], { layers: ['station-names'] }).length > 0;
     const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id) && !covered(m.project(f.geometry.coordinates))
-      && typeof window.__lateness.get(f.properties.id)?.minutes === 'number').sort((a, b) => d(a) - d(b))[0];
+      && f.properties.id !== except && (!except || String(window.__trains.get(f.properties.id)?.number) !== String(window.__trains.get(except)?.number)) && typeof window.__lateness.get(f.properties.id)?.minutes === 'number').sort((a, b) => d(a) - d(b))[0];
     if (!f) return null;
     const q = m.project(f.geometry.coordinates);
     m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
     return f.properties.id;
-  });
+  }, except);
+  const id = await tapLone(null);
   await sleep(3500);
   const card = await page.evaluate(() => ({ open: !document.getElementById('panel').hidden, tiles: document.querySelectorAll('#panel .tile').length,
     late: document.querySelector('#panel .cd-late b')?.textContent, rows: document.querySelectorAll('#panel .tl-row').length, list: Boolean(document.getElementById('picker') && !document.getElementById('picker').hidden) }));
@@ -131,6 +133,23 @@ try {
     await sleep(1500);
     const refreshed = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
     check(refreshed === 0, `6: the card's refresh moves no rows (${refreshed} arriving)`);
+    // ---- 5: card to card: another train picked keeps the card; its number rolls; no "Laddar…" ----
+    await page.click('#panel .panel-more');   // (compact again)
+    await sleep(800);
+    await page.evaluate(() => { window.__seen = { hidden: false, loading: false, heads: [] };
+      const p = document.getElementById('panel');
+      const look = () => { if (p.hidden) window.__seen.hidden = true; if (p.querySelector('.state.loading')) window.__seen.loading = true;
+        const h = p.querySelector('.panel-title strong')?.textContent; if (h && h !== window.__seen.heads.at(-1)) window.__seen.heads.push(h);
+        if (window.__seen.heads.length < 400) requestAnimationFrame(look); };
+      requestAnimationFrame(look); });
+    const id2 = await tapLone(id);
+    await sleep(2500);
+    const sw = await page.evaluate(() => ({ ...window.__seen, late: document.querySelector('#panel .cd-late b')?.textContent, tiles: document.querySelectorAll('#panel .tile').length,
+      busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent }));
+    const want2 = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id2);
+    if (!id2) notes.push('5 not checked: no second lone train near the middle');
+    else check(!sw.hidden && !sw.loading && sw.heads.length >= 3 && sw.number === want2 && sw.tiles === 2 && !sw.busy,
+      `5: card to card keeps the card and rolls the number (${id} → ${id2}: ${sw.heads.slice(0, 3).join(' → ')}${sw.heads.length > 3 ? ' … ' + sw.heads.at(-1) : ''}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late})`);
     await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
     await sleep(600);
   }
