@@ -318,4 +318,7 @@ if (ui.status !== 2) pill = spawnSync('node', ['tools/pill-check.mjs'], { stdio:
 // search -> menu without a flicker, 3D, the far south, Statistik's map while loading, a swipe down on the card.
 let screens = { status: 0 };
 if (ui.status !== 2) screens = spawnSync('node', ['tools/screens-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || screens.status === 1 || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
+// The start screen's logo drawn on its own thread, smooth while the page is busy (Max's pick C, 2026-11-20).
+let splashRun = { status: 0 };
+if (ui.status !== 2) splashRun = spawnSync('node', ['tools/splash-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || splashRun.status === 1 || screens.status === 1 || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);

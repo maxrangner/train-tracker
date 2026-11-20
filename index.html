@@ -661,6 +661,7 @@
     :root[data-theme="dark"] #splash { background: #1d2130; color: #f1f2f7; }
     .splash-logo { width: min(250px, 62vw); }
     .splash-logo svg { display: block; width: 100%; height: auto; }
+    .splash-logo canvas { display: block; width: 100%; height: auto; aspect-ratio: 1470 / 510; }   /* the drawing on its own thread (below) */
     /* The logo's lines draw themselves, left to right (src/logo.js draw: pathLength 1, a delay by place). */
     .draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .8s cubic-bezier(.6, .1, .2, 1) forwards; animation-delay: var(--d); }
     .draw-dot { opacity: 0; animation: dot-in .25s ease .7s forwards; }
@@ -685,6 +686,68 @@
         try { lang = lang || (JSON.parse(localStorage.getItem('settings') || '{}') || {}).language; } catch (e) { /* storage blocked */ }
         lang = lang || ((navigator.languages && navigator.languages[0]) || navigator.language || '');
         if (String(lang).toLowerCase().indexOf('sv') === 0) document.querySelector('#splash .splash-loading').textContent = 'Laddar…';
+      })();
+    </script>
+    <script>
+      // The logo draws itself on its own thread (Max's pick C, 2026-11-20; sketch https://claude.ai/artifact/ETujvZYrfH97FEV4rkMEXe).
+      // The CSS drawing below (.draw) runs on the page's own thread, the one that then starts the app: measured on the
+      // built app with the processor slowed 4x, it got 13 frames in its first 1.4 s instead of about 80 (jobs of 270,
+      // 270 and 360 ms stopped it). Here a worker draws the same lines (same delays, length and easing, the rails' gaps
+      // erased as the mask does) on a canvas the page hands it, so the app's start-up can't stop it. Without workers
+      // drawing on a canvas (older phones), or with "reduce motion", the CSS drawing stays. window.__splashDrawn: done.
+      (function () {
+        var done, box = document.querySelector('#splash .splash-logo'), svg = box && box.querySelector('svg');
+        window.__splashDrawn = new Promise(function (r) { done = r; });
+        try {
+          if (!svg || !window.Worker || !window.HTMLCanvasElement || !('transferControlToOffscreen' in HTMLCanvasElement.prototype) ||
+            matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
+          var strokes = [];
+          svg.querySelectorAll('mask .draw').forEach(function (el) {
+            var g = el.parentNode.tagName === 'g' ? el.parentNode : el;
+            var d = el.getAttribute('d');
+            if (el.tagName === 'circle') {
+              var cx = +el.getAttribute('cx'), cy = +el.getAttribute('cy'), r = +el.getAttribute('r');
+              d = 'M ' + (cx + r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 1 1 ' + (cx - r) + ' ' + cy + ' A ' + r + ' ' + r + ' 0 1 1 ' + (cx + r) + ' ' + cy;
+            }
+            var p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            p.setAttribute('d', d);
+            strokes.push({ d: d, width: +(el.getAttribute('stroke-width') || g.getAttribute('stroke-width')), cut: g.getAttribute('stroke') === 'black',
+              delay: parseFloat(el.style.getPropertyValue('--d')) * 1000, len: p.getTotalLength() });
+          });
+          var canvas = document.createElement('canvas'), dpr = Math.min(3, devicePixelRatio || 1), w = box.getBoundingClientRect().width || 250;
+          canvas.width = Math.round(w * dpr); canvas.height = Math.round(w * dpr * 510 / 1470);
+          canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', 'Spårat');
+          var off = canvas.transferControlToOffscreen();
+          var code = 'var ctx, W, H, strokes, ink, t0 = null, n = 0, worst = 0, worstAt = 0, last = 0;' +
+            'function bez(x1, y1, x2, y2) { return function (x) { var lo = 0, hi = 1, t = x;' +
+            '  for (var i = 0; i < 30; i++) { var cx = 3 * t * (1 - t) * (1 - t) * x1 + 3 * t * t * (1 - t) * x2 + t * t * t; if (Math.abs(cx - x) < 1e-5) break; if (cx < x) lo = t; else hi = t; t = (lo + hi) / 2; }' +
+            '  return 3 * t * (1 - t) * (1 - t) * y1 + 3 * t * t * (1 - t) * y2 + t * t * t; }; }' +
+            'var ease = bez(.6, .1, .2, 1);' +   /* the CSS drawing's cubic-bezier(.6, .1, .2, 1), each line .8 s after its delay */
+            'function frame(now) { if (t0 === null) t0 = now; var t = now - t0; if (last && now - last > worst) { worst = now - last; worstAt = t; } last = now; n++;' +
+            '  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);' +
+            '  ctx.setTransform(W / 1470, 0, 0, H / 510, -100 * W / 1470, -220 * H / 510);' +
+            '  for (var i = 0; i < strokes.length; i++) { var s = strokes[i], k = Math.min(1, Math.max(0, (t - s.delay) / 800)); if (k <= 0) continue;' +
+            '    ctx.globalCompositeOperation = s.cut ? "destination-out" : "source-over"; ctx.strokeStyle = ink; ctx.lineWidth = s.width;' +
+            '    ctx.setLineDash([ease(k) * s.len, s.len + 1]); ctx.stroke(s.path); }' +
+            '  var dot = Math.min(1, Math.max(0, (t - 700) / 250));' +   /* the dot fades in at .7 s for .25 s */
+            '  if (dot > 0) { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = dot; ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(789, 290, 19, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }' +
+            '  if (t < 1300) requestAnimationFrame(frame); else postMessage({ frames: n, worst: Math.round(worst), at: Math.round(worstAt), start: Math.round(performance.timeOrigin + t0) }); }' +
+            'onmessage = function (e) { var m = e.data;' +
+            '  if (m.canvas) { ctx = m.canvas.getContext("2d"); W = m.canvas.width; H = m.canvas.height; strokes = m.strokes.map(function (s) { s.path = new Path2D(s.d); return s; }); }' +
+            '  if (m.ink) { ink = m.ink; if (t0 !== null) requestAnimationFrame(frame); }' +
+            '  if (m.go) requestAnimationFrame(frame); };';
+          var worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+          var splash = document.getElementById('splash'), inkNow = function () { return getComputedStyle(splash).color; };
+          worker.onmessage = function (e) { window.__splashStats = e.data; done(); };   // (its frames, longest pause, start: tools/splash-check.mjs)
+          // the worker stays while the start screen does (stopped, its canvas would go blank), and goes with it
+          new MutationObserver(function (c, o) { if (splash.hidden) { worker.terminate(); o.disconnect(); } }).observe(splash, { attributes: true, attributeFilter: ['hidden'] });
+          worker.onerror = function () { svg.style.display = ''; canvas.remove(); done(); };
+          worker.postMessage({ canvas: off, strokes: strokes, ink: inkNow(), go: true }, [off]);
+          svg.style.display = 'none';
+          box.appendChild(canvas);
+          // the chosen look comes a moment later (src/settings.js sets data-theme): the ink follows it
+          new MutationObserver(function () { worker.postMessage({ ink: inkNow() }); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        } catch (e) { if (svg) svg.style.display = ''; done(); }
       })();
     </script>
   </div>

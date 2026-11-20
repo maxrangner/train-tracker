@@ -229,7 +229,8 @@ const map = createMap('map', {
 const splash = document.getElementById('splash');
 // The start screen's logo draws itself in about 1.3 s (index.html): the screen stays at least that long.
 const SPLASH_MIN_MS = 1300;
-map.shown.then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
+// (and the drawing on its own thread has finished: index.html window.__splashDrawn)
+Promise.all([map.shown, window.__splashDrawn]).then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
   Math.max(0, SPLASH_MIN_MS - performance.now())));
 
 // The map credit (index.html #credit; Max, 2026-11-17): shown once the start screen has gone, faded on the first touch
