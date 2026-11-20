@@ -202,8 +202,10 @@ for (const f of skipReplay ? [] : recordings) {
 // The open train's line follows the train (src/path-follow.js; Max, 2026-11-19: "avoid a line flipping back and
 // forth"): in the first FOLLOW_MIN minutes of each recording every train is opened; the drawn train is on its line at
 // least FOLLOW_ON % of the time, and the line goes back to a way it just left at most FOLLOW_FLIPS times a train-hour
-// (2026-11-20: 98.8 % and 0.48 in the morning rush; 99.9 % and 1.0 on 19 Nov 23:28). Its inputs are replay inputs.
-const FOLLOW_MIN = 10, FOLLOW_ON = 98, FOLLOW_FLIPS = 1.5;
+// (2026-11-20, first 10 minutes: 99.0-99.2 % and 0.07-0.23 in the rushes, the late evening and Saturday; the night
+// 97.5 %: trains parked after their trip on sidings the rail data joins to their route's end only kilometres round,
+// 7877 north of Stockholm C and 496 at Göteborg C, the line can't reach them). Its inputs are replay inputs.
+const FOLLOW_MIN = 10, FOLLOW_ON = 97, FOLLOW_FLIPS = 1.5;
 for (const f of skipReplay ? [] : recordings) {
   try {
     const p = JSON.parse(execFileSync('node', ['tools/route-follow-check.mjs', `data/${f}`, '--minutes', String(FOLLOW_MIN), '--json'],

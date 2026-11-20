@@ -217,7 +217,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
