@@ -56,7 +56,7 @@
       gap: 6px;
       align-items: flex-start;
       pointer-events: none;
-      z-index: 5;   /* above the menu's tap-outside layer (#nav-backdrop), below the sheets */
+      z-index: 5;   /* below the sheets */
     }
     #top > * { pointer-events: auto; }
     /* The search bar (the Soft look, 2026-11-15): logo, search (opens the menu sheet), the live count (opens the
@@ -94,8 +94,6 @@
       transform-origin: top left; transition: transform .2s cubic-bezier(.2, .9, .25, 1), opacity .2s; }
     @media (min-width: 440px) { #nav { top: calc(70px + env(safe-area-inset-top, 0px)); } }
     #nav[hidden] { display: flex !important; transform: translateY(-14px); opacity: 0; visibility: hidden; transition: transform .15s ease-in, opacity .15s, visibility 0s .15s; }
-    #nav-backdrop { position: fixed; inset: 0; z-index: 4; display: none; }
-    #nav:not([hidden]) + #nav-backdrop { display: block; }
     .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 14px 8px 8px; border: 0; border-radius: calc(var(--radius) - 6px); background: transparent;
       color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
     .nav-row[hidden] { display: none; }
@@ -215,8 +213,8 @@
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* leave room on the right for the zoom buttons and compass */
     #top { right: calc(var(--gap) + env(safe-area-inset-right, 0px)); }
-    /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15),
-       the compass only while the map is turned or tilted (src/map.js sets .touch and .turned on the map). */
+    /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15);
+       src/map.js sets .touch and .turned on the map. */
     .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
@@ -228,8 +226,11 @@
     .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
     .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { width: 48px; height: 48px; }
     .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
-    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass { display: none; }
-    .maplibregl-map.touch:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
+    /* The compass: "3D" while the map is flat and north up (a tap tilts it), the needle while turned or tilted (src/map.js;
+       Max, 2026-11-20). */
+    .maplibregl-ctrl-compass .ctrl-3d { font: 700 14px/1 var(--font); letter-spacing: .02em; color: var(--ink); }
+    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass .maplibregl-ctrl-icon { display: none; }
+    .maplibregl-map.turned .maplibregl-ctrl-compass .ctrl-3d { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
     .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); right: calc(72px + env(safe-area-inset-right, 0px));
@@ -699,7 +700,6 @@
     <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
     <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="help">About</span></button>
   </nav>
-  <div id="nav-backdrop"></div>
   <div id="settings-page" class="card page" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
     <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
       <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
