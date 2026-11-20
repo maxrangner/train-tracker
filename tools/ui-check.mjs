@@ -186,6 +186,20 @@ try {
     await sleep(500);
     c = await card();
     expect(c.full && c.timeline > 0, '"More" did not open the full card with its timeline');
+    // "i" (src/train-info.js; Max, 2026-11-20): the train's own numbers instead of the stops, and back.
+    await page.evaluate(() => document.querySelector('#panel .panel-info')?.click());
+    await sleep(1500);
+    const info = await page.evaluate(() => {
+      const b = document.querySelector('#panel .panel-info-box'), r = b?.getBoundingClientRect();
+      return { shown: Boolean(r && r.height > 0), sections: b?.querySelectorAll('.ti-sec').length ?? 0, wide: b ? b.scrollWidth - b.clientWidth : -1,
+        timeline: document.querySelector('#panel .panel-table')?.getBoundingClientRect().height ?? -1 };
+    });
+    expect(info.shown && info.sections === 5 && info.timeline === 0, `"i" showed ${info.sections} sections (shown ${info.shown}, the stops ${info.timeline} px)`);
+    expect(info.wide <= 1, `the train's own numbers are ${info.wide} px wider than the card`);
+    await page.evaluate(() => document.querySelector('#panel .panel-info')?.click());
+    await sleep(400);
+    c = await card();
+    expect(c.timeline > 0, '"i" again did not bring the stops back');
   }
   await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
   await sleep(500);

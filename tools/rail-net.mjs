@@ -15,6 +15,8 @@
 //   tools/rail-trv.mjs): 3 for a slow (40 km/h or less) or not public track, else 0; plus its traffic direction (0 both
 //   ways, 1 along the line's points, 2 against them). src/rail-net.js makes routes prefer main tracks and the right
 //   track of a double track with it. Without the properties file the network is written without `c`.
+// - Each line also gets its link's design speed in km/h (`v`, a list, one per line; 0 not known; Max, 2026-11-20: the
+//   train card's speedometer marks what the track is built for, docs/train-info-1120). About +15 kB as sent.
 // - Straight corners get a curve beside them: a straight two-point line of at least CORNER_MIN_M on a normal track
 //   whose every way on, at both ends, turns more than the trains' MAX_TURN (but not over SHARP_TURN, src/path.js).
 //   Trafikverket draws the horseshoe north of Borås C (Kust till kust-banan, about 1.3 km) as one straight 845 m link
@@ -149,19 +151,21 @@ for (const c of simple) {
 const joinedTiny = joinTinyPieces({ scale: 1e5, n, d });
 const ready = removeOverlaps(joinedTiny);
 // Each remaining line's digit (see the top): slow or not public 3, plus the direction.
-let c;
+let c, speeds = null;
 if (props) {
   const linkAt = ready.kept.map(i => simpleLink[joinedTiny.kept[i]]);
   c = linkAt.map((id) => {
     const [v, a, f] = props[id] ?? [0, 3, 0];
     return ((v > 0 && v <= 40) || a !== 0 ? 3 : 0) + f;
   }).join('');
+  speeds = linkAt.map(id => (props[id] ?? [0])[0] || 0);
   const slow = [...c].filter(x => x >= '3').length, oneWay = [...c].filter(x => x % 3 !== 0).length;
   console.log(`track properties: ${slow} of ${c.length} lines slow or not public, ${oneWay} one-way`);
 } else console.log('no data/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
-const curved = addCornerCurves(ready, c);
+const curved = addCornerCurves(ready, c, speeds);
 c = curved.c;
-const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: curved.n, d: curved.d, ...(c ? { c } : {}) });
+const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: curved.n, d: curved.d,
+  ...(c ? { c } : {}), ...(speeds ? { v: speeds } : {}) });
 writeFileSync(out, json);
 
 // ---- 4. Overlap pieces (see the top) ----
@@ -206,7 +210,7 @@ function removeOverlaps({ n: nn, d: dd }) {
 }
 
 // ---- 5. Straight corners (see the top) ----
-function addCornerCurves({ n: nn, d: dd }, digits) {
+function addCornerCurves({ n: nn, d: dd }, digits, speeds) {
   const ls = [];
   let x = 0, y = 0, k = 0;
   for (const cnt of nn) { const pts = []; for (let i = 0; i < cnt; i++) { x += dd[2 * k]; y += dd[2 * k + 1]; k++; pts.push([x, y]); } ls.push(pts); }
@@ -246,6 +250,7 @@ function addCornerCurves({ n: nn, d: dd }, digits) {
     for (let i = 1; i < curve.length; i++) curveLen += mXY(curve[i - 1], curve[i]);
     ls.push(curve);
     if (out) out += out[li];
+    if (speeds) speeds.push(speeds[li]);   // (the curve has its straight line's speed)
     added++;
     console.log(`straight corner of ${len.toFixed(0)} m (turns ${a.turn.toFixed(0)}° and ${b.turn.toFixed(0)}°) at ${(W[1] / 1e5).toFixed(5)},${(W[0] / 1e5).toFixed(5)}: curve of ${curveLen.toFixed(0)} m added`);
   }
