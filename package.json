@@ -17,6 +17,7 @@
     "@capacitor/android": "6.2.3",
     "@capacitor/app": "6.0.3",
     "@capacitor/core": "6.2.3",
+    "@capacitor/haptics": "6.0.0",
     "maplibre-gl": "6.16.0",
     "nodemailer": "10.3.1",
     "pmtiles": "4.5.0",
