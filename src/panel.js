@@ -5,7 +5,7 @@
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
-import { roll, arrive, flash } from './motion.js';
+import { roll, arrive, flash, reduceMotion } from './motion.js';
 import { stateHtml } from './state.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
@@ -152,6 +152,11 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
 
   // follow: false for a train that isn't on the map (picked from the timetable search).
   async function open(train, { follow = true } = {}) {
+    // Card to card (Max's pick 5, 2026-11-20: "Make that numbers roll like the others"): another train picked while a
+    // card shows one keeps the card; the number rolls at once, the rest (dimmed) stays until the new timetable is in,
+    // then the lateness and the time to the stop roll to the new train's, changed words fade over, the trip bar glides.
+    const swap = !el.hidden && openId !== null && openId !== train.id && !el.classList.contains('full') && el.querySelector('.cd .cd-late')
+      && !reduceMotion() ? cardNumbers() : null;
     openId = train.id;
     lateSeen = null;   // (a card opening shows its lateness at once)
     number = train.number ?? null;
@@ -163,21 +168,77 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     el.hidden = false;
     el.classList.remove('full');   // always opens compact (the Train card setting went, Max 2026-11-20)
     shown = { train, route: null };
-    el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
+    if (swap) {
+      const old = el.querySelector('.panel-head');
+      old.outerHTML = head(train);
+      const strong = el.querySelector('.panel-title strong'), to = Number(strong.textContent);
+      if (Number.isInteger(swap.number) && Number.isInteger(to) && swap.number !== to) { strong._v = swap.number; roll(strong, to, 0, '', String); swap.rolling = strong; }
+      if (el.querySelector('.panel-co')?.textContent !== swap.company) flash(el.querySelector('.panel-co'), 'fresh');
+      for (const c of el.children) if (!c.classList.contains('panel-head')) c.classList.add('busy');
+    } else el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
 
     let route;
     try {
       route = await fetchRoute(train.operational, train.date, train.number);
     } catch (e) {
-      if (openId === train.id) { el.querySelector('.state').outerHTML = stateHtml('error', t('routeFailed', e.message)); refreshLater(train); }
+      if (openId === train.id) {
+        if (swap) { el.innerHTML = head(train) + stateHtml('error', t('routeFailed', e.message)); wireHead(); }
+        else el.querySelector('.state').outerHTML = stateHtml('error', t('routeFailed', e.message));
+        refreshLater(train);
+      }
       return;
     }
     if (openId !== train.id) return;   // another train was tapped meanwhile
     onRoute?.(train.id, route);
     shown = { train, route };
-    draw(train, route);
+    if (swap) glide(el, () => { draw(train, route); rollIn(swap); });
+    else draw(train, route);
     refreshLater(train);
+  }
+  // What the card shows now, as numbers (for the swap above): the train number, the minutes late, the minutes to the
+  // stop, the trip bar's place, the words under the tiles and the stations.
+  function cardNumbers() {
+    const q = s => el.querySelector(s);
+    const lateText = q('.cd-late b')?.textContent.trim() ?? '', stopText = q('.cd-stop b')?.textContent.trim() ?? '';
+    const late = lateText === minutesText(0) ? 0 : (/^([+−-])(\d+) min$/.exec(lateText) ?? []);
+    const stop = /^(?:(\d+) h )?(\d+) min$/.exec(stopText);
+    return {
+      number: Number(q('.panel-title strong')?.textContent), company: q('.panel-co')?.textContent ?? '',
+      late: late === 0 ? 0 : late[2] ? (late[1] === '+' ? 1 : -1) * Number(late[2]) : null,
+      stop: stop ? Number(stop[1] ?? 0) * 60 + Number(stop[2]) : null,
+      done: q('.cd-done')?.style.width, at: q('.cd-train')?.style.left,
+      words: [...el.querySelectorAll('.cd small, .cd-names > *')].map(x => x.textContent),
+    };
+  }
+  // The new train's card just drawn: its numbers roll from the old train's, its bar glides from where the old one was.
+  // (The tiles are not drawn again meanwhile: holdGlance.)
+  function rollIn(old) {
+    holdGlance = performance.now() + 750;
+    // the head was drawn again with the timetable: the number still rolling stays
+    const head = el.querySelector('.panel-title strong');
+    if (old.rolling && head && head.textContent === String(old.rolling._v)) head.replaceWith(old.rolling);
+    const late = el.querySelector('.cd-late b'), stop = el.querySelector('.cd-stop b');
+    const now = cardNumbers();
+    if (late && old.late !== null && now.late !== null) {
+      const end = late.textContent;
+      late._v = old.late;
+      roll(late, now.late, 0, '', (n, last) => (last ? end : n === 0 ? '0 min' : minutesText(n)));
+    }
+    if (stop && old.stop !== null && now.stop !== null) {
+      const end = stop.textContent;
+      stop._v = old.stop;
+      roll(stop, now.stop, 0, '', (n, last) => (last ? end : n < 60 ? `${n} min` : `${Math.floor(n / 60)} h ${n % 60} min`));
+    }
+    const done = el.querySelector('.cd-done'), train = el.querySelector('.cd-train');
+    if (done && train && old.done && old.at) {
+      const to = [done.style.width, train.style.left];
+      done.style.width = old.done; train.style.left = old.at;
+      void done.offsetWidth;
+      done.classList.add('moving'); train.classList.add('moving');
+      done.style.width = to[0]; train.style.left = to[1];
+    }
+    [...el.querySelectorAll('.cd small, .cd-names > *')].forEach((x, i) => { if (x.textContent !== old.words[i]) flash(x, 'fresh'); });
   }
 
   // The minutes late now: as on the map while the train is on it, else from its route.
@@ -288,8 +349,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     roll(b, m, 0, '', (n, last) => (last ? end : n === 0 ? '0 min' : minutesText(n)));
     flash(tile);
   }
+  let holdGlance = 0;   // until then the tiles stay as they are (a card-to-card roll: rollIn)
   function showGlance() {
-    if (closing) return;   // sliding shut: left as it is for those 0.18 s
+    if (closing || performance.now() < holdGlance) return;   // sliding shut: left as it is for those 0.18 s
     const stops = shown?.stops;
     const box = el.querySelector('.cd');
     if (!box || !stops?.length) return;
