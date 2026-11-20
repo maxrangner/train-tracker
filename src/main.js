@@ -265,6 +265,28 @@ const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'se
   .map(id => document.getElementById(id)));
 const raise = id => sheets.raise(document.getElementById(id));
 
+// ---- One screen at a time (Max, 2026-11-20: Störningar, then Statistik from the menu, left both open; closing one
+// showed the other). Every menu screen opens through openPage, which closes the others. What becomes of a card under
+// it (a train, a board, a disruption, the "3 trains" list) is a Debug choice for now (Settings → Debug → Screen over a
+// train; Max: "Make a debug toggle for the three options"): 'card' the card waits under the screen and is back when it
+// closes (as before); 'follow' the cards go, the open train stays picked and followed (a tap on it brings its card
+// back, a tap on the map lets it go); 'clear' the cards go and the train is let go. ----
+const pageEls = () => [settingsPage, statsPage, connPage, disruptionsPage, helpEl];
+function openPage(el) {
+  closeNav();
+  menu.close();
+  for (const p of pageEls()) if (p !== el) p.hidden = true;
+  const mode = settings.pageOverTrain;
+  if (mode !== 'card') {
+    board.close();
+    pickerEl.hidden = true;
+    disruptionEl.hidden = true;
+    if (panel.openId) { if (mode === 'clear') panel.close(); else panel.hide(); }
+  }
+  el.hidden = false;
+  raise(el.id);
+}
+
 // ---- Several trains close together ("3 trains"): pick one ----
 const pickerEl = document.getElementById('picker');
 function showPicker(list) {
@@ -316,6 +338,12 @@ function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
   buzz();
+  if (panel.openId === id && panel.hidden && !go) {   // its card put away by a screen (openPage, 'follow'): back
+    panel.show();
+    raise('panel');
+    follow(id);
+    return true;
+  }
   board.close();
   pickerEl.hidden = true;
   disruptionEl.hidden = true;
@@ -332,9 +360,9 @@ function openTrain(id, { go = false } = {}) {
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-function openHelp() { statsPage.hidden = true; connPage.hidden = true; helpEl.hidden = false; helpEl.querySelector('.panel-close').focus(); }
+function openHelp() { openPage(helpEl); helpEl.querySelector('.panel-close').focus(); }
 helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = () => { closeNav(); menu.close(); openHelp(); };   // in the menu (☰, 2026-11-18)
+document.getElementById('help-button').onclick = openHelp;   // in the menu (☰, 2026-11-18)
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
 // filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
@@ -400,7 +428,7 @@ versionEl.addEventListener('click', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!navEl.hidden) { closeNav(); return; }
-  const pages = [helpEl, settingsPage, statsPage, connPage, disruptionsPage];
+  const pages = pageEls();
   if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
   if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
 });
@@ -574,12 +602,7 @@ const settingsPage = document.getElementById('settings-page');
 const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
 document.getElementById('open-settings').onclick = () => {
-  closeNav();
-  menu.close();
-  connPage.hidden = true;
-  helpEl.hidden = true;
-  statsPage.hidden = true;
-  settingsPage.hidden = false;
+  openPage(settingsPage);
   foldAccents(false);   // the accent colours start folded
   settingsPage.querySelector('.panel-close').focus();
 };
@@ -675,12 +698,7 @@ function drawStats(first = false) {
     trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
 }
 function openStats() {
-  closeNav();
-  menu.close();
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  connPage.hidden = true;
-  statsPage.hidden = false;
+  openPage(statsPage);
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
   drawStats(true);
@@ -696,15 +714,8 @@ const conn = createConnection(connPage, {
 });
 let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
 function openConn() {
-  closeNav();
-  menu.close();
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  statsPage.hidden = true;
-  disruptionsPage.hidden = true;
   showConn();
-  connPage.hidden = false;
-  raise('conn-page');
+  openPage(connPage);
   connPage.querySelector('.panel-close').focus();
 }
 document.getElementById('status').onclick = () => (connPage.hidden ? openConn() : (connPage.hidden = true));
@@ -797,14 +808,8 @@ function openDisruption(id, { go = false } = {}) {
   else if (p) map.goTo(p, 9);
 }
 document.getElementById('open-disruptions').onclick = () => {
-  closeNav();
-  menu.close();
-  connPage.hidden = true;
-  helpEl.hidden = true;
-  settingsPage.hidden = true;
-  statsPage.hidden = true;
   drawDisruptions();
-  disruptionsPage.hidden = false;
+  openPage(disruptionsPage);
   disruptionsPage.querySelector('.panel-close').focus();
 };
 disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };

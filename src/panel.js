@@ -449,5 +449,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     line.textContent = text;
   }
 
-  return { open, close, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; } };
+  // The card put away with the train still open (a screen over it, Settings → Debug → Screen over a train: 'follow'),
+  // and shown again; it stays up to date meanwhile.
+  const hide = () => { el.hidden = true; };
+  const show = () => { if (openId) el.hidden = false; };
+  return { open, close, hide, show, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }
