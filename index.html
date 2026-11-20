@@ -718,12 +718,12 @@
           canvas.width = Math.round(w * dpr); canvas.height = Math.round(w * dpr * 510 / 1470);
           canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', 'Spårat');
           var off = canvas.transferControlToOffscreen();
-          var code = 'var ctx, W, H, strokes, ink, t0 = null, n = 0, worst = 0, last = 0;' +
+          var code = 'var ctx, W, H, strokes, ink, t0 = null, n = 0, worst = 0, worstAt = 0, last = 0;' +
             'function bez(x1, y1, x2, y2) { return function (x) { var lo = 0, hi = 1, t = x;' +
             '  for (var i = 0; i < 30; i++) { var cx = 3 * t * (1 - t) * (1 - t) * x1 + 3 * t * t * (1 - t) * x2 + t * t * t; if (Math.abs(cx - x) < 1e-5) break; if (cx < x) lo = t; else hi = t; t = (lo + hi) / 2; }' +
             '  return 3 * t * (1 - t) * (1 - t) * y1 + 3 * t * t * (1 - t) * y2 + t * t * t; }; }' +
             'var ease = bez(.6, .1, .2, 1);' +   /* the CSS drawing's cubic-bezier(.6, .1, .2, 1), each line .8 s after its delay */
-            'function frame(now) { if (t0 === null) t0 = now; var t = now - t0; if (last) worst = Math.max(worst, now - last); last = now; n++;' +
+            'function frame(now) { if (t0 === null) t0 = now; var t = now - t0; if (last && now - last > worst) { worst = now - last; worstAt = t; } last = now; n++;' +
             '  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);' +
             '  ctx.setTransform(W / 1470, 0, 0, H / 510, -100 * W / 1470, -220 * H / 510);' +
             '  for (var i = 0; i < strokes.length; i++) { var s = strokes[i], k = Math.min(1, Math.max(0, (t - s.delay) / 800)); if (k <= 0) continue;' +
@@ -731,7 +731,7 @@
             '    ctx.setLineDash([ease(k) * s.len, s.len + 1]); ctx.stroke(s.path); }' +
             '  var dot = Math.min(1, Math.max(0, (t - 700) / 250));' +   /* the dot fades in at .7 s for .25 s */
             '  if (dot > 0) { ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = dot; ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(789, 290, 19, 0, 7); ctx.fill(); ctx.globalAlpha = 1; }' +
-            '  if (t < 1300) requestAnimationFrame(frame); else postMessage({ frames: n, worst: Math.round(worst), start: Math.round(performance.timeOrigin + t0) }); }' +
+            '  if (t < 1300) requestAnimationFrame(frame); else postMessage({ frames: n, worst: Math.round(worst), at: Math.round(worstAt), start: Math.round(performance.timeOrigin + t0) }); }' +
             'onmessage = function (e) { var m = e.data;' +
             '  if (m.canvas) { ctx = m.canvas.getContext("2d"); W = m.canvas.width; H = m.canvas.height; strokes = m.strokes.map(function (s) { s.path = new Path2D(s.d); return s; }); }' +
             '  if (m.ink) { ink = m.ink; if (t0 !== null) requestAnimationFrame(frame); }' +
