@@ -222,6 +222,7 @@
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
     .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
+    .sheet-jump .maplibregl-ctrl-bottom-right { transition: none; }   /* (out from behind a tall sheet: in place at once; src/sheet.js) */
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
     .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
     .maplibregl-ctrl.maplibregl-ctrl-group button { width: 46px; height: 46px; }

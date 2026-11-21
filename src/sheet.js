@@ -69,10 +69,15 @@ export function glide(el, change, { from = el.getBoundingClientRect().height, se
     el.style.transition = 'none';
     el.style.height = ''; el.style.maxHeight = '';
     el.classList.remove('gliding');
+    el.dispatchEvent(new Event('glided'));
     el.getBoundingClientRect();
     el.style.transition = '';
   }, GLIDE_MS);
 }
+
+// Sliding away: down by its own height, or from where the finger left it if that is further (a short sheet pulled
+// further than its height climbed back before it went: Störningar with few rows 1001 → 908 px; 2026-11-21's sweep).
+const away = dy => `translateY(max(100%, ${Math.round(dy)}px))`;
 
 export function initSheets(els) {
   const order = [];   // the open sheets, oldest first
@@ -80,11 +85,27 @@ export function initSheets(els) {
   let watched = null;
   // The open bottom sheet's height, for the map's buttons; 0 when none (or on a wide screen).
   const heightSeen = new ResizeObserver(() => showHeight());
+  // The map's buttons go once to where the sheet ends up (2026-11-21's sweep: a train opened from a station's board
+  // took them down to its "Laddar…" card, then back up as its timetable came):
+  //  - a sheet still saying "Laddar…" doesn't take them down: they wait where they are until its content is in;
+  //  - a gliding sheet gives where its glide ends, not where it is on the way (the buttons glide there themselves);
+  //  - coming out from behind a tall sheet, they show in their place (they slid down the screen from its top).
+  let shownH = 0, holdTimer = null;
   function showHeight() {
     const top = order.at(-1);
-    const h = top && bottomSheet(top) ? Math.round(top.getBoundingClientRect().height) : 0;
+    const bottom = top && bottomSheet(top);
+    const h = !bottom ? 0 : top.classList.contains('gliding') && top.style.height ? Math.round(parseFloat(top.style.height))
+      : Math.round(top.getBoundingClientRect().height);
+    clearTimeout(holdTimer);
+    if (bottom && h < shownH && top.querySelector(':scope > .state.loading')) { holdTimer = setTimeout(showHeight, 150); return; }
+    const tall = h > window.innerHeight - 260;   // the map's buttons hide behind a tall sheet
+    if (!tall && root.classList.contains('sheet-tall')) {
+      root.classList.add('sheet-jump');
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('sheet-jump')));
+    }
+    shownH = h;
     root.style.setProperty('--sheet-h', `${h}px`);
-    root.classList.toggle('sheet-tall', h > window.innerHeight - 260);   // the map's buttons hide behind a tall sheet
+    root.classList.toggle('sheet-tall', tall);
   }
   function show() {
     const top = order.at(-1);
@@ -96,6 +117,7 @@ export function initSheets(els) {
     }
     showHeight();
   }
+  for (const el of els) el.addEventListener('glided', () => { if (el === order.at(-1)) showHeight(); });
   const seen = new MutationObserver((changes) => {
     for (const { target: el } of changes) {
       const i = order.indexOf(el);
@@ -209,7 +231,7 @@ function dragging(el) {
     if (grew && dy > CLOSE_PX) {   // grown, then pulled far down: slides away and closes, as from small
       el.classList.remove('dragging');
       el.classList.add('leaving');
-      el.style.transform = 'translateY(100%)';
+      el.style.transform = away(dy);
       setTimeout(close, 200);
       return;
     }
@@ -236,7 +258,7 @@ function dragging(el) {
     if (tap || dy < -SNAP_PX) { el.style.transform = ''; return; }
     if (dy > CLOSE_PX) {   // slides away, then closes
       el.classList.add('leaving');
-      el.style.transform = 'translateY(100%)';
+      el.style.transform = away(dy);
       setTimeout(close, 200);
       return;
     }
