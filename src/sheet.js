@@ -117,7 +117,9 @@ export function initSheets(els) {
 
 function dragging(el) {
   let start = null;   // { y, t, id, h }
-  const close = () => el.querySelector('.panel-close, .menu-close')?.click();
+  // (its own click is never swallowed below: a drag down that began on a button slid the card away but left it open,
+  // the train selected and the map's buttons up where the card was; Max, 2026-11-21)
+  const close = () => { swallowUntil = 0; el.querySelector('.panel-close, .menu-close')?.click(); };
   // A drag can start anywhere on the sheet (Max, 2026-11-20: "when train card is expanded: swiping down from where
   // ever on the card should minimize it"): on a button or link once the finger has moved (a press that stays put is
   // the button's tap, and a drag's click is swallowed), and in a scrolling list with a swipe down while the list is at
