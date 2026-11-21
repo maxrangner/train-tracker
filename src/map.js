@@ -54,6 +54,8 @@ const colourBase = dark => (dark
   : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
       rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: null, disDash: true,   // dashed in light too (Max, 2026-11-17: "Make it dashed in both")
       casing: '#ffffff', stopFill: '#ffffff' });
+// The route's white edge (Settings → Debug → Route white edge; Max, 2026-11-21, option E).
+const ROUTE_EDGE = 'rgba(255, 255, 255, 0.9)';
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
 // The bigger stations (tools/station-sizes.mjs); further out than SMALL_UNTIL the others' names are small and grey.
 const BIG = new Set(stationSizes.big);
@@ -232,7 +234,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-edge', 'path-slide-edge', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -288,6 +290,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const c = pathColours();
     map.setPaintProperty('path-line', 'line-gradient', c.line);
     map.setPaintProperty('path-casing', 'line-gradient', c.casing);
+    if (map.getLayer('path-edge')) map.setPaintProperty('path-edge', 'line-gradient', c.edge);
     map.setPaintProperty('path-slide-line', 'line-gradient', c.slide);
     map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
     map.setPaintProperty('path-slide-stops', 'circle-stroke-color', c.stops);
@@ -324,6 +327,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const p = g && g.b > g.a ? (pathProgress - g.a) / (g.b - g.a) : 0;
     return { line: rampOf(x => (inGap(x) ? CLEAR : x < pathProgress ? C.routeDone : C.route), cuts),
       casing: rampOf(x => (inGap(x) ? CLEAR : C.casing), cuts),
+      edge: rampOf(x => (inGap(x) ? CLEAR : ROUTE_EDGE), cuts),
       slide: rampOf(x => (x < p ? C.routeDone : C.route), [p]),
       stops: ['case', ['<=', ['get', 'f'], pathProgress], C.routeDone, C.route] };
   };
@@ -509,7 +513,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // 2026-11-13; the travelled part was once grey, which in the dark look was the rail lines' grey, so it looked
     // missing). Its stops: path-stops, below.
     // The casing is a gradient too (one colour), so the sliding stretch's gap shows through it.
-    const casingWidth = ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11], lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7];
+    // About twice as wide since 2026-11-21 (Max, option d B: the route was hard to see among the trains; it was 5 → 11
+    // and 3 → 7). Settings → Debug → Route white edge (option E): a white edge under the casing.
+    const casingWidth = ['interpolate', ['linear'], ['zoom'], 5, 9, 14, 20], lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 6, 14, 13];
+    if (settings.routeEdge) {
+      const edgeWidth = ['interpolate', ['linear'], ['zoom'], 5, 13, 14, 25];
+      map.addLayer({ id: 'path-edge', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-gradient': pathColours().edge, 'line-width': edgeWidth } });
+      map.addLayer({ id: 'path-slide-edge', type: 'line', source: 'path-slide', filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ROUTE_EDGE, 'line-width': edgeWidth } });
+    }
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-gradient': pathColours().casing, 'line-width': casingWidth } });

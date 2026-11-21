@@ -36,6 +36,8 @@ const DEFAULTS = {
   // Disruptions on the map (Max, 2026-11-18): 'all' (problems and rail work, the default: "Alla"), 'problems' (faults
   // and incidents only: "Fel") or 'off'. The menu's list always has them all.
   disruptionsMap: 'all',
+  // A white edge round the open train's route (Debug, Max 2026-11-21: option E of the route sketches, off).
+  routeEdge: false,
   // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
   // followed) or 'clear' (card and train let go).
@@ -62,6 +64,7 @@ const KEYS = {
   accent: { param: 'accent' },
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
+  routeEdge: { param: 'routeedge' },
   pageOverTrain: { param: 'overtrain' },
   routeNames: { param: 'routenames' },
 };
@@ -88,6 +91,7 @@ const valid = {
   accent: v => (typeof v === 'string' && Object.hasOwn(ACCENTS, v) ? v : undefined),
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
+  routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
   routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
 };
