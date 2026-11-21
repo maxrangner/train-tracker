@@ -31,10 +31,15 @@ export const MAP = {
 export const PAGE = {
   light: { page: '#f7f3ec', card: '#ffffff', ink: '#2f2a24', muted: '#776f63', line: '#efe9e0', hover: '#f6f2ec', problem: '#c23a33',
     label: '#2f2a24', halo: '#ffffff', station: '#5b5348', shadow: '0 10px 30px rgba(80, 60, 30, 0.13), 0 2px 6px rgba(80, 60, 30, 0.06)',
-    shadowSmall: '0 2px 8px rgba(80, 60, 30, 0.14)' },
+    shadowSmall: '0 2px 8px rgba(80, 60, 30, 0.14)', pillBg: '#2f2a24', pillInk: '#ffffff' },
   dark: { page: '#1d2130', card: '#272c3c', ink: '#f1f2f7', muted: '#9aa1b5', line: '#343a4d', hover: '#2f3547', problem: '#ff9c94',
-    label: '#ffffff', halo: '#1d2130', station: '#c3c9d8', shadow: '0 10px 30px rgba(0, 0, 0, 0.35)', shadowSmall: '0 2px 8px rgba(0, 0, 0, 0.4)' },
+    label: '#ffffff', halo: '#1d2130', station: '#c3c9d8', shadow: '0 10px 30px rgba(0, 0, 0, 0.35)', shadowSmall: '0 2px 8px rgba(0, 0, 0, 0.4)',
+    pillBg: '#e8ecf2', pillInk: '#151a22' },
 };
+// pillBg, pillInk: the open train's station names in "contrast" pills (Max, 2026-11-21: option C), the other way from
+// the trains' labels (those are in the card's colour): light on the dark map, dark on the light.
+// The smaller stations' names at middle zoom (Max, 2026-11-21, option c C: small and grey; src/big-stations.json).
+export const STATION_SMALL = { light: '#a39a8e', dark: '#7f879b' };
 
 // The accent colour (Settings → Accent colour, Max 2026-11-15): buttons, the chosen train's route ("done": the part
 // it has travelled), the "N trains" labels, the timeline's "now". c: the colour; ink: text on it. Only colours that
@@ -84,10 +89,12 @@ export function cssVars(dark, accent) {
   return {
     '--page': P.page, '--bg': P.card, '--card': P.card, '--ink': P.ink, '--muted': P.muted, '--line': P.line, '--hover': P.hover,
     '--late': P.problem, '--label': P.label, '--label-halo': P.halo, '--station': P.station, '--shadow': P.shadow, '--shadow-s': P.shadowSmall,
+    '--pill-bg': P.pillBg, '--pill-ink': P.pillInk,
     '--accent': A.c, '--accent-ink': A.ink, '--accent-done': A.done, '--group': A.c,
     '--c-ontime': L.ontime, '--c-some': L.some, '--c-late': L.late, '--c-unknown': L.unknown,
     '--t-ontime-bg': T.ontime[0], '--t-ontime': T.ontime[1], '--t-some-bg': T.some[0], '--t-some': T.some[1],
     '--t-late-bg': T.late[0], '--t-late': T.late[1], '--t-unknown-bg': T.unknown[0], '--t-unknown': T.unknown[1],
+    '--station-small': STATION_SMALL[th],
     '--dis-1': DISRUPTION[th][0], '--dis-2': DISRUPTION[th][1], '--dis-3': DISRUPTION[th][2],
   };
 }

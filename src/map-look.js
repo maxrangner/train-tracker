@@ -23,6 +23,9 @@ export const LOOK = {
   },
 };
 
+// The base map's city and town names close in (zoom 11 and in): this strong (1 = as further out).
+const PLACES_CLOSE = 0.35;
+
 // Recolour the base map's layers for the light or dark look. Called after the base style has loaded, before our own
 // layers are added (the sea-coloured cover outside Sweden takes the water colour from here).
 export function restyleBase(map, dark) {
@@ -60,6 +63,9 @@ export function restyleBase(map, dark) {
           (R.places === 'cities' && /city|capital/.test(id));
         show(id, keep);
         if (keep) { set(id, 'text-color', R.text); set(id, 'text-halo-color', R.halo); }
+        // Faint close in (Max, 2026-11-21, option C: "SOLNA" in grey capitals sat under our "Solna"): from zoom 11,
+        // where our station names start, a third as strong; further out as before.
+        if (keep && /city|town/.test(id)) set(id, 'text-opacity', ['interpolate', ['linear'], ['zoom'], 10.5, 1, 11, PLACES_CLOSE]);
       } else if (sl === 'water_name') {
         show(id, Boolean(R.waterText));
         if (R.waterText) { set(id, 'text-color', R.waterText); set(id, 'text-halo-color', R.water); }
