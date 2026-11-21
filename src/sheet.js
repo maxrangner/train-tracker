@@ -62,7 +62,15 @@ export function glide(el, change, { from = el.getBoundingClientRect().height, se
   el.classList.remove('dragging');
   settle?.();
   el.style.height = `${to}px`;
-  el.glideTimer = setTimeout(() => { el.style.height = ''; el.style.maxHeight = ''; }, GLIDE_MS);
+  // Let go at the end without a transition: the sheet's max-height has one, so clearing the glide's (larger) limit
+  // ran a second glide from it, and a card taller than its compact limit glided down twice (Max, 2026-11-21: the
+  // station card "bounces twice" when its messages fold; measured: 78 → 468, back to 78, → 468 again).
+  el.glideTimer = setTimeout(() => {
+    el.style.transition = 'none';
+    el.style.height = ''; el.style.maxHeight = '';
+    el.getBoundingClientRect();
+    el.style.transition = '';
+  }, GLIDE_MS);
 }
 
 export function initSheets(els) {
