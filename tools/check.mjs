@@ -9,7 +9,7 @@
 // by tools/lib/deps.mjs from the imports, plus the data it uses) and is skipped when none of it has changed since it
 // last passed (data/.check-stamps.json, shared by every working folder through the data link); a skipped check is
 // named. The checks run two at a time (the CPU rule: at most 2 heavy jobs), the longest first; one that only waits
-// (the file formats) runs beside them. Each check's output is printed when it ends; the times close the run.
+// (the file formats) runs beside them; one measuring smoothness (the splash) runs alone at the end. Each check's output is printed when it ends; the times close the run.
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -98,11 +98,12 @@ const times = [];       // [name, seconds]
 const skipped = [];     // [name, when it last passed]
 const failures = [];
 // A check: its name, the files it reads (null: always run, for checks of a second or ones asking online), and run()
-// -> true when it passed (it prints its own lines). wait: it only waits (runs beside the two, not in their place).
-function check(name, files, run, { wait = false, order = 0 } = {}) {
+// -> true when it passed (it prints its own lines). wait: it only waits (runs beside the two, not in their place);
+// alone: it measures smoothness, so it runs after the others, with nothing beside it.
+function check(name, files, run, { wait = false, order = 0, alone = false } = {}) {
   const stamp = files ? stampOf(files, name) : null;
   if (!ALL && stamp && stamps[name]?.stamp === stamp) { skipped.push([name, stamps[name].when]); return null; }
-  return { name, wait, order, go: async () => {
+  return { name, wait, order, alone, go: async () => {
     const t = Date.now();
     let ok = false;
     try { ok = await run(); } catch (e) { console.log(`FAIL ${name}: ${e.message}`); }
@@ -283,7 +284,7 @@ const SCREENS = [
   ['scrollbars', 'tools/scroll-check.mjs', 55],          // room for the scrollbar in every scrolling area
   ['live pill', 'tools/pill-check.mjs', 13],             // every state one short line, both languages
   ['screens 1120', 'tools/screens-check.mjs', 65],       // Max's notes of 2026-11-20
-  ['splash', 'tools/splash-check.mjs', 30],              // the start screen's logo on its own thread
+  ['splash', 'tools/splash-check.mjs', 30, true],        // the start screen's logo on its own thread (alone: frame times; 2026-11-21 beside another check its longest pause hit the 80 ms limit)
   ['animations', 'tools/ui-motion-check.mjs', 53],       // buttons, numbers, rows, signs, the menu
 ];
 const screenJobs = [];
@@ -291,7 +292,7 @@ if (!pageUp) {
   console.log(`note the screens not checked: no page answering at ${PAGE} (start npm run dev)`);
   if (process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them'); failed++; }
 } else {
-  for (const [name, file, order] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order }));
+  for (const [name, file, order, alone] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order, alone }));
   // The same screens on the page reading the fetcher's files (public-plan step 3) on a fetcher of their own, 75 s
   // into its replay, as the old check had it: later in that replay the test can fail by itself (2026-11-21: at about
   // 7 min a tap on 2513 opens Stockholm C's board; TODO B), so the moment is kept fixed. Its wait holds one of the two.
@@ -308,11 +309,14 @@ for (const j of screenJobs) add(j);
 
 // ---------- go ----------
 if (formatJob) await startFetcher();
-const queue = jobs.filter(j => !j.wait).sort((a, b) => b.order - a.order);
+const queue = jobs.filter(j => !j.wait && !j.alone).sort((a, b) => b.order - a.order), alone = jobs.filter(j => j.alone);
 console.log(`checking: ${queue.length + (formatJob ? 1 : 0)} checks, ${AT_ONCE} at a time${skipped.length ? `; skipped, nothing they read has changed since they passed: ${skipped.map(([n]) => n).join(', ')}` : ''}${ALL ? ' (all: --full or a release)' : ''}`);
 await Promise.all([
   formatJob?.go(),
-  ...Array.from({ length: AT_ONCE }, async () => { while (queue.length) await queue.shift().go(); }),
+  (async () => {
+    await Promise.all(Array.from({ length: AT_ONCE }, async () => { while (queue.length) await queue.shift().go(); }));
+    for (const j of alone) await j.go();
+  })(),
 ]);
 fetcher?.kill();
 
