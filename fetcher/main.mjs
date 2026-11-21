@@ -241,21 +241,21 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
 // since the oldest of them, so a tap is at most ~30 s behind Trafikverket. The index every 10 minutes, the station
 // messages every 2 minutes. A replay uses its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37:
 // the format check on this computer then sees the tap files of the code about to be released; no station messages).
-const groupAt = {};   // card-NN / board-NN -> when its file in use was made
+const groupAt = {};   // card-NN / board-NN / day-NN -> when its file in use was made
 const timetable = replayName
   ? createTimetable({ log, seed: { days: [...new Set((replayTimetable ?? []).map(a => (a.ScheduledDepartureDateTime ?? '').slice(0, 10)))], rows: replayTimetable ?? [] } })
   : KEY ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
 if (timetable) {
   stops.push(() => timetable.stop());
-  const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`]);
+  const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`, `day-${g}`]);
   every('tap files', 30000, 30000, () => {
     if (!timetable.ready()) return;
     const t = Date.now();
     const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
-      : ['card', 'board'].map(w => GROUP_KINDS.filter(k => k.startsWith(w)).sort((a, b) => groupAt[a] - groupAt[b])[0]);
+      : ['card', 'board', 'day'].map(w => GROUP_KINDS.filter(k => k.startsWith(w)).sort((a, b) => groupAt[a] - groupAt[b])[0]);
     for (const k of due) {
       const [what, g] = k.split('-');
-      shelf.put(k, t, { v: FORMAT, ...(what === 'card' ? timetable.card(g, t) : timetable.board(g, t)) });
+      shelf.put(k, t, { v: FORMAT, ...timetable[what](g, t) });
       groupAt[k] = t;
     }
     const oldest = Math.min(...Object.values(groupAt));

@@ -52,7 +52,7 @@ function paths(v, at, out, seen) {
   }
   add(typeof v);
 }
-const kindOf = name => name.replace(/-\d+\.json$/, '').replace(/^(card|board)-\d\d$/, '$1');
+const kindOf = name => name.replace(/-\d+\.json$/, '').replace(/^(card|board|day)-\d\d$/, '$1');
 
 // The newest live file and the files it names.
 // One file; a refusal or a slow answer is tried twice more (one.com answers some quick runs of requests slowly).

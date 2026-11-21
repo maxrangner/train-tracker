@@ -18,7 +18,7 @@ import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
 import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -345,6 +345,7 @@ function showPicker(list) {
 // ---- A station's board (where the train panel opens; one of them at a time) ----
 const board = createBoard(document.getElementById('board'), {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
+  loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   isStarred: sig => favourites.has('station', sig),
