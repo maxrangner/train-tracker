@@ -441,6 +441,21 @@
     .fresh { animation: fresh-in .3s ease-out; }
     @keyframes fresh-in { from { opacity: 0; } }
     .cd-done.moving, .cd-train.moving { transition: width .7s cubic-bezier(.2, .9, .25, 1), left .7s cubic-bezier(.2, .9, .25, 1); }
+    /* Compact ↔ full (Max, 2026-11-21: on a slow drag the trip line "quickly disappears and the i and star button
+       appears ... Should be animated and smooth"): dragged up, the compact card's own parts fade with the finger
+       (--fold, src/sheet.js); then the parts that come into view fade in, "i" and the star grow in (.switching,
+       src/panel.js). The same with the handle, "All stops" / "Less" and back down. */
+    #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: calc(1 - var(--fold, 0)); transition: opacity .2s; }
+    #panel.dragging:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
+    #panel.switching.full :is(.tv-box, .panel-table, .panel-info-box, .panel-more),
+    #panel.switching:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { animation: part-in .22s ease-out backwards; }
+    #panel.switching.full :is(.panel-star, .panel-info) { animation: part-pop .26s cubic-bezier(.2, .9, .25, 1) backwards; }
+    @keyframes part-in { from { opacity: 0; } }
+    @keyframes part-pop { from { opacity: 0; scale: .5; } }
+    @media (prefers-reduced-motion: reduce) {
+      #panel.switching :is(.cd-trip, .panel-alert, .panel-more, .tv-box, .panel-table, .panel-info-box, .panel-star, .panel-info) { animation: none; }
+      #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       .fresh { animation: none; }
       button, button:active { transition: none; scale: none; }
@@ -655,17 +670,17 @@
     .ti-km { font-size: 28px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
     .ti-km small { font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 4px; letter-spacing: 0; }
     .ti-of { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-    .ti-route { fill: none; stroke: var(--line); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
-    .ti-route.done { stroke: var(--accent); }
+    /* the trip: the line coloured by the track's speed, the rail network faint beneath */
+    .ti-bg { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+    .ti-route, .ti-route-case { fill: none; stroke-linejoin: round; }
+    .ti-route { stroke: var(--line); stroke-width: 4.5; }
+    .ti-route-case { stroke: var(--hover); stroke-width: 9; stroke-linecap: round; }
     .ti-stop { fill: var(--bg); stroke: var(--muted); stroke-width: 2; }
     .ti-stop.done { fill: var(--accent); stroke: var(--hover); }
     .ti-sec .ti-stop-t { font-size: 12px; font-weight: 500; }
     .ti-sec .ti-stop-t.next { fill: var(--ink); font-weight: 700; }
     .ti-train { fill: var(--accent); stroke: var(--hover); stroke-width: 3; }
     .ti-train-ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0.45; }
-    .ti-strip-none { fill: var(--line); }
-    .ti-strip-left { fill: var(--hover); fill-opacity: 0.55; }
-    .ti-strip-at { fill: var(--ink); }
     .ti-next { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 14px; }
     .ti-next b { font-weight: 650; }
     .ti-m { color: var(--muted); }

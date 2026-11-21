@@ -386,10 +386,16 @@ function openTrain(id, { go = false } = {}) {
   const r = id && trains.get(id);
   if (!r) return false;
   buzz();
-  if (panel.openId === id && panel.hidden && !go) {   // its card put away by a screen (openPage, 'follow'): back
-    panel.show();
+  // Already open: the card stays as it is, the camera follows the train again (Max, 2026-11-21: a tap on the selected
+  // train "reloads the card and flickers it once"); its card put away by a screen (openPage, 'follow'): back.
+  if (panel.openId === id) {
+    if (panel.hidden) panel.show();
+    else { board.close(); pickerEl.hidden = true; disruptionEl.hidden = true; }
     raise('panel');
-    follow(id);
+    panel.setFollowing(true);
+    const following = follow(id);
+    const p = go && placeNow(id);
+    if (p) following.then(() => map.goTo(p, 13, true));
     return true;
   }
   board.close();
