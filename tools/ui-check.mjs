@@ -148,11 +148,17 @@ try {
   // Trafikverket gives out a day's timetable only for a few days: the 12 Nov recording's routes were there on 15 Nov,
   // gone on 16 Nov (every train "no stops"). Since 2026-11-17 the replay brings its own (CARD_HOUR's routes file); in
   // the files run, or without that file, the card's parts can't be checked: said so, not failed.
-  await sleep(2000);   // the route
-  // Since plan step 4 (2026-11-17) the files run's taps come from the fetcher's tap files, which a replaying fetcher
-  // doesn't make (no timetable): the card says so (an error state), checked live by tools/taps-check.mjs instead.
+  // The route: until the card has its stops ("All stops") or says it has none, at most 10 s (2026-11-21: a fixed 2 s
+  // was too short at times from the fetcher's tap files, slower beside another check: "No element found: .panel-more").
+  for (let t = 0; t < 10000; t += 250) {
+    if (await page.evaluate(() => Boolean(document.querySelector('#panel .panel-more, #panel .state.empty, #panel .state.error')))) break;
+    await sleep(250);
+  }
+  await sleep(300);
+  // Since plan step 4 (2026-11-17) the files run's taps come from the fetcher's tap files; a replaying fetcher makes
+  // them from the recording's timetable since TODO 37 (2026-11-19). A train they don't hold: said so, not failed.
   const noRoute = head && await page.evaluate(() => Boolean(document.querySelector('#panel .state.empty, #panel .state.error')) && !document.querySelector('#panel .tile'));
-  if (noRoute) cardNote = filesAt ? ' (card parts not checked: a replaying fetcher makes no tap files; tools/taps-check.mjs checks them live)'
+  if (noRoute) cardNote = filesAt ? ' (card parts not checked: the fetcher\'s tap files had no stops for this train)'
     : ' (card parts not checked: the replay\'s day is no longer at Trafikverket)';
   if (head && !noRoute) {
     const card = () => page.evaluate(() => {
