@@ -324,4 +324,7 @@ if (ui.status !== 2) splashRun = spawnSync('node', ['tools/splash-check.mjs'], {
 // The small animations: buttons, numbers, rows, the lateness, signs, the menu (Max's picks, 2026-11-20).
 let motionRun = { status: 0 };
 if (ui.status !== 2) motionRun = spawnSync('node', ['tools/ui-motion-check.mjs'], { stdio: 'inherit' });
-process.exit(failed || motionRun.status === 1 || splashRun.status === 1 || screens.status === 1 || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
+// Max's notes of 2026-11-21 (second batch): Statistik's loading, dimming and company pages, the board's search (live).
+let statsBoard = { status: 0 };
+if (ui.status !== 2) statsBoard = spawnSync('node', ['tools/stats-board-check.mjs'], { stdio: 'inherit' });
+process.exit(failed || statsBoard.status === 1 || motionRun.status === 1 || splashRun.status === 1 || screens.status === 1 || scroll.status === 1 || pill.status === 1 || ui.status === 1 || filesUi.status === 1 || abroad.status === 1 || debug.status === 1 || group.status === 1 || dis.status === 1 ? 1 : 0);
