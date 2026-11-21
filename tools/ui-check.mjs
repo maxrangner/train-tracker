@@ -114,7 +114,13 @@ try {
   await page.evaluate(() => { window.__samePage = true; });
 
   // ---- A tap on a train opens its card ----
-  const tapped = await page.evaluate(() => {
+  // Up to 3 tries (2026-11-21): the map answers a tap from the picture it last drew; on a busy computer (another check
+  // beside this one) and with the files' 5-s batches that can lag the train, so a tap opened its neighbour or nothing
+  // (2 of 4 runs). A wrong one is closed and a train picked again; all 3 wrong fails as before.
+  let tapped = null, head = null;
+  for (let tries = 0; tries < 3; tries++) {
+  if (tries) { await page.keyboard.press('Escape'); await sleep(600); }
+  tapped = await page.evaluate(() => {
     const m = window.__map, c = m.project(m.getCenter());
     const d = f => { const q = m.project(f.geometry.coordinates); return Math.hypot(q.x - c.x, q.y - c.y); };
     // trains with a label of their own: further out the map's, close in page elements (src/map.js placeNearLabels)
@@ -138,10 +144,12 @@ try {
     return String(window.__trains.get(f.properties.id).number);
   });
   await sleep(1500);
-  const head = await page.evaluate(() => (!document.getElementById('panel').hidden ? document.querySelector('#panel .panel-head strong')?.textContent
+  head = await page.evaluate(() => (!document.getElementById('panel').hidden ? document.querySelector('#panel .panel-head strong')?.textContent
     : !document.getElementById('picker').hidden ? `the group list: ${document.querySelector('#picker strong')?.textContent}`
     : !document.getElementById('board').hidden ? `the board of ${document.querySelector('#board strong, #board h2')?.textContent}` : null));
-  expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'}`);
+  if (!tapped || head?.startsWith(tapped)) break;
+  }
+  expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'} (3 tries)`);
 
   // ---- The compact card (2026-11-15): two tiles; the stop tile lists the stops ahead and counts down to the one
   // picked; "All stops" opens it full; no × on a phone; Settings → Train card: Expanded opens it full ----
@@ -188,7 +196,9 @@ try {
         expect(c.stop.includes(picked) && c.rows.length === 0, `picking ${picked}: the tile says "${c.stop}"`);
       }
     } else expect(/Arrived/.test(c.stop), `the stop tile isn't a button and says "${c.stop}"`);
-    await page.click('#panel .panel-more');
+    // Said as a problem, not a crash, when the card is gone by then (2026-11-21).
+    const more = await page.evaluate(() => { const b = document.querySelector('#panel .panel-more'); b?.click(); return Boolean(b); });
+    expect(more, `the card of ${tapped} had no "All stops" by then (panel ${await page.evaluate(() => (document.getElementById('panel').hidden ? 'closed' : 'open'))})`);
     await sleep(500);
     c = await card();
     expect(c.full && c.timeline > 0, '"More" did not open the full card with its timeline');
