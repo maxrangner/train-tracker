@@ -200,6 +200,22 @@ try {
     await sleep(400);
     c = await card();
     expect(c.timeline > 0, '"i" again did not bring the stops back');
+    // "All places" (src/places-ahead.js; Max, 2026-11-21): the places between the stops come in, and go again.
+    const placeRows = () => page.evaluate(() => {
+      const t = document.querySelector('#panel .panel-table');
+      return { on: document.querySelector('#panel .tl-switch-btn')?.getAttribute('aria-checked'), places: t?.querySelectorAll('.tl-row.place').length ?? -1,
+        stops: t?.querySelectorAll('.tl-row:not(.place)').length ?? -1, wide: t ? t.scrollWidth - t.clientWidth : -1 };
+    });
+    const off = await placeRows();
+    await page.evaluate(() => document.querySelector('#panel .tl-switch-btn')?.click());
+    await sleep(1500);
+    const on = await placeRows();
+    expect(off.on === 'false' && on.on === 'true' && off.places === 0, `"All places": the switch went ${off.on} -> ${on.on} (${off.places} places while off)`);
+    expect(on.stops === off.stops && on.wide <= 1, `"All places" changed the stops (${off.stops} -> ${on.stops}) or is ${on.wide} px wider than the card`);
+    console.log(`  "All places": ${on.places} places between ${on.stops} stops`);
+    await page.evaluate(() => document.querySelector('#panel .tl-switch-btn')?.click());
+    await sleep(400);
+    expect((await placeRows()).places === 0, '"All places" off again left places in the list');
   }
   await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
   await sleep(500);

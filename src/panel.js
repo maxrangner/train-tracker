@@ -4,6 +4,8 @@
 // it full (class "full", src/sheet.js): the star, Trafikverket's notes and the timeline of every stop. On the full card
 // "i" next to the star (class "info"; Max, 2026-11-20) swaps the notes and the stops for the train's own numbers
 // (src/train-info.js, drawn by options.info each second while shown); "i" again brings the stops back.
+// "All places" above the stops on the full card (Max, 2026-11-21, sketch C) puts every place the train passes without
+// stopping between them (options.places, src/places-ahead.js): passed with Trafikverket's times, ahead names only.
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
@@ -30,6 +32,11 @@ const NOTES_KEY = 'notesShown';
 let notesOpen = false;
 try { notesOpen = localStorage.getItem(NOTES_KEY) === 'true'; } catch { /* storage blocked: folded */ }
 const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
+// "All places" (the switch above the stops), remembered on this device like the notes' fold.
+const PLACES_KEY = 'allPlaces';
+let placesOn = false;
+try { placesOn = localStorage.getItem(PLACES_KEY) === 'true'; } catch { /* storage blocked: off */ }
+const rememberPlaces = on => { try { localStorage.setItem(PLACES_KEY, String(on)); } catch { /* used now, not remembered */ } };
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
 const notesBox = (lines, problems) => (notesOpen
   ? `<div class="tv-box open"><button type="button" class="tv-toggle tv-fold" aria-expanded="true" aria-label="${t('foldNotes')}">${icon('chevronUp', 15)}</button>` +
@@ -82,7 +89,8 @@ function routeLate(stops) {
 const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces,
   (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
 
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info }) {
+// places(id, route, stops): the places passed without stopping between the card's stops (src/places-ahead.js tripPlaces).
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -432,6 +440,35 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // The trip as a timeline (the Soft look, 2026-11-15): the planned time with the minutes off under it (in their
     // colour; "est." while only expected), a dot on a line (passed: ✓; next: a ring), the station (arrival under it
     // when the train stands a while), its track; "Now · next stop X" where the train is.
+    // "All places": the places between the stops, in soft boxes (one per run of passed or ahead places), a small dot on
+    // the line beside each; passed ones with the planned time and the minutes off, ahead ones (worked out from the
+    // route: Trafikverket lists them only once passed) the name only. The train's line goes between the two.
+    const between = placesOn && places ? places(openId, route, stops) : null;
+    const nowLine = `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>`;
+    const placeRows = (list, withNow) => {
+      const parts = [];
+      let run = [];
+      const flush = () => {
+        run.forEach((p, k) => {
+          const r = p.row, m = r?.actual && r.planned ? Math.round((r.actual - r.planned) / 60000) : null;
+          const edge = (k === 0 ? ' first' : '') + (k === run.length - 1 ? ' last' : '');
+          parts.push(`<div class="tl-row place ${p.passed ? 'passed' : 'ahead'}${edge}"><span class="tl-time"></span>` +
+            `<span class="tl-node"><span class="tl-dot"></span></span><span class="tl-pbox">` +
+            (p.passed ? `<b>${r?.actual ? time(r.planned) : ''}</b>` : '') + `<span>${esc(stationName(p.sig))}</span>` +
+            (p.passed ? (m ? `<small class="m ${lateClass(m)}">${m > 0 ? '+' : '−'}${Math.abs(m)}</small>` : '<small></small>') : '') + `</span></div>`);
+        });
+        run = [];
+      };
+      let nowDone = !withNow;
+      for (const p of list) {
+        if (!p.passed && !nowDone) { flush(); parts.push(nowLine); nowDone = true; }
+        if (run.length && run[0].passed !== p.passed) flush();
+        run.push(p);
+      }
+      flush();
+      if (!nowDone) parts.push(nowLine);
+      return parts.join('');
+    };
     const rows = stops.map((s, i) => {
       const a = s.arr, d = s.dep;
       const main = d ?? a;
@@ -449,11 +486,11 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         : state === 'passed' ? `<span class="tl-dot">${icon('check', 13, 3)}</span>` : '<span class="tl-dot"></span>';
       // Where the train is: the minutes to the next stop (or till it leaves the one it stands at), each second
       // (showGlance; Max, 2026-11-15: "Nu · nästa station X" said nothing new).
-      const now = i === nextIdx && i > 0
-        ? `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>` : '';
+      const now = i === nextIdx && i > 0 && !between ? nowLine : '';
       return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
         `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}</span>` +
-        `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>`;
+        `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>` +
+        (between ? placeRows(between[i], i === nextIdx - 1 && nextIdx > 0) : '');
     }).join('');
     // A trip that goes on abroad, or comes from there (src/abroad.js): one more row for that end, after the last stop
     // (before the first), the line to it broken by two cuts (Max's pick from the sketch, 2026-11-18: "B", the cuts
@@ -507,6 +544,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
+          (places ? `<div class="tl-switch"><span>${t('allPlaces')}<small>${t('allPlacesSub')}</small></span>` +
+            `<button type="button" class="tl-switch-btn" role="switch" aria-checked="${placesOn}" aria-label="${t('allPlaces')}"></button></div>` : '') +
           `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>` +
           (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
@@ -515,6 +554,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (more) more.onclick = () => glide(el, () => el.classList.toggle('full'));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
+    const sw = el.querySelector('.tl-switch-btn');
+    if (sw) sw.onclick = () => { placesOn = !placesOn; rememberPlaces(placesOn); draw(train, route); };
     showGlance();
     drawInfo();
     if (infoScrolled) el.querySelector('.panel-info-box').scrollTop = infoScrolled;
@@ -540,6 +581,11 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (full && !wasFull) requestAnimationFrame(() => { if (infoOn) drawInfo(); else { toNext(); rowsIn(); } });
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });
+
+  // The open train's route is drawn (main.js): with "All places" on, the places worked out from it come in.
+  function placesReady(id) {
+    if (placesOn && id === openId && shown?.route && shown.train?.id === openId) draw(shown.train, shown.route);
+  }
 
   // Draw it again as it is (Settings → Language changed): no new request, the map stays as it is.
   function relabel() {
@@ -569,5 +615,5 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // and shown again; it stays up to date meanwhile.
   const hide = () => { el.hidden = true; };
   const show = () => { if (openId) el.hidden = false; };
-  return { open, close, hide, show, setFollowing, setStatus, relabel, wake, reroute, get openId() { return openId; }, get hidden() { return el.hidden; } };
+  return { open, close, hide, show, setFollowing, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }

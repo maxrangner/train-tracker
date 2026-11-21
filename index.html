@@ -496,6 +496,7 @@
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
     /* "i" (src/train-info.js; Max, 2026-11-20): on the full card, the train's own numbers instead of the notes and stops. */
     #panel:not(.full) .panel-info, #panel:not(.full) .panel-info-box, #panel:not(.info) .panel-info-box, #panel.info .tv-box, #panel.info .panel-table { display: none; }
+    #panel:not(.full) .tl-switch, #panel.info .tl-switch { display: none; }
     .panel-info[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
     /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
@@ -587,6 +588,17 @@
     .tv-box.open { position: relative; }
     .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
     .tv-fold { position: absolute; top: 0; right: -6px; width: 34px; height: 30px; padding: 0; justify-content: center; }
+    /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
+    .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
+      background: var(--hover); border-radius: 14px; font-weight: 650; }
+    .tl-switch small { display: block; color: var(--muted); font-weight: 500; font-size: 12.5px; }
+    .tl-switch-btn { position: relative; flex: none; width: 50px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: var(--line); cursor: pointer; }
+    .tl-switch-btn::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--bg);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform .18s; }
+    .tl-switch-btn[aria-checked="true"] { background: var(--accent); }
+    .tl-switch-btn[aria-checked="true"]::after { transform: translateX(20px); }
+    .tl-switch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { .tl-switch-btn::after { transition: none; } }
     .tv-warn { display: inline-flex; align-items: center; gap: 3px; color: var(--late); font-weight: 700; }
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
@@ -703,6 +715,19 @@
     .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
       background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
     .tl-now { min-height: 40px; color: var(--accent); font-weight: 700; font-size: 13.5px; }
+    /* The places between the stops ("All places"): soft boxes beside the line, a small dot on the line for each. */
+    .tl-row.place { min-height: 0; }
+    .tl-pbox { grid-column: 3 / -1; align-self: stretch; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 8px; align-items: center;
+      background: var(--hover); padding: 1px 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+    .tl-pbox b { font-weight: 600; }
+    .tl-pbox span { min-width: 0; overflow-wrap: anywhere; }
+    .tl-pbox small { font-weight: 700; font-size: 12px; }
+    .tl-row.place.ahead .tl-pbox { grid-template-columns: minmax(0, 1fr); }
+    .tl-row.place.first .tl-pbox { border-top-left-radius: 12px; border-top-right-radius: 12px; padding-top: 5px; margin-top: 3px; }
+    .tl-row.place.last .tl-pbox { border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; padding-bottom: 5px; margin-bottom: 3px; }
+    .tl-row.place.passed .tl-pbox { opacity: 0.8; }
+    .tl-row.place .tl-dot, .tl-row.place.passed .tl-dot { width: 6px; height: 6px; background: var(--muted); box-shadow: 0 0 0 2px var(--bg); }
+    .tl-row.place.passed .tl-dot { background: var(--accent); }
     .tl-now > span:last-child { grid-column: 3 / -1; }
     .tl-name { font-size: 15.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
     .tl-row.passed .tl-time, .tl-row.passed .tl-name, .tl-row.passed .tl-trk { opacity: 0.5; }
