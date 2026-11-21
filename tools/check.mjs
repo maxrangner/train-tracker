@@ -99,10 +99,10 @@ const skipped = [];     // [name, when it last passed]
 const failures = [];
 // A check: its name, the files it reads (null: always run, for checks of a second or ones asking online), and run()
 // -> true when it passed (it prints its own lines). wait: it only waits (runs beside the two, not in their place).
-function check(name, files, run, { wait = false, order = 0, readyAt = null } = {}) {
+function check(name, files, run, { wait = false, order = 0 } = {}) {
   const stamp = files ? stampOf(files, name) : null;
   if (!ALL && stamp && stamps[name]?.stamp === stamp) { skipped.push([name, stamps[name].when]); return null; }
-  return { name, wait, order, readyAt, go: async () => {
+  return { name, wait, order, go: async () => {
     const t = Date.now();
     let ok = false;
     try { ok = await run(); } catch (e) { console.log(`FAIL ${name}: ${e.message}`); }
@@ -248,14 +248,13 @@ add(check('linux-update-check', [...depsOf('tools/linux-update-check.mjs', 'tool
 // computer (started at once: some kinds are made only minutes in, arrivals-add after ~5), then format-check --strict
 // --wait (every kind made, readable, nothing removed or changed; with the key from .env it also asks stations,
 // disruptions, stats and arrivals; without it only types are checked) and the released readers reading today's
-// files (format-read-check, made-up rows). The same fetcher serves the screens on the fetcher's files below.
+// files (format-read-check, made-up rows).
 const HAS_KEY = existsSync('.env') && /^\s*(VITE_)?TRV_KEY\s*=\s*\S/m.test(readFileSync('.env', 'utf8'));
-let fetcher = null, fetcherAt = 0, fetcherPort = 0;
+let fetcher = null, fetcherPort = 0;
 const startFetcher = async () => {
   if (fetcher) return;
   fetcherPort = await freePort();
   fetcher = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(fetcherPort), '--minutes', '60'], { stdio: 'ignore' });
-  fetcherAt = Date.now();
 };
 const FORMAT_FILES = [...FETCHER_FILES, ...depsOf('tools/format-check.mjs', 'tools/format-read-check.mjs'), 'tools/file-formats.json', '.env'];
 const formatJob = check('file formats', FORMAT_FILES, async () => {
@@ -293,28 +292,27 @@ if (!pageUp) {
   if (process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them'); failed++; }
 } else {
   for (const [name, file, order] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order }));
-  // The same screens on the page reading the fetcher's files (public-plan step 3), a minute into the fetcher's replay.
+  // The same screens on the page reading the fetcher's files (public-plan step 3) on a fetcher of their own, 75 s
+  // into its replay, as the old check had it: later in that replay the test can fail by itself (2026-11-21: at about
+  // 7 min a tap on 2513 opens Stockholm C's board; TODO B), so the moment is kept fixed. Its wait holds one of the two.
   screenJobs.push(check('screens on files', [...PAGE_FILES, ...FETCHER_FILES, ...depsOf('tools/ui-check.mjs')], async () => {
-    const left = 75000 - (Date.now() - fetcherAt);
-    if (left > 0) await new Promise(r => setTimeout(r, left));
-    return plain(['tools/ui-check.mjs', '--files', `http://localhost:${fetcherPort}/`])();
-  }, { order: 1000, readyAt: () => fetcherAt + 75000 }));   // as soon as the fetcher is 75 s in, as the old check had it (later in its replay the card can differ)
+    const port = await freePort();
+    const own = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(port), '--minutes', '8'], { stdio: 'ignore' });
+    try {
+      await new Promise(r => setTimeout(r, 75000));
+      return await plain(['tools/ui-check.mjs', '--files', `http://localhost:${port}/`])();
+    } finally { own.kill(); }
+  }, { order: 1000 }));   // first: its minute of waiting overlaps the replays' start
 }
 for (const j of screenJobs) add(j);
 
 // ---------- go ----------
-if (formatJob || jobs.some(j => j.name === 'screens on files')) await startFetcher();
+if (formatJob) await startFetcher();
 const queue = jobs.filter(j => !j.wait).sort((a, b) => b.order - a.order);
 console.log(`checking: ${queue.length + (formatJob ? 1 : 0)} checks, ${AT_ONCE} at a time${skipped.length ? `; skipped, nothing they read has changed since they passed: ${skipped.map(([n]) => n).join(', ')}` : ''}${ALL ? ' (all: --full or a release)' : ''}`);
 await Promise.all([
   formatJob?.go(),
-  // Each of the two takes the longest check left that is ready (one waiting for its fetcher is passed over until then).
-  ...Array.from({ length: AT_ONCE }, async () => {
-    while (queue.length) {
-      const i = queue.findIndex(j => !j.readyAt || Date.now() >= j.readyAt());
-      await queue.splice(i < 0 ? 0 : i, 1)[0].go();
-    }
-  }),
+  ...Array.from({ length: AT_ONCE }, async () => { while (queue.length) await queue.shift().go(); }),
 ]);
 fetcher?.kill();
 
