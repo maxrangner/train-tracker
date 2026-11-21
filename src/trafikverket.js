@@ -2,6 +2,7 @@
 // Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
 // version, so the page and the fetcher ask Trafikverket the same things.
 import { joinPieces, tripsOf, NUMBER_FIELDS } from './trip.js';
+import { swedishDay } from './clock.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 // In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
@@ -290,13 +291,18 @@ export async function fetchCancelledToday(day) {
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
     `<FILTER><EQ name="Canceled" value="true"/><EQ name="Advertised" value="true"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
-    `<INCLUDE>OperationalTrainNumber</INCLUDE></QUERY>`);
-  return new Set((r.TrainAnnouncement ?? []).map(a => a.OperationalTrainNumber)).size;
+    `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
+  // { count, byBrand: { company: trains } } (per company since 2026-11-21: Statistik's company page)
+  const brandOf = new Map();
+  for (const a of r.TrainAnnouncement ?? []) if (!brandOf.has(a.OperationalTrainNumber) || !brandOf.get(a.OperationalTrainNumber)) brandOf.set(a.OperationalTrainNumber, a.ProductInformation?.[0]?.Description ?? '');
+  const byBrand = {};
+  for (const b of brandOf.values()) byBrand[b] = (byBrand[b] ?? 0) + 1;
+  return { count: brandOf.size, byBrand };
 }
 
 // ---------- Today's arrivals (the stats page's graph) ----------
 
-// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual }],
+// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual, brand }],
 // id = train number + station (shorter than ActivityId, 36 characters). changedSince (ms): only rows changed after
 // it (ModifiedTime). Measured 2026-11-13 at 23:50: the whole day ~31,900 rows, 5.4 MB, ~285 kB as sent; changes over 10
 // minutes ~150 rows, 2.5 kB. Old rows are changed again too (an hour's changes reached back to 01:23).
@@ -307,11 +313,12 @@ export async function fetchDayArrivals(since, changedSince = null) {
     `<EQ name="Advertised" value="true"/><EQ name="ActivityType" value="Ankomst"/>` +
     (changedSince ? `<GT name="ModifiedTime" value="${new Date(changedSince).toISOString()}"/>` : '') + `</FILTER>` +
     `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>LocationSignature</INCLUDE>` +
-    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE></QUERY>`);
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
   const out = [];
   for (const a of r.TrainAnnouncement ?? []) {
     if (!a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
-    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation) });
+    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation),
+      brand: a.ProductInformation?.[0]?.Description ?? null });   // the company (Statistik's company page, 2026-11-21)
   }
   return out;
 }
@@ -432,6 +439,38 @@ export async function fetchBoard(sig, activity, at, n) {
   const out = rows.filter(x => !boardGone(x, at)).slice(0, n);
   out.asOf = r.asOf ?? null;   // from files: when they were made
   return out;
+}
+
+// A station's whole day (the search on its board; Max, 2026-11-21: "Search for all day, numbers, destinations"): every
+// advertised train there today in one direction, gone ones too, in the board's rows (gone: left or arrived, or
+// cancelled and its time passed). The question asks from 2 hours before Swedish midnight on (a day's length plus a
+// clock change), the day itself is cut here. Stockholm C's departures on a weekday: about 900 rows.
+export async function fetchStationDay(sig, activity, at) {
+  const day = swedishDay(at), from = Date.parse(`${day}T00:00:00Z`) - 2 * 3600000;
+  const r = await askTap('day', { sig, act: activity, at },
+    `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="4000">` +
+    `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
+    `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
+    `<GT name="AdvertisedTimeAtLocation" value="${new Date(from).toISOString()}"/>` +
+    `<LT name="AdvertisedTimeAtLocation" value="${new Date(from + 28 * 3600000).toISOString()}"/></FILTER>` +
+    `<INCLUDE>AdvertisedTrainIdent</INCLUDE><INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ScheduledDepartureDateTime</INCLUDE>` +
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>EstimatedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE>` +
+    `<INCLUDE>TrackAtLocation</INCLUDE><INCLUDE>Canceled</INCLUDE><INCLUDE>ProductInformation</INCLUDE>` +
+    `<INCLUDE>FromLocation</INCLUDE><INCLUDE>ToLocation</INCLUDE></QUERY>`);
+  const rows = (r.TrainAnnouncement ?? []).filter(a => a.ScheduledDepartureDateTime && swedishDay(Date.parse(a.AdvertisedTimeAtLocation)) === day).map(a => ({
+    key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
+    operational: a.OperationalTrainNumber, date: a.ScheduledDepartureDateTime.slice(0, 10), number: a.AdvertisedTrainIdent,
+    planned: Date.parse(a.AdvertisedTimeAtLocation),
+    estimated: a.EstimatedTimeAtLocation ? Date.parse(a.EstimatedTimeAtLocation) : null,
+    actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null,
+    track: a.TrackAtLocation ?? '', canceled: a.Canceled === true,
+    product: a.ProductInformation?.[0]?.Description ?? null,
+    from: a.FromLocation?.[0]?.LocationName ?? null, to: a.ToLocation?.[0]?.LocationName ?? null,
+  }));
+  for (const x of rows) x.gone = boardGone(x, at);
+  rows.asOf = r.asOf ?? null;
+  rows.partial = Boolean(r.partial);   // from files: the server made no day file yet (only the next trains)
+  return rows;
 }
 
 // ---------- A train number in today's timetable ----------

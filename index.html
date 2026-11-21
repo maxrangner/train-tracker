@@ -793,6 +793,21 @@
        the lateness tag, the track. */
     #board .panel-head strong { font-size: 26px; line-height: 1.1; }
     .board-tabs { align-self: flex-start; margin: 10px 0 6px; flex: none; }
+    /* The search beside the tabs (Max, 2026-11-21): the station's whole day, a number or a destination typed narrows it;
+       trains gone are dimmed. */
+    .board-tabrow { display: flex; align-items: center; gap: 10px; flex: none; }
+    .board-tabrow .board-tabs { margin: 10px 0 6px; }
+    .board-find { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; margin: 4px 0 0;
+      border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
+    .board-find[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+    .board-qrow { display: flex; flex: none; margin: 2px 0 8px; }
+    .board-q { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px;
+      background: var(--hover); color: var(--ink); }
+    .board-q:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+    .board-found { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+    #board.finding { height: 100vh; }   /* as tall as a full sheet may be (its max-height), from the start: no jump when the day comes */
+    .board-q::-webkit-search-cancel-button { display: none; }   /* (one × only: the button beside the tabs closes the search) */
+    .bd-row.gone { opacity: .5; }
     .bd-head { display: grid; grid-template-columns: 50px 1fr auto; column-gap: 10px; padding: 4px 10px 4px 0; font-size: 12px; font-weight: 600;
       color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
     .bd { display: grid; align-content: start; font-variant-numeric: tabular-nums; }

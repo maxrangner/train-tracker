@@ -19,7 +19,7 @@ import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
 import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -354,6 +354,7 @@ function showPicker(list) {
 // ---- A station's board (where the train panel opens; one of them at a time) ----
 const board = createBoard(document.getElementById('board'), {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
+  loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   isStarred: sig => favourites.has('station', sig),
@@ -748,12 +749,16 @@ const statsView = createStatsPage(statsBody, {
     return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
   },
   filter,
+  redraw: () => drawStats(true),
 });
+// statsView.company: a company's own page (only its trains), or null
 function drawStats(first = false) {
+  const brand = statsView.company;
   statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand }), { first });
 }
 function openStats() {
+  statsView.home();
   openPage(statsPage);
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
@@ -994,7 +999,8 @@ async function fileOf(kind) {
   if (!f) throw new Error(`no ${kind} file yet`);
   return f;
 }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => f.cancelled) : fetchCancelledToday(swedishDay(now())); }
+// { count, byBrand (null from a file made before 2026-11-21) }
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null })) : fetchCancelledToday(swedishDay(now())); }
 // Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
 async function filesArrivals(midnight, since) {
   const full = await fileOf('arrivals');
@@ -1002,7 +1008,7 @@ async function filesArrivals(midnight, since) {
   const day = swedishDay(now()), rows = [];
   if (full.day === day && (since === null || since < full.t)) rows.push(...full.rows);
   if (add && add.day === day && add.t >= full.t) rows.push(...add.rows);
-  return rows.map(([id, planned, actual]) => ({ id, planned, actual }));
+  return rows.map(([id, planned, actual, brand]) => ({ id, planned, actual, brand: brand ?? null }));   // (no company in files before 2026-11-21)
 }
 
 function gotStations(m) {
