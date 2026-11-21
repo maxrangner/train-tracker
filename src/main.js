@@ -613,7 +613,7 @@ function frame(ts) {
   const openId = panel.openId;
   const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
   if (due || !frameAll.length) {
-    frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+    frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
     frameTrains = filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
@@ -629,7 +629,7 @@ function frame(ts) {
     lastDraw = ts;
     const near = map.nearView(), features = [];
     for (const x of frameTrains) {
-      const r = near(x.lon, x.lat) && trains.get(x.id);
+      const r = near(x.lon, x.lat) && reportOf(x.id);
       if (r) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
         properties: { id: x.id, bearing: x.bearing, ...propsFor(r, x) } });
     }
@@ -637,7 +637,7 @@ function frame(ts) {
   }
   map.tick(ts);
   const sel = openId && frameById.get(openId);
-  const r = sel && trains.get(sel.id);
+  const r = sel && reportOf(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
   // How far along its route the open train is: at most 10 times a second (it took a fifth of the frame's time).
   // The open train's line follows its train (src/path-follow.js): checked FOLLOW_MS apart; the rare full re-route of
@@ -947,12 +947,27 @@ function onPassings(list) {
   routes.addPassings(list);
   trains.addPassings(list);
 }
+// Trains before the track file (TODO 24, Codex's beta review point 10; Max's go 2026-11-21, "1 a"): the feeds start
+// at once, beside the track file (650 kB packed: a few seconds on slow mobile data, when the map stayed empty). Until it
+// is in, each train is drawn standing at its latest report (its way, its lateness colour: earlyPlaced) and its reports
+// wait in `early`; when it is in (or failed: no network, as before) they go to the simulation in one batch and it
+// takes over. The movement itself is unchanged.
+let netIn = false;
+const early = [], earlyAt = new Map();   // reports before the track file; each train's latest of them
+const earlyPlaced = () => [...earlyAt.values()].map(r => ({ id: r.id, lon: r.lon, lat: r.lat, bearing: r.bearing ?? 0, syncing: false,
+  stale: false, v: 0, extra: 0 }));
+const reportOf = id => trains.get(id) ?? (netIn ? null : earlyAt.get(id) ?? null);
 const positionHandlers = {
   onRecords(records) {
     lastDataAt = now();
     conn.onBatch(records.length);
     stats.onRecords(records, now());
     speedLog.add(records, now());
+    if (!netIn) {
+      early.push(...records);
+      for (const r of records) if (r.gone) earlyAt.delete(r.id); else earlyAt.set(r.id, r);
+      return;
+    }
     if (trains.halted) trains.setHalted(false);
     trains.update(records, now());
   },
@@ -965,6 +980,12 @@ const positionHandlers = {
 };
 let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
+  netIn = true;
+  if (early.length) trains.update(early.splice(0), now());
+  earlyAt.clear();
+});
+// The feeds start at once (above: their reports wait for the track file).
+(function startFeeds() {
   // The public page: everything from the fetcher's files (positions, passings, planned routes, stations).
   if (fromFiles) {
     positionsFeed = startFilesSource(filesBase, { ...positionHandlers, onPassings, onPlanned: gotPlanned, onStations: gotStations,
@@ -978,7 +999,7 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
   if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
-});
+})();
 
 // Back from the background (another app, a locked phone, another tab) after BACK_MS or more: a phone froze the page,
 // so every train's data is as old as that. Each train is placed where it is now as soon as its next report comes
