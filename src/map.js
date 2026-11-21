@@ -12,7 +12,8 @@ import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
-import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
+import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
+import stationSizes from './big-stations.json';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -54,6 +55,9 @@ const colourBase = dark => (dark
       rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: null, disDash: true,   // dashed in light too (Max, 2026-11-17: "Make it dashed in both")
       casing: '#ffffff', stopFill: '#ffffff' });
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
+// The bigger stations (tools/station-sizes.mjs); further out than SMALL_UNTIL the others' names are small and grey.
+const BIG = new Set(stationSizes.big);
+const SMALL_UNTIL = 13;
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
@@ -666,6 +670,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // is above the map itself, so it stays on top.)
     // From the zoom where the trains' labels are page elements (placeNearLabels) the names are page elements too,
     // above those labels; this layer draws them further out.
+    // Up to SMALL_UNTIL the smaller stations' names are small and grey (Max, 2026-11-21, option c C), placed after the
+    // bigger ones'.
+    const small = ['==', ['get', 'small'], 1];
     map.addLayer({
       id: 'station-names',
       type: 'symbol',
@@ -675,12 +682,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         visibility: namesOnPage() ? 'none' : 'visible',   // page elements from there (switchModels)
         'text-field': ['get', 'name'],
         'text-font': ['Outfit Medium'],
-        'text-size': 14,
+        'text-size': ['step', ['zoom'], ['case', small, 11.5, 14], SMALL_UNTIL, 14],
         'text-offset': [0, -1.1],
         'text-anchor': 'bottom',
         'text-optional': true,
+        'symbol-sort-key': ['get', 'small'],
       },
-      paint: { 'text-color': C.station, 'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
+      paint: { 'text-color': ['step', ['zoom'], ['case', small, STATION_SMALL[dark ? 'dark' : 'light'], C.station], SMALL_UNTIL, C.station],
+        'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
     });
     // The open train's stations: their names in pills, at every zoom up to where names are page elements (there the
     // page's names get the pill: placeStationNames).
@@ -1020,12 +1029,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const key = [c.lng, c.lat, map.getZoom(), map.getBearing(), map.getPitch(), W, H, routeSigs, data.stations, data['route-names']];
     if (namesFor && key.every((v, i) => v === namesFor[i])) return;
     namesFor = key;
-    const placed = [], keep = new Set(), onRoute = new Set(routeSigs);
+    const placed = [], keep = new Set(), onRoute = new Set(routeSigs), smallNow = map.getZoom() < SMALL_UNTIL;
     const order = onRoute.size ? [...data['route-names'].features, ...data.stations.features.filter(f => !onRoute.has(f.properties.sig))] : data.stations.features;
     for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
-      const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
+      // A smaller station's name, further out than SMALL_UNTIL: small and grey (index.html .station-name.small).
+      const { sig, name } = f.properties, isSmall = smallNow && f.properties.small === 1 && !onRoute.has(sig);
+      const w = String(name).length * (isSmall ? 6.3 : 7.6) + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - (isSmall ? 15 : 18), bt: q.y - NAME_DY };
       if (placed.some(o => o.l < b.r && b.l < o.r && o.t < b.bt && b.t < o.bt)) continue;
       placed.push(b);
       keep.add(sig);
@@ -1037,6 +1048,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         nameEls.set(sig, el);
       }
       el.classList.toggle('pill', onRoute.has(sig));
+      el.classList.toggle('small', isSmall);
       el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
@@ -1574,8 +1586,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (isReady) map.getSource('disruptions').setData(data.disruptions);
     },
     async setStations(list) {
+      // small: 1 for the smaller stations (src/big-stations.json); the bigger ones first, so where names collide theirs
+      // are kept.
       data.stations = { type: 'FeatureCollection', features: list.map(st => ({
-        type: 'Feature', properties: { sig: st.sig, name: st.name, country: st.country ?? '' }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
+        type: 'Feature', properties: { sig: st.sig, name: st.name, country: st.country ?? '', small: BIG.has(st.sig) ? 0 : 1 },
+        geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })).sort((a, b) => a.properties.small - b.properties.small) };
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
       if (routeSigs.length) routeNames();

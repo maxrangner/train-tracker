@@ -334,6 +334,9 @@
       color: var(--station); will-change: transform;
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
 
+    /* A smaller station's name at middle zoom (Max, 2026-11-21, option c C; src/big-stations.json, src/map.js SMALL_UNTIL). */
+    .station-name.small { font-size: 11.5px; color: var(--station-small); }
+
     /* The open train's stations close in: the name in a pill (src/map.js placeStationNames; Max, 2026-11-15). */
     .station-name.pill { background: var(--card); color: var(--ink); font-size: 13px; padding: 2px 9px; border-radius: 999px; text-shadow: none;
       box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.12); margin-top: -3px; }

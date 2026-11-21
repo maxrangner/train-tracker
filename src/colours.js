@@ -38,6 +38,8 @@ export const PAGE = {
 };
 // pillBg, pillInk: the open train's station names in "contrast" pills (Max, 2026-11-21: option C), the other way from
 // the trains' labels (those are in the card's colour): light on the dark map, dark on the light.
+// The smaller stations' names at middle zoom (Max, 2026-11-21, option c C: small and grey; src/big-stations.json).
+export const STATION_SMALL = { light: '#a39a8e', dark: '#7f879b' };
 
 // The accent colour (Settings → Accent colour, Max 2026-11-15): buttons, the chosen train's route ("done": the part
 // it has travelled), the "N trains" labels, the timeline's "now". c: the colour; ink: text on it. Only colours that
@@ -92,6 +94,7 @@ export function cssVars(dark, accent) {
     '--c-ontime': L.ontime, '--c-some': L.some, '--c-late': L.late, '--c-unknown': L.unknown,
     '--t-ontime-bg': T.ontime[0], '--t-ontime': T.ontime[1], '--t-some-bg': T.some[0], '--t-some': T.some[1],
     '--t-late-bg': T.late[0], '--t-late': T.late[1], '--t-unknown-bg': T.unknown[0], '--t-unknown': T.unknown[1],
+    '--station-small': STATION_SMALL[th],
     '--dis-1': DISRUPTION[th][0], '--dis-2': DISRUPTION[th][1], '--dis-3': DISRUPTION[th][2],
   };
 }
