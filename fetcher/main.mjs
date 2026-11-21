@@ -205,7 +205,8 @@ if (KEY) every('disruptions', 5 * MIN, 2000, async () => {
 if (KEY) every('stats', 5 * MIN, 4000, async () => {
   const t = Date.now(), day = swedishDay(t);
   const c = await fetchCancelledToday(day);
-  shelf.put('stats', t, { v: 1, t, kind: 'stats', day, cancelled: c.count, cancelledBy: c.byBrand });   // cancelledBy: added 2026-11-21
+  // cancelledBy (added 2026-11-21): [[company, trains], ...] (a list, so the format's fields stay the same whatever the companies)
+  shelf.put('stats', t, { v: 1, t, kind: 'stats', day, cancelled: c.count, cancelledBy: Object.entries(c.byBrand) });
 });
 if (KEY) every('stations', 24 * 60 * MIN, 1000, async () => {
   const t = Date.now();
