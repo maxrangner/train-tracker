@@ -100,6 +100,9 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       for (const p of list) {
         const e = entry(p.key);
         if (p.activity === 'Avgang') (e.departed ??= new Set()).add(p.station);
+        // the actual times per location, for a stop's real dwell (stopsAlong)
+        const at = (e.actual ??= new Map()).get(p.station) ?? {};
+        e.actual.set(p.station, { ...at, [p.activity === 'Avgang' ? 'dep' : 'arr']: p.time });
         if (e.passed && e.passed.time > p.time) continue;
         e.passed = { sig: p.station, time: p.time, activity: p.activity ?? null };
         e.delay = p.minutes ?? e.delay;
@@ -141,6 +144,25 @@ export function createRoutes({ stations = new Map(), net = null } = {}) {
       const locs = e ? locsOf(e) : [];
       const l = locs[locs.length - 1];
       return l ? (l.arr ?? l.dep) + e.delay * 60000 : 0;
+    },
+    // The planned stops (an arrival and a departure) whose stopping place lies on poly (a way along the tracks, within
+    // 30 m of it), planned between from and to (ms, with 30 minutes' margin either way): [{ sig, along (m along poly),
+    // dwellMs }], in order along it. dwellMs: the actual departure minus the actual arrival when both are reported,
+    // else the planned ones (whole minutes either way). For the hold rule in trains.js (trains seen only at fixed
+    // places, whose reports straddle a stop).
+    stopsAlong(key, poly, from, to, near) {
+      const e = byKey.get(key);
+      if (!e || !poly) return [];
+      const out = [];
+      for (const l of locsOf(e)) {
+        if (l.arr === null || l.dep === null || l.arr < from - 1800000 || l.arr > to + 1800000) continue;
+        const p = stopSnap(l.sig) ?? placeOf(l.sig);
+        const along = p ? near(poly, p, 30) : null;
+        if (along === null) continue;
+        const act = e.actual?.get(l.sig);
+        out.push({ sig: l.sig, along, dwellMs: act?.arr !== undefined && act?.dep !== undefined ? act.dep - act.arr : l.dep - l.arr });
+      }
+      return out.sort((a, b) => a.along - b.along);
     },
     // Has the train been reported leaving this location?
     departed(key, sig) { return Boolean(byKey.get(key)?.departed?.has(sig)); },

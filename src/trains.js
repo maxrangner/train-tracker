@@ -84,6 +84,18 @@ const SYNC_START_S = 25;
 const SYNC_END_M = 50;    // ...until this close
 const JUMP_M = 20000;     // further off than this (either way): jump
 const AHEAD_JUMP_M = 3000; // ahead of the target by more than this (the data went somewhere else): jump
+// The hold rule (Max's go 2026-11-21, "1 a"; docs/movement-findings-1121.md section 2): a train seen only at fixed
+// places whose two reports lie either side of a planned stop was drawn driving through it at the average speed
+// between them (540 of the 688 stops still drawn driven through in seven recordings). Now it stands at the stop's
+// stopping place between them, for the stop's dwell (actual departure - arrival from the passings, else the planned
+// one; at least HOLD_MIN_S), arriving and leaving so that it still passes both reports at their times. Only where
+// the reports leave room: at least HOLD_EDGE_M from the stop on either side (150 m: half the gain), and time to
+// drive both parts at HOLD_V.
+const HOLD_MIN_S = 20, HOLD_EDGE_M = 50, HOLD_V = 40;
+const KEEP_SIDE_M = 25;    // a drawn place this close to a new way ahead counts as on it (keepPlace)
+const KEEP_FAR_M = 500;    // a new way ahead further than this from the drawn place is not taken (keepPlace)
+// The sharpest turn a way between two reports may take when none exists under the network's own rule (append).
+const SHARP_TURN_DEG = 120;
 
 const R = Math.PI / 180;
 // Distance in metres between two places (flat approximation, fine over a few km).
@@ -205,6 +217,11 @@ export function createTrains(options = {}) {
       const hd = coastHeading(h);
       const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.assumed ? new Set([...(tr.reached ?? []), ...tr.assumed]) : tr.reached) : null;
       if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig || tr.ext.noGps !== noGps) {
+        // A train drawn past this same last report keeps its drawn place when the way ahead changes (a new next stop,
+        // a stop taken as passed): it jumped there, by up to 54 km for a train moved on by its timetable (Hulingsryd,
+        // Bryngenäs, Floda; docs/movement-findings-1121.md N2). Its place on the old way, before the change:
+        const old = tr.ext?.last === last ? tr.ext : null, pastS = tr.sim ? tr.sim.s - last.s : 0;
+        const before = old && pastS > 0.01 ? onWay(old.poly, last, hd, pastS) : null;
         // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
         // straight distance (a far detour to a track that only happens to lie near the station is not the way).
         const straight = toward?.snap ? metres(last, toward.snap) : 0;
@@ -218,9 +235,35 @@ export function createTrains(options = {}) {
         // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).
         tr.ext = { last, sig: toward?.sig, poly, stopAt, atPlace: place !== null, noGps, towardS: reached ? last.s + poly.towardAt : null,
           eta: reached ? toward.eta : null, at: now };
+        // The new way far from where the train is drawn (a train silent for half an hour, moved on 17-63 km by its
+        // timetable and then taken past a stop, Hulingsryd 27812/28804): it keeps the way it is drawn on, marked so it
+        // is not worked out again at every step (step's "taken as passed"); a new report or 10 s later it is tried again.
+        if (before && !keepPlace(tr, before, last, hd, pastS)) tr.ext = { ...old, at: now, kept: true };
       } else tr.ext.at = now;
     }
     return tr.ext;
+  }
+
+  // The place d metres past the last report on a way ahead (poly; none: straight on along heading hd).
+  function onWay(poly, last, hd, d) {
+    if (poly) return polyAt(poly, d);
+    return hd === null || hd === undefined ? { lon: last.lon, lat: last.lat } : ahead(last, hd, d);
+  }
+  // The way ahead of train tr changed under it (trackAhead): it was drawn at `before` (its path's place, d metres past
+  // its last report, without the fading offset). When that place lies on the new way (within
+  // KEEP_SIDE_M), the train is put there on it, if that is not past where it must stop; else it stays d metres along
+  // the new way and the difference fades (as for a new report, append).
+  // Returns false when the new way doesn't come within KEEP_FAR_M of the drawn place: the caller keeps the old way.
+  function keepPlace(tr, before, last, hd, d) {
+    const ext = tr.ext;
+    const on = ext.poly ? alongPoly(ext.poly, before, KEEP_SIDE_M) : null;
+    if (on !== null && last.s + on <= ext.stopAt) { tr.sim.s = last.s + on; d = on; counts.keptOnWay++; }
+    const after = onWay(ext.poly, last, hd, d);
+    if (on === null && metres(before, after) > KEEP_FAR_M) { counts.keptWay++; return false; }
+    tr.sim.off.lon += before.lon - after.lon;
+    tr.sim.off.lat += before.lat - after.lat;
+    counts.keptPlace++;
+    return true;
   }
 
   // The place s metres along train tr's path, and the path's direction there.
@@ -240,6 +283,28 @@ export function createTrains(options = {}) {
     if (b.route) return polyAt(b.route, s - a.s);
     const f = (s - a.s) / (b.s - a.s);
     return { lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f, heading: b.s - a.s > 5 ? headingOf(a, b) : null };
+  }
+
+  // The hold of the stretch of train tr's path drawn at time t (see HOLD_MIN_S): worked out once, when the drawing
+  // first gets there (the passings of the stop are often in by then: such trains are drawn NO_GPS_EXTRA_MS behind).
+  function holdFor(tr, t) {
+    const h = tr.hist;
+    if (!ROUTES || h.length < 2 || tr.nullRun < NO_GPS_RUN) return;
+    let i = h.length - 1;
+    while (i > 1 && h[i - 1].time > t) i--;
+    const a = h[i - 1], b = h[i];
+    if (b.hold !== undefined || t < a.time) return;
+    b.hold = null;
+    if (b.jump || !b.route || b.passing || a.speed !== null && a.speed !== undefined || b.speed !== null && b.speed !== undefined) return;
+    const len = b.s - a.s, T = (b.time - a.time) / 1000;
+    const stop = ROUTES.stopsAlong(tr.latest.id, b.route, a.time, b.time, alongPoly)
+      .find(x => x.along >= HOLD_EDGE_M && x.along <= len - HOLD_EDGE_M);
+    if (!stop) return;
+    const dwell = Math.min(Math.max(HOLD_MIN_S, stop.dwellMs / 1000), T - len / HOLD_V);
+    if (dwell < HOLD_MIN_S) return;
+    const drive = T - dwell, from = a.time + drive * (stop.along / len) * 1000;
+    b.hold = { s: a.s + stop.along, from, to: from + dwell * 1000, sig: stop.sig };
+    counts.holds++;
   }
 
   // Where the reports say the train was at time t: { s, v (m/s), mode, coasting, capped, inJump }.
@@ -279,6 +344,12 @@ export function createTrains(options = {}) {
     while (h[i - 1].time > t) i--;
     const a = h[i - 1], b = h[i];
     if (b.jump) return { s: a.s, v: 0, inJump: true, mode: 'gps' };   // wait at the start of a jump; jumped once passed
+    const H = b.hold;   // a stop between two fixed-place reports (holdFor)
+    if (H) {
+      if (t >= H.from && t <= H.to) return { s: H.s, v: 0, mode: 'held at a stop' };
+      const [s0, t0, s1, t1] = t < H.from ? [a.s, a.time, H.s, H.from] : [H.s, H.to, b.s, b.time];
+      return { s: s0 + (s1 - s0) * (t - t0) / (t1 - t0), v: (s1 - s0) / ((t1 - t0) / 1000), mode: 'gps' };
+    }
     const f = (t - a.time) / (b.time - a.time);
     return { s: a.s + (b.s - a.s) * f, v: speedAround(h, i, t), mode: 'gps' };
   }
@@ -338,7 +409,7 @@ export function createTrains(options = {}) {
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
         frozen: Boolean(tr.inactiveSince) || (t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta)), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
+  const counts = { holds: 0, keptWay: 0, keptPlace: 0, keptOnWay: 0, routedSharp: 0, inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -360,6 +431,12 @@ export function createTrains(options = {}) {
       const straight = metres(last, e);
       if (!given && e.snap && last.snap && straight > 0.01) {
         e.route = NET.route(last.snap, e.snap, 3 * straight + 500);
+        // No way under the trains' turn rule (60°): the track data often has a sharp corner where trains really run
+        // straight through (Sandared, Nässjö C, Göteborg C, Norrköping C: 8 of 26 wrong branches in seven recordings,
+        // docs/movement-findings-1121.md G1; about 0.6 % of all report pairs). Before drawing a straight chord, a way
+        // with turns up to SHARP_TURN_DEG, at most a little longer than the straight distance (not a reversal round a
+        // yard).
+        if (!e.route) { e.route = NET.route(last.snap, e.snap, 1.2 * straight + 200, 0, SHARP_TURN_DEG); if (e.route) counts.routedSharp++; }
         counts[e.route ? 'routed' : 'unrouted']++;
       }
       e.s = last.s + (e.route ? e.route.cum[e.route.cum.length - 1] : straight);
@@ -483,13 +560,14 @@ export function createTrains(options = {}) {
     const past = t >= last.time ? aheadOf(tr, t)
       : tr.sim && tr.sim.s > last.s ? { cap: aheadOf(tr, t).cap, o: {} } : { cap: Infinity, o: {} };
     const cap = past.cap;
+    if (t < last.time) holdFor(tr, t);
     let T = targetAt(h, t, cap, past.o);
     // A train turning grey (stale) stops where it is drawn: its target is its last report, which a train moved on
     // by its timetable has long passed, and going back there was a jump backwards (about 15 an hour, 2026-11-12).
     if (T.mode === 'stale' && tr.sim && T.s < tr.sim.s) T = { ...T, s: tr.sim.s };
     // Long silent and waiting before a planned stop past its expected time + 1 minute: take it as passed, and move
     // on by the timetable towards the next one.
-    if (T.capped && tr.ext?.eta && tr.ext.sig && t > tr.ext.eta + 60000 && longSilent(tr, t)) {
+    if (T.capped && tr.ext?.eta && tr.ext.sig && !tr.ext.kept && t > tr.ext.eta + 60000 && longSilent(tr, t)) {
       (tr.assumed ??= new Set()).add(tr.ext.sig);
       tr.ext.at = -Infinity;   // work out the way ahead again
     }

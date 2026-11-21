@@ -184,7 +184,7 @@ else for (const f of recordings) {
       : CHECKS.filter(([k, ok]) => !ok(r[k]));
     console.log(`${bad.length ? 'FAIL' : 'ok  '} ${f} (${r.minutes} min${r.routes ? `, ${r.routes} routes` : ''}${b ? ', own baseline' : ''}): ` +
       `frozen ${r.frozenPct} %, ${r.stopsPerMin} stops/min, 90 % within ${r.lag90S} s, through stops ${r.dwellThroughPct} %, track 99 % ${r.offTrack99M} m, ` +
-      `grey ${r.greyPct} %, turn-backs ${r.turnBacks} (data ${r.truthTurnBacks}), wrong way ${r.wrongWay}, past stop ${r.pastStop}, moved after standing ${r.movedAfterStanding}`);
+      `grey ${r.greyPct} %, turn-backs ${r.turnBacks} (data ${r.truthTurnBacks}, unexplained ${r.unmatchedTurnBacks}), wrong way ${r.wrongWay}, past stop ${r.pastStop}, moved after standing ${r.movedAfterStanding}`);
     for (const [k, , why] of bad) console.log(`     ${why}${b ? '' : `: ${k} = ${r[k]}`}`);
     if (REBASE) {
       if (CHECKS.filter(([k, ok]) => ALWAYS.has(k) && !ok(r[k])).length) { console.log('     not rebaselined: a must-be-0 rule or the track limit fails'); return false; }
