@@ -84,6 +84,8 @@ const SYNC_START_S = 25;
 const SYNC_END_M = 50;    // ...until this close
 const JUMP_M = 20000;     // further off than this (either way): jump
 const AHEAD_JUMP_M = 3000; // ahead of the target by more than this (the data went somewhere else): jump
+const KEEP_SIDE_M = 25;    // a drawn place this close to a new way ahead counts as on it (keepPlace)
+const KEEP_FAR_M = 500;    // a new way ahead further than this from the drawn place is not taken (keepPlace)
 // The sharpest turn a way between two reports may take when none exists under the network's own rule (append).
 const SHARP_TURN_DEG = 120;
 
@@ -207,6 +209,11 @@ export function createTrains(options = {}) {
       const hd = coastHeading(h);
       const toward = ROUTES && hd !== null && hd !== undefined ? ROUTES.toward(tr.latest.id, last, hd, tr.assumed ? new Set([...(tr.reached ?? []), ...tr.assumed]) : tr.reached) : null;
       if (tr.ext?.last !== last || tr.ext.sig !== toward?.sig || tr.ext.noGps !== noGps) {
+        // A train drawn past this same last report keeps its drawn place when the way ahead changes (a new next stop,
+        // a stop taken as passed): it jumped there, by up to 54 km for a train moved on by its timetable (Hulingsryd,
+        // Bryngenäs, Floda; docs/movement-findings-1121.md N2). Its place on the old way, before the change:
+        const old = tr.ext?.last === last ? tr.ext : null, pastS = tr.sim ? tr.sim.s - last.s : 0;
+        const before = old && pastS > 0.01 ? onWay(old.poly, last, hd, pastS) : null;
         // The way to the next planned location ends on any of its tracks, and may be at most a little longer than the
         // straight distance (a far detour to a track that only happens to lie near the station is not the way).
         const straight = toward?.snap ? metres(last, toward.snap) : 0;
@@ -220,9 +227,35 @@ export function createTrains(options = {}) {
         // towardS / eta: where that next location is along the path, and when it is expected there (for the pace).
         tr.ext = { last, sig: toward?.sig, poly, stopAt, atPlace: place !== null, noGps, towardS: reached ? last.s + poly.towardAt : null,
           eta: reached ? toward.eta : null, at: now };
+        // The new way far from where the train is drawn (a train silent for half an hour, moved on 17-63 km by its
+        // timetable and then taken past a stop, Hulingsryd 27812/28804): it keeps the way it is drawn on, marked so it
+        // is not worked out again at every step (step's "taken as passed"); a new report or 10 s later it is tried again.
+        if (before && !keepPlace(tr, before, last, hd, pastS)) tr.ext = { ...old, at: now, kept: true };
       } else tr.ext.at = now;
     }
     return tr.ext;
+  }
+
+  // The place d metres past the last report on a way ahead (poly; none: straight on along heading hd).
+  function onWay(poly, last, hd, d) {
+    if (poly) return polyAt(poly, d);
+    return hd === null || hd === undefined ? { lon: last.lon, lat: last.lat } : ahead(last, hd, d);
+  }
+  // The way ahead of train tr changed under it (trackAhead): it was drawn at `before` (its path's place, d metres past
+  // its last report, without the fading offset). When that place lies on the new way (within
+  // KEEP_SIDE_M), the train is put there on it, if that is not past where it must stop; else it stays d metres along
+  // the new way and the difference fades (as for a new report, append).
+  // Returns false when the new way doesn't come within KEEP_FAR_M of the drawn place: the caller keeps the old way.
+  function keepPlace(tr, before, last, hd, d) {
+    const ext = tr.ext;
+    const on = ext.poly ? alongPoly(ext.poly, before, KEEP_SIDE_M) : null;
+    if (on !== null && last.s + on <= ext.stopAt) { tr.sim.s = last.s + on; d = on; counts.keptOnWay++; }
+    const after = onWay(ext.poly, last, hd, d);
+    if (on === null && metres(before, after) > KEEP_FAR_M) { counts.keptWay++; return false; }
+    tr.sim.off.lon += before.lon - after.lon;
+    tr.sim.off.lat += before.lat - after.lat;
+    counts.keptPlace++;
+    return true;
   }
 
   // The place s metres along train tr's path, and the path's direction there.
@@ -340,7 +373,7 @@ export function createTrains(options = {}) {
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
         frozen: Boolean(tr.inactiveSince) || (t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta)), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { routedSharp: 0, inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
+  const counts = { keptWay: 0, keptPlace: 0, keptOnWay: 0, routedSharp: 0, inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -497,7 +530,7 @@ export function createTrains(options = {}) {
     if (T.mode === 'stale' && tr.sim && T.s < tr.sim.s) T = { ...T, s: tr.sim.s };
     // Long silent and waiting before a planned stop past its expected time + 1 minute: take it as passed, and move
     // on by the timetable towards the next one.
-    if (T.capped && tr.ext?.eta && tr.ext.sig && t > tr.ext.eta + 60000 && longSilent(tr, t)) {
+    if (T.capped && tr.ext?.eta && tr.ext.sig && !tr.ext.kept && t > tr.ext.eta + 60000 && longSilent(tr, t)) {
       (tr.assumed ??= new Set()).add(tr.ext.sig);
       tr.ext.at = -Infinity;   // work out the way ahead again
     }
