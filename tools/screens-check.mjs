@@ -225,6 +225,57 @@ try {
     await page.touchscreen.tap(more2.x, more2.y);
     await sleep(800);
     check(await isFull(), 'a tap on that button still works (All stops)');
+    // Max, 2026-11-21: a tap on the train already open "reloads the card and flickers it once": the card stays as it is
+    await page.evaluate(() => document.querySelector('#panel .panel-more')?.click());   // compact again
+    await sleep(800);
+    const dot = await page.evaluate(() => {
+      const id = [...window.__map.queryRenderedFeatures({ layers: ['train-dots'] })]
+        .find(f => document.querySelector('#panel .panel-title strong')?.textContent === String(window.__trains.get(f.properties.id)?.number));
+      if (!id) return null;
+      const p = window.__map.project(id.geometry.coordinates);
+      return { x: p.x, y: p.y };
+    });
+    if (!dot) fails.push('tap on the open train: its dot not found on the map');
+    else {
+      await page.evaluate(() => { window.__emptied = false; const el = document.getElementById('panel');
+        new MutationObserver(() => { if (el.querySelector('.state')) window.__emptied = true; }).observe(el, { childList: true, subtree: true }); });
+      await page.touchscreen.tap(dot.x, dot.y);
+      await sleep(1500);
+      const r = await page.evaluate(() => ({ emptied: window.__emptied, open: !document.getElementById('panel').hidden }));
+      check(r.open && !r.emptied, `a tap on the train already open keeps its card as it is (open ${r.open}, emptied ${r.emptied})`);
+    }
+    // Max, 2026-11-21: swiped away from a button, the card stayed open below the screen (the train selected, the map's
+    // buttons up where it was): a long swipe down from "All stops" on the compact card closes it
+    const more3 = await page.evaluate(() => { const r = document.querySelector('#panel .panel-more').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await swipe(more3.x, more3.y, 200);
+    const gone = await page.evaluate(() => ({ hidden: document.getElementById('panel').hidden,
+      h: getComputedStyle(document.documentElement).getPropertyValue('--sheet-h').trim() }));
+    check(gone.hidden && gone.h === '0px', `a long swipe down that starts on a button closes the card (closed ${gone.hidden}, the map's buttons at ${gone.h})`);
+    // Max, 2026-11-21: a slow drag up on the compact card switched it at once ("should be animated and smooth"): the
+    // trip line fades with the finger, then the full card's parts fade in; back down, the same way
+    await openTrain();
+    for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await page.evaluate(() => Boolean(document.querySelector('#panel .cd-trip')))) break;
+    await sleep(800);
+    const look = () => page.evaluate(() => { const el = document.getElementById('panel'), op = s => { const x = el.querySelector(s);
+      return x && getComputedStyle(x).display !== 'none' ? Number(getComputedStyle(x).opacity) : null; };
+      return { full: el.classList.contains('full'), trip: op('.cd-trip'), star: op('.panel-star') }; });
+    const at = await page.evaluate(() => { const r = document.querySelector('#panel .cd-trip').getBoundingClientRect(); return { x: r.left + 10, y: r.top + r.height / 2 }; });
+    await page.touchscreen.touchStart(at.x, at.y);
+    await page.touchscreen.touchMove(at.x, at.y - 10); await sleep(16);
+    await page.touchscreen.touchMove(at.x, at.y - 18); await sleep(80);
+    const half = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 40); await sleep(30);
+    const turned = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 80); await sleep(400);
+    const up = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 10); await sleep(400);
+    const back = await look();
+    await page.touchscreen.touchEnd(); await sleep(500);
+    const end = await look();
+    check(!half.full && half.trip > 0.3 && half.trip < 0.7, `a slow drag up, 18 px: still compact, the trip line half faded (${half.trip?.toFixed(2)})`);
+    check(turned.full && turned.star !== null && turned.star < 0.9, `40 px: full, the star fading in (${turned.star?.toFixed(2)})`);
+    check(up.full && up.star === 1, '80 px: full, all shown');
+    check(!back.full && back.trip > 0.5 && end.trip === 1 && !end.full, `back down: compact again, the trip line back (${back.trip?.toFixed(2)} → ${end.trip})`);
   }
   check(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 } finally {

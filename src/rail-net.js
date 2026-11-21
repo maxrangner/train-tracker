@@ -360,6 +360,20 @@ export function netFromJSON(json) {
     costed: costs, maxWeight: costs ? SLOW_W * AGAINST_W : 1, isFast: li => fast[li] === 1,
     // What the track nearest a place (within 30 m) is built for, km/h; null: not known.
     speedAt(place) { if (!designSpeed) return null; const s = snap(place, null, 30); return (s && designSpeed[s.li]) || null; },
+    // The lines with a point inside [lon0, lat0, lon1, lat1], each as [[lon, lat], ...] (the faint tracks under the
+    // trip on a train's card, src/train-info.js).
+    linesIn([a, b, c, d]) {
+      const out = [];
+      for (let li = 0; li < L; li++) {
+        let i = start[li];
+        while (i < start[li + 1] && !(lon[i] >= a && lon[i] <= c && lat[i] >= b && lat[i] <= d)) i++;
+        if (i === start[li + 1]) continue;
+        const pts = [];
+        for (let j = start[li]; j < start[li + 1]; j++) pts.push([lon[j], lat[j]]);
+        out.push(pts);
+      }
+      return out;
+    },
     // All lines as one GeoJSON feature, for drawing.
     toGeoJSON() {
       const coordinates = [];

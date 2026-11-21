@@ -149,7 +149,7 @@ export function drawInfo(box, ctx) {
     const total = shape.total;
     q('.ti-km').innerHTML = `${fmt((km ?? 0) / 1000)}<small>km</small>`;
     q('.ti-of').textContent = tr('tiOfKm', fmt(total / 1000), Math.floor((100 * (km ?? 0)) / total));
-    q('.ti-trip svg').outerHTML = tripSvg(shape, km, stops, sm, nextIdx, ctx.stationName);
+    q('.ti-trip svg').outerHTML = tripSvg(shape, km, stops, sm, nextIdx, ctx.stationName, net);
     const next = stops[nextIdx];
     if (next && km !== null && sm[nextIdx] != null) {
       const x = next.arr ?? next.dep, late = Math.max(0, ctx.late ?? 0);
@@ -280,20 +280,49 @@ function graphSvg(entries, t, net, route, stationName) {
   return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${s}</svg>`;
 }
 
-// The route's shape, done and left; dots for its stops, the start, the end and the next named; under it the track's
-// speed along the whole trip, slow blue to fast yellow, with where the train is.
-function tripSvg(shape, km, stops, sm, nextIdx, stationName) {
-  const box = { x: 70, y: 28, w: 190, h: 182 };
+// The route's shape, coloured by the track's speed along it (slow blue to fast yellow; Max, 2026-11-21: "Can the
+// colored segments be overlayed in the actual route?", the strip under it before; the stops show what is done); the rail
+// network faint beneath it (his "Should the actual map be faint underneath?"; the app's Sweden outline is too coarse
+// for a coast at this size: ~17 km between its points); dots for its stops, the start, the end and the next named.
+const speedColour = v => (v ? HEAT[dark() ? 'dark' : 'light'][v < 80 ? 0 : v < 120 ? 1 : v < 160 ? 2 : v < 200 ? 3 : 4] : null);
+function tripSvg(shape, km, stops, sm, nextIdx, stationName, net) {
+  const box = { x: 70, y: 28, w: 190, h: 182 }, W = 330, H = 214, n = shape.speeds.length;
   const lons = shape.line.map(p => p[0]), lats = shape.line.map(p => p[1]);
   const x0 = Math.min(...lons), x1 = Math.max(...lons), y0 = Math.min(...lats), y1 = Math.max(...lats);
   const kx = Math.cos(((y0 + y1) / 2) * R);
   const sc = Math.min(box.w / Math.max(1e-6, (x1 - x0) * kx), box.h / Math.max(1e-6, y1 - y0));
   const ox = box.x + (box.w - (x1 - x0) * kx * sc) / 2, oy = box.y + (box.h - (y1 - y0) * sc) / 2;
   const P = ([lon, lat]) => [ox + (lon - x0) * kx * sc, oy + (y1 - lat) * sc];
-  const at = m => { const i = Math.max(0, Math.min(shape.line.length - 1, m / 1000)), a = shape.line[Math.floor(i)], b = shape.line[Math.min(shape.line.length - 1, Math.floor(i) + 1)], f = i - Math.floor(i); return [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])]; };
+  const last = shape.line.length - 1;
+  const at = m => { const i = Math.max(0, Math.min(last, m / 1000)), a = shape.line[Math.floor(i)], b = shape.line[Math.min(last, Math.floor(i) + 1)], f = i - Math.floor(i); return [a[0] + f * (b[0] - a[0]), a[1] + f * (b[1] - a[1])]; };
+  // the line from metre a to metre b
+  const piece = (a, b) => { const pts = [at(a)]; for (let k = Math.floor(a / 1000) + 1; k < b / 1000 && k <= last; k++) pts.push(shape.line[k]); pts.push(at(b)); return pts; };
   const line = pts => pts.map((p, i) => { const [x, y] = P(p); return `${i ? 'L' : 'M'}${f1(x)} ${f1(y)}`; }).join('');
-  let s = `<path class="ti-route" d="${line(shape.line)}"/>`;
-  if (km !== null) s += `<path class="ti-route done" d="${line([...shape.line.slice(0, Math.floor(km / 1000) + 1), at(km)])}"/>`;
+  // The faint tracks: the network's lines in view, a point every 2 px or more, worked out once per trip.
+  if (net?.linesIn && shape._bg === undefined) {
+    const lonAt = x => x0 + (x - ox) / (kx * sc), latAt = y => y1 - (y - oy) / sc;
+    let d = '';
+    for (const l of net.linesIn([lonAt(0), latAt(H), lonAt(W), latAt(0)])) {
+      let px = null, py = null;
+      l.forEach((p, i) => {
+        const [x, y] = P(p);
+        if (i && i < l.length - 1 && Math.abs(x - px) + Math.abs(y - py) < 2) return;
+        d += `${i ? 'L' : 'M'}${f1(x)} ${f1(y)}`; px = x; py = y;
+      });
+    }
+    shape._bg = d;
+  }
+  let s = shape._bg ? `<path class="ti-bg" d="${shape._bg}"/>` : '';
+  s += `<path class="ti-route-case" d="${line(shape.line)}"/>`;
+  if (n) {   // the line in runs of one colour
+    let run = 0;
+    for (let i = 1; i <= n; i++) {
+      if (i < n && speedColour(shape.speeds[i]) === speedColour(shape.speeds[run])) continue;
+      const c = speedColour(shape.speeds[run]);
+      s += `<path class="ti-route"${c ? ` style="stroke:${c}"` : ''} d="${line(piece(run * STRIP_M, Math.min(shape.total, i * STRIP_M)))}"/>`;
+      run = i;
+    }
+  } else s += `<path class="ti-route" d="${line(shape.line)}"/>`;
   stops.forEach((st, i) => {
     if (sm[i] == null) return;
     const [x, y] = P(at(sm[i])), done = km !== null && sm[i] <= km, end = i === stops.length - 1, named = i === 0 || end || i === nextIdx;
@@ -304,24 +333,14 @@ function tripSvg(shape, km, stops, sm, nextIdx, stationName) {
       `text-anchor="${end ? 'middle' : right ? 'start' : 'end'}">${esc(stationName(st.station))}</text>`;
   });
   if (km !== null) { const [x, y] = P(at(km)); s += `<circle class="ti-train-ring" cx="${f1(x)}" cy="${f1(y)}" r="11"/><circle class="ti-train" cx="${f1(x)}" cy="${f1(y)}" r="7"/>`; }
-  // The strip.
-  const sy = 232, sx = 8, sw = 314, n = shape.speeds.length, per = sw / Math.max(1, n), heat = HEAT[dark() ? 'dark' : 'light'];
-  const colour = v => (v ? heat[v < 80 ? 0 : v < 120 ? 1 : v < 160 ? 2 : v < 200 ? 3 : 4] : null);
+  // The key: what the colours mean.
   if (n) {
-    let run = 0;
-    for (let i = 1; i <= n; i++) {
-      if (i < n && colour(shape.speeds[i]) === colour(shape.speeds[run])) continue;
-      const c = colour(shape.speeds[run]);
-      s += `<rect x="${f1(sx + run * per)}" y="${sy}" width="${f1((i - run) * per + 0.5)}" height="9"${c ? ` fill="${c}"` : ' class="ti-strip-none"'}/>`;
-      run = i;
-    }
-    if (km !== null) {
-      const mx = sx + (sw * km) / shape.total;
-      s += `<rect class="ti-strip-left" x="${f1(mx)}" y="${sy - 1}" width="${f1(Math.max(0, sx + sw - mx))}" height="11"/><path class="ti-strip-at" d="M${f1(mx)} ${sy - 3}l-5 -6h10z"/>`;
-    }
-    s += `<text class="ti-num" x="${sx}" y="${sy + 23}">${tr('tiStrip')}</text><text class="ti-num" x="${sx + sw}" y="${sy + 23}" text-anchor="end">${tr('tiStripScale')}</text>`;
+    const ky = H + 14, kw = 13;
+    s += `<text class="ti-num" x="8" y="${ky + 9}">${tr('tiStrip')}</text>`;
+    HEAT[dark() ? 'dark' : 'light'].forEach((c, i) => { s += `<rect x="${W - 8 - (5 - i) * kw}" y="${ky}" width="${kw - 2}" height="7" rx="2" fill="${c}"/>`; });
+    s += `<text class="ti-num" x="${W - 8}" y="${ky + 26}" text-anchor="end">${tr('tiStripScale')}</text>`;
   }
-  return `<svg viewBox="0 0 330 ${n ? 260 : 214}" aria-hidden="true">${s}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${n ? H + 46 : H}" aria-hidden="true">${s}</svg>`;
 }
 
 // The minutes late at each stop, evenly spaced, in the map's three colours; stops ahead as dashed rings.
