@@ -6,19 +6,24 @@
 // places it really passed (its rows not shown to passengers, with a time):
 //   found: worked out and really passed; missed: passed but not worked out; extra: worked out but never reported;
 //   order: of the found ones, the share of neighbours in the same order as really passed.
-// Run: node tools/places-check.mjs [data/routes-<name>.jsonl ...] [--near 50,100,150,250] [--worst] [--train <op>]
+// Only the places on the list of those Trafikverket reports (src/reported-places.js, as the card); --all: every station.
+// The list is made from these same recordings, so here it can only help; measured on days it had not seen:
+// tools/reported-places.mjs (its top).
+// Run: node tools/places-check.mjs [data/routes-<name>.jsonl ...] [--near 50,100,150,250] [--worst] [--train <op>] [--all]
 //   (--train: that trip's places, worked out and passed, side by side)
 //   (no file: the two newest recordings with saved routes)
 import { readFileSync, readdirSync } from 'node:fs';
 import { netFromJSON } from '../src/rail-net.js';
 import { pathOf } from '../src/path.js';
 import { placesAlong, NEAR_M } from '../src/places-ahead.js';
+import { REPORTED } from '../src/reported-places.js';
 
 const argv = process.argv.slice(2);
 const opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const files = argv.filter(a => a.endsWith('.jsonl'));
 const list = files.length ? files : readdirSync('data').filter(f => f.startsWith('routes-')).sort().slice(-2).map(f => `data/${f}`);
-const nears = opt('--near', `50,100,${NEAR_M},250,400`).split(',').map(Number);
+const nears = opt('--near', `30,${NEAR_M},100,250`).split(',').map(Number);
+const listed = argv.includes('--all') ? null : REPORTED;
 const net = netFromJSON(JSON.parse(readFileSync('public/rail-net.json', 'utf8')));
 const stationList = JSON.parse(readFileSync('data/stations.json', 'utf8')).map((s) => {
   const m = s.Geometry?.WGS84?.match(/POINT \(([\d.-]+) ([\d.-]+)\)/);
@@ -61,7 +66,7 @@ for (const file of list) {
     const path = pathOf(places, net, { reversals });
     for (const n of nears) {
       const t0 = performance.now();
-      const along = placesAlong(path, stationList, n).map(p => p.sig).filter(s => !stopSigs.has(s));
+      const along = placesAlong(path, stationList, n).map(p => p.sig).filter(s => !stopSigs.has(s) && (!listed || listed.has(s)));
       if (n === NEAR_M) ms += performance.now() - t0;
       const got = new Set(along), was = new Set(passed), T = total[n];
       const found = along.filter(s => was.has(s));
@@ -86,7 +91,8 @@ for (const file of list) {
   }
 }
 const pc = (a, b) => (b ? `${Math.round((100 * a) / b)} %` : '-');
-console.log(`${list.join(', ')}: ${trips} finished trips, ${real} places really passed (and ${noPlace} with no place in TrainStation)`);
+console.log(`${list.join(', ')}: ${trips} finished trips, ${real} places really passed (and ${noPlace} with no place in TrainStation);` +
+  ` ${listed ? `only the ${listed.size} places on the list` : 'every station'}`);
 for (const n of nears) {
   const T = total[n];
   console.log(`within ${String(n).padStart(3)} m: found ${pc(T.found, real)} of the places passed, missed ${pc(T.missed, real)};` +

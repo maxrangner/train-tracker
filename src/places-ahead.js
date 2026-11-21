@@ -2,9 +2,12 @@
 // place between the stops on the card, "Ahead is important. No times." Trafikverket lists such a place only once the
 // train has passed it (docs/data.md: ahead of the trains 175 passing rows against 10,029 stop rows), so the ones ahead
 // are the stations (TrainStation, every driftplats) whose point lies within NEAR_M metres of the route, in the
-// route's order. How often that matches the places really passed: tools/places-check.mjs. Plain JavaScript, no page parts.
+// route's order, and only those Trafikverket reports passenger trains passing (src/reported-places.js; Max's B,
+// 2026-11-21: freight yards beside the line and the like left out). How often that matches the places really passed:
+// tools/places-check.mjs. Plain JavaScript, no page parts.
 
 import { progressAlong } from './path.js';
+import { REPORTED } from './reported-places.js';
 
 export const NEAR_M = 50;   // (tools/places-check.mjs, 17-19 Nov: 94 % of the places passed found, 12 % of those shown never reported; wider finds no more)
 const R = Math.PI / 180, M = R * 6371000;
@@ -63,7 +66,8 @@ export function placesAlong(path, stations, nearM = NEAR_M) {
 // Returns between: between[i] the places after stop i (the last: after the end), each { sig, row (Trafikverket's row,
 // or null: worked out from the route), passed }. Passed: it has a time, or lies before the train (or before the last
 // place with a time): Trafikverket reports only some places (docs/data.md), so a place behind the train may have none.
-export function tripPlaces(route, stops, path, pathPlaces, stations, trainF = null) {
+// listed: the places a worked-out one must be among (REPORTED; null: every station, for tools/places-check.mjs --all).
+export function tripPlaces(route, stops, path, pathPlaces, stations, trainF = null, listed = REPORTED) {
   const between = stops.map(() => []);
   if (!stops.length) return between;
   const stopSigs = new Set(stops.map(s => s.station));
@@ -96,7 +100,7 @@ export function tripPlaces(route, stops, path, pathPlaces, stations, trainF = nu
     all.push({ sig: p.sig, row: p.row, f, after: p.after });
   }
   for (const p of placesAlong(path, stations)) {
-    if (stopSigs.has(p.sig) || known.has(p.sig) || p.f < (stopF[0] ?? 0)) continue;
+    if ((listed && !listed.has(p.sig)) || stopSigs.has(p.sig) || known.has(p.sig) || p.f < (stopF[0] ?? 0)) continue;
     all.push({ sig: p.sig, row: null, f: p.f, after: null });
   }
   for (const p of all) {
