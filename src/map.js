@@ -148,16 +148,20 @@ const symbolSize = () => (settings.trainSymbol === 'drop'
   : ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25]);
 const triangles = () => settings.trainSymbol !== 'circle';
 // The pill behind a name of the open train's stations (Max, 2026-11-15: white name pills): a rounded box in the card's
-// colour with a thin edge, stretched round the text (icon-text-fit).
+// colour with a thin edge, stretched round the text (icon-text-fit). 'pill-contrast' (Max, 2026-11-21: option C): the
+// other way from the trains' labels, no edge (Settings → Debug → Route station names).
 function addPill(map, dark) {
-  const c = document.createElement('canvas');
-  c.width = 48; c.height = 32;
-  const g = c.getContext('2d');
-  g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
-  g.fillStyle = PAGE[dark ? 'dark' : 'light'].card; g.fill();
-  g.lineWidth = 1.5; g.strokeStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'; g.stroke();
-  if (map.hasImage('pill')) map.removeImage('pill');
-  map.addImage('pill', g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+  const P = PAGE[dark ? 'dark' : 'light'];
+  for (const [id, fill, edge] of [['pill', P.card, dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'], ['pill-contrast', P.pillBg, null]]) {
+    const c = document.createElement('canvas');
+    c.width = 48; c.height = 32;
+    const g = c.getContext('2d');
+    g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
+    g.fillStyle = fill; g.fill();
+    if (edge) { g.lineWidth = 1.5; g.strokeStyle = edge; g.stroke(); }
+    if (map.hasImage(id)) map.removeImage(id);
+    map.addImage(id, g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+  }
 }
 function addTriangles(map, dark) {
   for (const [name, colour] of Object.entries(dotColours(dark))) {
@@ -680,7 +684,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     });
     // The open train's stations: their names in pills, at every zoom up to where names are page elements (there the
     // page's names get the pill: placeStationNames).
+    // Their look: Settings → Debug → Route station names (Max, 2026-11-21): a contrast pill (the default), the trains'
+    // own pill, or bold text with a halo and no pill.
     addPill(map, dark);
+    const rn = settings.routeNames, P = PAGE[dark ? 'dark' : 'light'];
     map.addLayer({
       id: 'route-names',
       type: 'symbol',
@@ -688,17 +695,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: {
         visibility: namesOnPage() ? 'none' : 'visible',
         'text-field': ['get', 'name'],
-        'text-font': ['Outfit SemiBold'],
-        'text-size': 13,
+        'text-font': [rn === 'plain' ? 'Outfit Bold' : 'Outfit SemiBold'],
+        'text-size': rn === 'plain' ? 14 : 13,
         'text-offset': [0, -1.25],
         'text-anchor': 'bottom',
-        'icon-image': 'pill',
-        'icon-text-fit': 'both',
-        'icon-text-fit-padding': [2, 7, 2, 7],
+        ...(rn === 'plain' ? {} : { 'icon-image': rn === 'contrast' ? 'pill-contrast' : 'pill', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 7, 2, 7] }),
         'symbol-sort-key': ['get', 'rank'],
         'text-padding': 3,
       },
-      paint: { 'text-color': C.station },
+      paint: rn === 'plain' ? { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 2 }
+        : { 'text-color': rn === 'contrast' ? P.pillInk : C.station },
     });
     routeNames();
 

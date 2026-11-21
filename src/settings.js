@@ -40,6 +40,10 @@ const DEFAULTS = {
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
   // followed) or 'clear' (card and train let go).
   pageOverTrain: 'card',
+  // The open train's station names (Debug, Max 2026-11-21: "C, but put all three in a debug setting"): 'contrast' (a
+  // pill the other way from the trains' labels: light on the dark map, dark on the light), 'pill' (the trains' own
+  // pill, as before) or 'plain' (bold text, no pill).
+  routeNames: 'contrast',
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -59,6 +63,7 @@ const KEYS = {
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
   pageOverTrain: { param: 'overtrain' },
+  routeNames: { param: 'routenames' },
 };
 const STORE = 'settings';
 
@@ -84,6 +89,7 @@ const valid = {
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
+  routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
@@ -102,6 +108,7 @@ const showTheme = () => {
   if (typeof document === 'undefined') return;
   const root = document.documentElement, dark = isDark();
   root.dataset.theme = dark ? 'dark' : 'light';
+  root.dataset.routeNames = settings.routeNames;   // the open train's station names close in (index.html)
   for (const [k, v] of Object.entries(cssVars(dark, settings.accent))) root.style.setProperty(k, v);
 };
 showTheme();
@@ -120,7 +127,7 @@ export function setSetting(key, value) {
     now.delete(KEYS[key].param);
     history.replaceState(null, '', `#${now.toString().replace(/%2F/g, '/')}`);
   }
-  if (key === 'theme' || key === 'accent') showTheme();
+  if (key === 'theme' || key === 'accent' || key === 'routeNames') showTheme();
   changed(key);
   return true;
 }
