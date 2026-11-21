@@ -11,7 +11,8 @@
 // says "Laddar…" over it (Max, 2026-11-20: the switch to Lateness seemed to do nothing until the data came; every
 // spot was drawn green, as on time).
 import OUTLINE from './sweden-outline.json';
-import { HEAT, LATE } from './colours.js';
+import { HEAT, lateSet } from './colours.js';
+import { settings } from './settings.js';
 import { t } from './i18n.js';
 
 const LON0 = 10.4, LON1 = 24.4, LAT0 = 55.0, LAT1 = 69.2, KX = Math.cos(62 * Math.PI / 180);
@@ -73,7 +74,7 @@ export function createSwedenMap() {
         if (sc !== undefined) { lateSum[j] += w * sc; lateW[j] += w; }
       }
     }
-    const th = dark() ? 'dark' : 'light', hot = HEAT[th].map(rgb), L = LATE[th];
+    const th = dark() ? 'dark' : 'light', hot = HEAT[th].map(rgb), L = lateSet(th === 'dark', settings.colourBlind);
     const green = rgb(L.ontime), yellow = rgb(L.some), red = rgb(L.late), grey = rgb(L.unknown);
     const known = snap.dots.filter(d => SCORE[d.late] !== undefined).length;
     const loading = mode === 'lateness' && snap.dots.length > 0 && known < snap.dots.length * LOADING_SHARE;
