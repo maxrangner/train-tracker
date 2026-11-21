@@ -52,7 +52,7 @@ export function onTap(el, fn) {
 // settle: runs once the transitions are back on (what should move too, e.g. the transform back to 0).
 export function glide(el, change, { from = el.getBoundingClientRect().height, settle } = {}) {
   clearTimeout(el.glideTimer);
-  el.classList.add('dragging');   // (transitions off)
+  el.classList.add('dragging', 'gliding');   // (transitions off; gliding: until the glide ends, index.html)
   el.style.height = ''; el.style.maxHeight = '';
   change();
   const to = el.getBoundingClientRect().height;
@@ -68,6 +68,7 @@ export function glide(el, change, { from = el.getBoundingClientRect().height, se
   el.glideTimer = setTimeout(() => {
     el.style.transition = 'none';
     el.style.height = ''; el.style.maxHeight = '';
+    el.classList.remove('gliding');
     el.getBoundingClientRect();
     el.style.transition = '';
   }, GLIDE_MS);

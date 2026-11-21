@@ -400,6 +400,10 @@
       animation: sheet-in .26s cubic-bezier(.2, .9, .25, 1);
       transition: max-height .26s cubic-bezier(.2, .9, .25, 1), height .26s cubic-bezier(.2, .9, .25, 1), transform .26s cubic-bezier(.2, .9, .25, 1); }
     .sheet.dragging { transition: none; }
+    /* Searching a station's day, the card's height follows the phone's keyboard at once: its max-height glided after
+       the page's new size, so the top went 78 → 430 → 78 px when the keyboard went down (Max, 2026-11-21: "another
+       ugly jitter"). Its own glides (in and out of the search) still glide. */
+    #board.finding:not(.gliding) { transition: transform .26s cubic-bezier(.2, .9, .25, 1); }
     .sheet.leaving { transition: transform .2s ease-in; pointer-events: none; }   /* (sliding away: never catches a tap) */
     /* Lists inside a sheet scroll with a finger; the rest of the sheet drags it (src/sheet.js). */
     .sheet .panel-table, .sheet .panel-info-box, #search-results, #stats-body, #settings, .help-body, #disruptions-body, .pick-list, .dis-text { touch-action: pan-y; }
