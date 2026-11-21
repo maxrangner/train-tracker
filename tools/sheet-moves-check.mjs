@@ -16,11 +16,9 @@ import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
 
 const SHEETS = ['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help', 'nav'];
 const fails = [], notes = [];
-const KNOWN = [   // [the step, the element, what it is] (2026-11-21's sweep)
-  [/a long swipe down$/, /top edge/, 'a short sheet swiped further down than its own height climbs back before it goes (it slides to 100% of its height)'],
-  [/a train from the search$/, /the map buttons/, "the map's buttons dip, then come back, while the opened card is still loading"],
+const KNOWN = [   // [the step, the element, what it is]: none now (2026-11-21's two were fixed, Max: "Fix both")
 ];
-let steps = 0;
+let steps = 0, missed = false;   // missed: a tap on a train missed and the next one was tapped (two moves, not judged)
 const browser = await launch();
 try {
   const page = await browser.newPage();
@@ -54,10 +52,12 @@ try {
   async function act(name, fn, ms = 1400) {
     steps++;
     await page.evaluate(() => { window.__rec = []; });
+    missed = false;
     await sleep(120);   // (the resting place first)
     try { await fn(); } catch (e) { fails.push(`${name}: ${e.message.split('\n')[0]}`); }
     await sleep(ms);
     const rec = await page.evaluate(() => { const r = window.__rec; window.__rec = null; return r; });
+    if (missed) { notes.push(`${name}: the tap missed a moving train, the next one tapped (its moves not judged)`); return rec; }
     const keys = new Set(rec.flatMap(r => Object.keys(r).filter(k => k !== 't')));
     for (const k of keys) {
       const s = rec.filter(r => r[k]).map(r => ({ t: r.t, top: r[k][0], h: r[k][1] }));
@@ -73,7 +73,7 @@ try {
         const what = `${name}: ${k === 'the map buttons' ? k : `#${k}`} ${dim === 'top' ? 'top edge' : 'height'}`;
         const known = KNOWN.find(([st, e]) => st.test(name) && e.test(what.slice(name.length)));
         if (known) notes.push(`known (waiting for Max): ${what}, ${known[2]}`);
-        else fails.push(`bounce ${what} turned ${turns} times (${path.slice(0, 18).join(' ')})`);
+        else fails.push(`bounce ${what} turned ${turns} times (${path.slice(0, 40).join(' ')})`);
       }
     }
     return rec;
@@ -104,6 +104,7 @@ try {
     // (the map follows the open train, so a tap can miss and close the card: the next train then)
     await sleep(1200);
     if (await shown('panel') || tries > 3) return;
+    missed = true;
     await tapTrain(k + 1, tries + 1);
   };
   // The train card's height reaches its timetable in a glide: its last change isn't one step of 16 px or more with
@@ -181,7 +182,18 @@ try {
   await sleep(800);
   await act('the top search: the keyboard down', kbDown, 800);
   await act('board: opened from the search', ev(() => [...document.querySelectorAll('#search-results button')].find(b => b.textContent.includes('Uppsala C'))?.click()), 2500);
-  for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await has('#board .bd-row')) break;
+  const rows = async () => { for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await has('#board .bd-row')) break; };
+  const openBoard = async () => {   // (a train picked from the board closes it)
+    await page.evaluate(() => document.getElementById('menu-button').click());
+    await sleep(600);
+    await page.evaluate(() => { document.getElementById('search').value = ''; });
+    await page.type('#search', 'Uppsala C');
+    await sleep(800);
+    await page.evaluate(() => [...document.querySelectorAll('#search-results button')].find(b => b.textContent.includes('Uppsala C'))?.click());
+    await rows();
+    await sleep(800);
+  };
+  await rows();
   for (let t0 = Date.now(); Date.now() - t0 < 6000; await sleep(300)) if (await has('#board .board-msgs-toggle')) break;
   await sleep(800);
   const message = await has('#board .board-msgs-toggle');
@@ -221,6 +233,10 @@ try {
     await act('board: that search closed', find, 2500);
     state(!(await isFull('board')), 'board: compact, message, search, closed: left full');
   }
+  // a train picked from the compact board's rows: the map's buttons go once to the train card (not to its "Laddar…")
+  await act('board: a train from its rows', ev(() => document.querySelector('#board .bd-row')?.click()), 3000);
+  await act('that train\'s card closed', ev(() => document.querySelector('#panel .panel-close')?.click()), 1500);
+  await openBoard();
   // a train picked from the search
   await act('board: the search again', find, 2500);
   await act('board: Ankomster while searching', ev(() => document.querySelector('#board [data-act="Ankomst"]').click()), 2500);
