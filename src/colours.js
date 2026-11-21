@@ -35,6 +35,8 @@ export const PAGE = {
   dark: { page: '#1d2130', card: '#272c3c', ink: '#f1f2f7', muted: '#9aa1b5', line: '#343a4d', hover: '#2f3547', problem: '#ff9c94',
     label: '#ffffff', halo: '#1d2130', station: '#c3c9d8', shadow: '0 10px 30px rgba(0, 0, 0, 0.35)', shadowSmall: '0 2px 8px rgba(0, 0, 0, 0.4)' },
 };
+// The smaller stations' names at middle zoom (Max, 2026-11-21, option c C: small and grey; src/big-stations.json).
+export const STATION_SMALL = { light: '#a39a8e', dark: '#7f879b' };
 
 // The accent colour (Settings → Accent colour, Max 2026-11-15): buttons, the chosen train's route ("done": the part
 // it has travelled), the "N trains" labels, the timeline's "now". c: the colour; ink: text on it. Only colours that
@@ -88,6 +90,7 @@ export function cssVars(dark, accent) {
     '--c-ontime': L.ontime, '--c-some': L.some, '--c-late': L.late, '--c-unknown': L.unknown,
     '--t-ontime-bg': T.ontime[0], '--t-ontime': T.ontime[1], '--t-some-bg': T.some[0], '--t-some': T.some[1],
     '--t-late-bg': T.late[0], '--t-late': T.late[1], '--t-unknown-bg': T.unknown[0], '--t-unknown': T.unknown[1],
+    '--station-small': STATION_SMALL[th],
     '--dis-1': DISRUPTION[th][0], '--dis-2': DISRUPTION[th][1], '--dis-3': DISRUPTION[th][2],
   };
 }
