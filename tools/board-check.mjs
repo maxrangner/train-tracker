@@ -26,6 +26,10 @@ const P = a => Date.parse(a.AdvertisedTimeAtLocation);
 const count = new Map();
 for (const a of raw) if (a.Advertised && !a.Deleted) { const k = `${a.LocationSignature}|${a.ActivityType}`; count.set(k, (count.get(k) ?? 0) + 1); }
 const busiest = [...count].filter(([, n]) => n >= 150).map(([k]) => k.split('|'));
+// Each busy station-direction's own rows, sorted out once (2026-11-21: searching all the day's rows for every one of the
+// 23,460 boards took most of the check's 78 s; the boards and the counting are as before).
+const rowsOf = new Map(busiest.map(([sig, act]) => [`${sig}|${act}`, []]));
+for (const a of raw) if (a.Advertised && !a.Deleted) rowsOf.get(`${a.LocationSignature}|${a.ActivityType}`)?.push(a);
 const plain = a => ({ planned: P(a), estimated: a.EstimatedTimeAtLocation ? Date.parse(a.EstimatedTimeAtLocation) : null,
   actual: a.TimeAtLocation ? Date.parse(a.TimeAtLocation) : null, canceled: a.Canceled === true });
 
@@ -41,8 +45,7 @@ for (let h = 5; h < 22; h += 0.25) {
     return files.get(kind);
   }, () => read));
   for (const [sig, act] of busiest) {
-    const there = raw.filter(a => a.LocationSignature === sig && a.ActivityType === act && a.Advertised && !a.Deleted
-      && P(a) > read - BOARD_BACK_MS && !boardGone(plain(a), read)).length;
+    const there = rowsOf.get(`${sig}|${act}`).filter(a => P(a) > read - BOARD_BACK_MS && !boardGone(plain(a), read)).length;
     for (const n of [4, 12, 40]) {
       const got = (await fetchBoard(sig, act, read, n)).length;
       boards++;
