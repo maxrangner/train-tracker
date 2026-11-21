@@ -286,6 +286,7 @@ const SCREENS = [
   ['screens 1120', 'tools/screens-check.mjs', 65],       // Max's notes of 2026-11-20
   ['splash', 'tools/splash-check.mjs', 30, true],        // the start screen's logo on its own thread (alone: frame times; 2026-11-21 beside another check its longest pause hit the 80 ms limit)
   ['animations', 'tools/ui-motion-check.mjs', 53],       // buttons, numbers, rows, signs, the menu
+  ['stats and board', 'tools/stats-board-check.mjs', 40], // Max's notes of 2026-11-21: Statistik's loading, dimming, company pages, the board's search (live)
 ];
 const screenJobs = [];
 if (!pageUp) {

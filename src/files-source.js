@@ -266,6 +266,15 @@ export function filesTapAsker(latest, at) {
         .map(m => ({ LocationCode: m[0], FreeText: m[1], StartDateTime: m[2], EndDateTime: m[3], Status: m[4] })) };
     }
     const add = await latest('taps-add');
+    if (kind === 'day') {
+      // A station's whole day (fetchStationDay): its group's day file (since 2026-11-21); from a server that makes none
+      // yet, its board file (the next trains only: partial).
+      const act = p.act === 'Avgang' ? 'D' : 'A';
+      const dayFile = await latest(`day-${groupOf(p.sig)}`).catch(() => null);
+      const g = dayFile ?? await need(`board-${groupOf(p.sig)}`);
+      const rows = withChanges(g, add, r => r[3] === p.sig && r[4] === act).filter(a => a.Advertised && !a.Deleted).sort(byPlanned);
+      return { asOf: add?.t ?? g.t, partial: !dayFile, TrainAnnouncement: rows };
+    }
     if (kind === 'board') {
       // Every row of the station from BOARD_BACK_MS back (4 h: a very late train still shows): fetchBoard
       // (src/trafikverket.js) drops the trains that are gone and then takes the next n. (Cut to n × 4 here first, a busy

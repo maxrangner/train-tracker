@@ -4,6 +4,8 @@
 // messages. From it fetcher/main.mjs makes the tap files (src/tap-files.js is their format):
 //   card-NN   the rows of the trains whose number is in group NN (a train's card; the number search)
 //   board-NN  the stations in group NN: each one's next trains not yet gone, per direction (a station's board)
+//   day-NN    the stations in group NN: every advertised train there today, both directions (the search on a
+//             station's board; Max, 2026-11-21: "Search for all day"; added 2026-11-21)
 //   taps-add  every row changed since the oldest card or board file now in use, at its newest state
 //   taps-index  internal number -> public number (a card asked by internal number finds its group)
 //   messages  every station's monitor messages in force or coming
@@ -164,6 +166,12 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
         by.get(k).push(x);
       }
       return out([...by.values()].flatMap(l => l.sort((a, b) => a.r[6] - b.r[6]).slice(0, BOARD_ROWS)), { kind: `board-${g}`, t });
+    },
+    // A station's whole day: every advertised row (not deleted) at the group's stations planned on t's Swedish day.
+    day: (g, t) => {
+      const today = swedishDay(t);
+      return out(all().filter(x => (x.r[5] & 1) && !(x.r[5] & 4) && x.r[6] !== null && groupOf(x.r[3]) === g && swedishDay(x.r[6] * 1000) === today)
+        .sort((a, b) => a.r[6] - b.r[6]), { kind: `day-${g}`, t });
     },
     changes: (since, t) => out(all().filter(x => x.mod >= since), { kind: 'taps-add', t, since }),
     index: t => { const ops = {}; for (const x of rows.values()) if (x.r[1]) ops[x.r[0]] = x.r[1]; return { kind: 'taps-index', t, groups: GROUPS, ops }; },

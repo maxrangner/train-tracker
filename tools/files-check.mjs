@@ -9,7 +9,7 @@
 //   - the text protector (src/html.js, point 1).
 // Run: node tools/files-check.mjs     exit code 0: all hold; 1: one failed
 import { startFilesSource, filesTapAsker } from '../src/files-source.js';
-import { setTapAsker, fetchBoard } from '../src/trafikverket.js';
+import { setTapAsker, fetchBoard, fetchStationDay } from '../src/trafikverket.js';
 import { esc } from '../src/html.js';
 import { FORMAT } from '../src/live-file.js';
 import { encodeRows, groupOf } from '../src/tap-files.js';
@@ -149,6 +149,16 @@ const handlers = (extra = {}) => ({ onRecords() {}, onStatus() {}, onPassings() 
   const got = [];
   for (const n of [4, 12, 40]) got.push((await fetchBoard('Mc', 'Avgang', now, n)).length);
   ok(got.join() === '4,12,40', `a board file with ${120 - toCome} trains gone and ${toCome} to come gives 4 / 12 / 40 rows (${got.join(' / ')})`);
+  // The search on a board (2026-11-21): the station's day file gives the whole day, the gone ones marked; from a server
+  // without day files, the board file (partial).
+  const dayFile = encodeRows(rows, { v: 1, t: now, kind: `day-${groupOf('Mc')}` });
+  setTapAsker(filesTapAsker(async kind => (kind === `day-${groupOf('Mc')}` ? dayFile : kind === `board-${groupOf('Mc')}` ? file : null), () => now));
+  const day = await fetchStationDay('Mc', 'Avgang', now);
+  const left = rows.filter(a => a.TimeAtLocation && Date.parse(a.TimeAtLocation) < now).length;   // (gone: left before now)
+  ok(day.length === 120 && day.filter(r => r.gone).length === left && !day.partial, `a day file gives the whole day: ${day.length} trains, ${day.filter(r => r.gone).length} gone, not partial`);
+  setTapAsker(filesTapAsker(async kind => (kind === `board-${groupOf('Mc')}` ? file : null), () => now));
+  const old = await fetchStationDay('Mc', 'Avgang', now);
+  ok(old.partial && old.length > 0, `no day file (an older server): the board file's trains, marked partial (${old.length})`);
 }
 // 8. the text protector.
 ok(esc(`<b>"Sto'ck" & co</b>`) === '&lt;b&gt;&quot;Sto&#39;ck&quot; &amp; co&lt;/b&gt;', 'station names and ids are shown as typed (& < > " \')');

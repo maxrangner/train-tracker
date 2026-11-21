@@ -6,6 +6,7 @@ import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, ownMap } from './map.js';
 import { createPanel } from './panel.js';
 import { drawInfo } from './train-info.js';
+import { tripPlaces } from './places-ahead.js';
 import { createSpeedLog } from './speed-log.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
@@ -18,7 +19,7 @@ import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
 import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -65,7 +66,7 @@ const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
 netReady.then((n) => { net = n; });
-let shownPath = null;   // { id, path, places, key, follow }: the open train's path (follow: src/path-follow.js)
+let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
 const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
 // The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
@@ -134,6 +135,13 @@ const panel = createPanel(document.getElementById('panel'), {
     drawInfo(box, { ...c, t: now() - DRAW_DELAY_MS, now: now(), log: speedLog, net, stationName, station: sig => stations.get(sig),
       path: shownPath?.id === c.id ? shownPath.path : null, place: frameById.get(c.id) ?? null, late: r ? minutesOf(r) : null });
   },
+  // "All places" on the full card (src/places-ahead.js): the places between the stops, those ahead worked out from the
+  // route as drawn from the timetable (shownPath.base: its places are the trip's stations, path.at where each is).
+  places: (id, route, stops) => {
+    const sp = shownPath?.id === id && shownPath.base ? shownPath : null;
+    const here = sp ? placeNow(id) : null;
+    return tripPlaces(route, stops, sp?.base ?? null, sp?.places ?? null, stations, here ? progressAt(sp.base, here) : null);
+  },
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
@@ -180,7 +188,8 @@ const panel = createPanel(document.getElementById('panel'), {
       if (!(shownPath?.id === id && shownPath.key === key && shownPath.follow)) {
         const base = cachedPath(places);
         const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
-        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow };
+        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
+        panel.placesReady(id);
       }
       const here = placeNow(id);
       let done = 0;
@@ -345,6 +354,7 @@ function showPicker(list) {
 // ---- A station's board (where the train panel opens; one of them at a time) ----
 const board = createBoard(document.getElementById('board'), {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
+  loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   isStarred: sig => favourites.has('station', sig),
@@ -739,12 +749,16 @@ const statsView = createStatsPage(statsBody, {
     return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
   },
   filter,
+  redraw: () => drawStats(true),
 });
+// statsView.company: a company's own page (only its trains), or null
 function drawStats(first = false) {
+  const brand = statsView.company;
   statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand }), { first });
 }
 function openStats() {
+  statsView.home();
   openPage(statsPage);
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
@@ -985,7 +999,8 @@ async function fileOf(kind) {
   if (!f) throw new Error(`no ${kind} file yet`);
   return f;
 }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => f.cancelled) : fetchCancelledToday(swedishDay(now())); }
+// { count, byBrand (null from a file made before 2026-11-21) }
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null })) : fetchCancelledToday(swedishDay(now())); }
 // Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
 async function filesArrivals(midnight, since) {
   const full = await fileOf('arrivals');
@@ -993,7 +1008,7 @@ async function filesArrivals(midnight, since) {
   const day = swedishDay(now()), rows = [];
   if (full.day === day && (since === null || since < full.t)) rows.push(...full.rows);
   if (add && add.day === day && add.t >= full.t) rows.push(...add.rows);
-  return rows.map(([id, planned, actual]) => ({ id, planned, actual }));
+  return rows.map(([id, planned, actual, brand]) => ({ id, planned, actual, brand: brand ?? null }));   // (no company in files before 2026-11-21)
 }
 
 function gotStations(m) {
