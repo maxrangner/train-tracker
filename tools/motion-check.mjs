@@ -130,7 +130,7 @@ const feed = (trains, upTo, i, skip, list = recs) => {
 const s = { pastStopBounced: 0, wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
   syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, earlyAtPlace: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
-const truthDir = new Map(), drawnDir = new Map();
+const truthDir = new Map(), truthDir20 = new Map(), drawnDir = new Map();
 const truthTurnAt = new Map(), wrongRun = new Map();   // wrong-way episodes (below)
 const truthTurns = new Map(), drawnTurns = new Map();   // id -> [times]: drawn turn-backs matched with real ones (below)
 const capWas = new Map();   // id -> the drawn train's s at the moment before (has it moved?)
@@ -243,9 +243,13 @@ for (let T = start; T < end; T += STEP) {
     // real) for comparison, judged over 20 m like the trains themselves (TURN_EVIDENCE_M in src/trains.js; since
     // 2026-11-21, TODO 4): over 5 m a standing train's GPS wobble turned the real direction minutes before the real
     // turn at a terminus, and the drawn turn there was then counted as one without a real one.
-    const truthTurned = turnBack(truthDir, d.id, tru, 20);
+    // (The wrong-way rule below keeps the real direction over 5 m, as before: there a position source jumping 60 m
+    // back and forth at a standing train, 1704 at Hjärup, is a real turn of the data that the drawn train rightly
+    // doesn't follow.)
+    const truthTurned = turnBack(truthDir20, d.id, tru, 20);
     s.truthBack += truthTurned;
-    if (truthTurned) { truthTurnAt.set(d.id, t); (truthTurns.get(d.id) ?? truthTurns.set(d.id, []).get(d.id)).push(t); }
+    if (truthTurned) (truthTurns.get(d.id) ?? truthTurns.set(d.id, []).get(d.id)).push(t);
+    if (turnBack(truthDir, d.id, tru)) truthTurnAt.set(d.id, t);
     const tb = turnBack(drawnDir, d.id, d);
     if (tb) (drawnTurns.get(d.id) ?? drawnTurns.set(d.id, []).get(d.id)).push(t);
     // Wrong way (Max, 2026-11-12: "U-turns on the line"): the drawn train moving against the real one, both moving
