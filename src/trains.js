@@ -84,6 +84,8 @@ const SYNC_START_S = 25;
 const SYNC_END_M = 50;    // ...until this close
 const JUMP_M = 20000;     // further off than this (either way): jump
 const AHEAD_JUMP_M = 3000; // ahead of the target by more than this (the data went somewhere else): jump
+// The sharpest turn a way between two reports may take when none exists under the network's own rule (append).
+const SHARP_TURN_DEG = 120;
 
 const R = Math.PI / 180;
 // Distance in metres between two places (flat approximation, fine over a few km).
@@ -338,7 +340,7 @@ export function createTrains(options = {}) {
       o: { stood: tr.stood && !stoodReleased(tr, t), dwell: Boolean(dw), dwellS,
         frozen: Boolean(tr.inactiveSince) || (t + DELAY - tr.heard > silentLimit(tr) && !(longSilent(tr, t) && ext?.eta)), towardS: ext?.towardS ?? null, eta: ext?.eta ?? null } };
   };
-  const counts = { inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
+  const counts = { routedSharp: 0, inactiveKept: 0, inactiveBack: 0, speedAtFixed: 0, repeats: 0, resent: 0, dwellRepeats: 0, spikes: 0, leapsHeld: 0, leapsKept: 0, against: 0, jumpsHeld: 0, jumpsDropped: 0, jumpsKept: 0, routed: 0, unrouted: 0, passingsUsed: 0, passingsReplaced: 0, handedOver: 0 };
 
   // Add a report to the path. If the train is being drawn past its last report (coasting), the path ahead of it
   // changes: keep the drawn place still and let the difference fade, so nothing jumps sideways.
@@ -360,6 +362,12 @@ export function createTrains(options = {}) {
       const straight = metres(last, e);
       if (!given && e.snap && last.snap && straight > 0.01) {
         e.route = NET.route(last.snap, e.snap, 3 * straight + 500);
+        // No way under the trains' turn rule (60°): the track data often has a sharp corner where trains really run
+        // straight through (Sandared, Nässjö C, Göteborg C, Norrköping C: 8 of 26 wrong branches in seven recordings,
+        // docs/movement-findings-1121.md G1; about 0.6 % of all report pairs). Before drawing a straight chord, a way
+        // with turns up to SHARP_TURN_DEG, at most a little longer than the straight distance (not a reversal round a
+        // yard).
+        if (!e.route) { e.route = NET.route(last.snap, e.snap, 1.2 * straight + 200, 0, SHARP_TURN_DEG); if (e.route) counts.routedSharp++; }
         counts[e.route ? 'routed' : 'unrouted']++;
       }
       e.s = last.s + (e.route ? e.route.cum[e.route.cum.length - 1] : straight);
