@@ -12,6 +12,26 @@ export const TAG = {
   light: { ontime: ['#d9f5e6', '#17804c'], some: ['#fdefcf', '#8a5d00'], late: ['#ffe0dd', '#c23a33'], unknown: ['#eeeae4', '#6f675c'] },
   dark: { ontime: ['#1f4a3a', '#7fe0b0'], some: ['#4d3f1d', '#ffd27a'], late: ['#57292b', '#ff9c94'], unknown: ['#363b4c', '#a8aec0'] },
 };
+// The same four for colour blindness (Settings → Colour-blind mode; Max, 2026-11-21: "Just do a color blind toggle and
+// change the color scheme for that"). Today's set: with red-green colour blindness (deuteranopia, about 5 % of men)
+// on time and +6 or more look almost the same olive (CIEDE2000 8-9; docs/reviews/2026-11-21-checks.md). This set
+// carries the order in lightness too (on time light, +6 or more dark, +3 to +5 a bright amber, not known a grey):
+// the smallest difference between any two is 17 (light) / 21 (dark) in normal vision and in deuteranopia, protanopia
+// and tritanopia alike (Machado 2009; today's set: 8). Searched by computer under the accent check's rules (every
+// accent at least 20 from each normally, 12 colour-blind) and standing out from the land at least as today's
+// green does. The same hues on both maps, so a colour means the same in both. Tags: the colour's hue, text contrast
+// 5.3:1 or more (light) and 8.3:1 (dark).
+export const LATE_SAFE = {
+  light: { ontime: '#60a286', some: '#e6b816', late: '#bd4d00', unknown: '#6c6559' },
+  dark: { ontime: '#73edb1', some: '#ea9602', late: '#b84412', unknown: '#82807d' },
+};
+export const TAG_SAFE = {
+  light: { ontime: ['#cdf6e3', '#036f4f'], some: ['#f8eac6', '#725a08'], late: ['#fee5db', '#97400d'], unknown: ['#edebe7', '#615d57'] },
+  dark: { ontime: ['#103c28', '#7debb3'], some: ['#462d0b', '#fec583'], late: ['#4c271a', '#fdc1ac'], unknown: ['#36322d', '#d5d0ca'] },
+};
+// The lateness colours and tags in use: the colour-blind set when safe is true.
+export const lateSet = (dark, safe) => (safe ? LATE_SAFE : LATE)[dark ? 'dark' : 'light'];
+export const tagSet = (dark, safe) => (safe ? TAG_SAFE : TAG)[dark ? 'dark' : 'light'];
 // Disruptions on the map: yellow, orange, red (by level).
 export const DISRUPTION = { light: ['#d4a017', '#e8701a', '#d1242f'], dark: ['#e3b341', '#f0883e', '#ff6b61'] };
 // The stats page's heatmap, how many trains (Max, 2026-11-15: "cold to hot", then "add yellow/orange"): blue, violet,
@@ -82,9 +102,9 @@ export const ACCENTS = {
 // The default since 2026-11-20: Azurblå (Max: "Use Azurblå default color"); periwinkle (Blålila) before.
 export const DEFAULT_ACCENT = 'cerulean';
 
-// The CSS variables for a theme and accent, as { '--name': value }.
-export function cssVars(dark, accent) {
-  const th = dark ? 'dark' : 'light', P = PAGE[th], L = LATE[th], T = TAG[th];
+// The CSS variables for a theme and accent (safe: the colour-blind lateness set), as { '--name': value }.
+export function cssVars(dark, accent, safe = false) {
+  const th = dark ? 'dark' : 'light', P = PAGE[th], L = lateSet(dark, safe), T = tagSet(dark, safe);
   const A = (ACCENTS[accent] ?? ACCENTS[DEFAULT_ACCENT])[th];
   return {
     '--page': P.page, '--bg': P.card, '--card': P.card, '--ink': P.ink, '--muted': P.muted, '--line': P.line, '--hover': P.hover,
