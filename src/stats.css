@@ -161,3 +161,18 @@ button.st-fastrow:hover { background: var(--card); }
 .st-busy { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .st-busy[hidden] { display: none; }
 .st-busy .spin { width: 12px; height: 12px; border-width: 2px; }
+
+/* A company's own page (Max, 2026-11-21): "›" at the end of its row opens it; its head: back, name, kind, today. */
+.st-brow-w { display: flex; align-items: center; gap: 2px; }
+.st-brow-w > .st-brow { flex: 1; min-width: 0; width: auto; margin-right: 0; }
+.st-brow-w[hidden] { display: none; }
+.st-cogo { flex: none; width: 34px; height: 34px; margin-right: -8px; border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+  font: inherit; font-size: 22px; font-weight: 600; line-height: 1; cursor: pointer; }
+.st-cogo:hover { background: var(--card); color: var(--ink); }
+.st-cohead { display: grid; gap: 6px; padding-top: 2px; }
+.st-back { justify-self: start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 4px 0; font: inherit; font-weight: 700; color: var(--accent); cursor: pointer; }
+.st-back span { font-size: 22px; line-height: 1; }
+.st-coname { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.st-coname b { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
+.st-coname small { color: var(--muted); font-size: 14px; }
+.st-codot { width: 14px; height: 14px; border-radius: 50%; flex: none; align-self: center; }
