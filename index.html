@@ -337,6 +337,11 @@
     /* The open train's stations close in: the name in a pill (src/map.js placeStationNames; Max, 2026-11-15). */
     .station-name.pill { background: var(--card); color: var(--ink); font-size: 13px; padding: 2px 9px; border-radius: 999px; text-shadow: none;
       box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.12); margin-top: -3px; }
+    /* Settings → Debug → Route station names (Max, 2026-11-21: "C, but put all three in a debug setting"): the contrast
+       pill (the default: the other way from the trains' labels), or bold text with no pill. */
+    :root[data-route-names="contrast"] .station-name.pill { background: var(--pill-bg); color: var(--pill-ink); box-shadow: none; font-weight: 600; }
+    :root[data-route-names="plain"] .station-name.pill { background: none; box-shadow: none; padding: 0; margin-top: 0; font-size: 15px; font-weight: 700;
+      color: var(--label); text-shadow: 0 0 2px var(--label-halo), 0 0 3px var(--label-halo), 0 0 5px var(--label-halo); }
     /* Disruptions (src/disruptions.js): the list page opened from the menu (as the stats page), and a disruption's card
        where a train's panel opens. The dot shows the level: yellow, orange, red (as on the map). */
     #disruptions-page { display: flex; flex-direction: column; gap: 6px; }
@@ -994,6 +999,8 @@
         <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
       <div class="debug-only set-row"><span data-t="pageOverTrain">Screen over a train</span>
         <div class="seg" data-key="pageOverTrain" role="group" aria-label="Screen over a train" data-t-aria="pageOverTrain"><button type="button" data-v="card" data-t="overCard">Card back</button><button type="button" data-v="follow" data-t="overFollow">Followed</button><button type="button" data-v="clear" data-t="overClear">Let go</button></div></div>
+      <div class="debug-only set-row"><span data-t="routeNames">Route station names</span>
+        <div class="seg" data-key="routeNames" role="group" aria-label="Route station names" data-t-aria="routeNames"><button type="button" data-v="contrast" data-t="rnContrast">Contrast</button><button type="button" data-v="pill" data-t="rnPill">Like trains</button><button type="button" data-v="plain" data-t="rnPlain">Text</button></div></div>
     </div>
   </div>
   <div id="settings-backdrop"></div>
