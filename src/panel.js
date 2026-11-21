@@ -90,7 +90,7 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
   (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
 
 // places(id, route, stops): the places passed without stopping between the card's stops (src/places-ahead.js tripPlaces).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places }) {
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -203,6 +203,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       for (const c of el.children) if (!c.classList.contains('panel-head')) c.classList.add('busy');
     } else el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
+    // The line on how its place is known, at once: it came with the next second's tick, after the timetable was in,
+    // so the card stepped ~24-43 px taller after its glide (2026-11-21's sweep).
+    putStatus(statusOf?.(train.id) ?? '');
 
     let route;
     try {
@@ -219,7 +222,10 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     onRoute?.(train.id, route);
     shown = { train, route };
     if (swap) glide(el, () => { draw(train, route); rollIn(swap); });
-    else draw(train, route);
+    // From "Laddar…" to the timetable in one glide (a step of ~24 px, the map's buttons dipping with it; 2026-11-21's
+    // sweep). Not under a finger: a glide turns the drag's own transitions back on.
+    else if (el.classList.contains('dragging')) draw(train, route);
+    else glide(el, () => draw(train, route));
     refreshLater(train);
   }
   // What the card shows now, as numbers (for the swap above): the train number, the minutes late, the minutes to the
@@ -609,6 +615,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   function setStatus(text) {
     showGlance();
     drawInfo();
+    putStatus(text);
+  }
+  function putStatus(text) {
     let line = el.querySelector('.panel-status');
     if (!text) { line?.remove(); return; }
     if (!line) {

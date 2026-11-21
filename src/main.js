@@ -127,6 +127,8 @@ const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(fal
 const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers, "i")
 const panel = createPanel(document.getElementById('panel'), {
   stationName,
+  // the line on how its place is known (also each second, below), for a card just opened
+  statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
   isStarred: number => favourites.has('train', number),
   lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
