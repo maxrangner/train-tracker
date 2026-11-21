@@ -20,7 +20,8 @@
     },
     {
       "slot": "saturday daytime",
-      "core": "2026-11-14T09-00-00-018Z"
+      "core": "2026-11-14T09-00-00-018Z",
+      "alsoWithGps": "library 2026-11-21T12-38-00-336Z (Sat 21 Nov 13:38, SL's GPS on): an easier replay than the core hour, which stays"
     },
     {
       "slot": "night or first trains",
@@ -105,6 +106,25 @@
       "routes": {
         "bytes": 5143609,
         "sha256": "aaa30dcf99fc761fd0c0e03ba47a68d0777f2ab7264afdbf8eda5fddae760f15"
+      }
+    },
+    {
+      "name": "2026-11-21T12-38-00-336Z",
+      "role": "library",
+      "slot": "saturday daytime",
+      "swedish": "Sat 21 Nov 2026 13:38-14:38",
+      "why": "Saturday daytime with SL's GPS on (27-33 of 28-34 SL trains sent a speed in every 10 minutes; Sat 14 Nov 10:00, the core hour, had it off). 228 trains at once (most 240), 36 % never send a speed, 39.7 % of train time in GPS silences of 30 s or more, 35 jumps, 10.4 % of trains 6 min or more late; routes saved for all 389 trains at once. Replays at 90 % within 5.5 s, frozen 0.4 %, stops driven through 12.3 %, wrong branches 6 (the core Saturday hour: 6.4 s, 18.6 %). Library, not core: easier than the core Saturday hour, which stays.",
+      "positions": {
+        "bytes": 42058190,
+        "sha256": "18d2c82461082e3332d42c3ca075e9f9c80f2cca858572e9156bb59348745e8d"
+      },
+      "timetable": {
+        "bytes": 9056275,
+        "sha256": "6ef96508077d463f6f39a7a23a3a1823d4d2aec01d8c74d45874b1d306a7b3c3"
+      },
+      "routes": {
+        "bytes": 6648461,
+        "sha256": "0d71de2c95ecba91a0389b1c6532cdda6eabd11574776f7b7d5406533abd3a58"
       }
     },
     {
