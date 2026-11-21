@@ -153,3 +153,10 @@ button.st-fastrow:hover { background: var(--card); }
 @media (prefers-reduced-motion: reduce) {
   #stats-body *, #stats-body *::before { transition: none !important; animation: none !important; }
 }
+
+/* Today's graph asking for its numbers (Max, 2026-11-21): "Laddar…" beside its title, also over the numbers saved
+   earlier today. */
+.st-daylbl { display: flex; align-items: center; gap: 8px; }
+.st-busy { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.st-busy[hidden] { display: none; }
+.st-busy .spin { width: 12px; height: 12px; border-width: 2px; }
