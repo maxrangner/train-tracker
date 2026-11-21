@@ -24,11 +24,15 @@ export const CHECKS = [
 export const MARGINS = {
   frozenPct: [b => b + 0.2, 'moving trains drawn standing'],
   lag90S: [b => b + 1, '90 % of moments within (s of travel)'],
+  // Since 2026-11-21 a stop counts within 300 m of the station point or of its measured stopping place.
   dwellThroughPct: [b => b + 2, 'real stops drawn driving through (%)'],
   wrongWay: [b => b + 2, 'drawn against the real train'],
   // Drawn onto another track before the next report (tools/lib/branch.mjs; since 2026-11-14).
   wrongBranch: [b => b + Math.max(3, Math.round(0.2 * b)), 'drawn onto a wrong branch'],
   extraTurnBacks: [b => b + Math.max(5, Math.round(0.1 * b)), 'U-turns drawn beyond the data’s own'],
+  // Drawn U-turns with no real turn of the same train within 90 s (since 2026-11-21, TODO 4; the real direction
+  // judged over 20 m moved, so a standing train's GPS wobble at a terminus no longer hides or makes a turn).
+  unmatchedTurnBacks: [b => b + Math.max(5, Math.round(0.15 * b)), 'U-turns drawn with no real turn within 90 s'],
   // Trains seen only at fixed places, drawn standing at real stops: median metres from where trains really stand
   // (public/stop-places.json; since 2026-11-14, point 5 B: 186 -> 23 m in the morning rush).
   standNoGpsMedM: [b => b + Math.max(10, Math.round(0.3 * b)), 'trains without GPS standing at stops, median m from the stopping place'],
