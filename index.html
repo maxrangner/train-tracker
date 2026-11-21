@@ -529,7 +529,11 @@
        up to 60 %: the followed train is held about 27 % from the top (src/map.js defaultFocus), still above it. */
     @media (max-width: 439px) { #panel:not(.full):not(.picking) { max-height: 60vh; } }
     .cd { display: contents; }
-    .cd-tiles { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; margin-top: 12px; flex: none; }
+    /* The two tiles the same width (Max, 2026-11-21, option l C; 3 : 2 before): the stop's name fits on one line. */
+    .cd-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; flex: none; }
+    /* "planned" (no expected time from Trafikverket) as a small tag beside the minutes. */
+    .cd-top { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }   /* no room: the tag under the minutes */
+    .cd-plan { flex: none; font: 700 11px/1 var(--font); color: var(--muted); background: var(--card); border-radius: 999px; padding: 4px 7px; }
     .tile b.long { font-size: 18px; line-height: 1.4; }   /* "≈ 1 h 43 min": smaller, inside its tile (Max, 2026-11-15) */
     .tile b.wrap { font-size: 18px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }   /* "Mot Göteborg C": two lines when it must */
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
