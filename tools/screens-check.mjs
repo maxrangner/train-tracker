@@ -225,6 +225,32 @@ try {
     await page.touchscreen.tap(more2.x, more2.y);
     await sleep(800);
     check(await isFull(), 'a tap on that button still works (All stops)');
+    // Max, 2026-11-21: a tap on the train already open "reloads the card and flickers it once": the card stays as it is
+    await page.evaluate(() => document.querySelector('#panel .panel-more')?.click());   // compact again
+    await sleep(800);
+    const dot = await page.evaluate(() => {
+      const id = [...window.__map.queryRenderedFeatures({ layers: ['train-dots'] })]
+        .find(f => document.querySelector('#panel .panel-title strong')?.textContent === String(window.__trains.get(f.properties.id)?.number));
+      if (!id) return null;
+      const p = window.__map.project(id.geometry.coordinates);
+      return { x: p.x, y: p.y };
+    });
+    if (!dot) fails.push('tap on the open train: its dot not found on the map');
+    else {
+      await page.evaluate(() => { window.__emptied = false; const el = document.getElementById('panel');
+        new MutationObserver(() => { if (el.querySelector('.state')) window.__emptied = true; }).observe(el, { childList: true, subtree: true }); });
+      await page.touchscreen.tap(dot.x, dot.y);
+      await sleep(1500);
+      const r = await page.evaluate(() => ({ emptied: window.__emptied, open: !document.getElementById('panel').hidden }));
+      check(r.open && !r.emptied, `a tap on the train already open keeps its card as it is (open ${r.open}, emptied ${r.emptied})`);
+    }
+    // Max, 2026-11-21: swiped away from a button, the card stayed open below the screen (the train selected, the map's
+    // buttons up where it was): a long swipe down from "All stops" on the compact card closes it
+    const more3 = await page.evaluate(() => { const r = document.querySelector('#panel .panel-more').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+    await swipe(more3.x, more3.y, 200);
+    const gone = await page.evaluate(() => ({ hidden: document.getElementById('panel').hidden,
+      h: getComputedStyle(document.documentElement).getPropertyValue('--sheet-h').trim() }));
+    check(gone.hidden && gone.h === '0px', `a long swipe down that starts on a button closes the card (closed ${gone.hidden}, the map's buttons at ${gone.h})`);
   }
   check(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 } finally {
