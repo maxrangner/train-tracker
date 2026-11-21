@@ -85,7 +85,8 @@ try {
     return { full: b.classList.contains('full'), n: list.length, gone: list.filter(r => r.classList.contains('gone')).length, topGone: top ? top.classList.contains('gone') : null,
       numbers: list.map(r => r.querySelector('.bd-name small').textContent.split(' ')[0]), names: list.map(r => r.querySelector('.bd-name b').textContent), empty: Boolean(b.querySelector('.board-found .state')) }; });
   await page.evaluate(() => document.querySelector('#board .board-find').click());
-  for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(200)) if (await page.evaluate(() => Boolean(document.querySelector('#board .board-found .bd-row')))) break;
+  // (the board's rows stay, dimmed, until the day is in: wait for the day)
+  for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(200)) if (await page.evaluate(() => Boolean(document.querySelector('#board .board-found:not(.busy) .bd-row')) && !document.querySelector('#board .board-found .busy'))) break;
   const day = await look();
   check(day.full && day.n > 30 && day.topGone === false, `the search: the card full, the whole day (${day.n} trains, ${day.gone} gone), starting at the next train`);
   const num = day.numbers.find(Boolean).slice(0, 2);
