@@ -6,6 +6,7 @@ import { createLateness, label, lateClass } from './lateness.js';
 import { createMap, ownMap } from './map.js';
 import { createPanel } from './panel.js';
 import { drawInfo } from './train-info.js';
+import { tripPlaces } from './places-ahead.js';
 import { createSpeedLog } from './speed-log.js';
 import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
@@ -65,7 +66,7 @@ const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
 netReady.then((n) => { net = n; });
-let shownPath = null;   // { id, path, places, key, follow }: the open train's path (follow: src/path-follow.js)
+let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
 const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
 // The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
@@ -134,6 +135,13 @@ const panel = createPanel(document.getElementById('panel'), {
     drawInfo(box, { ...c, t: now() - DRAW_DELAY_MS, now: now(), log: speedLog, net, stationName, station: sig => stations.get(sig),
       path: shownPath?.id === c.id ? shownPath.path : null, place: frameById.get(c.id) ?? null, late: r ? minutesOf(r) : null });
   },
+  // "All places" on the full card (src/places-ahead.js): the places between the stops, those ahead worked out from the
+  // route as drawn from the timetable (shownPath.base: its places are the trip's stations, path.at where each is).
+  places: (id, route, stops) => {
+    const sp = shownPath?.id === id && shownPath.base ? shownPath : null;
+    const here = sp ? placeNow(id) : null;
+    return tripPlaces(route, stops, sp?.base ?? null, sp?.places ?? null, stations, here ? progressAt(sp.base, here) : null);
+  },
   onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
@@ -180,7 +188,8 @@ const panel = createPanel(document.getElementById('panel'), {
       if (!(shownPath?.id === id && shownPath.key === key && shownPath.follow)) {
         const base = cachedPath(places);
         const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
-        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow };
+        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
+        panel.placesReady(id);
       }
       const here = placeNow(id);
       let done = 0;
