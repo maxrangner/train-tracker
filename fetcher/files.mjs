@@ -27,8 +27,8 @@ export const KINDS = {
   'taps-index': [10 * MIN, 15 * MIN],
   messages: [2 * MIN, 5 * MIN],
 };
-const GROUP_KEEP = 25 * MIN;   // card-NN, board-NN: kept 25 minutes after made (a newer one comes within ~16)
-export const keepOf = kind => KINDS[kind]?.[1] ?? (/^(card|board)-\d+$/.test(kind) ? GROUP_KEEP : 15 * MIN);
+const GROUP_KEEP = 25 * MIN;   // card-NN, board-NN, day-NN: kept 25 minutes after made (a newer one comes within ~16)
+export const keepOf = kind => KINDS[kind]?.[1] ?? (/^(card|board|day)-\d+$/.test(kind) ? GROUP_KEEP : 15 * MIN);
 // The live file's name comes from its 5-s slot (a page works it out from the clock); every other file is named by
 // the moment it was made (the live file tells its name), so even a file made twice in one period gets a new name.
 export const nameOf = (kind, t) => kind === 'live' ? liveName(t) : `${kind}-${t}.json`;
