@@ -32,6 +32,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   let msgs = [];          // the station's own messages
   let msgsOpen = false;   // they are folded into one line (Max, 2026-11-15: they pushed the departures out of sight)
   let finding = false, query = '', dayRows = null, dayFor = '', dayAt = 0;   // the search (see the top)
+  let closingFind = false;   // the search closed: the board's rows, once in, glide the card back in one go
   const DAY_MS = 2 * 60 * 1000;   // the whole day asked again at most this often while searching (Stockholm C: ~400 kB)
   const msgsHtml = () => (msgs.length ? `<div class="board-msgs"><button type="button" class="board-msgs-toggle" aria-expanded="${msgsOpen}">` +
     `${icon('warning', 17)}<span>${t('messagesCount', msgs.length)}</span>${icon(msgsOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` +
@@ -39,7 +40,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   function wireMsgs() {
     const b = el.querySelector('.board-msgs-toggle');
     // Opened, the card goes full height so departures still show under them; folded again, back to its size.
-    if (b) b.onclick = () => glide(el, () => { msgsOpen = !msgsOpen; el.classList.toggle('full', msgsOpen); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); });
+    if (b) b.onclick = () => glide(el, () => { msgsOpen = !msgsOpen; el.classList.toggle('full', msgsOpen || finding); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); });
   }
   async function askMessages() {
     if (!station || !messages) return;
@@ -114,24 +115,31 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     if (finding) { if (Date.now() - dayAt > DAY_MS) findRefresh(); return; }
     const n = ++asked;
     if (showLoading) frame(stateHtml('loading', t('loading')));
+    // The search just closed: the card keeps the day (dimmed) until the board's rows are in, then glides to them once
+    // (Max, 2026-11-21: it "jumps around": it shrank to "Laddar…", then jumped up and glided again).
+    const paint = (fn) => {
+      if (!closingFind) { fn(); return; }
+      closingFind = false;
+      glide(el, () => { el.classList.remove('finding'); if (!msgsOpen) el.classList.remove('full'); fn(); });
+    };
     let rows;
     try {
       rows = await load(station.sig, activity);
     } catch (e) {
-      if (n === asked && station) frame(stateHtml('error', t('boardFailed', e.message)));
+      if (n === asked && station) paint(() => frame(stateHtml('error', t('boardFailed', e.message))));
       return;
     }
     if (n !== asked || !station) return;
     const dep = activity === 'Avgang';
     const scroll = top ? 0 : el.querySelector('.panel-table')?.scrollTop ?? 0;
-    if (!rows.length) { frame(stateHtml('empty', t(dep ? 'noDepartures' : 'noArrivals'))); return; }
+    if (!rows.length) { paint(() => frame(stateHtml('empty', t(dep ? 'noDepartures' : 'noArrivals')))); return; }
     // One row per train, in the train card's style (round 4, 2026-11-15): the planned time (the new one under it in
     // the lateness colour), where it goes (or comes from) with its number and kind, the lateness tag, the track.
     const body = rows.map((r, i) => rowHtml(r, i, dep)).join('');
     // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
     const stale = rows.asOf && now() - rows.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(rows.asOf))}</p>` : '';
-    frame(stale + `<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
-      `<div class="panel-table bd">${body}</div>`);
+    paint(() => frame(stale + `<div class="bd-head"><span>${t('time')}</span><span>${t(dep ? 'to' : 'from')}</span><span>${t('track')}</span></div>` +
+      `<div class="panel-table bd">${body}</div>`));
     const box = el.querySelector('.panel-table');
     box.scrollTop = scroll;
     for (const b of el.querySelectorAll('.bd-row')) {
@@ -144,15 +152,23 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   }
 
   // ---- The search: the station's whole day ----
+  // Opened: the station's messages fold (the field stays above the phone's keyboard; Max, 2026-11-21), the card goes
+  // full in one glide, the board's rows stay (dimmed) until the day is in: nothing empties to "Laddar…" on the way.
   function startFind() {
-    finding = true; query = '';
-    glide(el, () => { el.classList.add('full', 'finding'); frame(findHtml(stateHtml('loading', t('loading')))); wireFind(); });
+    finding = true; query = ''; closingFind = false;
+    const old = el.querySelector('.bd-head') ? `<div class="busy">${el.querySelector('.bd-head').outerHTML}${el.querySelector('.panel-table')?.outerHTML ?? ''}</div>` : '';
+    msgsOpen = false;
+    glide(el, () => { el.classList.add('full', 'finding'); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind(); });
     el.querySelector('.board-q')?.focus();
     findRefresh({ toNow: true });
   }
+  // Closed: the day stays (dimmed) until the board's rows are in, then one glide back (refresh's paint).
   function stopFind() {
-    finding = false; dayRows = null;
-    glide(el, () => { el.classList.remove('full', 'finding'); frame(stateHtml('loading', t('loading'))); });
+    finding = false; dayRows = null; closingFind = true;
+    el.querySelector('.board-qrow')?.remove();
+    el.querySelector('.board-found')?.classList.add('busy');
+    const b = el.querySelector('.board-find');
+    if (b) { b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-label', t('boardFind')); b.innerHTML = icon('search', 18); }
     refresh(false, { top: true });
   }
   const findHtml = list => `<div class="board-qrow"><input class="board-q" type="search" enterkeyhint="search" autocomplete="off" ` +
@@ -174,6 +190,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       return;
     }
     if (!el.querySelector('.board-q')) { frame(findHtml('')); wireFind(); }
+    el.querySelector('.board-found')?.classList.remove('busy');
     drawFound({ toNow });
   }
   // A train number (its start) or a destination's name (any part; arrivals: where it comes from).
