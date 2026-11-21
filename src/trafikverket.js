@@ -290,13 +290,18 @@ export async function fetchCancelledToday(day) {
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9">` +
     `<FILTER><EQ name="Canceled" value="true"/><EQ name="Advertised" value="true"/>` +
     `<EQ name="ScheduledDepartureDateTime" value="${day}"/></FILTER>` +
-    `<INCLUDE>OperationalTrainNumber</INCLUDE></QUERY>`);
-  return new Set((r.TrainAnnouncement ?? []).map(a => a.OperationalTrainNumber)).size;
+    `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
+  // { count, byBrand: { company: trains } } (per company since 2026-11-21: Statistik's company page)
+  const brandOf = new Map();
+  for (const a of r.TrainAnnouncement ?? []) if (!brandOf.has(a.OperationalTrainNumber) || !brandOf.get(a.OperationalTrainNumber)) brandOf.set(a.OperationalTrainNumber, a.ProductInformation?.[0]?.Description ?? '');
+  const byBrand = {};
+  for (const b of brandOf.values()) byBrand[b] = (byBrand[b] ?? 0) + 1;
+  return { count: brandOf.size, byBrand };
 }
 
 // ---------- Today's arrivals (the stats page's graph) ----------
 
-// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual }],
+// Arrivals at passenger stops with an actual time after `since` (ms: Swedish midnight): [{ id, planned, actual, brand }],
 // id = train number + station (shorter than ActivityId, 36 characters). changedSince (ms): only rows changed after
 // it (ModifiedTime). Measured 2026-11-13 at 23:50: the whole day ~31,900 rows, 5.4 MB, ~285 kB as sent; changes over 10
 // minutes ~150 rows, 2.5 kB. Old rows are changed again too (an hour's changes reached back to 01:23).
@@ -307,11 +312,12 @@ export async function fetchDayArrivals(since, changedSince = null) {
     `<EQ name="Advertised" value="true"/><EQ name="ActivityType" value="Ankomst"/>` +
     (changedSince ? `<GT name="ModifiedTime" value="${new Date(changedSince).toISOString()}"/>` : '') + `</FILTER>` +
     `<INCLUDE>OperationalTrainNumber</INCLUDE><INCLUDE>LocationSignature</INCLUDE>` +
-    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE></QUERY>`);
+    `<INCLUDE>AdvertisedTimeAtLocation</INCLUDE><INCLUDE>TimeAtLocation</INCLUDE><INCLUDE>ProductInformation</INCLUDE></QUERY>`);
   const out = [];
   for (const a of r.TrainAnnouncement ?? []) {
     if (!a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
-    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation) });
+    out.push({ id: `${a.OperationalTrainNumber}|${a.LocationSignature}`, planned: Date.parse(a.AdvertisedTimeAtLocation), actual: Date.parse(a.TimeAtLocation),
+      brand: a.ProductInformation?.[0]?.Description ?? null });   // the company (Statistik's company page, 2026-11-21)
   }
   return out;
 }

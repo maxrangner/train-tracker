@@ -204,7 +204,8 @@ if (KEY) every('disruptions', 5 * MIN, 2000, async () => {
 });
 if (KEY) every('stats', 5 * MIN, 4000, async () => {
   const t = Date.now(), day = swedishDay(t);
-  shelf.put('stats', t, { v: 1, t, kind: 'stats', day, cancelled: await fetchCancelledToday(day) });
+  const c = await fetchCancelledToday(day);
+  shelf.put('stats', t, { v: 1, t, kind: 'stats', day, cancelled: c.count, cancelledBy: c.byBrand });   // cancelledBy: added 2026-11-21
 });
 if (KEY) every('stations', 24 * 60 * MIN, 1000, async () => {
   const t = Date.now();
@@ -220,12 +221,13 @@ function swedishMidnight(t) {
   return utc - h * 3600000;
 }
 const arr = { day: null, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 };
-const arrRows = m => [...m].map(([id, [p, a]]) => [id, p, a]);
+// A row: [id, planned, actual, company] (the company at the row's end since 2026-11-21: Statistik's company page).
+const arrRows = m => [...m].map(([id, [p, a, b]]) => [id, p, a, b ?? null]);
 if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
   const t = Date.now(), day = swedishDay(t);
   if (day !== arr.day) Object.assign(arr, { day, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 });
   const list = await fetchDayArrivals(swedishMidnight(t), arr.asOf === null ? null : arr.asOf - 5 * MIN);
-  for (const r of list) { arr.rows.set(r.id, [r.planned, r.actual]); arr.changed.set(r.id, [r.planned, r.actual]); }
+  for (const r of list) { arr.rows.set(r.id, [r.planned, r.actual, r.brand]); arr.changed.set(r.id, [r.planned, r.actual, r.brand]); }
   arr.asOf = t;
   if (t - arr.fullAt >= 60 * MIN) {
     shelf.put('arrivals', t, { v: 1, t, kind: 'arrivals', day, rows: arrRows(arr.rows) });

@@ -128,17 +128,47 @@ const ICONS = {
 
 // root: #stats-body. actions: { openTrain(id), openStation(sig), describe(id) -> { number, brand, minutes } }.
 // filter: src/filter.js (which rows show as pressed; main.js toggles it on a tap of [data-filter]).
-export function createStatsPage(root, { openTrain, openStation, describe, filter }) {
-  let builtLang = null, parts = [], funOffset = 0, beatSlot = null;
+// A company's own page (Max, 2026-11-21: "a sub stats screen for each operator ... number of trains today,
+// punctuality, and more"): "›" at the end of its row; the same tiles, only its trains (src/stats.js snapshot brand),
+// under a head with its name, its kind and its trains today; "‹" back to all. main.js asks for the numbers of
+// `company`.
+export function createStatsPage(root, { openTrain, openStation, describe, filter, redraw }) {
+  let builtLang = null, builtFor = null, parts = [], funOffset = 0, beatSlot = null;
+  let company = null;   // the company whose page is shown (null: all trains)
   addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
   const view = { fastest: 'now', busiest: 'recent' };   // the toggles: not remembered
   let companiesOpen = false, hourOn = null, last = null;
 
   function build() {
     builtLang = lang();
+    builtFor = company;
+    hourOn = null;
     root.innerHTML = '';
-    parts = [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()];
+    parts = company === null ? [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()]
+      : [companyHead(), sweden(), duo(), punctuality(), fastest(), busiest(), data()];
     root.append(...parts);
+    root.scrollTop = 0;
+  }
+  function showCompany(b) {
+    company = b;
+    build();
+    redraw?.();   // its numbers at once (main.js asks for them by `company`)
+  }
+  root.addEventListener('click', (e) => { const b = e.target.closest?.('[data-company]'); if (b) showCompany(b.dataset.company); });
+
+  // ---- A company's page: back to all, its name and kind, its trains today ----
+  function companyHead() {
+    const el = h(`<section class="st-sec st-cohead"><button type="button" class="st-back"><span aria-hidden="true">‹</span>${t('stAllCompanies')}</button>` +
+      `<div class="st-coname"><span class="st-codot" style="background:${company ? brandColour(company) : 'var(--c-unknown)'}"></span>` +
+      `<b>${company ? esc(company) : `<i>${t('stNoCompany')}</i>`}</b>${company ? `<small>${esc(t(`kind_${kindOf(company)}`))}</small>` : ''}</div>` +
+      `<p class="st-sub st-cotoday"></p></section>`);
+    $(el, '.st-back').onclick = () => showCompany(null);
+    el.update = (s) => {
+      const d = s.day;
+      put($(el, '.st-cotoday'), !d ? t('stNotInReplay') : d.state === 'ok' ? t('stCoTrainsToday', `<b>${num(d.trains ?? 0)}</b>`)
+        : d.state === 'loading' ? t('stLoadingDay') : d.state === 'unknown' ? '' : t('stCouldNotAsk5'));
+    };
+    return el;
   }
 
   // ---- Sweden as a heatmap, with the count beside it and the switch Trains / Lateness ----
@@ -174,7 +204,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- Driven while you watched, cancelled today ----
   function duo() {
-    const el = h(`<section class="st-sec st-duo"><div class="st-tile"><span class="st-lbl">${t('stDriven')}</span><div class="st-o"></div><div class="st-sub">${t('stDrivenSub')}</div></div>` +
+    const el = h(`<section class="st-sec st-duo"><div class="st-tile"><span class="st-lbl">${t('stDriven')}</span><div class="st-o"></div><div class="st-sub">${t(company === null ? 'stDrivenSub' : 'stDrivenSubCo')}</div></div>` +
       `<div class="st-tile st-cancel"><span class="st-lbl">${t('stCancelled')}</span><div style="margin-top:6px"><b class="st-big st-cn">…</b></div><div class="st-sub st-cs">${t('stCancelledSub')}</div></div></section>`);
     const odo = odometer();
     $(el, '.st-o').append(odo);
@@ -227,7 +257,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
   function dayGraph(box, s) {
     const day = s.day;
     if (!day || day.state !== 'ok') {
-      put(box, `<p class="st-sub">${!day ? t('stNotInReplay') : day.state === 'loading' ? t('stLoadingDay') : t('stCouldNotAsk5')}</p>`);
+      put(box, `<p class="st-sub">${!day ? t('stNotInReplay') : day.state === 'loading' ? t('stLoadingDay') : day.state === 'unknown' ? t('stNoneYet') : t('stCouldNotAsk5')}</p>`);
       box._key = null;
       return;
     }
@@ -312,10 +342,16 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
           r = h(`<button type="button" class="st-brow" data-filter="${type}" data-v="${esc(v)}" aria-pressed="false"><span class="st-nm">${name(v)}</span>` +
             `<span class="st-tr"><span class="st-bar" style="width:0;background:${colour(v)}"></span></span><b class="st-n"></b></button>`);
           rows.set(v, r);
-          el.append(r);
+          // a company: "›" opens its own page (the row itself still filters the map)
+          if (type === 'brand') {
+            const w = h(`<div class="st-brow-w"><button type="button" class="st-cogo" data-company="${esc(v)}" aria-label="${esc(t('stCoOpen', v || t('stNoCompany')))}">›</button></div>`);
+            w.prepend(r);
+            r.wrap = w;
+          }
+          el.append(r.wrap ?? r);
         }
-        r.style.order = i;
-        r.hidden = Boolean(limit && !open && i >= limit);
+        (r.wrap ?? r).style.order = i;
+        (r.wrap ?? r).hidden = Boolean(limit && !open && i >= limit);
         r.setAttribute('aria-pressed', String(Boolean(filter.has(type, v))));
         // A filter on: a row whose trains aren't on the map is dimmed, still a button (Max, 2026-11-21: "the companies
         // that no longer apply should be slightly greyed or otherwise shown to not be relevant. Still clickable")
@@ -325,7 +361,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
         if (bar.style.width === '0px' || bar.style.width === '0') requestAnimationFrame(() => { bar.style.width = w; }); else bar.style.width = w;
         roll($(r, '.st-n'), n);
       });
-      for (const [v, r] of rows) if (!seen.has(v)) { r.remove(); rows.delete(v); }
+      for (const [v, r] of rows) if (!seen.has(v)) { (r.wrap ?? r).remove(); rows.delete(v); }
     };
     return el;
   }
@@ -413,13 +449,18 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     return el;
   }
 
+  // s: src/stats.js snapshot(). first: the page has just opened (numbers are set, not rolled from old values).
+  function update(s, { first = false } = {}) {
+    if (builtLang !== lang() || builtFor !== company) build();
+    last = s;
+    if ((s.brand ?? null) !== company) return;   // (numbers asked for before the page switched: the next second's are right)
+    if (first) for (const el of root.querySelectorAll('.st-big, .st-legend b, .st-n, .st-ap, .st-p')) el._v = undefined;
+    for (const p of parts) p.update(s, first);
+  }
   return {
-    // s: src/stats.js snapshot(). first: the page has just opened (numbers are set, not rolled from old values).
-    update(s, { first = false } = {}) {
-      if (builtLang !== lang()) build();
-      last = s;
-      if (first) for (const el of root.querySelectorAll('.st-big, .st-legend b, .st-n, .st-ap, .st-p')) el._v = undefined;
-      for (const p of parts) p.update(s, first);
-    },
+    update,
+    get company() { return company; },
+    // the page opened again: all companies
+    home() { if (company !== null) { company = null; build(); } },
   };
 }

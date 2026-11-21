@@ -49,6 +49,7 @@ function km(a, b) {
 // keep: remember today's fastest on this phone (not in a replay, whose day is another).
 export function createStats({ keep = true } = {}) {
   let metres = 0, lastTick = null;   // driven since the page opened
+  const metresBy = new Map();         // the same per company (Statistik's company page, 2026-11-21)
   // Today's fastest (FAST_STORE): id -> { id, kmh, lon, lat, number, brand }.
   let fastDay = null, fastToday = new Map(), fastSaved = 0;
   const fastLoad = (day) => {
@@ -59,18 +60,27 @@ export function createStats({ keep = true } = {}) {
       if (s?.day === day) for (const x of s.list ?? []) fastToday.set(x.id, x);
     } catch { /* nothing saved, or the phone won't read it */ }
   };
-  const fastTop = n => [...fastToday.values()].sort((a, b) => b.kmh - a.kmh).slice(0, n);
+  const fastTop = (n, brand = null) => [...fastToday.values()].filter(x => brand === null || x.brand === brand).sort((a, b) => b.kmh - a.kmh).slice(0, n);
+  // Kept: the FAST_KEEP fastest, and each company's 3 fastest (its own page).
+  const fastKept = () => {
+    const keep = new Map(fastTop(FAST_KEEP).map(x => [x.id, x])), per = new Map();
+    for (const x of [...fastToday.values()].sort((a, b) => b.kmh - a.kmh)) {
+      const n = per.get(x.brand) ?? 0;
+      if (n < 3) { keep.set(x.id, x); per.set(x.brand, n + 1); }
+    }
+    return keep;
+  };
   const fastSave = (at) => {
-    if (fastToday.size > 2 * FAST_KEEP) fastToday = new Map(fastTop(FAST_KEEP).map(x => [x.id, x]));
+    if (fastToday.size > 2 * FAST_KEEP + 60) fastToday = fastKept();
     if (!keep || at - fastSaved < FAST_SAVE_MS) return;
     fastSaved = at;
-    try { localStorage.setItem(FAST_STORE, JSON.stringify({ day: fastDay, list: fastTop(FAST_KEEP) })); } catch { /* kept in memory */ }
+    try { localStorage.setItem(FAST_STORE, JSON.stringify({ day: fastDay, list: [...fastKept().values()] })); } catch { /* kept in memory */ }
   };
   let arrivals = [];                 // [{ at, age }] of positions arrived in the last minute
   let firstBatch = true;             // the first answer holds the last 10 minutes at once: not "arriving"
   let firstAt = null;                // when positions started arriving live
   let passings = [];                 // [{ key, station, time }] of the last 15 minutes
-  const cancelled = { count: null, at: 0, asking: false, failed: false };
+  const cancelled = { count: null, byBrand: null, at: 0, asking: false, failed: false };
 
   // "Fastest" is the speed the train itself reports, from a report under a minute old, not the drawn speed: a drawn
   // train goes faster than the real one while it catches up with its data (live 2026-11-13: "398 km/h" for a
@@ -104,7 +114,7 @@ export function createStats({ keep = true } = {}) {
       const day = swedishDay(at);
       if (day !== fastDay) fastLoad(day);
       for (const x of frame) {
-        if (!x.stale && x.v > 0) metres += x.v * dt;
+        if (!x.stale && x.v > 0) { metres += x.v * dt; const b = x.brand ?? ''; metresBy.set(b, (metresBy.get(b) ?? 0) + x.v * dt); }
         const kmh = reported(x, reportOf, at);
         if (kmh === null || kmh <= (fastToday.get(x.id)?.kmh ?? 0)) continue;
         fastToday.set(x.id, { id: x.id, kmh, lon: x.lon, lat: x.lat, number: reportOf(x.id)?.number ?? '?', brand: x.brand ?? '' });
@@ -112,11 +122,12 @@ export function createStats({ keep = true } = {}) {
       fastSave(at);
       if (passings.length > 2000) passings = passings.filter(p => p.time > at - BUSY_MS);
     },
-    // Cancelled trains today: asked when the page opens, at most every 10 minutes. ask(): () => Promise<count>.
+    // Cancelled trains today: asked when the page opens, at most every 10 minutes. ask(): () => Promise<{ count,
+    // byBrand }> (byBrand null: not known per company, a file from before 2026-11-21).
     wantCancelled(ask, at) {
       if (cancelled.asking || (cancelled.at && at - cancelled.at < 10 * 60000)) return;
       cancelled.asking = true;
-      ask().then((n) => { cancelled.count = n; cancelled.failed = false; })
+      ask().then((n) => { cancelled.count = n.count; cancelled.byBrand = n.byBrand ?? null; cancelled.failed = false; })
         .catch((e) => { cancelled.failed = true; console.warn('cancelled today:', e.message); })
         .finally(() => { cancelled.asking = false; cancelled.at = at; });
     },
@@ -128,9 +139,14 @@ export function createStats({ keep = true } = {}) {
     },
 
     // Every number on the page, plainly (src/stats-page.js draws them). d: { count (trains on the map), reports,
-    // frame (drawn trains), lateness, stations, trainOf(id), at, replay, day (src/day-stats.js view, or null) }.
+    // frame (drawn trains), lateness, stations, trainOf(id), at, replay, day (src/day-stats.js view, or null),
+    // brand (a company's own page: only its trains; Max, 2026-11-21) }.
     snapshot(d) {
-      const { reports, frame, lateness, stations, at } = d;
+      const { lateness, stations, at } = d, brand = d.brand ?? null;
+      const mine = id => brand === null || (lateness.brand(id) ?? '') === brand;
+      const frame = brand === null ? d.frame : d.frame.filter(x => mine(x.id));
+      const reports = brand === null ? d.reports : d.reports.filter(r => mine(r.id));
+      const count = brand === null ? d.count : frame.length;
       // Moving, standing, no news; every train's place and lateness for the heatmap; north and south; the reported speeds added up.
       let moving = 0, standing = 0, sumKmh = 0, moved = 0, sumMoved = 0, north = null, south = null;
       const dots = [], fastNow = [];
@@ -168,7 +184,7 @@ export function createStats({ keep = true } = {}) {
       passings = passings.filter(p => p.time > at - BUSY_MS);
       const perStation = new Map();
       for (const p of passings) {
-        if (!stations.get(p.station)?.advertised) continue;
+        if (!stations.get(p.station)?.advertised || !mine(p.key)) continue;
         if (!perStation.has(p.station)) perStation.set(p.station, new Set());
         perStation.get(p.station).add(p.key);
       }
@@ -178,12 +194,13 @@ export function createStats({ keep = true } = {}) {
       const busyToday = day?.state === 'ok' ? [...day.stations].filter(([sig]) => stations.get(sig)?.advertised).sort((a, b) => b[1] - a[1]).slice(0, 3).map(named) : [];
 
       return {
-        at, replay: Boolean(d.replay), count: d.count, moving, standing, grey: Math.max(0, d.count - moving - standing),
+        at, replay: Boolean(d.replay), count, moving, standing, grey: Math.max(0, count - moving - standing),
         dots, north: place(north), south: place(south), apart: north && south && north !== south ? km(north, south) : null,
-        km: metres / 1000, sumKmh, avg: moved ? sumMoved / moved : null, lateMin,
-        cancelled: d.replay ? 'replay' : cancelled.count !== null ? cancelled.count : cancelled.failed ? 'failed' : 'loading',
-        groups, worst, day,
-        fastNow: withNear(fastNow.sort((a, b) => b.kmh - a.kmh).slice(0, 3)), fastToday: withNear(fastTop(3)),
+        km: (brand === null ? metres : metresBy.get(brand) ?? 0) / 1000, sumKmh, avg: moved ? sumMoved / moved : null, lateMin,
+        cancelled: d.replay ? 'replay' : cancelled.count === null ? (cancelled.failed ? 'failed' : 'loading')
+          : brand === null ? cancelled.count : cancelled.byBrand ? cancelled.byBrand[brand] ?? 0 : 'unknown',
+        groups, worst, day, brand,
+        fastNow: withNear(fastNow.sort((a, b) => b.kmh - a.kmh).slice(0, 3)), fastToday: withNear(fastTop(3, brand)),
         kinds: KINDS.filter(k => byKind.has(k)).map(k => [k, byKind.get(k)]),
         brands: [...byBrand].sort((a, b) => (a[0] === '') - (b[0] === '') || b[1] - a[1]),
         busyRecent, busyToday, rate: this.rate(at),

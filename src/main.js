@@ -739,12 +739,16 @@ const statsView = createStatsPage(statsBody, {
     return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
   },
   filter,
+  redraw: () => drawStats(true),
 });
+// statsView.company: a company's own page (only its trains), or null
 function drawStats(first = false) {
+  const brand = statsView.company;
   statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view() ?? null }), { first });
+    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand }), { first });
 }
 function openStats() {
+  statsView.home();
   openPage(statsPage);
   if (live) stats.wantCancelled(askCancelled, now());
   dayStats?.open();
@@ -985,7 +989,8 @@ async function fileOf(kind) {
   if (!f) throw new Error(`no ${kind} file yet`);
   return f;
 }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => f.cancelled) : fetchCancelledToday(swedishDay(now())); }
+// { count, byBrand (null from a file made before 2026-11-21) }
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: f.cancelledBy ?? null })) : fetchCancelledToday(swedishDay(now())); }
 // Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
 async function filesArrivals(midnight, since) {
   const full = await fileOf('arrivals');
@@ -993,7 +998,7 @@ async function filesArrivals(midnight, since) {
   const day = swedishDay(now()), rows = [];
   if (full.day === day && (since === null || since < full.t)) rows.push(...full.rows);
   if (add && add.day === day && add.t >= full.t) rows.push(...add.rows);
-  return rows.map(([id, planned, actual]) => ({ id, planned, actual }));
+  return rows.map(([id, planned, actual, brand]) => ({ id, planned, actual, brand: brand ?? null }));   // (no company in files before 2026-11-21)
 }
 
 function gotStations(m) {
