@@ -251,6 +251,31 @@ try {
     const gone = await page.evaluate(() => ({ hidden: document.getElementById('panel').hidden,
       h: getComputedStyle(document.documentElement).getPropertyValue('--sheet-h').trim() }));
     check(gone.hidden && gone.h === '0px', `a long swipe down that starts on a button closes the card (closed ${gone.hidden}, the map's buttons at ${gone.h})`);
+    // Max, 2026-11-21: a slow drag up on the compact card switched it at once ("should be animated and smooth"): the
+    // trip line fades with the finger, then the full card's parts fade in; back down, the same way
+    await openTrain();
+    for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await page.evaluate(() => Boolean(document.querySelector('#panel .cd-trip')))) break;
+    await sleep(800);
+    const look = () => page.evaluate(() => { const el = document.getElementById('panel'), op = s => { const x = el.querySelector(s);
+      return x && getComputedStyle(x).display !== 'none' ? Number(getComputedStyle(x).opacity) : null; };
+      return { full: el.classList.contains('full'), trip: op('.cd-trip'), star: op('.panel-star') }; });
+    const at = await page.evaluate(() => { const r = document.querySelector('#panel .cd-trip').getBoundingClientRect(); return { x: r.left + 10, y: r.top + r.height / 2 }; });
+    await page.touchscreen.touchStart(at.x, at.y);
+    await page.touchscreen.touchMove(at.x, at.y - 10); await sleep(16);
+    await page.touchscreen.touchMove(at.x, at.y - 18); await sleep(80);
+    const half = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 40); await sleep(30);
+    const turned = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 80); await sleep(400);
+    const up = await look();
+    await page.touchscreen.touchMove(at.x, at.y - 10); await sleep(400);
+    const back = await look();
+    await page.touchscreen.touchEnd(); await sleep(500);
+    const end = await look();
+    check(!half.full && half.trip > 0.3 && half.trip < 0.7, `a slow drag up, 18 px: still compact, the trip line half faded (${half.trip?.toFixed(2)})`);
+    check(turned.full && turned.star !== null && turned.star < 0.9, `40 px: full, the star fading in (${turned.star?.toFixed(2)})`);
+    check(up.full && up.star === 1, '80 px: full, all shown');
+    check(!back.full && back.trip > 0.5 && end.trip === 1 && !end.full, `back down: compact again, the trip line back (${back.trip?.toFixed(2)} → ${end.trip})`);
   }
   check(!errors.length, `no page errors${errors.length ? `: ${errors.slice(0, 3).join(' | ')}` : ''}`);
 } finally {

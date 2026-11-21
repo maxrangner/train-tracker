@@ -441,6 +441,21 @@
     .fresh { animation: fresh-in .3s ease-out; }
     @keyframes fresh-in { from { opacity: 0; } }
     .cd-done.moving, .cd-train.moving { transition: width .7s cubic-bezier(.2, .9, .25, 1), left .7s cubic-bezier(.2, .9, .25, 1); }
+    /* Compact ↔ full (Max, 2026-11-21: on a slow drag the trip line "quickly disappears and the i and star button
+       appears ... Should be animated and smooth"): dragged up, the compact card's own parts fade with the finger
+       (--fold, src/sheet.js); then the parts that come into view fade in, "i" and the star grow in (.switching,
+       src/panel.js). The same with the handle, "All stops" / "Less" and back down. */
+    #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: calc(1 - var(--fold, 0)); transition: opacity .2s; }
+    #panel.dragging:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
+    #panel.switching.full :is(.tv-box, .panel-table, .panel-info-box, .panel-more),
+    #panel.switching:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { animation: part-in .22s ease-out backwards; }
+    #panel.switching.full :is(.panel-star, .panel-info) { animation: part-pop .26s cubic-bezier(.2, .9, .25, 1) backwards; }
+    @keyframes part-in { from { opacity: 0; } }
+    @keyframes part-pop { from { opacity: 0; scale: .5; } }
+    @media (prefers-reduced-motion: reduce) {
+      #panel.switching :is(.cd-trip, .panel-alert, .panel-more, .tv-box, .panel-table, .panel-info-box, .panel-star, .panel-info) { animation: none; }
+      #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
+    }
     @media (prefers-reduced-motion: reduce) {
       .fresh { animation: none; }
       button, button:active { transition: none; scale: none; }

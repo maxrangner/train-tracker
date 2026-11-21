@@ -534,10 +534,16 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const box = el.querySelector('.panel-table'), next = el.querySelector('.tl-now') ?? el.querySelector('.tl-row.next');
     if (box && next && box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
-  let wasFull = el.classList.contains('full');
+  let wasFull = el.classList.contains('full'), switchTimer = 0;
   new MutationObserver(() => {
     const full = el.classList.contains('full');
     if (full && !wasFull) requestAnimationFrame(() => { if (infoOn) drawInfo(); else { toNext(); rowsIn(); } });
+    // compact ↔ full: the parts that come into view fade in (index.html "switching"; Max, 2026-11-21)
+    if (full !== wasFull && !el.hidden) {
+      el.classList.add('switching');
+      clearTimeout(switchTimer);
+      switchTimer = setTimeout(() => el.classList.remove('switching'), 320);
+    }
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });
 

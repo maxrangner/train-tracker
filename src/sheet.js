@@ -9,12 +9,19 @@
 // Dragging a bottom sheet (Max: it should follow the finger, and go back to compact): anywhere outside its scrolling
 // lists and buttons. Up: taller, to full height; down: from full to half, from half (or a page) further to close. A
 // tap on the handle (the sheet's top) switches between half and full.
+import { reduceMotion } from './motion.js';
+
 const NARROW = typeof matchMedia === 'function' ? matchMedia('(max-width: 439px)') : null;
 const SCROLLERS = '.panel-table, .panel-info-box, .cd-list, .board-msg-list, #search-results, #stats-body, #settings, .help-body, #disruptions-body, #conn-body, .pick-list, .dis-text';
 const SNAP_PX = 40;      // a drag this far (up or down) changes the height
 const CLOSE_PX = 100;    // dragged down this far from half height (or on a page): closed
 const HANDLE_PX = 34;    // the handle: the sheet's top this high
 const TOP_GAP = 78;      // full height leaves this much at the top (the search bar)
+// The compact train card dragged up (Max, 2026-11-21: on a slow drag the trip line "quickly disappears and the i and
+// star button appears ... Should be animated and smooth"): its own parts (the trip line, "All stops") fade with the
+// finger over this much (--fold, index.html), then it turns full and the full card's parts fade in; back below half
+// of it, compact again, the same way. Other sheets (and with "reduce motion") turn full after 6 px, as before.
+const FOLD_PX = 36;
 
 const bottomSheet = el => Boolean(NARROW?.matches) && el.id !== 'menu';
 const GLIDE_MS = 280;    // a little over the CSS height transition (.sheet, .26 s)
@@ -128,8 +135,10 @@ function dragging(el) {
   let inList = null;        // a finger down in a list: { id, y }
   let swallowUntil = 0;     // a drag that began on a button: its click (if one comes) does nothing
   const begin = (id, y, fromButton = false) => {
+    const compact = !el.classList.contains('full') && !el.classList.contains('page');
     start = { y, t: performance.now(), id, h: el.getBoundingClientRect().height,
-      handle: y - el.getBoundingClientRect().top < HANDLE_PX, fromButton };
+      handle: y - el.getBoundingClientRect().top < HANDLE_PX, fromButton, compact,
+      fold: compact && el.id === 'panel' && !reduceMotion() };
     try { el.setPointerCapture(id); } catch { /* the pointer is gone */ }
     el.classList.add('dragging');
   };
@@ -160,16 +169,23 @@ function dragging(el) {
     if (dy < 0) {   // taller, following the finger, up to full height
       el.style.transform = '';
       const h = `${Math.min(window.innerHeight - TOP_GAP, start.h - dy)}px`;
-      // A compact card has nothing taller to show: it shows its full content at once and grows to the finger (Max,
-      // 2026-11-16: dragging up "doesn't follow the finger"; only its height limit grew).
-      if (!start.grew && !el.classList.contains('full') && !el.classList.contains('page') && dy < -6) { start.grew = true; el.classList.add('full'); }
+      // A compact card has nothing taller to show: it shows its full content (the train card: after FOLD_PX) and
+      // grows to the finger (Max, 2026-11-16: dragging up "doesn't follow the finger"; only its height limit grew).
+      if (start.fold && start.grew && dy > -FOLD_PX / 2) { start.grew = false; el.classList.remove('full'); }
+      if (start.compact && !start.grew && dy < -(start.fold ? FOLD_PX : 6)) { start.grew = true; el.classList.add('full'); }
+      if (start.fold) el.style.setProperty('--fold', start.grew ? '0' : String(Math.min(1, -dy / FOLD_PX)));
       el.style.maxHeight = h;
-      if (start.grew) el.style.height = h;
+      if (start.grew || start.fold) el.style.height = h;
     } else {        // down: the whole sheet follows the finger
       el.style.maxHeight = '';
       // grown first, then back below the start: at its small height again, following the finger down (Max's phone
-      // test, 2026-11-17: it stayed at the grown height, shifted down, and was left there cut off)
-      if (start.grew) el.style.height = `${start.h}px`;
+      // test, 2026-11-17: it stayed at the grown height, shifted down, and was left there cut off); the train card
+      // compact again
+      if (start.fold) {
+        if (start.grew) { start.grew = false; el.classList.remove('full'); }
+        el.style.height = '';
+        el.style.setProperty('--fold', '0');
+      } else if (start.grew) el.style.height = `${start.h}px`;
       el.style.transform = `translateY(${dy}px)`;
     }
   });
@@ -177,9 +193,10 @@ function dragging(el) {
     wait = null;
     inList = null;
     if (!start || e.pointerId !== start.id) return;
-    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew } = start;
+    const dy = e.clientY - start.y, tap = Math.abs(dy) < 6 && performance.now() - start.t < 400, { handle, h: startH, grew, fold } = start;
     if (start.fromButton) swallowUntil = performance.now() + 400;
     start = null;
+    const unfold = () => el.style.removeProperty('--fold');   // (once the transitions are on: the parts fade back)
     if (grew && dy > CLOSE_PX) {   // grown, then pulled far down: slides away and closes, as from small
       el.classList.remove('dragging');
       el.classList.add('leaving');
@@ -189,9 +206,12 @@ function dragging(el) {
     }
     if (grew) {   // grown with the finger: on to full height, or back to compact; its height glides there
       const stay = dy < -SNAP_PX;
-      glide(el, () => { if (!stay) el.classList.remove('full'); }, { settle: () => { el.style.transform = ''; } });   // (back up, if pulled below its start)
+      glide(el, () => { if (!stay) el.classList.remove('full'); }, { settle: () => { el.style.transform = ''; unfold(); } });   // (back up, if pulled below its start)
       return;
     }
+    // the train card pulled up less than FOLD_PX: back to its compact height, its parts fade back
+    if (fold && dy < 0 && !(tap && handle)) { glide(el, () => {}, { settle: () => { el.style.transform = ''; unfold(); } }); return; }
+    unfold();
     const page = el.classList.contains('page'), full = el.classList.contains('full');
     if (tap && handle && !page) { glide(el, () => { el.classList.toggle('full'); el.style.transform = ''; }); return; }
     if (dy < -SNAP_PX && !full) { glide(el, () => { el.classList.add('full'); el.style.transform = ''; }); return; }
