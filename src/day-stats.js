@@ -38,6 +38,7 @@ export function createDayStats({ now, loadArrivals = fetchDayArrivals }) {
   let perStation = new Map();         // station signature -> arrivals today (the stats page's busiest stations, today)
   let asOf = null;                    // when the last good ask was sent
   let lastTry = 0, asking = false, failed = false, loaded = false;
+  let openedAt = 0;                   // when the stats page last opened (busy: asking for numbers newer than that)
 
   function reset(d) {
     day = d; midnight = swedishMidnight(now()); rows = new Map(); asOf = null; perStation = new Map();
@@ -102,16 +103,18 @@ export function createDayStats({ now, loadArrivals = fetchDayArrivals }) {
     // The stats page opened: ask for what changed (or the whole day), unless asked in the last minute.
     open() {
       if (!loaded) load();
+      openedAt = now();
       if (now() - lastTry > 60 * 1000) ask();
     },
     // Once a second while the page is open: again every 5 minutes.
     tick() { if (now() - lastTry >= EVERY_MS) ask(); },
     // For drawing: { state: 'loading' | 'failed' | 'ok', hours: counts up to this hour, now: the hour now,
-    // stations: Map signature -> arrivals today }.
+    // stations: Map signature -> arrivals today, busy: asking while what is shown is from before the page opened (the
+    // numbers saved earlier today; Max, 2026-11-21: the graph "doesn't indicate loading before appearing") }.
     view() {
       const hourNow = Math.min(HOURS - 1, Math.floor((now() - midnight) / 3600000));
       const state = asOf !== null ? 'ok' : failed ? 'failed' : 'loading';
-      return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow, stations: perStation };
+      return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow, stations: perStation, busy: asking && (asOf === null || asOf < openedAt) };
     },
   };
 }

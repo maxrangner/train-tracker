@@ -190,7 +190,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
   function punctuality() {
     const el = h(`<section class="st-sec st-tile st-punct"><span class="st-lbl">${t('stPunctuality')}</span><div class="st-prow"></div>` +
       `<button type="button" class="st-go st-worst" hidden><span class="st-sub">${t('stMostLate')}</span><b class="st-wn"></b><span class="st-wt"></span><span class="st-wb"></span><span class="st-chev">›</span></button>` +
-      `<div class="st-daybox"><span class="st-lbl">${t('stToday')}</span><div class="st-dayin"></div></div></section>`);
+      `<div class="st-daybox"><span class="st-lbl st-daylbl">${t('stToday')}<span class="st-busy" hidden><span class="spin" aria-hidden="true"></span>${t('loading')}</span></span><div class="st-dayin"></div></div></section>`);
     const ring = donut(96, 11, ['ontime', 'some', 'late'], `<b class="st-p">0</b><small>${t('stKeyOnTime')}</small>`);
     const leg = h(`<div class="st-legend"><div class="st-row"><span class="st-key k-ontime"></span>${t('stLegOnTime')}<b class="st-a"></b></div>` +
       `<div class="st-row"><span class="st-key k-some"></span>${t('stLegSome')}<b class="st-b"></b></div>` +
@@ -216,6 +216,8 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
         $(worst, '.st-wb').textContent = s.worst.brand;
       }
       dayGraph(dayIn, s);
+      // asking for today's numbers: "Laddar…" beside the title, also over the numbers saved earlier today
+      $(el, '.st-busy').hidden = !(s.day && (s.day.state === 'loading' || s.day.busy));
     };
     return el;
   }
