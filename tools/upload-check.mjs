@@ -253,5 +253,38 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   check('refused, then let go of before the next try: not sent, nothing deleted', !s.fs.has(`${DIR}/card-03-3.json`) && !s.ops.some(o => o[0] === 'delete' && o[1].endsWith('card-03-3.json')) && st.waiting === 0, JSON.stringify(st));
 }
 
+// 12. The live file names only files that are on one.com (2026-11-21, TODO 40's rest): a file refused 3 times was
+// named until the next of its kind. Per kind the newest file uploaded, the one before when the newest was refused,
+// nothing on its way, nothing let go of.
+{
+  const s = space(marked());
+  const logs = []; const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, tryAgainMs: 100 });
+  const shelf = createShelf({ onAdd: (n, f) => up.add(n, f), onRemove: n => up.remove(n) });
+  await wait(30);
+  const T0 = 1_800_000_000_000;
+  const a = shelf.put('stats', T0, { a: 1 }); shelf.put('disruptions', T0, { d: 1 });
+  await wait(100);
+  check('named once uploaded', up.names().stats === a && Boolean(up.names().disruptions) && !('live' in up.names()), JSON.stringify(up.names()));
+  s.failWrites(6);   // three tries refused (each writes the temporary file twice)
+  const b = shelf.put('stats', T0 + 300000, { b: 1 });
+  check('on its way: not named yet', up.names().stats === a, JSON.stringify(up.names()));
+  await wait(600);
+  check('refused 3 times: never named, the one before still is', !s.fs.has(`${DIR}/${b}`) && up.names().stats === a && logs.some(l => l.includes(`${b}: `) && /given up/.test(l)), JSON.stringify(up.names()) + ' | ' + logs.join(' | '));
+  const c = shelf.put('stats', T0 + 600000, { c: 1 });
+  await wait(100);
+  check('the next one uploaded: named', up.names().stats === c && s.fs.has(`${DIR}/${c}`), JSON.stringify(up.names()));
+  up.breakFor(300); await wait(30);
+  const d = shelf.put('stats', T0 + 900000, { d: 1 });
+  await wait(100);
+  check('offline: the newest is not named until it is there', up.names().stats === c, JSON.stringify(up.names()));
+  await wait(1500);
+  check('back: named', up.names().stats === d && s.fs.has(`${DIR}/${d}`), JSON.stringify(up.names()));
+  shelf.sweep(T0 + 900000 + 11 * 60000);   // the older stats files let go of (kept 10 minutes)
+  await wait(100);
+  const st = up.stats();
+  check('a file let go of is never named', up.names().stats === d && !s.fs.has(`${DIR}/${c}`) && st.waiting === 0, JSON.stringify(up.names()) + JSON.stringify(st));
+  await up.close();
+}
+
 console.log(failed ? `${failed} failed` : 'upload-check: all hold');
 process.exit(failed ? 1 : 0);

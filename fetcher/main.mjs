@@ -145,7 +145,8 @@ function every(name, ms, first, fn) {
 // The live file, at the start of every 5-s slot.
 function liveTick() {
   const t = Date.now();
-  const names = shelf.names(); delete names.live;
+  // Uploading: only what is on one.com (fetcher/upload.mjs names()); else (--serve) everything on the shelf.
+  const names = uploader ? uploader.names() : shelf.names(); delete names.live;
   const live = buildLive(state, t, names);
   live.feeds = { positions: feeds.positions.mode, passings: feeds.passings.mode, lastRecordAt: feeds.lastRecordAt };
   shelf.put('live', t, live);
