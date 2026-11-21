@@ -12,6 +12,7 @@ import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
 import { followPath } from './path-follow.js';
+import { createPathSearch } from './path-async.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
@@ -65,7 +66,11 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
 const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
-netReady.then((n) => { net = n; });
+// The open train's route is searched on a thread of its own (src/path-async.js, 2026-11-21): it held the map up to
+// 300 ms on the PC, over a second on a 4 times slower processor. Started once the page's own network is there (the
+// worker loads the same file again, then from the browser's cache).
+let searchPath = null;
+netReady.then((n) => { net = n; if (n) searchPath = createPathSearch('/rail-net.json', () => net); });
 let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
 const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
@@ -158,12 +163,12 @@ const panel = createPanel(document.getElementById('panel'), {
   onRoute(id, route) {
     // The last few drawn routes are kept (the review's F09, 2026-11-17): reopening a train doesn't search the rail
     // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
-    const cachedPath = (places) => {
+    const cachedPath = async (places) => {
       if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
       const key = placesKey(places);
       let path = pathCache.get(key);
       if (path) pathCache.delete(key);
-      else path = pathOf(places, net, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
+      else path = await searchPath(places, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
       pathCache.set(key, path);   // (the newest last)
       if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
       return path;
@@ -181,18 +186,25 @@ const panel = createPanel(document.getElementById('panel'), {
       places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
-    // Worked out once the camera has come to the train: finding the way over the rail network takes about 45 ms,
-    // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
-    map.whenSettled().then(() => {
+    // Shown once the camera has come to the train: finding the way over the rail network on the page's own thread
+    // (45-300 ms) made the glide jump (Max, 2026-11-15: "camera is very jerky"). Since 2026-11-21 it is searched on a
+    // thread of its own (src/path-async.js), started at once, during the glide; where no such thread runs, after it.
+    const key = placesKey(places);
+    const kept = () => shownPath?.id === id && shownPath.key === key && shownPath.follow;
+    const early = net && searchPath?.offThread() && !kept() ? cachedPath(places) : null;
+    map.whenSettled().then(async () => {
       if (panel.openId !== id) return;   // closed, or another train opened meanwhile
       // The line follows the train itself (src/path-follow.js; Max, 2026-11-19: trains drawn beside their route). The
       // same trip again (its stations unchanged): the line as it stands, not the timetable's again (that would jump).
-      const key = placesKey(places);
-      if (!(shownPath?.id === id && shownPath.key === key && shownPath.follow)) {
-        const base = cachedPath(places);
-        const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
-        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
-        panel.placesReady(id);
+      if (!kept()) {
+        const base = await (early ?? cachedPath(places));
+        // Searched on its own thread meanwhile: closed, or another train opened, or this trip drawn already.
+        if (panel.openId !== id) return;
+        if (!kept()) {
+          const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
+          shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
+          panel.placesReady(id);
+        }
       }
       const here = placeNow(id);
       let done = 0;

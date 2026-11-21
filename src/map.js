@@ -453,7 +453,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The far-out labels: the same trains, those close together on the screen grouped by the map into one "N trains"
     // label (Max, 2026-11-15: far out only some labels showed where trains were close; close in they were grouped).
     // The open train is left out (its own marker has its label).
-    add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, clusterMaxZoom: 16, maxzoom: 12 });
+    // Grouped from zoom 16 down, as since 2026-11-15; its tiles stop at 12 like the dots' (closer in, zoom 12's groups
+    // are enlarged). MapLibre warns about that pair in the source's options ("The maxzoom value "12" is expected to be
+    // greater than the clusterMaxZoom value "16"", TODO 13), so the 16 is given just after: the same groups, no warning.
+    if (!map.getSource('train-groups')) {
+      add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, maxzoom: 12 });
+      map.getSource('train-groups').setClusterOptions({ cluster: true, clusterMaxZoom: 16 });
+    }
     add('disruptions');
     add('route-names');
   }
