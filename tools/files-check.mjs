@@ -5,6 +5,8 @@
 //   - home down: far fewer requests than 24 every 5 s (point 6); hidden: none at all (point 6);
 //   - a live file in a newer format is not read (TODO 26);
 //   - the fetcher's last report time reaches the page (point 7);
+//   - a phone clock 30 s, 1 minute or 2 minutes slow reads fresh files soon (point 11, TODO 41); a right or fast clock
+//     as before, with at most one extra request a minute;
 //   - a station board cuts after dropping trains that are gone (point 2);
 //   - the text protector (src/html.js, point 1).
 // Run: node tools/files-check.mjs     exit code 0: all hold; 1: one failed
@@ -46,8 +48,9 @@ let failed = 0;
 const ok = (good, what) => { console.log(`${good ? 'ok  ' : 'FAIL'} ${what}`); if (!good) failed++; };
 
 // A pretend site: live-<slot>.json exists from 0.6 s after its slot began, for a minute, unless liveOk() says no.
+// ahead: the site's clock minus this "phone's" (30000: the phone is 30 s slow).
 // other(name) -> the file's contents, null for 404, or 'stall' for an answer that never comes (until aborted).
-function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordAt = null } = {}) {
+function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordAt = null, ahead = 0 } = {}) {
   const asked = [];
   globalThis.fetch = (url, opts = {}) => {
     const name = String(url).split('/').pop();
@@ -56,7 +59,8 @@ function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordA
     const m = /^live-(\d+)\.json$/.exec(name);
     if (m) {
       const made = Number(m[1]) * 5000 + 50;
-      if (!liveOk() || made + 600 > Date.now() || Date.now() - made > 60000) return answer(null);
+      const now = Date.now() + ahead;
+      if (!liveOk() || made + 600 > now || now - made > 60000) return answer(null);
       return answer({ v, t: made, kind: 'live', trains: [], passings: [], files: { stations: 'stations-1.json', planned: 'planned-1.json' },
         feeds: { positions: 'stream', passings: 'stream', lastRecordAt: lastRecordAt ?? made - 1000 } });
     }
@@ -104,7 +108,8 @@ const handlers = (extra = {}) => ({ onRecords() {}, onStatus() {}, onPassings() 
     hidden = asked.length - before;
     stop();
   });
-  ok(n <= 24 + 3 * 3, `home down: ${n} requests in 30 s (before the fix: 24 every 5 s, about 150)`);
+  // (the far look also tries 5 names ahead since 2026-11-21, for a slow clock)
+  ok(n <= 24 + 5 + 3 * 3, `home down: ${n} requests in 30 s (before the fix: 24 every 5 s, about 150)`);
   ok(hidden === 0, `hidden: ${hidden} requests in 6 s`);
 }
 // 5. a newer format: not read.
@@ -130,6 +135,27 @@ const handlers = (extra = {}) => ({ onRecords() {}, onStatus() {}, onPassings() 
     stop();
   });
   ok(got === t0, 'the fetcher\'s last report time is passed on with each file');
+}
+// 6b. a phone clock off (point 11, TODO 41): before 2026-11-21 a clock 30 s slow found a 30-s-old file every time
+// and never learnt better; 2 minutes slow found nothing. Three minutes on the pretend clock; "fresh": read within 5 s
+// of being made (the newest file); the live requests in the third minute against the 12 a minute of the reads.
+for (const [ahead, what] of [[0, 'right'], [-10000, '10 s fast'], [30000, '30 s slow'], [60000, '1 minute slow'], [120000, '2 minutes slow']]) {
+  const reads = [];   // { at: phone's clock since start, age: by the site's clock }
+  let asked, start;
+  await fast(async (sleep) => {
+    asked = site({ ahead });
+    start = Date.now();
+    const stop = startFilesSource('http://site/', handlers({ onFile: (t) => reads.push({ at: Date.now() - start, age: Date.now() + ahead - t }) }));
+    await sleep(180000);
+    stop();
+  });
+  const lastStale = reads.filter(r => r.age > 5000).map(r => r.at).pop();
+  const freshFrom = lastStale === undefined ? 0 : (reads.find(r => r.at > lastStale)?.at ?? Infinity);
+  const third = asked.filter(a => a.at - start >= 120000 && /^live-/.test(a.name)).length;
+  const fresh = reads.filter(r => r.at >= 120000).length;
+  const limit = ahead > 0 ? 20000 : 10000;   // (the first file can be 5-6.5 s old, by when the page opens in a slot)
+  ok(freshFrom <= limit && third <= fresh + 1 && fresh >= 11,
+    `a clock ${what}: fresh files from ${(freshFrom / 1000).toFixed(0)} s on (limit ${limit / 1000} s); third minute: ${fresh} files read with ${third} live requests`);
 }
 // 7. a busy station's board, made the way the fetcher makes it (src/tap-files.js encodeRows): 120 departures every
 // 1.5 minutes from 80 minutes ago, those before now gone (left), the rest to come; boards of 4, 12 and 40 rows.

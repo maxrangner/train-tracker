@@ -15,6 +15,10 @@
 //   tools/rail-trv.mjs): 3 for a slow (40 km/h or less) or not public track, else 0; plus its traffic direction (0 both
 //   ways, 1 along the line's points, 2 against them). src/rail-net.js makes routes prefer main tracks and the right
 //   track of a double track with it. Without the properties file the network is written without `c`.
+//   Where the data's one-way directions are known not to hold (TWO_WAY: GPS reports at 20 km/h or more on one-way
+//   tracks run against the data's direction at Barkarby 77-94 % and Jakobsberg 29-34 % in seven recordings, Sweden
+//   3.5-4.8 %; Mälarbanan was rebuilt to four tracks there; docs/movement-findings-1121.md N6), the tracks within
+//   TWO_WAY_M of the station's point are marked both ways: the train's own GPS then decides which track it is on.
 // - Each line also gets its link's design speed in km/h (`v`, a list, one per line; 0 not known; Max, 2026-11-20: the
 //   train card's speedometer marks what the track is built for, docs/train-info-1120). About +15 kB as sent.
 // - Straight corners get a curve beside them: a straight two-point line of at least CORNER_MIN_M on a normal track
@@ -34,6 +38,8 @@ const OVERLAP_M = 60;
 const SIMPLIFY_M = 0.5;
 const CORNER_MIN_M = 300;
 const MAX_TURN = 60, SHARP_TURN = 120;   // as src/rail-net.js MAX_TURN and src/path.js SHARP_TURN
+// Stations whose one-way tracks are marked both ways (see the top): [name, lon, lat] (data/stations.json's points).
+const TWO_WAY = [['Barkarby', 17.863678, 59.405446], ['Jakobsberg', 17.833120, 59.423806]], TWO_WAY_M = 1500;
 const CORNER_ARM = 0.65;                 // the curve's control arms, as a share of the straight line's length
 const src = new URL('../data/rail-trv.geojson', import.meta.url);
 const out = new URL('../public/rail-net.json', import.meta.url);
@@ -162,6 +168,7 @@ if (props) {
   const slow = [...c].filter(x => x >= '3').length, oneWay = [...c].filter(x => x % 3 !== 0).length;
   console.log(`track properties: ${slow} of ${c.length} lines slow or not public, ${oneWay} one-way`);
 } else console.log('no data/rail-trv-props.json (node tools/rail-trv.mjs --props): the network has no track properties');
+if (c) c = twoWay(ready, c);
 const curved = addCornerCurves(ready, c, speeds);
 c = curved.c;
 const json = JSON.stringify({ about: 'Trafikverket rail lines (CC0), see tools/rail-net.mjs', scale: 1e5, joined: true, n: curved.n, d: curved.d,
@@ -210,6 +217,22 @@ function removeOverlaps({ n: nn, d: dd }) {
 }
 
 // ---- 5. Straight corners (see the top) ----
+// The digits with the one-way tracks near TWO_WAY marked both ways (a line counts when any of its points is near).
+function twoWay({ n: nn, d: dd }, digits) {
+  const out = [...digits];
+  let x = 0, y = 0, k = 0, changed = 0;
+  nn.forEach((cnt, li) => {
+    let near = false;
+    for (let i = 0; i < cnt; i++) {
+      x += dd[2 * k]; y += dd[2 * k + 1]; k++;
+      if (!near) near = TWO_WAY.some(([, lon, lat]) => Math.hypot((x - lon * 1e5) * kx(lat * 1e5), (y - lat * 1e5) * KY) <= TWO_WAY_M);
+    }
+    const v = Number(out[li]);
+    if (near && v % 3 !== 0) { out[li] = String(v - (v % 3)); changed++; }
+  });
+  console.log(`one-way tracks marked both ways near ${TWO_WAY.map(t => t[0]).join(', ')} (within ${TWO_WAY_M} m): ${changed}`);
+  return out.join('');
+}
 function addCornerCurves({ n: nn, d: dd }, digits, speeds) {
   const ls = [];
   let x = 0, y = 0, k = 0;

@@ -30,6 +30,15 @@ const RETRY_MS = 30000;       // a file that failed is asked again after this, d
 const RETRY_MAX_MS = 5 * 60000;
 const MISS_WAITS = [10000, 20000, 30000];   // nothing found: wait this long before looking again (then 30 s)
 const FAR_EVERY = 4;          // while nothing is found, every 4th look goes 24 names back (a clock far off)
+// A slow clock (TODO 41, 2026-11-21): the names come from this phone's clock and an older file still exists, so a
+// clock 30 s slow found a 30-s-old file every time and never learnt better. When the newest name asked is there, the
+// next names are tried too (1, 2, 4, 8, 16 ahead, until one is missing): at the start and then once a minute (one
+// extra request a minute for a right clock: a missing name is a 404, never kept by one.com's cache, measured
+// 2026-11-21: `no-store`). While nothing is found, the far look also tries names ahead (a clock up to 2.5 minutes
+// slow; live files are kept a minute, so steps of 6 names can't jump over them).
+const AHEAD_EVERY_MS = 60000;
+const AHEAD_STEPS = [1, 2, 4, 8, 16];
+const FAR_AHEAD = [6, 12, 18, 24, 30];
 
 export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlanned, onStations, onFile }) {
   base = base.replace(/\/?$/, '/');
@@ -45,6 +54,9 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   const skewSamples = [];
   let needPassings = false, timer = null, stopped = false, paused = false, mode = 'starting', lastError = null, busy = false;
   let misses = 0;               // looks in a row that found no live file while none had come for 20 s
+  let lead = 0;                 // slots past the clock's own where the newest live file was found (a slow clock), until
+                                // learnClock has moved the page's clock by as much
+  let aheadAt = 0;              // when to try the names ahead of the newest again (0: with the next look)
 
   const status = (m, error = null) => {
     if (m === mode && error === lastError) return;
@@ -93,6 +105,8 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     // The page's clock follows only a clear difference (more than 3 s, from at least three files): a clock moved back
     // and forth would make the trains jump.
     if (skewSamples.length >= 3 && Math.abs(s - skew) > 3000) {
+      // The clock now covers what the names ahead were making up for.
+      if (s > skew) lead = Math.max(0, lead - Math.round((s - skew) / LIVE_MS));
       skew = s;
       setClock(Date.now() + skew);
     }
@@ -185,13 +199,29 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     let found = false;
     try {
       const at = Date.now() + skew;
-      const slot = Math.floor((at - 1500) / LIVE_MS);
-      let file = null;
+      const slot = Math.floor((at - 1500) / LIVE_MS) + lead;
+      let file = null, took = null;   // took: the slot of the file found
       // The newest finished file; on a 404 one and two slots back. With nothing for a while (a clock far off, or a
       // long break): up to two minutes back on the first look and every FAR_EVERY-th after, 3 names between.
       const lost = !lastFile || Date.now() - lastFile.at > 20000;
       const back = lost && misses % FAR_EVERY === 0 ? 24 : 3;
-      for (let k = 0; k < back && !file; k++) file = await live(slot - k);
+      for (let k = 0; k < back && !file; k++) { file = await live(slot - k); if (file) took = slot - k; }
+      if (file && took < slot && lead) lead = Math.max(0, lead - (slot - took));   // the names ahead went too far
+      // The names ahead (a slow clock, see AHEAD_STEPS).
+      if (file && took === slot && Date.now() >= aheadAt) {
+        for (const j of AHEAD_STEPS) {
+          const f = await live(slot + j);
+          if (!f) break;
+          file = f; took = slot + j;
+        }
+        aheadAt = took === slot ? Date.now() + AHEAD_EVERY_MS : 0;   // found newer: on with the next look
+      } else if (!file && back > 3) {
+        for (const j of FAR_AHEAD) {
+          file = await live(slot + j);
+          if (file) { took = slot + j; aheadAt = 0; break; }
+        }
+      }
+      if (file && took > slot) lead += took - slot;
       found = Boolean(file);
       if (file && (!lastFile || file.t > lastFile.t)) take(file);
       if (mode === 'outdated') return;
@@ -236,6 +266,7 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     if (!paused || stopped) return;
     paused = false;
     misses = 0;
+    aheadAt = 0;
     tick().then(schedule);
   };
   stop.latest = latest;

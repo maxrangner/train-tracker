@@ -12,7 +12,7 @@ import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
-import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
+import { lateSet, tagSet, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
 import stationSizes from './big-stations.json';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -139,7 +139,7 @@ const LABEL_GROUP_PX = 22;
 
 // A train further out (with Settings → Trains → Symbol, at every zoom) is a triangle pointing the way it goes, or
 // (Settings → Debug → Train symbol, Max 2026-11-13) a circle, in the same colours. Drawn once per colour, white-edged, sharp on a phone's screen (4 pixels per screen pixel).
-const dotColours = dark => LATE[dark ? 'dark' : 'light'];   // src/colours.js
+const dotColours = dark => lateSet(dark, settings.colourBlind);   // src/colours.js (Settings → Colour-blind mode)
 // The arrow's shape in a 64 x 64 picture, pointing up (north); middle (32, 32). Max, 2026-11-15, from four sketches
 // ("Change to A, but put a toggle under debug to toggle to C"): 'triangle' wider than before (base 44, was 34: hard
 // to read), 'dart' (Settings → Debug → Train symbol → Dart) wide with a notch at the back.
@@ -453,7 +453,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The far-out labels: the same trains, those close together on the screen grouped by the map into one "N trains"
     // label (Max, 2026-11-15: far out only some labels showed where trains were close; close in they were grouped).
     // The open train is left out (its own marker has its label).
-    add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, clusterMaxZoom: 16, maxzoom: 12 });
+    // Grouped from zoom 16 down, as since 2026-11-15; its tiles stop at 12 like the dots' (closer in, zoom 12's groups
+    // are enlarged). MapLibre warns about that pair in the source's options ("The maxzoom value "12" is expected to be
+    // greater than the clusterMaxZoom value "16"", TODO 13), so the 16 is given just after: the same groups, no warning.
+    if (!map.getSource('train-groups')) {
+      add('train-groups', { cluster: true, clusterRadius: LABEL_GROUP_PX, maxzoom: 12 });
+      map.getSource('train-groups').setClusterOptions({ cluster: true, clusterMaxZoom: 16 });
+    }
     add('disruptions');
     add('route-names');
   }
@@ -479,7 +485,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   }
   // Our layers, with the colours, model zoom and language as they are now.
   function addLayers() {
-    const C = colours(dark), MODEL_ZOOM = modelZoom(), T = TAG[dark ? 'dark' : 'light'];
+    const C = colours(dark), MODEL_ZOOM = modelZoom(), T = tagSet(dark, settings.colourBlind);
     // Outside Sweden, the sea's colour: over the base map's land, roads and borders, under its names after them, so
     // a Swedish name at the coast isn't cut (the names outside Sweden are left out, below). The dark map draws roads
     // and borders after some names, so the place is after its last layer that isn't names.

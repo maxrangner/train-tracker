@@ -46,6 +46,8 @@ const DEFAULTS = {
   // pill the other way from the trains' labels: light on the dark map, dark on the light), 'pill' (the trains' own
   // pill, as before) or 'plain' (bold text, no pill).
   routeNames: 'contrast',
+  // Lateness colours colour-blind people can tell apart (Max, 2026-11-21; src/colours.js LATE_SAFE), off.
+  colourBlind: false,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -67,6 +69,7 @@ const KEYS = {
   routeEdge: { param: 'routeedge' },
   pageOverTrain: { param: 'overtrain' },
   routeNames: { param: 'routenames' },
+  colourBlind: { param: 'cb' },
 };
 const STORE = 'settings';
 
@@ -94,6 +97,7 @@ const valid = {
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
   routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
+  colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
@@ -107,13 +111,13 @@ const changed = key => { for (const fn of listeners) fn(key); };
 // Dark or light now, as chosen (Auto: as the phone is set now). The page's colours follow <html data-theme>.
 const phoneDark = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
 export const isDark = () => settings.theme === 'dark' || (settings.theme === 'auto' && Boolean(phoneDark?.matches));
-// The page's colours (src/colours.js) as CSS variables on <html>, for the theme and accent now.
+// The page's colours (src/colours.js) as CSS variables on <html>, for the theme, accent and colour-blind mode now.
 const showTheme = () => {
   if (typeof document === 'undefined') return;
   const root = document.documentElement, dark = isDark();
   root.dataset.theme = dark ? 'dark' : 'light';
   root.dataset.routeNames = settings.routeNames;   // the open train's station names close in (index.html)
-  for (const [k, v] of Object.entries(cssVars(dark, settings.accent))) root.style.setProperty(k, v);
+  for (const [k, v] of Object.entries(cssVars(dark, settings.accent, settings.colourBlind))) root.style.setProperty(k, v);
 };
 showTheme();
 phoneDark?.addEventListener('change', () => { if (settings.theme === 'auto') { showTheme(); changed('theme'); } });
@@ -131,7 +135,7 @@ export function setSetting(key, value) {
     now.delete(KEYS[key].param);
     history.replaceState(null, '', `#${now.toString().replace(/%2F/g, '/')}`);
   }
-  if (key === 'theme' || key === 'accent' || key === 'routeNames') showTheme();
+  if (key === 'theme' || key === 'accent' || key === 'routeNames' || key === 'colourBlind') showTheme();
   changed(key);
   return true;
 }

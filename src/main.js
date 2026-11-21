@@ -12,6 +12,7 @@ import { createMenu } from './menu.js';
 import { createBoard } from './board.js';
 import { pathOf, progressAlong, progressAt } from './path.js';
 import { followPath } from './path-follow.js';
+import { createPathSearch } from './path-async.js';
 import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
@@ -65,7 +66,11 @@ const netReady = loadNet('/rail-net.json').catch((e) => {
 const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
 let net = null;
-netReady.then((n) => { net = n; });
+// The open train's route is searched on a thread of its own (src/path-async.js, 2026-11-21): it held the map up to
+// 300 ms on the PC, over a second on a 4 times slower processor. Started once the page's own network is there (the
+// worker loads the same file again, then from the browser's cache).
+let searchPath = null;
+netReady.then((n) => { net = n; if (n) searchPath = createPathSearch('/rail-net.json', () => net); });
 let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
 const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
@@ -158,12 +163,12 @@ const panel = createPanel(document.getElementById('panel'), {
   onRoute(id, route) {
     // The last few drawn routes are kept (the review's F09, 2026-11-17): reopening a train doesn't search the rail
     // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
-    const cachedPath = (places) => {
+    const cachedPath = async (places) => {
       if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
       const key = placesKey(places);
       let path = pathCache.get(key);
       if (path) pathCache.delete(key);
-      else path = pathOf(places, net, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
+      else path = await searchPath(places, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
       pathCache.set(key, path);   // (the newest last)
       if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
       return path;
@@ -181,18 +186,25 @@ const panel = createPanel(document.getElementById('panel'), {
       places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
     }
     if (places.length < 2) return;
-    // Worked out once the camera has come to the train: finding the way over the rail network takes about 45 ms,
-    // which made the glide jump (Max, 2026-11-15: "camera is very jerky"). The route shows about half a second later.
-    map.whenSettled().then(() => {
+    // Shown once the camera has come to the train: finding the way over the rail network on the page's own thread
+    // (45-300 ms) made the glide jump (Max, 2026-11-15: "camera is very jerky"). Since 2026-11-21 it is searched on a
+    // thread of its own (src/path-async.js), started at once, during the glide; where no such thread runs, after it.
+    const key = placesKey(places);
+    const kept = () => shownPath?.id === id && shownPath.key === key && shownPath.follow;
+    const early = net && searchPath?.offThread() && !kept() ? cachedPath(places) : null;
+    map.whenSettled().then(async () => {
       if (panel.openId !== id) return;   // closed, or another train opened meanwhile
       // The line follows the train itself (src/path-follow.js; Max, 2026-11-19: trains drawn beside their route). The
       // same trip again (its stations unchanged): the line as it stands, not the timetable's again (that would jump).
-      const key = placesKey(places);
-      if (!(shownPath?.id === id && shownPath.key === key && shownPath.follow)) {
-        const base = cachedPath(places);
-        const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
-        shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
-        panel.placesReady(id);
+      if (!kept()) {
+        const base = await (early ?? cachedPath(places));
+        // Searched on its own thread meanwhile: closed, or another train opened, or this trip drawn already.
+        if (panel.openId !== id) return;
+        if (!kept()) {
+          const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
+          shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
+          panel.placesReady(id);
+        }
       }
       const here = placeNow(id);
       let done = 0;
@@ -601,7 +613,7 @@ function frame(ts) {
   const openId = panel.openId;
   const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
   if (due || !frameAll.length) {
-    frameAll = trains.placedAt(t).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+    frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
     frameTrains = filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
@@ -617,7 +629,7 @@ function frame(ts) {
     lastDraw = ts;
     const near = map.nearView(), features = [];
     for (const x of frameTrains) {
-      const r = near(x.lon, x.lat) && trains.get(x.id);
+      const r = near(x.lon, x.lat) && reportOf(x.id);
       if (r) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
         properties: { id: x.id, bearing: x.bearing, ...propsFor(r, x) } });
     }
@@ -625,7 +637,7 @@ function frame(ts) {
   }
   map.tick(ts);
   const sel = openId && frameById.get(openId);
-  const r = sel && trains.get(sel.id);
+  const r = sel && reportOf(sel.id);
   map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
   // How far along its route the open train is: at most 10 times a second (it took a fifth of the frame's time).
   // The open train's line follows its train (src/path-follow.js): checked FOLLOW_MS apart; the rare full re-route of
@@ -672,7 +684,7 @@ document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidd
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
-    || key === 'routeNames' || key === 'routeEdge') map.applySettings();
+    || key === 'routeNames' || key === 'routeEdge' || key === 'colourBlind') map.applySettings();
   if (key === 'language') {
     translatePage();
     nameSwatches();
@@ -935,12 +947,27 @@ function onPassings(list) {
   routes.addPassings(list);
   trains.addPassings(list);
 }
+// Trains before the track file (TODO 24, Codex's beta review point 10; Max's go 2026-11-21, "1 a"): the feeds start
+// at once, beside the track file (650 kB packed: a few seconds on slow mobile data, when the map stayed empty). Until it
+// is in, each train is drawn standing at its latest report (its way, its lateness colour: earlyPlaced) and its reports
+// wait in `early`; when it is in (or failed: no network, as before) they go to the simulation in one batch and it
+// takes over. The movement itself is unchanged.
+let netIn = false;
+const early = [], earlyAt = new Map();   // reports before the track file; each train's latest of them
+const earlyPlaced = () => [...earlyAt.values()].map(r => ({ id: r.id, lon: r.lon, lat: r.lat, bearing: r.bearing ?? 0, syncing: false,
+  stale: false, v: 0, extra: 0 }));
+const reportOf = id => trains.get(id) ?? (netIn ? null : earlyAt.get(id) ?? null);
 const positionHandlers = {
   onRecords(records) {
     lastDataAt = now();
     conn.onBatch(records.length);
     stats.onRecords(records, now());
     speedLog.add(records, now());
+    if (!netIn) {
+      early.push(...records);
+      for (const r of records) if (r.gone) earlyAt.delete(r.id); else earlyAt.set(r.id, r);
+      return;
+    }
     if (trains.halted) trains.setHalted(false);
     trains.update(records, now());
   },
@@ -953,6 +980,12 @@ const positionHandlers = {
 };
 let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
 netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
+  netIn = true;
+  if (early.length) trains.update(early.splice(0), now());
+  earlyAt.clear();
+});
+// The feeds start at once (above: their reports wait for the track file).
+(function startFeeds() {
   // The public page: everything from the fetcher's files (positions, passings, planned routes, stations).
   if (fromFiles) {
     positionsFeed = startFilesSource(filesBase, { ...positionHandlers, onPassings, onPlanned: gotPlanned, onStations: gotStations,
@@ -966,7 +999,7 @@ netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
   if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
   // A replay brings its own timetable (planned routes and passings), when the recording has one.
   startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
-});
+})();
 
 // Back from the background (another app, a locked phone, another tab) after BACK_MS or more: a phone froze the page,
 // so every train's data is as old as that. Each train is placed where it is now as soon as its next report comes

@@ -2,94 +2,169 @@
   "about": "Accepted replay numbers per recording (tools/check.mjs holds each recording to its own, with a margin). Written by node tools/check.mjs --rebaseline when a change is accepted; why goes in docs/movement.md.",
   "recordings": {
     "2026-11-11T16-46-20-921Z": {
-      "frozenPct": 0.86,
-      "lag90S": 7.62,
+      "frozenPct": 0.31,
+      "lag90S": 5.33,
       "dwellThroughPct": null,
       "wrongWay": 0,
-      "extraTurnBacks": 5,
-      "when": "2026-11-13"
+      "wrongBranch": 2,
+      "extraTurnBacks": 11,
+      "unmatchedTurnBacks": 11,
+      "standNoGpsMedM": null,
+      "when": "2026-11-21"
     },
     "2026-11-11T21-45-41-004Z": {
-      "frozenPct": 0.53,
-      "lag90S": 5.7,
-      "dwellThroughPct": 12.3,
+      "frozenPct": 0.52,
+      "lag90S": 5.78,
+      "dwellThroughPct": 7.7,
       "wrongWay": 0,
       "wrongBranch": 1,
-      "extraTurnBacks": 16,
+      "extraTurnBacks": 32,
+      "unmatchedTurnBacks": 31,
       "standNoGpsMedM": 16,
-      "when": "2026-11-14"
+      "when": "2026-11-21"
     },
     "2026-11-12T06-00-00-005Z": {
       "frozenPct": 0.5,
-      "lag90S": 5.58,
-      "dwellThroughPct": 14,
+      "lag90S": 5.63,
+      "dwellThroughPct": 8.3,
       "wrongWay": 2,
-      "wrongBranch": 4,
-      "extraTurnBacks": 115,
-      "standNoGpsMedM": 18,
-      "when": "2026-11-14"
+      "wrongBranch": 5,
+      "extraTurnBacks": 186,
+      "unmatchedTurnBacks": 185,
+      "standNoGpsMedM": 22,
+      "when": "2026-11-21"
     },
     "2026-11-12T15-30-00-006Z": {
-      "frozenPct": 0.8,
-      "lag90S": 7.38,
-      "dwellThroughPct": 13.1,
-      "wrongWay": 4,
-      "extraTurnBacks": 130,
-      "when": "2026-11-13"
+      "frozenPct": 0.45,
+      "lag90S": 5.73,
+      "dwellThroughPct": 7.8,
+      "wrongWay": 5,
+      "wrongBranch": 9,
+      "extraTurnBacks": 169,
+      "unmatchedTurnBacks": 168,
+      "standNoGpsMedM": 21,
+      "when": "2026-11-21"
     },
     "2026-11-12T17-01-59-418Z": {
-      "frozenPct": 0.45,
-      "lag90S": 5.7,
-      "dwellThroughPct": 13.7,
+      "frozenPct": 0.44,
+      "lag90S": 5.76,
+      "dwellThroughPct": 8.1,
       "wrongWay": 1,
-      "wrongBranch": 3,
-      "extraTurnBacks": 119,
-      "standNoGpsMedM": 19,
-      "when": "2026-11-14"
+      "wrongBranch": 2,
+      "extraTurnBacks": 153,
+      "unmatchedTurnBacks": 149,
+      "standNoGpsMedM": 21,
+      "when": "2026-11-21"
     },
     "2026-11-12T19-42-00-050Z": {
-      "frozenPct": 0.77,
-      "lag90S": 8.36,
-      "dwellThroughPct": 13.4,
+      "frozenPct": 0.5,
+      "lag90S": 6.01,
+      "dwellThroughPct": 8.1,
       "wrongWay": 0,
-      "extraTurnBacks": 49,
-      "when": "2026-11-13"
+      "wrongBranch": 1,
+      "extraTurnBacks": 39,
+      "unmatchedTurnBacks": 38,
+      "standNoGpsMedM": 9,
+      "when": "2026-11-21"
     },
     "2026-11-12T23-02-56-574Z": {
       "frozenPct": 0.65,
-      "lag90S": 7.91,
-      "dwellThroughPct": 10.9,
+      "lag90S": 8.29,
+      "dwellThroughPct": 6.3,
       "wrongWay": 0,
       "wrongBranch": 2,
       "extraTurnBacks": 33,
+      "unmatchedTurnBacks": 36,
       "standNoGpsMedM": 12,
-      "when": "2026-11-14"
+      "when": "2026-11-21"
     },
     "2026-11-13T04-00-00-000Z": {
-      "frozenPct": 0.8,
-      "lag90S": 7.39,
-      "dwellThroughPct": 14.3,
+      "frozenPct": 0.48,
+      "lag90S": 5.07,
+      "dwellThroughPct": 8.8,
       "wrongWay": 0,
-      "extraTurnBacks": 52,
-      "when": "2026-11-13"
+      "wrongBranch": 1,
+      "extraTurnBacks": 80,
+      "unmatchedTurnBacks": 76,
+      "standNoGpsMedM": 17,
+      "when": "2026-11-21"
     },
     "2026-11-13T10-30-00-013Z": {
-      "frozenPct": 1,
-      "lag90S": 9.43,
-      "dwellThroughPct": 15.9,
+      "frozenPct": 0.41,
+      "lag90S": 6.55,
+      "dwellThroughPct": 9.5,
       "wrongWay": 0,
-      "extraTurnBacks": 136,
-      "when": "2026-11-13"
+      "wrongBranch": 5,
+      "extraTurnBacks": 132,
+      "unmatchedTurnBacks": 133,
+      "standNoGpsMedM": 15,
+      "when": "2026-11-21"
     },
     "2026-11-14T09-00-00-018Z": {
-      "frozenPct": 0.31,
-      "lag90S": 6.38,
-      "dwellThroughPct": 17.8,
+      "frozenPct": 0.3,
+      "lag90S": 6.6,
+      "dwellThroughPct": 12.2,
       "wrongWay": 0,
       "wrongBranch": 2,
-      "extraTurnBacks": 78,
-      "standNoGpsMedM": 12,
-      "when": "2026-11-14"
+      "extraTurnBacks": 84,
+      "unmatchedTurnBacks": 92,
+      "standNoGpsMedM": 13,
+      "when": "2026-11-21"
+    },
+    "2026-11-17T15-00-00-001Z": {
+      "frozenPct": 0.51,
+      "lag90S": 5.94,
+      "dwellThroughPct": 7.4,
+      "wrongWay": 7,
+      "wrongBranch": 10,
+      "extraTurnBacks": 420,
+      "unmatchedTurnBacks": 414,
+      "standNoGpsMedM": 16,
+      "when": "2026-11-21"
+    },
+    "2026-11-19T10-30-00-013Z": {
+      "frozenPct": 0.38,
+      "lag90S": 5.77,
+      "dwellThroughPct": 8.1,
+      "wrongWay": 2,
+      "wrongBranch": 6,
+      "extraTurnBacks": 107,
+      "unmatchedTurnBacks": 101,
+      "standNoGpsMedM": 19,
+      "when": "2026-11-21"
+    },
+    "2026-11-21T12-38-00-336Z": {
+      "frozenPct": 0.37,
+      "lag90S": 5.58,
+      "dwellThroughPct": 7,
+      "wrongWay": 1,
+      "wrongBranch": 6,
+      "extraTurnBacks": 73,
+      "unmatchedTurnBacks": 79,
+      "standNoGpsMedM": 21,
+      "when": "2026-11-21"
+    },
+    "2026-11-15T22-15-13-852Z": {
+      "frozenPct": 0.3,
+      "lag90S": 8.44,
+      "dwellThroughPct": 8.4,
+      "wrongWay": 0,
+      "wrongBranch": 2,
+      "extraTurnBacks": 17,
+      "unmatchedTurnBacks": 18,
+      "standNoGpsMedM": 8,
+      "when": "2026-11-21"
+    },
+    "2026-11-19T22-28-02-750Z": {
+      "frozenPct": 0.37,
+      "lag90S": 5.97,
+      "dwellThroughPct": 11.3,
+      "wrongWay": 0,
+      "wrongBranch": 0,
+      "extraTurnBacks": 19,
+      "unmatchedTurnBacks": 20,
+      "standNoGpsMedM": 14,
+      "when": "2026-11-21"
     }
   }
 }

@@ -130,13 +130,14 @@ const feed = (trains, upTo, i, skip, list = recs) => {
 const s = { pastStopBounced: 0, wrongWay: 0, moving: 0, frozen: 0, freezes: [], back: 0, truthBack: 0, lagM: [], lagS: [], standM: [],
   syncMoments: 0, syncStarts: 0, jumps: 0, all: 0, stale: 0, coastToStop: 0, earlyAtPlace: 0, silentLagS: [], returnAheadM: [], stoodMoved: 0, pastStop: 0, silentMoving: 0, silentFrozen: 0, why: {}, syncWhy: [] };
 const prev = new Map();     // id -> { p, dir, synced, frozenRun }
-const truthDir = new Map(), drawnDir = new Map();
+const truthDir = new Map(), truthDir20 = new Map(), drawnDir = new Map();
 const truthTurnAt = new Map(), wrongRun = new Map();   // wrong-way episodes (below)
+const truthTurns = new Map(), drawnTurns = new Map();   // id -> [times]: drawn turn-backs matched with real ones (below)
 const capWas = new Map();   // id -> the drawn train's s at the moment before (has it moved?)
-function turnBack(dirs, id, p) {
+function turnBack(dirs, id, p, minM = 5) {
   const a = dirs.get(id);
   if (!a) { dirs.set(id, { p, dir: null }); return 0; }
-  if (metres(a.p, p) < 5) return 0;
+  if (metres(a.p, p) < minM) return 0;
   const dir = heading(a.p, p);
   dirs.set(id, { p, dir });
   return a.dir !== null && angle(a.dir, dir) > 120 ? 1 : 0;
@@ -179,7 +180,10 @@ for (let T = start; T < end; T += STEP) {
     // minutes), how long the drawn train is within 300 m of the station, and how long of that it stands (drawn speed
     // under 0.8 m/s; a standing train's drawn place still shifts by millimetres while a path change fades out).
     for (const st of realStops.get(d.id) ?? []) {
-      if (t < st.arr - 120000 || t > st.dep + 120000 || metres(d, st.at) > 300) continue;
+      // Within 300 m of Trafikverket's station point or of the measured stopping place (since 2026-11-21: where the
+      // stopping place is far from the point, Mölndal, Bohus, Ramlösa, a train drawn standing at the platform was
+      // counted as driving through; docs/movement-findings-1121.md section 2).
+      if (t < st.arr - 120000 || t > st.dep + 120000 || (metres(d, st.at) > 300 && !(st.place && metres(d, st.place) <= 300))) continue;
       st.near += STEP / 1000;
       if (sim ? sim.v < 0.8 : (prev.get(d.id) && metres(prev.get(d.id).p, d) <= 0.05)) st.still += STEP / 1000;
     }
@@ -235,12 +239,19 @@ for (let T = start; T < end; T += STEP) {
       if (argv.includes('--why') && !why.startsWith('after') && s.syncWhy.filter(w => !w.startsWith('after')).length <= 3)
         console.log('sync start', d.id, new Date(t).toISOString().slice(11, 21), why);
     }
-    // Turn-backs, judged over every 5 m moved (so a standing train's jitter doesn't count). The truth's own
-    // (a train reversing at a terminus is real) for comparison.
-    const truthTurned = turnBack(truthDir, d.id, tru);
+    // Turn-backs, judged over every 5 m the drawn train moves. The truth's own (a train reversing at a terminus is
+    // real) for comparison, judged over 20 m like the trains themselves (TURN_EVIDENCE_M in src/trains.js; since
+    // 2026-11-21, TODO 4): over 5 m a standing train's GPS wobble turned the real direction minutes before the real
+    // turn at a terminus, and the drawn turn there was then counted as one without a real one.
+    // (The wrong-way rule below keeps the real direction over 5 m, as before: there a position source jumping 60 m
+    // back and forth at a standing train, 1704 at Hjärup, is a real turn of the data that the drawn train rightly
+    // doesn't follow.)
+    const truthTurned = turnBack(truthDir20, d.id, tru, 20);
     s.truthBack += truthTurned;
-    if (truthTurned) truthTurnAt.set(d.id, t);
+    if (truthTurned) (truthTurns.get(d.id) ?? truthTurns.set(d.id, []).get(d.id)).push(t);
+    if (turnBack(truthDir, d.id, tru)) truthTurnAt.set(d.id, t);
     const tb = turnBack(drawnDir, d.id, d);
+    if (tb) (drawnTurns.get(d.id) ?? drawnTurns.set(d.id, []).get(d.id)).push(t);
     // Wrong way (Max, 2026-11-12: "U-turns on the line"): the drawn train moving against the real one, both moving
     // (over 3 m/s drawn, 10 km/h real), for 3 s or more; not within a minute of the real train's own turn (a train
     // reversing at a terminus is drawn turning a few seconds later: that is lag, not a wrong way); only where the real
@@ -315,6 +326,13 @@ const pct = (a, b) => `${(100 * a / b).toFixed(1)} %`;
 const q = (arr, f) => { if (!arr.length) return NaN; const x = Float64Array.from(arr).sort(); return x[Math.floor(f * (x.length - 1))]; };
 const f1 = v => (Number.isFinite(v) ? v.toFixed(1) : '-');
 const minutes = (end - start) / 60000;
+// Drawn turn-backs with no real turn of the same train within 90 s either way (TODO 4): the U-turns the data doesn't
+// explain. Inside the replayed time.
+let unmatchedTurns = 0;
+for (const [id, ts] of drawnTurns) {
+  const real = truthTurns.get(id) ?? [];
+  for (const t of ts) if (t >= start && t < end && !real.some(x => Math.abs(x - t) <= 90000)) unmatchedTurns++;
+}
 // Wrong branches inside the replayed time.
 const wrongIn = branches.events.filter(e => e.time >= start - DELAY && e.time < end);
 if (argv.includes('--why')) for (const e of wrongIn.slice(0, 12)) console.log('wrong branch', e.id, new Date(e.time).toISOString().slice(11, 19), `slid ${e.slide} m, ${e.side} m sideways, at ${e.lat.toFixed(5)},${e.lon.toFixed(5)}`);
@@ -334,7 +352,7 @@ if (argv.includes('--json')) {
     frozenPct: r(100 * s.frozen / s.moving), stopsPerMin: r(s.freezes.length / minutes, 1),
     lagMedianS: r(q(s.lagS, 0.5)), lag90S: r(q(s.lagS, 0.9)), lag99S: r(q(s.lagS, 0.99)),
     offTrack99M: offTrack.length ? r(q(offTrack, 0.99)) : null,
-    turnBacks: s.back, truthTurnBacks: s.truthBack, wrongWay: s.wrongWay,
+    turnBacks: s.back, truthTurnBacks: s.truthBack, unmatchedTurnBacks: unmatchedTurns, wrongWay: s.wrongWay,
     greyPct: r(100 * s.stale / s.all), timetableReturns: s.returnAheadM.length,
     returnAhead500: s.returnAheadM.filter(m => m > 500).length, returnAhead90M: s.returnAheadM.length ? Math.round(q(s.returnAheadM, 0.9)) : null, silentStandingPct: r(100 * s.silentFrozen / s.silentMoving),
     dwellStops: dwells.length, dwellThroughPct: dwells.length ? r(100 * dwellThrough / dwells.length, 1) : null,
@@ -352,7 +370,7 @@ console.log(`frozen while really moving (over 15 km/h): ${pct(s.frozen, s.moving
 if (!PLAIN) console.log('  why:', Object.entries(s.why).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} ${pct(n, s.frozen)}`).join(', '));
 console.log(`stops of 0.5 s or more while really moving: ${s.freezes.length} (${(s.freezes.length / minutes).toFixed(0)} a minute across the map); ` +
   `length median ${f1(q(s.freezes, 0.5))} s, 90 % ${f1(q(s.freezes, 0.9))} s`);
-console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}`);
+console.log(`turn-backs over 120°: drawn ${s.back}, in the truth itself ${s.truthBack}; drawn with no real turn within 90 s: ${unmatchedTurns}`);
 console.log(`wrong way (drawn against the real train, both moving, 3 s or more, not at its own turn): ${s.wrongWay}`);
 console.log(`wrong branch (drawn onto another track before its next report, slid ${30} m or more sideways): ${wrongIn.length}, of them 300 m or more ${wrongIn.filter(e => e.slide >= 300).length}`);
 console.log(`distance from the truth while moving: median ${f1(q(s.lagM, 0.5))} m, 90 % ${f1(q(s.lagM, 0.9))} m, 99 % ${f1(q(s.lagM, 0.99))} m; ` +
@@ -364,7 +382,7 @@ if (!PLAIN && s.returnAheadM.length) console.log(`GPS back after moving by the t
   `more than 500 m behind ${s.returnAheadM.filter(m => m < -500).length}`);
 if (!PLAIN) console.log(`in longer silences, off from the (straight-line) truth: median ${f1(q(s.silentLagS, 0.5))} s of travel, ` +
   `90 % ${f1(q(s.silentLagS, 0.9))} s; moving on past where it stood, 30 s or more after its GPS went quiet (must be 0): ${s.stoodMoved}`);
-if (routes) console.log(`DWELL at real stops (an actual arrival and departure), drawn within 300 m: ${dwells.length}; drawn standing under 5 s (driving through): ${dwellThrough} = ${dwells.length ? (100 * dwellThrough / dwells.length).toFixed(1) : '-'} %; drawn standing median ${f1(q(dwells.map(st => st.still), 0.5))} s`);
+if (routes) console.log(`DWELL at real stops (an actual arrival and departure), drawn within 300 m of the station or its stopping place: ${dwells.length}; drawn standing under 5 s (driving through): ${dwellThrough} = ${dwells.length ? (100 * dwellThrough / dwells.length).toFixed(1) : '-'} %; drawn standing median ${f1(q(dwells.map(st => st.still), 0.5))} s`);
 if (routes) {
   const n = standNumbers((v, d = 2) => (Number.isFinite(v) ? Number(v.toFixed(d)) : null));
   console.log(`STANDS at real stops with a measured stopping place: ${n.standStops} drawn standing; to the stopping place median ${n.standPlaceMedM} m, 90 % ${n.standPlace90M} m, over 200 m ${n.standPlaceOver200Pct} %; ` +
