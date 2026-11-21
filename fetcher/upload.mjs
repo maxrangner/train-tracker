@@ -8,6 +8,9 @@
 // and 23 MB an hour before): a file the shelf lets go of before it was sent is simply forgotten (its upload and its
 // delete both dropped), so only what is still current waits, plus the deletes of files already on one.com. A file
 // one.com refuses is tried again, 3 times in all, 5 s apart (it was dropped at once while the live files named it).
+// The live file names only files that are on one.com (2026-11-21, TODO 40's rest; point 4's second half): names()
+// gives, per kind, the newest file uploaded and not yet let go by the shelf. A file still on its way is named by the
+// first live file made after it arrived; one refused 3 times is never named (the one before it stays named).
 // Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run).
 // Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
 // so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
@@ -78,11 +81,11 @@ export function folderCheck(cfg, { Client = ssh2.Client } = {}) {
 
 // The order of the waiting jobs, so the map comes back first after a break (2026-11-18: after 40 minutes offline
 // 1708 jobs waited, sent oldest first, and the map stayed empty ~3 minutes after the connection was back).
-// The newest live file names the newest file of every kind made before it (fetcher/files.mjs, liveTick; puts are
-// queued in the order they are made). So: of the files waiting before it, only the newest of each kind goes, then the
-// live file, then the files made after it; deletes last. The live file still goes after every file it names (a page
-// keeps a 404 for a name, src/files-source.js get()). Older files are never sent (no live file that is sent names
-// them), and their deletes are dropped (nothing there to delete). -> { jobs, skipped: puts not sent }
+// The live files name the newest file of every kind (since 2026-11-21 only once it is on one.com: names() below; puts
+// are queued in the order they are made). So: of the files waiting before the newest live file, only the newest of
+// each kind goes (the next live files name them), then the live file, then the files made after it; deletes last.
+// Older files are never sent (no live file names them), and their deletes are dropped (nothing there to delete).
+// -> { jobs, skipped: puts not sent }
 export function order(queue) {
   let last = -1;
   for (let i = queue.length - 1; i >= 0 && last < 0; i--) if (queue[i].op === 'put' && queue[i].f.kind === 'live') last = i;
@@ -116,6 +119,25 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
   let client = null, sftp = null, busy = false, closing = false, tries = 0, sweepTimer = null, retryTimer = null;
   let sending = null;               // the job being sent now
   const again = new Map();          // name -> timer: a refused file waiting for its next try
+  // What is on one.com: kind -> its files uploaded and not let go of yet, [{ name, n (the time in its name) }], oldest
+  // first (a file tried again can arrive after a newer one). Live files are not kept here (they are never named).
+  const onSite = new Map();
+  const madeOf = name => Number(/-(\d+)\.json$/.exec(name)?.[1] ?? 0);
+  function arrived(kind, name) {
+    if (kind === 'live') return;
+    const l = onSite.get(kind) ?? [];
+    if (!l.some(x => x.name === name)) { l.push({ name, n: madeOf(name) }); l.sort((a, b) => a.n - b.n); }
+    onSite.set(kind, l);
+  }
+  function left(name) {
+    for (const [kind, l] of onSite) {
+      const i = l.findIndex(x => x.name === name);
+      if (i < 0) continue;
+      l.splice(i, 1);
+      if (!l.length) onSite.delete(kind);
+      return;
+    }
+  }
 
   const call = (fn, ...a) => callOn(sftp, fn, ...a);
   let blockedUntil = 0;   // breakFor(): a pretend outage (the live test)
@@ -207,9 +229,11 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
           await putTmp(tmp, job.f.gz);   // packed: one.com hands it out as it is (data.htaccess)
           await call('rename', tmp, `${dir}/${job.name}`);
           stats.ok++; stats.lastOkAt = Date.now(); stats.lastMs = Date.now() - t; stats.bytes += job.f.gz.length;
+          arrived(job.f.kind, job.name);
         } else {
           await call('unlink', `${dir}/${job.name}`).catch(e => { if (!gone(e)) throw e; });   // already gone: fine
           stats.removed++;
+          left(job.name);
         }
         done(job);
       } catch (e) {
@@ -261,12 +285,15 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     // one being sent right now, or already sent, is deleted.
     remove(name) {
       if (!ours('delete', name, true)) return;
+      left(name);   // no longer named (its delete may still wait)
       const i = queue.findIndex(q => q.op === 'put' && q.name === name);
       if (i >= 0 && queue[i] !== sending) { queue.splice(i, 1); stats.forgotten++; return; }
       if (again.has(name)) { clearTimeout(again.get(name)); again.delete(name); stats.forgotten++; return; }
       queue.push({ op: 'rm', name }); work();
     },
     stats: () => ({ ...stats, waiting: queue.length }),
+    // kind -> the newest file of that kind on one.com, for the live file (fetcher/main.mjs liveTick).
+    names: () => Object.fromEntries([...onSite].map(([kind, l]) => [kind, l[l.length - 1].name])),
     sweep,
     // The live test (main.mjs --test-breaks): drop the connection and refuse to connect for ms, like a lost internet.
     breakFor(ms) { blockedUntil = Date.now() + ms; if (client) broken(new Error('test break')); },
