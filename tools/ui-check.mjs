@@ -133,8 +133,10 @@ try {
     // ...and not under a "3 trains" bubble (a tap there lists the group: right, but not this test; seen with the
     // files' 5-s batches, 2026-11-16).
     const groups = [...document.querySelectorAll('.near-label.group')].map(e => e.getBoundingClientRect());
-    // Nor under a station's name (close in a tap there opens the station).
-    const covered = q => groups.some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
+    // Nor under a station's name (close in a tap there opens the station): the map's names and, close in, the page's
+    // (src/map.js placeStationNames; 2026-11-21: with shorter bubbles a train under "Stockholm C" was picked).
+    const names = [...document.querySelectorAll('.station-name')].map(e => e.getBoundingClientRect());
+    const covered = q => [...groups, ...names].some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
       || m.queryRenderedFeatures([[q.x - 8, q.y - 8], [q.x + 8, q.y + 8]], { layers: ['station-names'] }).length > 0;
     const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id) && !covered(m.project(f.geometry.coordinates)))
       .sort((a, b) => d(a) - d(b))[0];

@@ -1152,16 +1152,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         nearEls.set(key, n);
       }
       keep.add(key);
-      const text = one ? `${g[0].pr.company ?? ''}|${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
+      // A train's bubble: its number and minutes, no company line (Max, 2026-11-21, option h B; the toy and the card
+      // show the company), and no "On time" (option i B: only minutes that say something; the open train's own label
+      // keeps it).
+      const text = one ? `${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
       if (text !== n.text) {
         n.text = text;
         if (one) {
-          const { company, label, stale } = g[0].pr;
+          const { label, stale } = g[0].pr;
           const { number, minutes, rest } = splitLabel(label);
           n.el.className = `near-label${stale ? ' stale' : ''}${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
-          n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-            ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+          n.el.replaceChildren(el('b', '', number),
+            ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = `near-label group${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           n.el.textContent = text;
@@ -1169,8 +1172,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
       // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
-      const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
-      const h = one && g[0].pr.company ? 40 : 26;
+      const w = (one ? String(g[0].pr.label).length * 8 + 30 : 70) / 2 + 10;
+      const h = 26;
       // The station's name stays readable, the bubble moves (Max, 2026-11-19: "B", after the "2 trains" bubble lay under
       // "Stockholm C"): placeBubble.
       const side = placeBubble(x, y, w, h, n.side);

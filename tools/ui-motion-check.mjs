@@ -89,7 +89,8 @@ try {
       if (own.some(r => Math.abs((r.left + r.right) / 2 - q.x) < 2 && Math.abs(r.top - q.y - 16) < 3)) lone.add(f.properties.id);
     }
     const groups = [...document.querySelectorAll('.near-label.group')].map(e => e.getBoundingClientRect());
-    const covered = q => groups.some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
+    const names = [...document.querySelectorAll('.station-name')].map(e => e.getBoundingClientRect());   // the page's names close in
+    const covered = q => [...groups, ...names].some(r => q.x > r.left - 4 && q.x < r.right + 4 && q.y > r.top - 4 && q.y < r.bottom + 4)
       || m.queryRenderedFeatures([[q.x - 8, q.y - 8], [q.x + 8, q.y + 8]], { layers: ['station-names'] }).length > 0;
     const f = m.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => lone.has(f.properties.id) && !covered(m.project(f.geometry.coordinates))
       && f.properties.id !== except && (!except || String(window.__trains.get(f.properties.id)?.number) !== String(window.__trains.get(except)?.number)) && typeof window.__lateness.get(f.properties.id)?.minutes === 'number').sort((a, b) => d(a) - d(b))[0];

@@ -105,8 +105,9 @@ const labelFor = r => label(r.number, minutesOf(r));
 const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
   company: lateness.brand(r.id) ?? '',
-  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4).
-  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined ? '' : minutesText(minutesOf(r)),
+  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4); on
+  // time just "2311" (Max, 2026-11-21, option i B).
+  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined || minutesOf(r) === 0 ? '' : minutesText(minutesOf(r)),
   rest: sim?.syncing && !sim.stale ? ' »»' : '',
 });
 
