@@ -12,7 +12,8 @@ import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
-import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE } from './colours.js';
+import { LATE, TAG, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
+import stationSizes from './big-stations.json';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -53,7 +54,12 @@ const colourBase = dark => (dark
   : { label: PAGE.light.label, halo: PAGE.light.halo, station: PAGE.light.station, ring: '#a59c8f', ringFill: '#ffffff',
       rail: MAP.light.rail, railEdge: null, railK: 0.9, nameHalo: MAP.light.land, disEdge: null, disDash: true,   // dashed in light too (Max, 2026-11-17: "Make it dashed in both")
       casing: '#ffffff', stopFill: '#ffffff' });
+// The route's white edge (Settings → Debug → Route white edge; Max, 2026-11-21, option E).
+const ROUTE_EDGE = 'rgba(255, 255, 255, 0.9)';
 // The rails' width at each zoom (k: how bold): bolder far out than before, but not a black mass in a big yard close in.
+// The bigger stations (tools/station-sizes.mjs); further out than SMALL_UNTIL the others' names are small and grey.
+const BIG = new Set(stationSizes.big);
+const SMALL_UNTIL = 13;
 const railWidth = k => ['interpolate', ['linear'], ['zoom'], 4, 0.5 * k, 7, 0.9 * k, 10, 1.5 * k, 13, Math.min(2.0 * k, 2.8), 16, Math.min(2.6 * k, 3.2)];
 
 // The rail lines: Trafikverket's network, the one the trains follow (public/rail-net.json, 1.7 MB instead of the
@@ -148,16 +154,20 @@ const symbolSize = () => (settings.trainSymbol === 'drop'
   : ['interpolate', ['linear'], ['zoom'], 4, 0.55, 10, 1.25]);
 const triangles = () => settings.trainSymbol !== 'circle';
 // The pill behind a name of the open train's stations (Max, 2026-11-15: white name pills): a rounded box in the card's
-// colour with a thin edge, stretched round the text (icon-text-fit).
+// colour with a thin edge, stretched round the text (icon-text-fit). 'pill-contrast' (Max, 2026-11-21: option C): the
+// other way from the trains' labels, no edge (Settings → Debug → Route station names).
 function addPill(map, dark) {
-  const c = document.createElement('canvas');
-  c.width = 48; c.height = 32;
-  const g = c.getContext('2d');
-  g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
-  g.fillStyle = PAGE[dark ? 'dark' : 'light'].card; g.fill();
-  g.lineWidth = 1.5; g.strokeStyle = dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'; g.stroke();
-  if (map.hasImage('pill')) map.removeImage('pill');
-  map.addImage('pill', g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+  const P = PAGE[dark ? 'dark' : 'light'];
+  for (const [id, fill, edge] of [['pill', P.card, dark ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,30,0.16)'], ['pill-contrast', P.pillBg, null]]) {
+    const c = document.createElement('canvas');
+    c.width = 48; c.height = 32;
+    const g = c.getContext('2d');
+    g.beginPath(); g.roundRect(1.5, 1.5, 45, 29, 14);
+    g.fillStyle = fill; g.fill();
+    if (edge) { g.lineWidth = 1.5; g.strokeStyle = edge; g.stroke(); }
+    if (map.hasImage(id)) map.removeImage(id);
+    map.addImage(id, g.getImageData(0, 0, 48, 32), { pixelRatio: 2, stretchX: [[16, 32]], stretchY: [[15, 17]], content: [14, 6, 34, 26] });
+  }
 }
 function addTriangles(map, dark) {
   for (const [name, colour] of Object.entries(dotColours(dark))) {
@@ -224,7 +234,7 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-edge', 'path-slide-edge', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
@@ -280,6 +290,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const c = pathColours();
     map.setPaintProperty('path-line', 'line-gradient', c.line);
     map.setPaintProperty('path-casing', 'line-gradient', c.casing);
+    if (map.getLayer('path-edge')) map.setPaintProperty('path-edge', 'line-gradient', c.edge);
     map.setPaintProperty('path-slide-line', 'line-gradient', c.slide);
     map.setPaintProperty('path-stops', 'circle-stroke-color', c.stops);
     map.setPaintProperty('path-slide-stops', 'circle-stroke-color', c.stops);
@@ -316,6 +327,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const p = g && g.b > g.a ? (pathProgress - g.a) / (g.b - g.a) : 0;
     return { line: rampOf(x => (inGap(x) ? CLEAR : x < pathProgress ? C.routeDone : C.route), cuts),
       casing: rampOf(x => (inGap(x) ? CLEAR : C.casing), cuts),
+      edge: rampOf(x => (inGap(x) ? CLEAR : ROUTE_EDGE), cuts),
       slide: rampOf(x => (x < p ? C.routeDone : C.route), [p]),
       stops: ['case', ['<=', ['get', 'f'], pathProgress], C.routeDone, C.route] };
   };
@@ -501,7 +513,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // 2026-11-13; the travelled part was once grey, which in the dark look was the rail lines' grey, so it looked
     // missing). Its stops: path-stops, below.
     // The casing is a gradient too (one colour), so the sliding stretch's gap shows through it.
-    const casingWidth = ['interpolate', ['linear'], ['zoom'], 5, 5, 14, 11], lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 3, 14, 7];
+    // About twice as wide since 2026-11-21 (Max, option d B: the route was hard to see among the trains; it was 5 → 11
+    // and 3 → 7). Settings → Debug → Route white edge (option E): a white edge under the casing.
+    const casingWidth = ['interpolate', ['linear'], ['zoom'], 5, 9, 14, 20], lineWidth = ['interpolate', ['linear'], ['zoom'], 5, 6, 14, 13];
+    if (settings.routeEdge) {
+      const edgeWidth = ['interpolate', ['linear'], ['zoom'], 5, 13, 14, 25];
+      map.addLayer({ id: 'path-edge', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-gradient': pathColours().edge, 'line-width': edgeWidth } });
+      map.addLayer({ id: 'path-slide-edge', type: 'line', source: 'path-slide', filter: ['==', ['geometry-type'], 'LineString'],
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ROUTE_EDGE, 'line-width': edgeWidth } });
+    }
     map.addLayer({ id: 'path-casing', type: 'line', source: 'path', filter: ['==', ['geometry-type'], 'LineString'],
       layout: { 'line-cap': 'round', 'line-join': 'round' },
       paint: { 'line-gradient': pathColours().casing, 'line-width': casingWidth } });
@@ -662,6 +685,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // is above the map itself, so it stays on top.)
     // From the zoom where the trains' labels are page elements (placeNearLabels) the names are page elements too,
     // above those labels; this layer draws them further out.
+    // Up to SMALL_UNTIL the smaller stations' names are small and grey (Max, 2026-11-21, option c C), placed after the
+    // bigger ones'.
+    const small = ['==', ['get', 'small'], 1];
     map.addLayer({
       id: 'station-names',
       type: 'symbol',
@@ -671,16 +697,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         visibility: namesOnPage() ? 'none' : 'visible',   // page elements from there (switchModels)
         'text-field': ['get', 'name'],
         'text-font': ['Outfit Medium'],
-        'text-size': 14,
+        'text-size': ['step', ['zoom'], ['case', small, 11.5, 14], SMALL_UNTIL, 14],
         'text-offset': [0, -1.1],
         'text-anchor': 'bottom',
         'text-optional': true,
+        'symbol-sort-key': ['get', 'small'],
       },
-      paint: { 'text-color': C.station, 'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
+      paint: { 'text-color': ['step', ['zoom'], ['case', small, STATION_SMALL[dark ? 'dark' : 'light'], C.station], SMALL_UNTIL, C.station],
+        'text-halo-color': C.nameHalo, 'text-halo-width': 1.5 },
     });
     // The open train's stations: their names in pills, at every zoom up to where names are page elements (there the
     // page's names get the pill: placeStationNames).
+    // Their look: Settings → Debug → Route station names (Max, 2026-11-21): a contrast pill (the default), the trains'
+    // own pill, or bold text with a halo and no pill.
     addPill(map, dark);
+    const rn = settings.routeNames, P = PAGE[dark ? 'dark' : 'light'];
     map.addLayer({
       id: 'route-names',
       type: 'symbol',
@@ -688,17 +719,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: {
         visibility: namesOnPage() ? 'none' : 'visible',
         'text-field': ['get', 'name'],
-        'text-font': ['Outfit SemiBold'],
-        'text-size': 13,
+        'text-font': [rn === 'plain' ? 'Outfit Bold' : 'Outfit SemiBold'],
+        'text-size': rn === 'plain' ? 14 : 13,
         'text-offset': [0, -1.25],
         'text-anchor': 'bottom',
-        'icon-image': 'pill',
-        'icon-text-fit': 'both',
-        'icon-text-fit-padding': [2, 7, 2, 7],
+        ...(rn === 'plain' ? {} : { 'icon-image': rn === 'contrast' ? 'pill-contrast' : 'pill', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 7, 2, 7] }),
         'symbol-sort-key': ['get', 'rank'],
         'text-padding': 3,
       },
-      paint: { 'text-color': C.station },
+      paint: rn === 'plain' ? { 'text-color': C.label, 'text-halo-color': C.halo, 'text-halo-width': 2 }
+        : { 'text-color': rn === 'contrast' ? P.pillInk : C.station },
     });
     routeNames();
 
@@ -1014,12 +1044,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const key = [c.lng, c.lat, map.getZoom(), map.getBearing(), map.getPitch(), W, H, routeSigs, data.stations, data['route-names']];
     if (namesFor && key.every((v, i) => v === namesFor[i])) return;
     namesFor = key;
-    const placed = [], keep = new Set(), onRoute = new Set(routeSigs);
+    const placed = [], keep = new Set(), onRoute = new Set(routeSigs), smallNow = map.getZoom() < SMALL_UNTIL;
     const order = onRoute.size ? [...data['route-names'].features, ...data.stations.features.filter(f => !onRoute.has(f.properties.sig))] : data.stations.features;
     for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
-      const { sig, name } = f.properties, w = String(name).length * 7.6 + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - 18, bt: q.y - NAME_DY };
+      // A smaller station's name, further out than SMALL_UNTIL: small and grey (index.html .station-name.small).
+      const { sig, name } = f.properties, isSmall = smallNow && f.properties.small === 1 && !onRoute.has(sig);
+      const w = String(name).length * (isSmall ? 6.3 : 7.6) + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - (isSmall ? 15 : 18), bt: q.y - NAME_DY };
       if (placed.some(o => o.l < b.r && b.l < o.r && o.t < b.bt && b.t < o.bt)) continue;
       placed.push(b);
       keep.add(sig);
@@ -1031,6 +1063,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         nameEls.set(sig, el);
       }
       el.classList.toggle('pill', onRoute.has(sig));
+      el.classList.toggle('small', isSmall);
       el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
@@ -1119,16 +1152,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         nearEls.set(key, n);
       }
       keep.add(key);
-      const text = one ? `${g[0].pr.company ?? ''}|${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
+      // A train's bubble: its number and minutes, no company line (Max, 2026-11-21, option h B; the toy and the card
+      // show the company), and no "On time" (option i B: only minutes that say something; the open train's own label
+      // keeps it).
+      const text = one ? `${g[0].pr.label}|${g[0].pr.stale}` : `${g.length}${t('nTrains')}`;
       if (text !== n.text) {
         n.text = text;
         if (one) {
-          const { company, label, stale } = g[0].pr;
+          const { label, stale } = g[0].pr;
           const { number, minutes, rest } = splitLabel(label);
           n.el.className = `near-label${stale ? ' stale' : ''}${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
-          n.el.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
-            ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+          n.el.replaceChildren(el('b', '', number),
+            ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
         } else {
           n.el.className = `near-label group${n.side && n.side !== 'down' ? ` ${n.side}` : ''}`;
           n.el.textContent = text;
@@ -1136,8 +1172,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       }
       const x = g.reduce((s, o) => s + o.x, 0) / g.length, y = g.reduce((s, o) => s + o.y, 0) / g.length;
       // Its box, guessed from its text (reading the page's sizes every frame would make it lay out again).
-      const w = (one ? Math.max(String(g[0].pr.company ?? '').length * 6.6, String(g[0].pr.label).length * 8 + 30) : 70) / 2 + 10;
-      const h = one && g[0].pr.company ? 40 : 26;
+      const w = (one ? String(g[0].pr.label).length * 8 + 30 : 70) / 2 + 10;
+      const h = 26;
       // The station's name stays readable, the bubble moves (Max, 2026-11-19: "B", after the "2 trains" bubble lay under
       // "Stockholm C"): placeBubble.
       const side = placeBubble(x, y, w, h, n.side);
@@ -1568,8 +1604,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (isReady) map.getSource('disruptions').setData(data.disruptions);
     },
     async setStations(list) {
+      // small: 1 for the smaller stations (src/big-stations.json); the bigger ones first, so where names collide theirs
+      // are kept.
       data.stations = { type: 'FeatureCollection', features: list.map(st => ({
-        type: 'Feature', properties: { sig: st.sig, name: st.name, country: st.country ?? '' }, geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })) };
+        type: 'Feature', properties: { sig: st.sig, name: st.name, country: st.country ?? '', small: BIG.has(st.sig) ? 0 : 1 },
+        geometry: { type: 'Point', coordinates: [st.lon, st.lat] } })).sort((a, b) => a.properties.small - b.properties.small) };
       await ready;
       if (isReady) map.getSource('stations').setData(data.stations);
       if (routeSigs.length) routeNames();

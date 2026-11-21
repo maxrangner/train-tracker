@@ -318,9 +318,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       return { here, w, inn: here ? t('cdHere') : inText(w.at - tNow), mark: w.kind === 'guess' ? '≈ ' : '' };
     };
     const g = row(goal);
+    // "planned" as a small tag beside the minutes (Max, 2026-11-21, option l C: "to Upplands Väsby · planned" wrapped);
+    // beside, not inside, the minutes: their text rolls (rollIn).
+    const minutesB = `<b${(g.mark + g.inn).length > 8 ? ' class="long"' : ''}>${g.mark}${g.inn}</b>`;
     const stopTile = `<button class="cd-stop tile" type="button" aria-expanded="${picking}">` +
-      `<b${(g.mark + g.inn).length > 8 ? ' class="long"' : ''}>${g.mark}${g.inn}</b><small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}` +
-      `${g.w.kind === 'planned' ? ` · ${t('planned')}` : ''}</span>${icon(picking ? 'chevronUp' : 'chevronDown', 14)}</small></button>`;
+      (g.w.kind === 'planned' ? `<span class="cd-top">${minutesB}<span class="cd-plan">${t('planned')}</span></span>` : minutesB) +
+      `<small><span>${esc(t(g.here ? 'cdAt' : 'cdTo', stationName(goal.s.station)))}</span>${icon(picking ? 'chevronUp' : 'chevronDown', 14)}</small></button>`;
     const list = picking ? `<div class="cd-pick${opening ? ' opening' : ''}"><p>${t('countDownTo')}</p><div class="cd-list">${ahead.map(a => {
       const r = row(a), on = a === goal;
       const note = a.i === nextIdx ? t(r.here ? 'stopHere' : 'nextStop') : a === ahead.at(-1) ? t('endStation') : '';

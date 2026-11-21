@@ -105,8 +105,9 @@ const labelFor = r => label(r.number, minutesOf(r));
 const propsFor = (r, sim) => ({
   label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
   company: lateness.brand(r.id) ?? '',
-  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4).
-  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined ? '' : minutesText(minutesOf(r)),
+  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4); on
+  // time just "2311" (Max, 2026-11-21, option i B).
+  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined || minutesOf(r) === 0 ? '' : minutesText(minutesOf(r)),
   rest: sim?.syncing && !sim.stale ? ' »»' : '',
 });
 
@@ -670,7 +671,8 @@ settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden
 document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
+    || key === 'routeNames' || key === 'routeEdge') map.applySettings();
   if (key === 'language') {
     translatePage();
     nameSwatches();

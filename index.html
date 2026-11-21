@@ -334,9 +334,17 @@
       color: var(--station); will-change: transform;
       text-shadow: 0 0 2px var(--label-halo), 0 0 2px var(--label-halo), 0 0 3px var(--label-halo); }
 
+    /* A smaller station's name at middle zoom (Max, 2026-11-21, option c C; src/big-stations.json, src/map.js SMALL_UNTIL). */
+    .station-name.small { font-size: 11.5px; color: var(--station-small); }
+
     /* The open train's stations close in: the name in a pill (src/map.js placeStationNames; Max, 2026-11-15). */
     .station-name.pill { background: var(--card); color: var(--ink); font-size: 13px; padding: 2px 9px; border-radius: 999px; text-shadow: none;
       box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.12); margin-top: -3px; }
+    /* Settings → Debug → Route station names (Max, 2026-11-21: "C, but put all three in a debug setting"): the contrast
+       pill (the default: the other way from the trains' labels), or bold text with no pill. */
+    :root[data-route-names="contrast"] .station-name.pill { background: var(--pill-bg); color: var(--pill-ink); box-shadow: none; font-weight: 600; }
+    :root[data-route-names="plain"] .station-name.pill { background: none; box-shadow: none; padding: 0; margin-top: 0; font-size: 15px; font-weight: 700;
+      color: var(--label); text-shadow: 0 0 2px var(--label-halo), 0 0 3px var(--label-halo), 0 0 5px var(--label-halo); }
     /* Disruptions (src/disruptions.js): the list page opened from the menu (as the stats page), and a disruption's card
        where a train's panel opens. The dot shows the level: yellow, orange, red (as on the map). */
     #disruptions-page { display: flex; flex-direction: column; gap: 6px; }
@@ -525,7 +533,11 @@
        up to 60 %: the followed train is held about 27 % from the top (src/map.js defaultFocus), still above it. */
     @media (max-width: 439px) { #panel:not(.full):not(.picking) { max-height: 60vh; } }
     .cd { display: contents; }
-    .cd-tiles { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; margin-top: 12px; flex: none; }
+    /* The two tiles the same width (Max, 2026-11-21, option l C; 3 : 2 before): the stop's name fits on one line. */
+    .cd-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; flex: none; }
+    /* "planned" (no expected time from Trafikverket) as a small tag beside the minutes. */
+    .cd-top { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }   /* no room: the tag under the minutes */
+    .cd-plan { flex: none; font: 700 11px/1 var(--font); color: var(--muted); background: var(--card); border-radius: 999px; padding: 4px 7px; }
     .tile b.long { font-size: 18px; line-height: 1.4; }   /* "≈ 1 h 43 min": smaller, inside its tile (Max, 2026-11-15) */
     .tile b.wrap { font-size: 18px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }   /* "Mot Göteborg C": two lines when it must */
     .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
@@ -992,12 +1004,16 @@
         <span class="range"><input id="set-closesize" type="range" min="1" max="6" step="0.5"><output id="set-closesize-out" for="set-closesize"></output></span></div>
       <div class="debug-only set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
+      <div class="debug-only set-row"><span data-t="routeEdge">Route white edge</span>
+        <div class="seg" data-key="routeEdge" role="group" aria-label="Route white edge" data-t-aria="routeEdge"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="debug-only set-row"><span data-t="noEstimate">With no expected time</span>
         <div class="seg" data-key="noEstimate" role="group" aria-label="With no expected time" data-t-aria="noEstimate"><button type="button" data-v="guess" data-t="guessLate">Planned + late</button><button type="button" data-v="planned" data-t="plannedOnly">Planned</button></div></div>
       <div class="debug-only set-row"><span data-t="trainSymbol">Train symbol</span>
         <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
       <div class="debug-only set-row"><span data-t="pageOverTrain">Screen over a train</span>
         <div class="seg" data-key="pageOverTrain" role="group" aria-label="Screen over a train" data-t-aria="pageOverTrain"><button type="button" data-v="card" data-t="overCard">Card back</button><button type="button" data-v="follow" data-t="overFollow">Followed</button><button type="button" data-v="clear" data-t="overClear">Let go</button></div></div>
+      <div class="debug-only set-row"><span data-t="routeNames">Route station names</span>
+        <div class="seg" data-key="routeNames" role="group" aria-label="Route station names" data-t-aria="routeNames"><button type="button" data-v="contrast" data-t="rnContrast">Contrast</button><button type="button" data-v="pill" data-t="rnPill">Like trains</button><button type="button" data-v="plain" data-t="rnPlain">Text</button></div></div>
     </div>
   </div>
   <div id="settings-backdrop"></div>
