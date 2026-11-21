@@ -668,7 +668,8 @@ settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden
 document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent') map.applySettings();
+  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
+    || key === 'routeEdge') map.applySettings();
   if (key === 'language') {
     translatePage();
     nameSwatches();
