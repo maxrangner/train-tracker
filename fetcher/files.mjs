@@ -57,6 +57,11 @@ export function buildPlanned(state, t, ids, from, since = null) {
   return { v: FORMAT, t, kind: since === null ? 'planned' : 'planned-add', since, rows: rows.map(plannedRow), brands };
 }
 
+// Today's arrivals (the stats page's graph; fetcher/main.mjs): kind 'arrivals' (the whole day) or 'arrivals-add'
+// (changed since); rows: Map train id -> [planned, actual, company]. A row: [id, planned, actual, company] (the company
+// at the row's end since 2026-11-21: Statistik's company page). Read by src/main.js filesArrivals.
+export const buildArrivals = (kind, t, day, rows) => ({ v: 1, t, kind, day, rows: [...rows].map(([id, [p, a, b]]) => [id, p, a, b ?? null]) });
+
 // The shelf: name -> { kind, at, json, gz }. onAdd/onRemove let the uploader follow it.
 export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
   const files = new Map();

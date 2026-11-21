@@ -18,7 +18,7 @@ import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCanc
 import { followPositions } from '../src/trains-source.js';
 import { swedishDay } from '../src/clock.js';
 import { createState } from './state.mjs';
-import { createShelf, buildLive, buildPassings, buildPlanned, LIVE_MS } from './files.mjs';
+import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
@@ -223,8 +223,7 @@ function swedishMidnight(t) {
   return utc - h * 3600000;
 }
 const arr = { day: null, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 };
-// A row: [id, planned, actual, company] (the company at the row's end since 2026-11-21: Statistik's company page).
-const arrRows = m => [...m].map(([id, [p, a, b]]) => [id, p, a, b ?? null]);
+// (its rows: fetcher/files.mjs buildArrivals)
 if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
   const t = Date.now(), day = swedishDay(t);
   if (day !== arr.day) Object.assign(arr, { day, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 });
@@ -232,9 +231,9 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
   for (const r of list) { arr.rows.set(r.id, [r.planned, r.actual, r.brand]); arr.changed.set(r.id, [r.planned, r.actual, r.brand]); }
   arr.asOf = t;
   if (t - arr.fullAt >= 60 * MIN) {
-    shelf.put('arrivals', t, { v: 1, t, kind: 'arrivals', day, rows: arrRows(arr.rows) });
+    shelf.put('arrivals', t, buildArrivals('arrivals', t, day, arr.rows));
     arr.fullAt = t; arr.changed = new Map();
-  } else shelf.put('arrivals-add', t, { v: 1, t, kind: 'arrivals-add', day, rows: arrRows(arr.changed) });
+  } else shelf.put('arrivals-add', t, buildArrivals('arrivals-add', t, day, arr.changed));
 });
 
 // ---------- taps from files (plan step 4, 2026-11-17: fetcher/timetable.mjs, src/tap-files.js) ----------

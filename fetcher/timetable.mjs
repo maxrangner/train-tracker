@@ -29,8 +29,8 @@ const FIELDS = TAP_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 const Q = filter => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"><FILTER>${filter}</FILTER>${FIELDS}</QUERY>`;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-// seed (checks and replays: tools/board-check.mjs, fetcher/main.mjs --replay): { days, rows } put in at once; nothing
-// asked, no stream, no timers.
+// seed (checks and replays: tools/board-check.mjs, fetcher/main.mjs --replay): { days, rows, messages (optional,
+// Trafikverket's TrainStationMessage shape) } put in at once; nothing asked, no stream, no timers.
 export function createTimetable({ log, onChange = () => {}, onLoaded = () => {}, seed = null }) {
   const w = words();                  // one word list for everything in memory
   const rows = new Map();             // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
@@ -100,6 +100,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   // Changes: one live stream of every TrainAnnouncement changed from 15 minutes ago on. After a break longer than
   // that, today is loaded again (a change could have been missed).
   if (seed) for (const a of seed.rows) put(a);
+  if (seed?.messages) { messages = seed.messages; messagesAt = Date.now(); }
   const stream = seed ? () => {} : follow({
     makeQuery: ({ changeId, stream: s }) => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" ${s ? 'sseurl="true" ' : ''}changeid="${changeId ?? 0}">` +
       `<FILTER><GT name="ModifiedTime" value="${new Date(Date.now() - CHANGES_BACK_MS).toISOString()}"/></FILTER>${FIELDS}</QUERY>`,
