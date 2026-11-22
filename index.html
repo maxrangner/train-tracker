@@ -289,6 +289,13 @@
       font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
       box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); }
     .sel-label[hidden] { display: none; }
+    /* Its arrow to the train, ringed like the label (Max, 2026-11-22: "Small arrows pointing to the train dynamically
+       moving around"): up to it from under it, down from above, sideways from beside it (src/map.js holdLabel). */
+    .sel-label::before { content: ''; position: absolute; left: 50%; top: -5px; width: 9px; height: 9px; margin-left: -4.5px;
+      background: inherit; transform: rotate(45deg); border-radius: 2px 0 0 0; box-shadow: -2px -2px 0 0 var(--accent); }
+    .sel-label.up::before { top: auto; bottom: -5px; border-radius: 0 0 2px 0; box-shadow: 2px 2px 0 0 var(--accent); }
+    .sel-label.right::before { left: -5px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 0 0 2px; box-shadow: -2px 2px 0 0 var(--accent); }
+    .sel-label.left::before { left: auto; right: -5px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 2px 0 0; box-shadow: 2px -2px 0 0 var(--accent); }
     .sel-label.stale { opacity: 0.45; }
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
@@ -341,6 +348,7 @@
     /* The open train's stations close in: the name in a pill (src/map.js placeStationNames; Max, 2026-11-15). */
     .station-name.pill { background: var(--card); color: var(--ink); font-size: 13px; padding: 2px 9px; border-radius: 999px; text-shadow: none;
       box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgba(0, 0, 0, 0.12); margin-top: -3px; }
+    .station-name.pill.side { margin-top: 0; }   /* (beside or under its station: centred on it; src/map.js placeStationNames) */
     /* Settings → Debug → Route station names (Max, 2026-11-21: "C, but put all three in a debug setting"): the contrast
        pill (the default: the other way from the trains' labels), or bold text with no pill. */
     :root[data-route-names="contrast"] .station-name.pill { background: var(--pill-bg); color: var(--pill-ink); box-shadow: none; font-weight: 600; }
@@ -1017,6 +1025,10 @@
         <div class="seg" data-key="pageOverTrain" role="group" aria-label="Screen over a train" data-t-aria="pageOverTrain"><button type="button" data-v="card" data-t="overCard">Card back</button><button type="button" data-v="follow" data-t="overFollow">Followed</button><button type="button" data-v="clear" data-t="overClear">Let go</button></div></div>
       <div class="debug-only set-row"><span data-t="routeNames">Route station names</span>
         <div class="seg" data-key="routeNames" role="group" aria-label="Route station names" data-t-aria="routeNames"><button type="button" data-v="contrast" data-t="rnContrast">Contrast</button><button type="button" data-v="pill" data-t="rnPill">Like trains</button><button type="button" data-v="plain" data-t="rnPlain">Text</button></div></div>
+      <div class="debug-only set-row"><span data-t="nameSide">Station names</span>
+        <div class="seg" data-key="nameSide" role="group" aria-label="Station names" data-t-aria="nameSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
+      <div class="debug-only set-row"><span data-t="pillSide">Route station names: place</span>
+        <div class="seg" data-key="pillSide" role="group" aria-label="Route station names: place" data-t-aria="pillSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
     </div>
   </div>
   <div id="settings-backdrop"></div>

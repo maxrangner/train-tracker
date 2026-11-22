@@ -694,6 +694,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Up to SMALL_UNTIL the smaller stations' names are small and grey (Max, 2026-11-21, option c C), placed after the
     // bigger ones'.
     const small = ['==', ['get', 'small'], 1];
+    // Beside or above the circle: Settings → Debug → Station names / Route station names: place (nameSide, pillSide).
+    const sideLayout = (side, off, up) => (side === 'above' ? { 'text-anchor': 'bottom', 'text-offset': [0, -up] }
+      : side === 'right' ? { 'text-anchor': 'left', 'text-offset': [off, 0], 'text-justify': 'left' }
+        : { 'text-variable-anchor': ['left', 'right', 'bottom', 'top'], 'text-radial-offset': off, 'text-justify': 'auto' });
     map.addLayer({
       id: 'station-names',
       type: 'symbol',
@@ -704,8 +708,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'text-field': ['get', 'name'],
         'text-font': ['Outfit Medium'],
         'text-size': ['step', ['zoom'], ['case', small, 11.5, 14], SMALL_UNTIL, 14],
-        'text-offset': [0, -1.1],
-        'text-anchor': 'bottom',
+        ...sideLayout(settings.nameSide, 0.8, 1.1),
         'text-optional': true,
         'symbol-sort-key': ['get', 'small'],
       },
@@ -727,8 +730,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         'text-field': ['get', 'name'],
         'text-font': [rn === 'plain' ? 'Outfit Bold' : 'Outfit SemiBold'],
         'text-size': rn === 'plain' ? 14 : 13,
-        'text-offset': [0, -1.25],
-        'text-anchor': 'bottom',
+        ...sideLayout(settings.pillSide, rn === 'plain' ? 0.8 : 1.2, 1.25),
         ...(rn === 'plain' ? {} : { 'icon-image': rn === 'contrast' ? 'pill-contrast' : 'pill', 'icon-text-fit': 'both', 'icon-text-fit-padding': [2, 7, 2, 7] }),
         'symbol-sort-key': ['get', 'rank'],
         'text-padding': 3,
@@ -1003,13 +1005,43 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // inside the marker; Firefox snaps the marker itself to whole pixels, so that correction then landed half a pixel off
   // (measured in Firefox at 100 %, zoom 9: 26 of 39 frames jumped). Out of the marker there is nothing to snap above it.
   // It moves on when the train has gone 0.75 of a device pixel from where its label is held.
-  let labelHeld = null;
+  // Its arrow points at the train: under it, else above, else beside it (Max, 2026-11-22: "Small arrows pointing to the
+  // train dynamically moving around"), like the other trains' bubbles. A side is free where no station's name is: close
+  // in the names' boxes (placeStationNames), further out the map's own names there. It keeps its side while that is
+  // free, looked at again at most every SEL_SIDE_MS.
+  let labelHeld = null, selSide = 'down', selSideAt = 0;
+  const SEL_SIDE_MS = 200;
+  const selBox = (side, p, w, h, dy, dx) => {
+    const x = side === 'right' ? p.x + dx : side === 'left' ? p.x - dx - w : p.x - w / 2;
+    const y = side === 'down' ? p.y + dy : side === 'up' ? p.y - dy - h : p.y - h / 2;
+    return { x, y, l: x, r: x + w, t: y, b: y + h };
+  };
+  function selSideFree(b) {
+    if (nameEls.size) return !nameBoxes.some(o => o.l < b.r && b.l < o.r && o.t < b.b && b.t < o.bt);
+    const layers = ['station-names', 'route-names'].filter(id => map.getLayer(id));
+    return !layers.length || !map.queryRenderedFeatures([[b.l, b.t], [b.r, b.b]], { layers }).length;
+  }
   function holdLabel() {
     if (!selShown) return;
-    const w = selLabel.offsetWidth;
+    const w = selLabel.offsetWidth, h = selLabel.offsetHeight;
     if (!w) return;
     const p = map.project(selMarker.getLngLat());   // where the map puts the marker's middle
-    const x = p.x - w / 2, y = p.y + (selEl.classList.contains('model') ? LABEL_DY : selEl.offsetHeight / 2 + 8);
+    const model = selEl.classList.contains('model');
+    const dy = model ? LABEL_DY : selEl.offsetHeight / 2 + 8, dx = model ? SIDE_DX : selEl.offsetWidth / 2 + 8;
+    const now = performance.now();
+    if (!labelHeld || now - selSideAt > SEL_SIDE_MS) {
+      selSideAt = now;
+      let side = selSide;
+      if (!selSideFree(selBox(side, p, w, h, dy, dx))) side = SIDES.find(s => selSideFree(selBox(s, p, w, h, dy, dx))) ?? 'down';
+      else if (side !== 'down') side = SIDES.find(s => s === side || selSideFree(selBox(s, p, w, h, dy, dx)));   // back under it when free
+      if (side !== selSide) {
+        selLabel.classList.remove(selSide);
+        if (side !== 'down') selLabel.classList.add(side);
+        selSide = side;
+        labelHeld = null;
+      }
+    }
+    const { x, y } = selBox(selSide, p, w, h, dy, dx);
     const dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
     if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
       labelHeld = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
@@ -1036,6 +1068,20 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.getCanvasContainer().appendChild(namesBox);
   const nameEls = new globalThis.Map();   // station signature -> its element
   const NAME_DY = 15.4;   // the name's bottom above the station's point (as the map's: 1.1 em of 14 px)
+  const NAME_DX = 11;     // a name beside its station: its near edge this far from the station's point (the circle 7 px)
+  const NAME_DOWN = 10;   // a name under its station: its top this far below the point
+  // Where a name may go, in turn (Settings → Debug → Station names / Route station names: place; Max 2026-11-22,
+  // pick 4: right of the circle, else left, above, below; a side running off the screen's edge only if none other is free).
+  const NAME_SIDES = { auto: ['right', 'left', 'up', 'down'], right: ['right'], above: ['up'] };
+  const nameBox = (side, x, y, w, h, pill) => {
+    const l = side === 'right' ? x + NAME_DX : side === 'left' ? x - NAME_DX - w : x - w / 2;
+    const t = side === 'up' ? y - NAME_DY - (pill ? 3 : 0) - h : side === 'down' ? y + NAME_DOWN : y - h / 2;
+    return { l, r: l + w, t, bt: t + h };
+  };
+  const NAME_TF = { right: (x, y) => `translate(${(x + NAME_DX).toFixed(1)}px, ${y.toFixed(1)}px) translateY(-50%)`,
+    left: (x, y) => `translate(${(x - NAME_DX).toFixed(1)}px, ${y.toFixed(1)}px) translate(-100%, -50%)`,
+    up: (x, y) => `translate(${x.toFixed(1)}px, ${(y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`,
+    down: (x, y) => `translate(${x.toFixed(1)}px, ${(y + NAME_DOWN).toFixed(1)}px) translateX(-50%)` };
   // What the names were last placed for: the camera, the map's size, the stations and the open train's route. The
   // names were placed again after every drawing of the map, also when only a train had moved (every station in
   // Sweden projected each time; Codex's beta review point 9, 2026-11-19).
@@ -1047,7 +1093,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       return;
     }
     const c = map.getCenter();
-    const key = [c.lng, c.lat, map.getZoom(), map.getBearing(), map.getPitch(), W, H, routeSigs, data.stations, data['route-names']];
+    const key = [c.lng, c.lat, map.getZoom(), map.getBearing(), map.getPitch(), W, H, routeSigs, data.stations, data['route-names'],
+      settings.nameSide, settings.pillSide];
     if (namesFor && key.every((v, i) => v === namesFor[i])) return;
     namesFor = key;
     const placed = [], keep = new Set(), onRoute = new Set(routeSigs), smallNow = map.getZoom() < SMALL_UNTIL;
@@ -1056,9 +1103,18 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
       // A smaller station's name, further out than SMALL_UNTIL: small and grey (index.html .station-name.small).
-      const { sig, name } = f.properties, isSmall = smallNow && f.properties.small === 1 && !onRoute.has(sig);
-      const w = String(name).length * (isSmall ? 6.3 : 7.6) + 6, b = { l: q.x - w / 2, r: q.x + w / 2, t: q.y - NAME_DY - (isSmall ? 15 : 18), bt: q.y - NAME_DY };
-      if (placed.some(o => o.l < b.r && b.l < o.r && o.t < b.bt && b.t < o.bt)) continue;
+      const { sig, name } = f.properties, pill = onRoute.has(sig), isSmall = smallNow && f.properties.small === 1 && !pill;
+      // Its box, guessed from its text (reading the page's sizes would make it lay out again).
+      const w = String(name).length * (isSmall ? 6.3 : 7.6) + (pill ? 18 : 6), h = pill ? 22 : isSmall ? 15 : 18;
+      let side = null, b = null;
+      for (const s of NAME_SIDES[(pill ? settings.pillSide : settings.nameSide)] ?? NAME_SIDES.auto) {
+        const o = nameBox(s, q.x, q.y, w, h, pill);
+        if (placed.some(p => p.l < o.r && o.l < p.r && p.t < o.bt && o.t < p.bt)) continue;
+        if (o.l < 4 || o.r > W - 4) { if (!b) { side = s; b = o; } continue; }   // off the screen's side: another first
+        side = s; b = o;
+        break;
+      }
+      if (!b) continue;
       placed.push(b);
       keep.add(sig);
       let el = nameEls.get(sig);
@@ -1068,9 +1124,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         namesBox.appendChild(el);
         nameEls.set(sig, el);
       }
-      el.classList.toggle('pill', onRoute.has(sig));
+      el.classList.toggle('pill', pill);
       el.classList.toggle('small', isSmall);
-      el.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y - NAME_DY).toFixed(1)}px) translate(-50%, -100%)`;
+      el.classList.toggle('side', side !== 'up');   // (a pill sits 3 px higher only above its station: index.html)
+      el.style.transform = NAME_TF[side](q.x, q.y);
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
     nameBoxes = placed;

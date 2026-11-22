@@ -46,6 +46,11 @@ const DEFAULTS = {
   // pill the other way from the trains' labels: light on the dark map, dark on the light), 'pill' (the trains' own
   // pill, as before) or 'plain' (bold text, no pill).
   routeNames: 'contrast',
+  // Where a station's name goes beside its circle (Debug, Max 2026-11-22: "Default 4, but put a debug toggle for all
+  // options"): the plain names and the open train's pills each 'auto' (right of the circle; where that is taken, left,
+  // above, below), 'right' (right, or left out) or 'above' (above, or left out: as before).
+  nameSide: 'auto',
+  pillSide: 'auto',
   // Lateness colours colour-blind people can tell apart (Max, 2026-11-21; src/colours.js LATE_SAFE), off.
   colourBlind: false,
 };
@@ -69,6 +74,8 @@ const KEYS = {
   routeEdge: { param: 'routeedge' },
   pageOverTrain: { param: 'overtrain' },
   routeNames: { param: 'routenames' },
+  nameSide: { param: 'nameside' },
+  pillSide: { param: 'pillside' },
   colourBlind: { param: 'cb' },
 };
 const STORE = 'settings';
@@ -97,6 +104,8 @@ const valid = {
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
   routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
+  nameSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
+  pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
