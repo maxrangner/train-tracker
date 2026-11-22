@@ -47,7 +47,7 @@ export function createPeek({ box, stationAt, load, stationName, blocked = () => 
       (rows === null ? `<p class="empty">${esc(t('tripNoAnswer'))}</p>` : rows.length ? rows.slice(0, 3).map(row).join('') : `<p class="empty">${esc(t('noDepartures'))}</p>`);
     place(x, y);
   }
-  function hide() { if (!shown) return; shown = null; asked++; bubble.hidden = true; eatUntil = performance.now() + 500; }
+  function hide() { if (!shown) return; shown = null; asked++; bubble.hidden = true; eatUntil = performance.now() + 300; }
   function cancel() { clearTimeout(press?.timer); press = null; }
 
   box.addEventListener('pointerdown', (e) => {

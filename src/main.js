@@ -1459,7 +1459,8 @@ shop = createShopWindow({ map, enabled: () => settings.shopWindow,
   trains() {
     const said = new Map(speedLog.moving(now()));
     return frameAll.filter(x => !x.stale).map(x => ({ id: x.id, number: trains.get(x.id)?.number ?? '', brand: x.brand, lon: x.lon, lat: x.lat,
-      speed: said.get(x.id) ?? (x.v ?? 0) * 3.6, bearing: x.bearing ?? 0, late: lateOf(x.id) }));
+      // (a speed over 210 km/h is a glitch, 311 km/h reported on 17 Nov: the drawn speed then, else none)
+      speed: [said.get(x.id), (x.v ?? 0) * 3.6].find(v => v !== undefined && v <= 210) ?? 0, bearing: x.bearing ?? 0, late: lateOf(x.id) }));
   },
   disruptions: () => (live && disruptions.loaded ? disruptions.list.filter(d => !isWork(d)).map(d => ({ id: d.id, header: d.header, place: disruptions.placeOf(d) })) : []),
   follow: followOnly, unfollow: () => map.unfollow() });

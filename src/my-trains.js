@@ -50,6 +50,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   const results = new Map();   // trip key -> { trains } or { pairs }, or { error }
   // Not gone from the board now (left, arrived, cancelled long ago), so the list starts at the next train.
   const notGone = x => !boardGone(x.dep, now());
+  const byLeaving = (a, b) => when(a.dep) - when(b.dep);
   async function load(trip) {
     try {
       if (!trip.via) {
@@ -72,11 +73,12 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (!r) return { loading: true };
     if (r.error) return { error: r.error };
     if (r.trains) {
-      const { next, after } = nextTwo(r.trains.filter(notGone), now());
+      // (by when they leave: a train 69 min late is not the next one when another leaves in 6 minutes)
+      const { next, after } = nextTwo(r.trains.filter(notGone).sort(byLeaving), now());
       return { next, after, none: !r.trains.length };
     }
     const pairs = r.pairs.filter(p => notGone(p.first));
-    const { next, after } = nextTwo(pairs.map(p => p.first), now());
+    const { next, after } = nextTwo(pairs.map(p => p.first).sort(byLeaving), now());
     return { next, after, pair: pairs.find(p => p.first === next) ?? null, none: !r.pairs.length };
   }
 
@@ -344,7 +346,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       } else {
         const a = arrAt(at);
         const list = deps === null ? stateHtml('loading', t('loading'))
-          : deps.filter(d => String(d.number) !== String(info.number) && !boardGone(d, now()) && d.planned >= a.planned - 5 * 60000).slice(0, 16).map((d) => {
+          : deps.filter(d => String(d.number) !== String(info.number) && !boardGone(d, now()) && when(d) >= when(a) - 5 * 60000).slice(0, 16).map((d) => {
             const ch = change(a, d);
             return `<button type="button" class="bd-row${d.canceled ? ' canceled' : ''}" data-dep="${esc(d.key)}"><span class="bd-time">${timeHtml(d)}</span>` +
               `<span class="bd-name"><b>${esc(d.to ? stationName(d.to) : '')}</b><small>${esc(`${d.number} ${d.product ?? ''}`)}</small></span>` +

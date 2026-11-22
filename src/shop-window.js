@@ -21,6 +21,8 @@ export function createShopWindow({ map, enabled, busy, trains, disruptions, foll
   const landscape = typeof matchMedia === 'function' ? matchMedia('(orientation: landscape)') : null;
   // sideways: a phone-sized screen wider than tall (a computer's wide window is no phone on its side)
   const sideways = () => Boolean(landscape?.matches) && Math.min(innerWidth, innerHeight) <= 500;
+  // A computer without a battery says it is charging (Chrome: charging, level 1): only a phone's word counts.
+  const phoneLike = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && Math.min(innerWidth, innerHeight) <= 500;
   // Charging: only where the browser tells (navigator.getBattery; not in every WebView, not checked on a phone).
   try {
     navigator.getBattery?.().then((b) => { charging = b.charging; b.addEventListener('chargingchange', () => { charging = b.charging; }); }).catch(() => { charging = null; });
@@ -78,9 +80,9 @@ export function createShopWindow({ map, enabled, busy, trains, disruptions, foll
     lastTouch = Date.now();
   }
   setInterval(() => {
-    const on = shouldRun({ sideways: sideways(), charging, lastTouch, now: Date.now(), enabled: enabled(), busy: busy() || document.hidden });
+    const on = shouldRun({ sideways: sideways(), charging: phoneLike() ? charging : null, lastTouch, now: Date.now(), enabled: enabled(), busy: busy() || document.hidden });
     if (on) start();
-    else if (running && (!enabled() || (!sideways() && charging !== true))) stop();
+    else if (running && (!enabled() || (!sideways() && !(phoneLike() && charging === true)))) stop();
   }, CHECK_MS);
   return {
     start, stop,

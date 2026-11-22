@@ -321,6 +321,8 @@
     .shop-line.in { animation: shop-in .6s ease both; }
     @keyframes shop-in { from { opacity: 0; transform: translate(-50%, 8px); } }
     @media (prefers-reduced-motion: reduce) { .shop-line.in { animation: none; } }
+    /* a note on the map ("Link copied") goes above the line when the line shows */
+    body:has(#line:not([hidden])) #map .map-note { bottom: calc(var(--sheet-h, 0px) + 62px + env(safe-area-inset-bottom, 0px)); }
     .help-tips { margin: 0; padding: 0 0 0 18px; display: grid; gap: 8px; font-size: 14.5px; line-height: 1.4; }
     .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
     .set-row > span:first-child, .set-row > label { font-size: 14px; }
