@@ -3,16 +3,16 @@
    starts with st- so the train card's .tile and the rest stay untouched. Kept out of index.html on purpose. */
 /* A column of parts at their own height (in a grid of fixed height, a part that clips its inside, as "for fun",
    was squeezed to 24 px: 2026-11-15). */
-#stats-body { overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 8px;
+.stats-body { overflow: auto; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 8px;
   font-size: 14px; font-variant-numeric: tabular-nums; scrollbar-width: thin; }
-#stats-body > * { flex: none; }
+.stats-body > * { flex: none; }
 /* Without our own bar (a phone: src/scrollbar.js is for a mouse), the phone's bar is drawn over the scrolling area's
    right edge, and it covered the numbers (Max, 2026-11-16, his phone's picture). The area reaches 10 px into the
    sheet's margin and pads them back: the content stays where it was, the bar runs in the margin. */
-#stats-body:not(.sb-own) { margin-right: -10px; padding-right: 10px; }
-#stats-body p { margin: 0; }
-#stats-body button { font-family: inherit; }
-#stats-body .tag { margin-left: 0; }
+.stats-body:not(.sb-own) { margin-right: -10px; padding-right: 10px; }
+.stats-body p { margin: 0; }
+.stats-body button { font-family: inherit; }
+.stats-body .tag { margin-left: 0; }
 
 .st-tile { border-radius: 18px; padding: 12px 14px; background: var(--hover); min-width: 0; }
 .st-lbl { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -22,7 +22,7 @@
 .st-sub { color: var(--muted); font-size: 13px; }
 .st-big { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
 .st-go { font: inherit; color: inherit; text-align: left; border: 0; background: none; padding: 0; cursor: pointer; }
-.st-go:focus-visible, #stats-body button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.st-go:focus-visible, .stats-body button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 .st-chev { color: var(--muted); }
 .st-key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; background: var(--k); }
 .k-moving { --k: var(--accent); } .k-standing { --k: color-mix(in srgb, var(--muted) 60%, var(--hover)); } .k-grey { --k: var(--c-unknown); }
@@ -152,7 +152,7 @@ button.st-fastrow:hover { background: var(--card); }
 .st-data.st-beat .st-live { animation: beat 1.1s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {
-  #stats-body *, #stats-body *::before { transition: none !important; animation: none !important; }
+  .stats-body *, .stats-body *::before { transition: none !important; animation: none !important; }
 }
 
 /* Today's graph asking for its numbers (Max, 2026-11-21): "Laddar…" beside its title, also over the numbers saved

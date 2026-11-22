@@ -133,10 +133,17 @@ const ICONS = {
 // punctuality, and more"): "›" at the end of its row; the same tiles, only its trains (src/stats.js snapshot brand),
 // under a head with its name, its kind and its trains today; "‹" back to all. main.js asks for the numbers of
 // `company`.
-export function createStatsPage(root, { openTrain, openStation, describe, filter, redraw }) {
+// Since the one sheet (2026-11-22) the stats page is no page of its own: its parts are drawn into Home and a company's
+// page (src/home.js). parts: which, in order: names ('sweden', 'duo', 'punctuality', 'fastest', 'kinds', 'companies',
+// 'busiest', 'fun', 'data'; 'companyHead' only on a company's own page) or elements of the caller's own (an update(s)
+// of theirs is called with the others'). company: the company whose numbers these are (null: all trains). groups:
+// the kinds' and companies' rows open their group's page (the caller listens to [data-filter]), no "›" beside them.
+export function createStatsPage(root, { openTrain, openStation, describe, filter, redraw, parts: want = null, company: only = null, groups = false }) {
   let builtLang = null, builtFor = null, parts = [], funOffset = 0, beatSlot = null;
-  let company = null;   // the company whose page is shown (null: all trains)
-  addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
+  let company = only;   // the company whose page is shown (null: all trains)
+  root.classList.add('stats-body');
+  root.classList.toggle('st-groups', groups);
+  if (!want) addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
   const view = { fastest: 'now', busiest: 'recent' };   // the toggles: not remembered
   let companiesOpen = false, hourOn = null, last = null;
 
@@ -145,8 +152,10 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     builtFor = company;
     hourOn = null;
     root.innerHTML = '';
-    parts = company === null ? [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()]
-      : [companyHead(), sweden(), duo(), punctuality(), fastest(), busiest(), data()];
+    const make = { sweden, duo, punctuality, fastest, kinds, companies, busiest, fun, data, companyHead };
+    parts = want ? want.map(p => (typeof p === 'string' ? make[p]() : p))
+      : company === null ? [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()]
+        : [companyHead(), sweden(), duo(), punctuality(), fastest(), busiest(), data()];
     root.append(...parts);
     root.scrollTop = 0;
   }
@@ -348,7 +357,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
             `<span class="st-tr"><span class="st-bar" style="width:0;background:${colour(v)}"></span></span><b class="st-n"></b></button>`);
           rows.set(v, r);
           // a company: "›" opens its own page (the row itself still filters the map)
-          if (type === 'brand') {
+          if (type === 'brand' && !groups) {
             const w = h(`<div class="st-brow-w"><button type="button" class="st-cogo" data-company="${esc(v)}" aria-label="${esc(t('stCoOpen', v || t('stNoCompany')))}">›</button></div>`);
             w.prepend(r);
             r.wrap = w;
@@ -460,12 +469,12 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     last = s;
     if ((s.brand ?? null) !== company) return;   // (numbers asked for before the page switched: the next second's are right)
     if (first) for (const el of root.querySelectorAll('.st-big, .st-legend b, .st-n, .st-ap, .st-p')) el._v = undefined;
-    for (const p of parts) p.update(s, first);
+    for (const p of parts) p.update?.(s, first);
   }
   return {
     update,
     get company() { return company; },
     // the page opened again: all companies
-    home() { if (company !== null) { company = null; build(); } },
+    home() { if (company !== only) { company = only; build(); } },
   };
 }

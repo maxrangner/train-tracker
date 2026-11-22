@@ -17,21 +17,25 @@ import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
-import { initSheets, onTap } from './sheet.js';
+import { onTap } from './sheet.js';
+import { createStack, hooks } from './stack.js';
+import { createLine } from './line.js';
+import { homePage, groupPage, groupOf, trainRow, stationRow, groupRow } from './home.js';
+import { STAND_MS } from './trains.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
 import { followPassings, fetchStations, fetchPlannedRoutes, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey, fetchRunsByNumber, pickRun } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
-import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
+import { createDisruptions, rowHtml, cardHtml, isWork, placesText } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
 import { now, hhmm, swedishDay } from './clock.js';
 import { startReplaySource } from './replay-source.js';
 import { createStats } from './stats.js';
-import { createStatsPage } from './stats-page.js';
 import { createConnection, pillText } from './connection.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
+import { kindOf } from './train-kinds.js';
 import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
@@ -72,6 +76,10 @@ let net = null;
 let searchPath = null;
 netReady.then((n) => { net = n; if (n) searchPath = createPathSearch('/rail-net.json', () => net); });
 let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
+// The open train's line as last drawn ({ id, coords, sigs: its stations }): kept after its page is covered, so the camera
+// can ride it to a station on it and back (src/map.js ride). holdPath: a train's page is being covered; its line stays.
+let lastPath = null, holdPath = false;
+const clearPath = () => { map.setPath(null); map.setAbroad(null); map.setRouteStations(null); };
 const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
 const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
 // The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
@@ -130,12 +138,18 @@ const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELA
 // Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
 const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
 const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers, "i")
-const panel = createPanel(document.getElementById('panel'), {
+// The pages of the one sheet (src/stack.js): made at the end of this file, used by everything that opens something.
+let stack = null;
+const panelEl = document.getElementById('panel');
+const panel = createPanel(panelEl, {
   stationName,
+  // In the sheet: its × takes its page away, "All stops" raises the sheet, a stop opens its station's page.
+  onCloseTap: id => stack.close(`train:${id}`),
+  onMore: full => stack.setLevel(full ? 2 : 1),
+  onStop: sig => openStation(sig),
   // the line on how its place is known (also each second, below), for a card just opened
   statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
-  isStarred: number => favourites.has('train', number),
   lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
   // The train's own numbers ("i" on the full card; src/train-info.js), each second while shown.
   info: (box, c) => {
@@ -150,12 +164,12 @@ const panel = createPanel(document.getElementById('panel'), {
     const here = sp ? placeNow(id) : null;
     return tripPlaces(route, stops, sp?.base ?? null, sp?.places ?? null, stations, here ? progressAt(sp.base, here) : null);
   },
-  onStar: number => favourites.toggle('train', number),
   onSelect(id) {
     map.select(id);
     if (!id) map.unfollow();   // the map stays exactly as it is
-    if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); map.setAbroad(null); }
-    map.setRouteStations(null);   // the new train's come with its route
+    // (a train's page covered by a station on its route: its line stays while the camera rides it there; holdPath)
+    if (shownPath && shownPath.id !== id) { shownPath = null; if (!holdPath) clearPath(); }
+    else if (!holdPath) map.setRouteStations(null);   // the new train's come with its route
   },
   // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
   // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
@@ -203,6 +217,7 @@ const panel = createPanel(document.getElementById('panel'), {
         if (!kept()) {
           const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
           shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
+          lastPath = { id, coords: shownPath.path.coords, sigs: new Set(places.map(p => p.sig)) };
           panel.placesReady(id);
         }
       }
@@ -239,25 +254,18 @@ const map = createMap('map', {
   getTrains3d: () => frameTrains,
   // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
   alongTrack: (id, d) => trains.along(id, d),
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it, also while it
-  // is followed (Max, 2026-11-13 evening: "single click while following should deselect train, not just stop
-  // following"). A tap that only closed the menu does nothing more.
+  // Tapping a train opens its page and the camera follows it. A tap on nothing (A's sheet, 2026-11-22): the search
+  // closes; else the sheet goes down to rest; resting, the page on top closes (as a tap beside a train's card closed
+  // it before: Max, 2026-11-13 evening, "single click while following should deselect train").
   onTrainTap(id) {
-    if (menu.justClosed) return;
-    if (!openTrain(id)) { panel.close(); board.close(); disruptionEl.hidden = true; }
+    if (openTrain(id)) return;
+    if (stack.searching) { stack.back(); return; }
+    if (stack.level > 0) stack.setLevel(0);
+    else if (stack.keys().length > 1) stack.back();
   },
-  onStationTap(sig) {
-    if (menu.justClosed) return;
-    openStation(sig);
-  },
-  onDisruptionTap(id) {
-    if (menu.justClosed) return;
-    openDisruption(id);
-  },
-  onGroupTap(list) {
-    if (menu.justClosed) return;
-    showPicker(list);
-  },
+  onStationTap(sig) { openStation(sig); },
+  onDisruptionTap(id) { openDisruption(id); },
+  onGroupTap(list) { showPicker(list); },
 });
 
 // Buttons press in while held (index.html "Motion"; Max's pick 1, 2026-11-20). An iPhone shows :active on a touch
@@ -321,118 +329,181 @@ map.shown.then(() => {
   for (const type of ['pointerdown', 'wheel']) mapEl.addEventListener(type, fade, { passive: true });
 });
 
-// ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
-// With a mouse, our own thin bar in every card that is there from the start, as Statistics has (src/scrollbar.js; Max, 2026-11-19).
-for (const sel of ['#settings', '.help-body', '#disruptions-body', '#conn-body', '#search-results']) addScrollbar(document.querySelector(sel));
-const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
-  .map(id => document.getElementById(id)));
-const raise = id => sheets.raise(document.getElementById(id));
+// ---- The one sheet (Max's pick A, 2026-11-22; src/stack.js): everything opened is a page in it, on a stack. These
+// are the pages a key names; the stack itself is made at the end of this file. ----
+for (const sel of ['#settings', '.help-body', '#conn-body']) addScrollbar(document.querySelector(sel));
+const holder = document.getElementById('page-holder');   // where Settings, About and Connection wait while not shown
+const trainMeta = new Map();   // trains opened that aren't on the map (the timetable search, a board): id -> { operational, date, number }
+let lightTest = null;          // only these trains on the map (a group's page, the lateness bar's colour): x -> true
+const light = (fn) => { lightTest = fn; lastDraw = 0; };
+let legend = null;             // the lateness bar's colour lit (Home), or null
+const lateOf = id => { const m = lateness.get(id)?.minutes; return m === undefined ? null : m; };
+const legendTest = k => x => (x.stale ? 'unknown' : lateClass(lateOf(x.id))) === k;
 
-// ---- One screen at a time (Max, 2026-11-20: Störningar, then Statistik from the menu, left both open; closing one
-// showed the other). Every menu screen opens through openPage, which closes the others. What becomes of a card under
-// it (a train, a board, a disruption, the "3 trains" list) is a Debug choice for now (Settings → Debug → Screen over a
-// train; Max: "Make a debug toggle for the three options"): 'card' the card waits under the screen and is back when it
-// closes (as before); 'follow' the cards go, the open train stays picked and followed (a tap on it brings its card
-// back, a tap on the map lets it go); 'clear' the cards go and the train is let go. ----
-const pageEls = () => [settingsPage, statsPage, connPage, disruptionsPage, helpEl];
-function openPage(el) {
-  closeNav();
-  menu.close();
-  for (const p of pageEls()) if (p !== el) p.hidden = true;
-  const mode = settings.pageOverTrain;
-  if (mode !== 'card') {
-    board.close();
-    pickerEl.hidden = true;
-    disruptionEl.hidden = true;
-    if (panel.openId) { if (mode === 'clear') panel.close(); else panel.hide(); }
+// The camera rides the rails (A's ride): the places along a line ([[lon, lat]]) from one place to another.
+const mx = lon => (lon + 180) / 360, my = lat => (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2;
+function pieceOf(c, p) {
+  const x = mx(p.lon), y = my(p.lat);
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < c.length - 1; i++) {
+    const ax = mx(c[i][0]), ay = my(c[i][1]), dx = mx(c[i + 1][0]) - ax, dy = my(c[i + 1][1]) - ay, l = dx * dx + dy * dy;
+    const f = l ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l)) : 0, d = (ax + dx * f - x) ** 2 + (ay + dy * f - y) ** 2;
+    if (d < bd) { bd = d; best = i; }
   }
-  el.hidden = false;
-  raise(el.id);
+  return best;
+}
+function along(c, from, to) {
+  const a = pieceOf(c, from), b = pieceOf(c, to), pts = [from];
+  if (a < b) for (let k = a + 1; k <= b; k++) pts.push({ lon: c[k][0], lat: c[k][1] });
+  else if (a > b) for (let k = a; k > b; k--) pts.push({ lon: c[k][0], lat: c[k][1] });
+  pts.push(to);
+  return pts;
+}
+const rideZoom = z => Math.min(14, Math.max(z, 12.5));
+
+// ---- A train ----
+function trainPage(id) {
+  const meta = () => {
+    const r = trains.get(id);
+    if (r) return { id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r), onMap: true };
+    const m = trainMeta.get(id);
+    return m ? { ...m, id, label: String(m.number), onMap: false } : null;
+  };
+  const m0 = meta();
+  if (!m0) return null;
+  const number = () => String(meta()?.number ?? m0.number);
+  return {
+    name: number, kind: 'train',
+    show(el, { prev, dir, go = false, again = false }) {
+      el.append(panelEl);
+      const m = meta() ?? m0;
+      const fresh = panel.openId !== id;
+      if (fresh) panel.open(m, { follow: m.onMap });
+      else if (panel.hidden) panel.show();
+      panelEl.classList.toggle('full', stack.level === 2);
+      if (!m.onMap) { map.unfollow(); return; }
+      buzz();
+      panel.setFollowing(true);
+      // Back from (or over from) a station on its route: the camera rides its line there, then follows it.
+      const p = placeNow(id);
+      if (!again && prev?.kind === 'station' && lastPath?.id === id && lastPath.sigs.has(prev.key.slice(8)) && p) {
+        const cam = map.camera();
+        map.ride(along(lastPath.coords, cam, p), rideZoom(cam.z)).then((ok) => { if (ok && stack.top() === `train:${id}`) follow(id); });
+        return;
+      }
+      const following = follow(id);
+      if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
+    },
+    hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } },
+    unmount() { if (panel.openId === id) panel.close(); },
+    level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
+    follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
+    redraw: () => panel.relabel(),
+  };
+}
+// Open a train on the map: its page, and the camera follows it. go: also fly there, zoomed in to the toys.
+function openTrain(id, { go = false } = {}) {
+  if (!id || !trains.get(id)) return false;
+  return stack.open(`train:${id}`, { go });
+}
+// A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
+function pickTrain(t) {
+  if (t.onMap && openTrain(t.id, { go: true })) return;
+  trainMeta.set(t.id, { operational: t.operational, date: t.date, number: t.number });
+  stack.open(`train:${t.id}`, { go: true });
 }
 
-// ---- Several trains close together ("3 trains"): pick one ----
-const pickerEl = document.getElementById('picker');
-function showPicker(list) {
-  panel.close();
-  board.close();
-  disruptionEl.hidden = true;
-  const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
-  pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
-    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
-  pickerEl.hidden = false;
-  raise('picker');
-  pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
-  for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
-}
-
-// ---- A station's board (where the train panel opens; one of them at a time) ----
-const board = createBoard(document.getElementById('board'), {
+// ---- A station's board ----
+const boardEl = document.getElementById('board');
+const board = createBoard(boardEl, {
   load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
   loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
-  isStarred: sig => favourites.has('station', sig),
-  onStar: sig => favourites.toggle('station', sig),
+  onCloseTap: () => board.openSig && stack.close(`station:${board.openSig}`),
   // The station's own messages (live only).
   messages: live ? sig => fetchStationMessages(sig, now()) : null,
 });
+// The board's messages or its search want room (it turns .full): the sheet goes to full height.
+new MutationObserver(() => { if (boardEl.classList.contains('full') && stack?.top()?.startsWith('station:') && stack.level < 2) stack.setLevel(2); })
+  .observe(boardEl, { attributes: true, attributeFilter: ['class'] });
+function stationPage(sig) {
+  const st0 = stations.get(sig);
+  if (!st0) return null;
+  return {
+    name: () => stations.get(sig)?.name ?? st0.name, kind: 'station',
+    show(el, { prev, dir, again = false }) {
+      el.append(boardEl);
+      const st = stations.get(sig) ?? st0;
+      if (board.openSig !== sig) board.open(st);
+      map.unfollow();
+      if (again) return;
+      // From a train that stops here: the camera rides the train's line here (its line stays on the map meanwhile).
+      const prevTrain = prev?.kind === 'train' ? prev.key.slice(6) : null;
+      if (dir > 0 && prevTrain && lastPath?.id === prevTrain && lastPath.sigs.has(sig)) {
+        const cam = map.camera();
+        map.ride(along(lastPath.coords, cam, shownAt(st)), rideZoom(cam.z)).then(() => { if (!panel.openId) clearPath(); });
+        return;
+      }
+      if (!panel.openId) clearPath();
+      if (dir > 0) map.goTo(shownAt(st), 13);   // lands above the sheet
+    },
+    hide() { if (board.openSig === sig) board.close(); },
+    unmount() { if (board.openSig === sig) board.close(); },
+    star: { on: () => favourites.has('station', sig), toggle: () => favourites.toggle('station', sig) },
+    redraw: () => board.relabel(),
+  };
+}
 async function openStation(sig, { go = false } = {}) {
-  const st = stations.get(sig);
-  if (!st) return;
-  if (panel.openId) panel.close();
-  map.unfollow();
-  disruptionEl.hidden = true;
-  board.open(st);
-  raise('board');
-  if (go) map.goTo(shownAt(st), 13);   // lands above the board
+  if (!stations.get(sig)) return;
+  stack.open(`station:${sig}`, { go });
 }
 
-// A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
-function pickTrain(t) {
-  board.close();
-  if (t.onMap && openTrain(t.id, { go: true })) return;
-  map.unfollow();
-  panel.open({ id: t.id, operational: t.operational, date: t.date, number: t.number, label: String(t.number) }, { follow: false });
-  raise('panel');
+// ---- Several trains close together ("3 trains"): pick one ----
+const pickerEl = document.getElementById('picker');
+const pickLists = new Map();
+let pickN = 0;
+function showPicker(list) {
+  const key = `pick:${++pickN}`;
+  pickLists.set(key, [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label))));
+  stack.open(key);
+}
+function pickPage(key) {
+  const rows = pickLists.get(key);
+  if (!rows) return null;
+  return {
+    name: () => t('trainsHere', rows.length), kind: 'pick',
+    show(el) {
+      pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
+        `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
+        rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
+      pickerEl.hidden = false;
+      el.append(pickerEl);
+      pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
+      for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
+    },
+    hide() { pickerEl.hidden = true; },
+    unmount() { pickerEl.hidden = true; pickLists.delete(key); },
+  };
 }
 
-// Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
-function openTrain(id, { go = false } = {}) {
-  const r = id && trains.get(id);
-  if (!r) return false;
-  buzz();
-  // Already open: the card stays as it is, the camera follows the train again (Max, 2026-11-21: a tap on the selected
-  // train "reloads the card and flickers it once"); its card put away by a screen (openPage, 'follow'): back.
-  if (panel.openId === id) {
-    if (panel.hidden) panel.show();
-    else { board.close(); pickerEl.hidden = true; disruptionEl.hidden = true; }
-    raise('panel');
-    panel.setFollowing(true);
-    const following = follow(id);
-    const p = go && placeNow(id);
-    if (p) following.then(() => map.goTo(p, 13, true));
-    return true;
-  }
-  board.close();
-  pickerEl.hidden = true;
-  disruptionEl.hidden = true;
-  panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
-  raise('panel');
-  const following = follow(id);
-  const p = go && placeNow(id);
-  if (p) following.then(() => map.goTo(p, 13, true));
-  return true;
+// ---- Settings, About, Connection: their parts are in index.html, moved into the page while it is shown ----
+function heldPage(el, { name, kind, onShow, onHide }) {
+  return {
+    name, kind,
+    show(page) { page.append(el); el.hidden = false; onShow?.(); },
+    hide() { el.hidden = true; holder.append(el); onHide?.(); },
+    unmount() { el.hidden = true; holder.append(el); },
+  };
 }
-
 
 // ---- Help, with the map credits: the ? button next to Tilt ----
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-function openHelp() { openPage(helpEl); helpEl.querySelector('.panel-close').focus(); }
-helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = openHelp;   // in the menu (☰, 2026-11-18)
+// Help & About: a page in the sheet from ☰ (2026-11-22). Its × is hidden (back belongs to the stack) and kept for the tools.
+helpEl.querySelector('.panel-close').onclick = () => stack.close('page:help');
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
 // filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
@@ -494,16 +565,15 @@ versionEl.addEventListener('click', () => {
   clearTimeout(sayTimer);
   sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
 });
-// Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
+// Esc steps back one page, as the back chip (2026-11-22): a menu or the search first; at Home the sheet goes down.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!navEl.hidden) { closeNav(); return; }
-  const pages = pageEls();
-  if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
-  if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
+  if (document.activeElement?.matches?.('.board-q')) return;   // (the board's own search closes itself)
+  stack.back();
 });
-// The phone's back button in the Android app (Max, 2026-11-17): closes the sheet on top (card, board, search, a page),
-// one per press, like a drag down; with none open, the app goes to the background (as Android's own back does since
+// The phone's back button in the Android app (Max, 2026-11-17; the stack since 2026-11-22): one page back per press;
+// at Home with the sheet up it goes down; at rest the app goes to the background (as Android's own back does since
 // Android 12: the map stays loaded). Only inside the app: Capacitor's bridge is there; the web page never loads this.
 // With the keyboard open, back only hides the keyboard (Max's phone test, 2026-11-17: one swipe closed both it and the
 // search). Open = a text field has focus and the page is clearly lower than the tallest seen at this width (the
@@ -517,19 +587,21 @@ if (window.Capacitor?.isNativePlatform?.()) {
   import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
     if (keyboardUp()) { document.activeElement.blur(); return; }
     if (!navEl.hidden) { closeNav(); return; }
-    if (!sheets.closeTop()) App.minimizeApp();
+    if (!stack.back()) App.minimizeApp();
   }));
 }
 
-// ---- The menu (☰; Max's pick A, 2026-11-18: menu and search apart): a drawer from the left with Störningar, Statistik,
-// Inställningar and Om Spårat. Closes with ×, Esc, a tap outside, the phone's back, or by opening one of its pages. ----
+// ---- ☰ (Max, 2026-11-22: at the right of the search bar): a small menu just above it with The day, Settings and
+// Help & About. Closes with a tap elsewhere, Esc, the phone's back, or by opening one of its rows. ----
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
 function openNav() {
-  menu.close();
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
-  navEl.querySelector('.nav-row:not([hidden])')?.focus();
+  const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
+  navEl.style.left = `${Math.max(10, Math.min(innerWidth - w - 10, a.right - w))}px`;
+  navEl.style.top = `${Math.max(10, a.top - h - 10)}px`;
+  navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
 function closeNav() {
   if (navEl.hidden) return;
@@ -537,16 +609,18 @@ function closeNav() {
   navButton.setAttribute('aria-expanded', 'false');
 }
 onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
-// The map works with the menu open (Max, 2026-11-20: "Map doesn't work with menu open, but cards do"; until then a
-// see-through layer over the map only closed the menu): a drag or pinch moves the map and the menu stays; a plain tap
-// on the map closes the menu and does nothing else (as the search does; createMap onMapTap).
-// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time (createMenu onOpen).
+document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target)) closeNav(); }, true);
+// The day (another part of the plan fills it in: hooks.onDay). Until then the row is there and says so.
+
+document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
+document.getElementById('open-settings').onclick = () => { closeNav(); stack.open('page:settings'); };
+document.getElementById('help-button').onclick = () => { closeNav(); stack.open('page:help'); };
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
 const menu = createMenu({
-  button: document.getElementById('menu-button'),
-  el: document.getElementById('menu'),
+  input: document.getElementById('search'),
+  list: document.getElementById('search-results'),
   findTrains: digits => trains.reports()
     .filter(r => String(r.number).startsWith(digits))
     .sort((a, b) => String(a.number).length - String(b.number).length || Number(a.number) - Number(b.number))
@@ -561,27 +635,64 @@ const menu = createMenu({
     const found = await fetchRunsByNumber(number, now());
     return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to), at: found.length > 1 && t.start !== null ? hhmm(t.start) : null }));
   },
-  onPickTrain: pickTrain,
-  onPickStation: st => openStation(st.sig, { go: true }),
-  onOpen: () => closeNav(),
-  favourites: () => ({
-    trains: favourites.trains.map((number) => {
-      const r = trains.reports().find(x => String(x.number) === number);
-      return { number, company: r ? lateness.brand(r.id) : null, onMap: Boolean(r) };
-    }),
-    stations: favourites.stations.map(sig => stations.get(sig)).filter(Boolean),
-  }),
-  // A starred train: on the map, fly there; otherwise its run now, the next one, or the latest (yesterday's while it
-  // still runs after midnight; until 2026-11-22 the day's first run, TODO 62).
-  async onPickFavouriteTrain(number) {
-    const r = trains.reports().find(x => String(x.number) === number);
-    if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
-    try {
-      const t = pickRun(await fetchRunsByNumber(number, now()), now());
-      if (t) { pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
-    } catch (e) { console.warn('favourite:', e.message); }
+  // The trains on the map now, by group: the empty search's "Show only" chips, and companies and kinds typed.
+  groups() {
+    const brands = new Map(), kinds = new Map();
+    let late = 0, still = 0;
+    for (const x of frameAll) {
+      const b = x.brand ?? '';
+      brands.set(b, (brands.get(b) ?? 0) + 1);
+      const k = kindOf(b);
+      kinds.set(k, (kinds.get(k) ?? 0) + 1);
+      if (!x.stale && lateClass(lateOf(x.id)) === 'late') late++;
+      if (!x.stale && x.v < STAND_MS) still++;
+    }
+    return { late, still, kinds: [...kinds].sort((a, b) => b[1] - a[1]), brands: [...brands].sort((a, b) => b[1] - a[1]) };
   },
+  findDisruptions(text) {
+    const q = fold(text);
+    return disruptions.list.filter(d => fold(`${d.header} ${d.kind ?? ''} ${placesText(d, stationName)} ${d.text ?? ''}`).includes(q))
+      .slice(0, 8).map(d => ({ id: d.id, header: d.header, sub: placesText(d, stationName) }));
+  },
+  recent: () => stack.recent(),
+  rowOf,
+  starred: () => starredRows(),
+  remember: tr => trainMeta.set(tr.id, { operational: tr.operational, date: tr.date, number: tr.number }),
 });
+// A row for a page key (the empty search's Recent).
+function rowOf(key) {
+  const i = key.indexOf(':'), type = i < 0 ? key : key.slice(0, i), v = i < 0 ? '' : key.slice(i + 1);
+  if (type === 'train') {
+    const r = trains.get(v), m = trainMeta.get(v);
+    if (!r && !m) return '';
+    return trainRow({ id: v, number: r?.number ?? m.number, brand: r ? lateness.brand(v) : null, minutes: r ? lateOf(v) : null, sub: t(r ? 'onMap' : 'notOnMapNow') });
+  }
+  if (type === 'station') { const st = stations.get(v); return st ? stationRow({ sig: v, name: st.name, sub: t('station') }) : ''; }
+  if (type === 'dis') { const d = disruptions.byId(v); return d ? groupRow({ key, name: d.header, sub: placesText(d, stationName) }) : ''; }
+  if (type === 'dislist') return groupRow({ key, name: t('allDisruptions') });
+  const g = groupOf(key, STAND_MS);
+  return g ? groupRow({ key, name: g.name(), sub: g.sub(), colour: g.colour }) : '';
+}
+// The starred trains and stations as rows (a train not on the map: its run now, the next one, or the latest).
+function starredRows() {
+  const byNumber = new Map(trains.reports().map(r => [String(r.number), r]));
+  return favourites.trains.map((n) => {
+    const r = byNumber.get(n);
+    return r ? trainRow({ id: r.id, number: n, brand: lateness.brand(r.id), minutes: lateOf(r.id), sub: t('onMap') })
+      : `<button type="button" class="row" data-act="favtrain" data-n="${esc(n)}"><b class="r-num">${esc(n)}</b><span class="r-main"><b>${esc(t('train'))}</b><small>${esc(t('notOnMapNow'))}</small></span></button>`;
+  }).join('') + favourites.stations.map(sig => stations.get(sig)).filter(Boolean)
+    .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' })).join('');
+}
+// A starred train: on the map, fly there; otherwise its run now, the next one, or the latest (yesterday's while it
+// still runs after midnight; until 2026-11-22 the day's first run, TODO 62).
+async function pickFavouriteTrain(number) {
+  const r = trains.reports().find(x => String(x.number) === number);
+  if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
+  try {
+    const t = pickRun(await fetchRunsByNumber(number, now()), now());
+    if (t) pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false });
+  } catch (e) { console.warn('favourite:', e.message); }
+}
 
 // ---- Drawing: one clock per frame ----
 // Each frame every train's simulation is brought to one moment (DELAY_MS ago), once. The camera (following), the
@@ -615,7 +726,9 @@ function frame(ts) {
   const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
   if (due || !frameAll.length) {
     frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
-    frameTrains = filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
+    // only some trains: a group's page or the lateness bar's colour (lightTest) while it is open, else the filter
+    frameTrains = lightTest ? frameAll.filter(x => x.id === openId || lightTest(x))
+      : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
     const x = trains.placedOne(openId, t);
@@ -669,19 +782,12 @@ function frame(ts) {
 }
 requestAnimationFrame(frame);
 
-// ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; every change shows at
-// once, without reloading the page (Max: reloading was a bad experience). ----
+// ---- Settings: a page in the sheet, from ☰ → Settings (Max, 2026-11-12; the sheet 2026-11-22). Remembered on this
+// phone; every change shows at once, without reloading the page (Max: reloading was a bad experience). ----
 const settingsPage = document.getElementById('settings-page');
 const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
-document.getElementById('open-settings').onclick = () => {
-  openPage(settingsPage);
-  foldAccents(false);   // the accent colours start folded
-  settingsPage.querySelector('.panel-close').focus();
-};
-settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
-// A tap outside the card (on the dimmed map behind it) closes it (Max, 2026-11-13).
-document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
+settingsPage.querySelector('.panel-close').onclick = () => stack.close('page:settings');
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
@@ -692,15 +798,15 @@ onSettingChange((key) => {
     map.relabel();   // "3 trains" on the map
     menu.refresh();
     panel.relabel();
-    if (!statsPage.hidden) drawStats();
     conn.relabel(); showConn();
     showFilter();
-    board.relabel();
-    pickerEl.hidden = true;
-    if (!disruptionsPage.hidden) drawDisruptions();
-    if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
+    homeDef.redraw();
+    const top = stack.top();
+    if (top !== 'home') stack.pageDef(top)?.redraw?.();
+    stack.refreshBar();
   }
   if (key === 'boardRows') board.relabel();
+  if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
   if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
@@ -753,97 +859,73 @@ const closeKey = () => (settings.trainStyle === 'toy' ? 'toyClose' : 'realClose'
 closeSizeEl.oninput = () => { setSetting(closeKey(), closeSizeEl.value); showSettings(); };
 showSettings();
 
-// ---- The stats page: ☰ → Statistik (Max, 2026-11-18; until then a tap on the live pill). Its own page, like Settings. ----
-const statsPage = document.getElementById('stats-page');
-const statsBody = document.getElementById('stats-body');
-// The page is built once and then only its numbers change (src/stats-page.js); a tap on a train or a station there
-// closes it and opens that train's card (flying to it) or the station's board.
-const statsView = createStatsPage(statsBody, {
-  openTrain: (id) => { statsPage.hidden = true; openTrain(id, { go: true }); },
-  openStation: (sig) => { statsPage.hidden = true; openStation(sig, { go: true }); },
-  describe: (id) => {
-    const r = trains.get(id);
-    return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
+// ---- Statistik's numbers (src/stats.js), drawn on Home and a company's page (src/home.js; Statistik's own page went
+// 2026-11-22). Cancelled today and today's arrivals are asked for only while one of those is shown. ----
+const snapshot = (brand = null) => stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
+  trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand });
+const statsShown = () => { const top = stack?.top(); return (top === 'home' && stack.level > 0) || Boolean(top?.startsWith('co:')); };
+function wantStats() { if (live) stats.wantCancelled(askCancelled, now()); dayStats?.open(); }
+// What Home and the group pages read (src/home.js).
+const pageData = {
+  frame: () => frameAll, lateOf, numberOf: id => trains.get(id)?.number ?? '?',
+  favourites, stations: () => stations, location: () => map.location, stationName,
+  disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
+  snapshot, filter, still: STAND_MS,
+  legend: { get: () => legend, set: (k) => { legend = legend === k ? null : k; light(legend ? legendTest(legend) : null); homeDef.redraw(); } },
+  statsActions: {
+    openTrain: id => openTrain(id, { go: true }),
+    openStation: sig => openStation(sig, { go: true }),
+    describe: (id) => { const r = trains.get(id); return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateOf(id) } : null; },
   },
-  filter,
-  redraw: () => drawStats(true),
-});
-// statsView.company: a company's own page (only its trains), or null
-function drawStats(first = false) {
-  const brand = statsView.company;
-  statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand }), { first });
-}
-function openStats() {
-  statsView.home();
-  openPage(statsPage);
-  if (live) stats.wantCancelled(askCancelled, now());
-  dayStats?.open();
-  drawStats(true);
-  statsPage.querySelector('.panel-close').focus();
-}
-document.getElementById('open-stats').onclick = openStats;
+  onShow: wantStats,
+  onLight: light,
+  // a group's trains on the map, all of them in view
+  fit(list) {
+    if (!list.length) return;
+    const lons = list.map(x => x.lon), lats = list.map(x => x.lat);
+    map.fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
+  },
+};
+const homeDef = homePage(pageData);
 
-// ---- The connection screen: a tap on the live pill (Max's pick Y, 2026-11-18; src/connection.js). ----
+// ---- The connection screen: a tap on the live mark at the top (Max's pick Y, 2026-11-18; a page in the sheet since
+// 2026-11-22; src/connection.js). ----
 const connPage = document.getElementById('conn-page');
 const conn = createConnection(connPage, {
   getTrains: () => frameAll,
   reportTimeOf: id => trains.get(id)?.time ?? null,
 });
 let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
-function openConn() {
-  showConn();
-  openPage(connPage);
-  connPage.querySelector('.panel-close').focus();
-}
-onTap(document.getElementById('status'), () => (connPage.hidden ? openConn() : (connPage.hidden = true)));
-connPage.querySelector('.panel-close').onclick = () => { connPage.hidden = true; };
-statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
-// A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the
-// page's other taps are its own (src/stats-page.js). While a finger is down on the page its numbers wait, so nothing
-// moves under the finger.
-let statsHeld = false;
-statsBody.addEventListener('pointerdown', () => { statsHeld = true; });
-addEventListener('pointerup', () => { statsHeld = false; });
-addEventListener('pointercancel', () => { statsHeld = false; });
-statsBody.addEventListener('click', (e) => {
-  const row = e.target.closest?.('[data-filter]');
-  if (row) filter.toggle(row.dataset.filter, row.dataset.v);
-  if (row) drawStats();
-});
-// The bar under the status line while a filter is on: what is shown, and × to show every train again.
-const filterBar = document.getElementById('filter-bar'), filterText = document.getElementById('filter-text');
+onTap(document.getElementById('status'), () => (stack.top() === 'page:conn' ? stack.back() : stack.open('page:conn')));
+connPage.querySelector('.panel-close').onclick = () => stack.close('page:conn');
+// The line above the bar while the map shows only some trains (src/filter.js; until 2026-11-22 a bar under the top
+// bar): what is shown, a tap opens that group's page, × shows every train again.
+const line = createLine(document.getElementById('line'));
+window.__line = line;   // (for the parts to come and the tools: set(id, { html, onTap, onClose, priority }), clear(id))
 function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
-  filterBar.hidden = !filter.active;
-  filterText.textContent = filter.active
-    ? t('filterShowing', filter.list().map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')) : '';
+  if (!filter.active) { line.clear('filter'); return; }
+  const list = filter.list(), first = list[0];
+  line.set('filter', { priority: 10, html: `<span>${esc(t('filterShowing', list.map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')))}</span>`,
+    onTap: () => stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`),
+    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); }, closeLabel: t('filterClear') });
 }
 filter.onChange(showFilter);
-document.getElementById('filter-clear').onclick = () => { filter.clear(); if (!statsPage.hidden) drawStats(); };
 
-// ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
-const disruptionEl = document.getElementById('disruption');
-const disruptionsPage = document.getElementById('disruptions-page');
+// ---- Disruptions (src/disruptions.js; live only): Home's part and the list's page, the marks on the map, a
+// disruption's page ----
 let stationsLoaded;
 const stationsReady = new Promise((resolve) => { stationsLoaded = resolve; });
 let netNow = null;
 netReady.then((n) => { netNow = n; });
 const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disruptions').then(f => f.disruptions) : fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
-  onData({ list, geojson }) {
+  onData({ geojson }) {
     map.setDisruptions(geojson);
-    // The menu's count: problems only, not rail work (Max, 2026-11-18).
-    const problems = list.filter(d => !isWork(d)).length, countEl = document.getElementById('disruptions-count');
-    roll(countEl, problems);   // (rolls to a new number: Max's pick 4, 2026-11-20)
-    countEl.classList.toggle('none', !problems);   // the chip only when there are problems
-    if (!disruptionsPage.hidden) drawDisruptions();
-    const open = disruptionEl.dataset.id;
-    if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
+    const top = stack?.top() ?? '';
+    if (top === 'dislist') stack.pageDef(top).redraw();
+    if (top.startsWith('dis:')) { if (disruptions.byId(top.slice(4))) stack.pageDef(top).redraw(); else stack.close(top); }
   } });
-if (live) {
-  document.getElementById('open-disruptions').hidden = false;
-  Promise.all([netReady, stationsReady]).then(() => disruptions.start());
-}
+if (live) Promise.all([netReady, stationsReady]).then(() => disruptions.start());
 // The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
 // end, ending soonest first; open or folded is remembered on this device. The fold glides open and shut (Max,
 // 2026-11-20: "Expanding and condensing störningar does not animate"): the rows are always there, in a box whose
@@ -852,81 +934,57 @@ if (live) {
 const WORKS_KEY = 'railWorksOpen';
 let worksOpen = false;
 try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
-// The list's rows come in one after another when it opens from the menu, and new ones when new data comes (Max's
-// pick 6, 2026-11-20); disSeen: the rows shown since it opened (by id; 'fold' for Banarbeten).
-let disSeen = new Set();
-function drawDisruptions() {
-  const list = disruptions.list, problems = list.filter(d => !isWork(d));
-  const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
-  const row = d => rowHtml(d, stationName, now());
-  document.getElementById('disruptions-body').innerHTML = (!disruptions.loaded ? stateHtml('loading', t('loading'))
-    : !list.length ? stateHtml('empty', t('noDisruptions'))
-    : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
-    problems.map(row).join('') +
-    (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
-      `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
-      `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '');
-  const body = document.getElementById('disruptions-body');
-  arrive(body.querySelectorAll(':scope > .dis-row, :scope > .dis-fold'), disSeen, r => r.dataset.id ?? 'fold');
-  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => {
-    listScroll = document.getElementById('disruptions-body').scrollTop;
-    disruptionsPage.hidden = true;
-    openDisruption(b.dataset.id, { go: true, fromList: true });
+function disListPage() {
+  let el = null, seen = new Set();
+  function draw() {
+    const list = disruptions.list, problems = list.filter(d => !isWork(d));
+    const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
+    const row = d => rowHtml(d, stationName, now());
+    el.innerHTML = `<div class="panel-head"><strong>${t('disruptions')}</strong></div><div class="dis-body">` + (!disruptions.loaded ? stateHtml('loading', t('loading'))
+      : !list.length ? stateHtml('empty', t('noDisruptions'))
+      : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
+      problems.map(row).join('') +
+      (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
+        `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
+        `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '') + '</div>';
+    arrive(el.querySelectorAll('.dis-body > .dis-row, .dis-body > .dis-fold'), seen, r => r.dataset.id ?? 'fold');
+    const fold = el.querySelector('.dis-fold'), box = el.querySelector('.dis-works');
+    if (fold) fold.onclick = () => {
+      worksOpen = !worksOpen;
+      try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ }
+      fold.setAttribute('aria-expanded', String(worksOpen));
+      box.classList.toggle('open', worksOpen);
+      box.inert = !worksOpen;
+      if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
+    };
+  }
+  return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
+}
+// A disruption: its words; opened (not come back to), the map shows all of its stretches (one station: flies to it).
+function disPage(id) {
+  if (!disruptions.byId(id)) return null;
+  let el = null;
+  const draw = () => {
+    const d = disruptions.byId(id);
+    if (!d) return;
+    el.innerHTML = `<div id="disruption">${cardHtml(d, stationName, now())}</div>`;
+    el.querySelector('.panel-close').onclick = () => stack.close(`dis:${id}`);
   };
-  const fold = disruptionsPage.querySelector('.dis-fold'), box = disruptionsPage.querySelector('.dis-works');
-  if (fold) fold.onclick = () => {
-    worksOpen = !worksOpen;
-    try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ }
-    fold.setAttribute('aria-expanded', String(worksOpen));
-    box.classList.toggle('open', worksOpen);
-    box.inert = !worksOpen;
-    if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
+  return {
+    name: () => disruptions.byId(id)?.header ?? t('disruptions'), kind: 'dis',
+    mount(page) { el = page; },
+    show(page, { dir }) {
+      draw();
+      if (dir <= 0) return;
+      const d = disruptions.byId(id), box = disruptions.boundsOf(d), p = !box && disruptions.placeOf(d);
+      map.unfollow();
+      if (box) map.fitBox(box);
+      else if (p) map.goTo(p, 9);
+    },
+    redraw: draw,
   };
 }
-// A disruption opened from the list has a back arrow (Max, 2026-11-20: "Back arrow when in a specific störning"):
-// back to the list, where it was scrolled to (the map stays where the disruption put it).
-let fromList = false, listScroll = 0;
-function drawDisruption(id) {
-  const d = disruptions.byId(id);
-  if (!d) return;
-  disruptionEl.dataset.id = id;
-  disruptionEl.innerHTML = cardHtml(d, stationName, now());
-  disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
-  if (!fromList) return;
-  const back = Object.assign(document.createElement('button'), { type: 'button', className: 'panel-back', innerHTML: icon('back') });
-  back.setAttribute('aria-label', t('backToList'));
-  back.onclick = () => {
-    disruptionEl.hidden = true;
-    drawDisruptions();
-    openPage(disruptionsPage);
-    document.getElementById('disruptions-body').scrollTop = listScroll;
-  };
-  disruptionEl.querySelector('.panel-head').prepend(back);
-}
-// Open a disruption's card where a train's panel sits; go: show all of its stretches (one station: fly to it).
-function openDisruption(id, { go = false, fromList: listed = false } = {}) {
-  const d = disruptions.byId(id);
-  if (!d) return;
-  fromList = listed;
-  if (panel.openId) panel.close();
-  board.close();
-  pickerEl.hidden = true;
-  map.unfollow();
-  drawDisruption(id);
-  disruptionEl.hidden = false;
-  raise('disruption');
-  if (!go) return;
-  const box = disruptions.boundsOf(d), p = !box && disruptions.placeOf(d);
-  if (box) map.fitBox(box);
-  else if (p) map.goTo(p, 9);
-}
-document.getElementById('open-disruptions').onclick = () => {
-  disSeen = new Set();
-  drawDisruptions();
-  openPage(disruptionsPage);
-  disruptionsPage.querySelector('.panel-close').focus();
-};
-disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };
+function openDisruption(id) { stack.open(`dis:${id}`); }
 
 // ---- Rail lines: Trafikverket's, always shown ----
 map.showRail('trv');
@@ -1129,9 +1187,6 @@ if (!replay) setInterval(() => {
 const modeText = m => t('mode')[m] ?? m;
 const statusEl = document.getElementById('status');
 const statusCount = statusEl.querySelector('.count');
-const barLogo = document.querySelector('.searchbar .logo');
-barLogo.innerHTML = logoSvg({ small: true });
-barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
 
 const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
 const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
@@ -1197,9 +1252,10 @@ setInterval(() => {
   // The open train's trip handed on to its next internal number (trains.prune): the card and the camera go with it.
   const to = panel.openId && !trains.get(panel.openId) ? trains.handedTo(panel.openId) : null;
   if (to) {
-    const r = trains.get(to), wasFollowing = map.following;
-    panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
-    if (wasFollowing) follow(to); else panel.setFollowing(false);
+    const wasFollowing = map.following, key = `train:${panel.openId}`;
+    if (stack.top() === key) stack.replace(`train:${to}`);
+    else stack.close(key);
+    if (!wasFollowing && panel.openId === to) { map.unfollow(); panel.setFollowing(false); }
   }
   const error = statusError();
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
@@ -1232,10 +1288,9 @@ setInterval(() => {
 
   // The stats: the running numbers every second; the page itself only while it is open.
   stats.tick(frameAll, tNow, id => trains.get(id));
-  if (!statsPage.hidden) {
+  if (statsShown()) {   // (Home's and a company's page draw themselves: src/stack.js every)
     if (live) stats.wantCancelled(askCancelled, tNow);
     dayStats?.tick();
-    if (!statsHeld) drawStats();
   }
   // Settings → Debug: the positions' rate and age (Max, 2026-11-15, 3A: the stats page keeps only a grey line).
   if (!settingsPage.hidden) {
@@ -1246,3 +1301,54 @@ setInterval(() => {
   // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
   if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DRAW_DELAY_MS), noData));
 }, 1000);
+
+// ---- The one sheet: made last, once everything its pages use is there (src/stack.js) ----
+function define(key) {
+  if (key === 'home') return homeDef;
+  const i = key.indexOf(':'), type = i < 0 ? key : key.slice(0, i), v = i < 0 ? '' : key.slice(i + 1);
+  switch (type) {
+    case 'train': return trainPage(v);
+    case 'station': return stationPage(v);
+    case 'pick': return pickPage(key);
+    case 'dis': return disPage(v);
+    case 'dislist': return live ? disListPage() : null;
+    case 'co': case 'kind': case 'late': case 'still': return groupPage(key, pageData);
+    case 'page':
+      if (v === 'settings') return heldPage(settingsPage, { name: () => t('settings'), kind: 'settings', onShow: () => { foldAccents(false); showSettings(); } });
+      if (v === 'help') return heldPage(helpEl, { name: () => t('helpAbout'), kind: 'help' });
+      if (v === 'conn') return heldPage(connPage, { name: () => t('connTitle'), kind: 'conn', onShow: () => showConn() });
+      return null;
+    default: return null;
+  }
+}
+stack = createStack({
+  sheet: document.getElementById('sheet'),
+  define,
+  onPad: h => map.setSheet(h),
+  onChange(pg) {
+    // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
+    if (pg.key === 'home') light(legend ? legendTest(legend) : null);
+    else if (pg.def.kind !== 'group') light(null);
+    // a train's line stays only under its own page and a station's (where the camera may still ride it)
+    if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
+  },
+});
+stack.onSearch((on) => { closeNav(); if (on) menu.open(); });
+// Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
+document.getElementById('sheet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
+  if (!b) return;
+  if (b.dataset.go) stack.open(b.dataset.go, { go: true });
+  else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
+  else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  else if (b.dataset.act === 'favtrain') pickFavouriteTrain(b.dataset.n);
+  else if (b.dataset.act === 'showonly') stack.pageDef(stack.top())?.toggleShowOnly?.();
+  else if (b.dataset.id && b.classList.contains('dis-row')) stack.open(`dis:${b.dataset.id}`);
+});
+// For the tools (tools/lib/screen.mjs): the stack's keys, its top, the sheet's height; opening and going back.
+window.__stack = {
+  keys: () => stack.keys(), top: () => stack.top(), names: () => stack.names(), get level() { return stack.level; },
+  get heights() { return stack.heights; }, get searching() { return stack.searching; },
+  open: (key, opts) => stack.open(key, opts), back: () => stack.back(), home: level => stack.home(level), setLevel: i => stack.setLevel(i),
+};
+
