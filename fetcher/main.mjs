@@ -16,7 +16,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { NodeEventSource } from './event-source.mjs';
 import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCancelledToday, fetchDayArrivals, fetchStations } from '../src/trafikverket.js';
 import { followPositions } from '../src/trains-source.js';
-import { swedishDay } from '../src/clock.js';
+import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
 import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
@@ -60,7 +60,7 @@ const servePort = arg('--serve') ? Number(arg('--serve')) : null;
 const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 
 // Times in the log are this computer's local time (as the Linux journal shows them).
-const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
+const log = (...a) => console.log(new Date(Date.now()).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }), ...a);   // (Swedish time whatever the PC's zone)
 
 // ---------- load on Trafikverket, counted ----------
 // Counted from the start (the monitor, monitor/main.mjs, takes the differences): questions, streams opened, bytes
@@ -197,12 +197,6 @@ if (KEY) every('stations', 24 * 60 * MIN, 1000, async () => {
 
 // Today's arrivals (the stats page's graph): the whole day once, then only what changed every 5 minutes (as
 // src/day-stats.js asks); a whole-day file is made from memory every hour, a changes file every 5 minutes.
-// Swedish midnight of moment t (src/day-stats.js swedishMidnight).
-function swedishMidnight(t) {
-  const utc = Date.parse(`${swedishDay(t)}T00:00:00Z`);
-  const h = Number(new Date(utc).toLocaleString('sv-SE', { hour: '2-digit', hour12: false, timeZone: 'Europe/Stockholm' }));
-  return utc - h * 3600000;
-}
 const arr = { day: null, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 };
 // (its rows: fetcher/files.mjs buildArrivals)
 if (KEY) every('arrivals', 5 * MIN, 6000, async () => {

@@ -9,7 +9,7 @@
 //   - Each train number's company is kept too (since 2026-11-21: Statistik's company page): view(brand) counts that
 //     company's rows (once per change of the rows, about 2 ms for a whole day).
 import { fetchDayArrivals } from './trafikverket.js';
-import { swedishDay } from './clock.js';
+import { swedishDay, swedishMidnight } from './clock.js';
 import { lateClass } from './lateness.js';
 
 const STORE = 'dayArrivals';
@@ -18,13 +18,6 @@ const MARGIN_MS = 5 * 60 * 1000;    // ask a little further back than the last a
 const HOURS = 25;                   // a day with the clock turned back has 25
 const GROUP = { ontime: 0, some: 1, late: 2 };
 
-// Swedish midnight of moment t (ms). Swedish time is UTC+1 or +2, and the clock never changes at midnight.
-function swedishMidnight(t) {
-  const day = swedishDay(t);
-  const utc = Date.parse(`${day}T00:00:00Z`);
-  const h = Number(new Date(utc).toLocaleString('sv-SE', { hour: '2-digit', hour12: false, timeZone: 'Europe/Stockholm' }));
-  return utc - h * 3600000;
-}
 
 // A row as one number: hour * 10000 + minutes late + 5000 (late kept within ±4999).
 const pack = (hour, late) => hour * 10000 + Math.max(-4999, Math.min(4999, late)) + 5000;
