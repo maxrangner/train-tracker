@@ -76,14 +76,17 @@ export function createState() {
     // The latest lateness per train (for asking planned routes far enough back, as the page does).
     lateBy: id => lastPassing.get(id)?.minutes ?? 0,
     plannedOf: id => planned.get(id) ?? null,
-    // Planned rows of the trains on the map, planned from `from` on; added after `since` only, when given.
-    plannedRows(now, ids, from, since = null) {
+    // Planned rows of the trains on the map, planned from `from` on; added after `since` only, when given, except the
+    // trains in `whole` (not in the base file: a train come (back) onto the map), which get all their rows. (Until
+    // 2026-11-22 such a train, its rows stored before the base file, was in neither file for up to 10 minutes: the code
+    // review of 2026-11-21, finding 10.)
+    plannedRows(now, ids, from, since = null, whole = null) {
       const out = [], brands = {};
       for (const id of ids) {
         const t = planned.get(id);
         if (!t) continue;
         if (t.brand) brands[id] = t.brand;
-        for (const r of t.rows.values()) if (r.planned >= from && (since === null || r.got > since)) out.push({ key: id, ...r });
+        for (const r of t.rows.values()) if (r.planned >= from && (since === null || r.got > since || whole?.has(id))) out.push({ key: id, ...r });
       }
       for (const [id, t] of planned) if (now - Math.max(t.until, t.asked) > PLANNED_KEEP_MS && !latest.has(id)) planned.delete(id);
       return { rows: out, brands };

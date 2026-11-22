@@ -165,18 +165,19 @@ every('passings-add file', MIN, 75000, () => {
 });
 
 // Planned routes for the trains on the map: fetcher/ask-routes.mjs.
-let plannedBaseAt = null;
+let plannedBaseAt = null, plannedBaseIds = null;
 const askRoutes = () => askRoutesOnce(state, fetchPlannedRoutes);
 if (!replayName) every('planned routes', 30000, 10000, askRoutes);   // a replay brings its own
 const shownIds = t => state.trains(t).map(r => r.id);
 every('planned file', 10 * MIN, 40000, () => {
   const t = Date.now();
-  shelf.put('planned', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS));
-  plannedBaseAt = t;
+  const ids = shownIds(t);
+  shelf.put('planned', t, buildPlanned(state, t, ids, t - MAX_BACK_MS));
+  plannedBaseAt = t; plannedBaseIds = new Set(ids);
 });
 every('planned-add file', MIN, 100000, () => {
   const t = Date.now();
-  if (plannedBaseAt !== null) shelf.put('planned-add', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS, plannedBaseAt));
+  if (plannedBaseAt !== null) shelf.put('planned-add', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS, plannedBaseAt, plannedBaseIds));
 });
 
 if (KEY) every('disruptions', 5 * MIN, 2000, async () => {
