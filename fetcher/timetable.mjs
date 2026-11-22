@@ -13,7 +13,7 @@
 // 2026-11-17: 7 questions, 21 s, 94k rows), one question a second; a day at start, at the day's turn, tomorrow at 18:00
 // and today again at 03:30 (a clean copy); the changes stream (one stream); messages every 2 minutes.
 import { ask, follow, boardGone } from '../src/trafikverket.js';
-import { swedishDay } from '../src/clock.js';
+import { swedishDay, swedishParts, midnightOf, addDays } from '../src/clock.js';
 import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey, BOARD_BACK_MS } from '../src/tap-files.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
@@ -22,6 +22,7 @@ const MIN = 60000, HOUR = 60 * MIN;
 // row went on its own when planned more than 6 h ago, so a night train's card and green route started mid-trip (the
 // code review of 2026-11-21, finding 2; on 17-18 Nov all 83 trains still running after midnight: tools/night-trains-check.mjs).
 const KEEP_RUNNING_MS = 6 * HOUR, YESTERDAY_BACK_MS = 24 * HOUR;
+const CARD_AHEAD_MS = 12 * HOUR;   // tomorrow's trains in the cards: those with a stop within this
 const tripOf = x => `${x.r[1] || x.r[0]}|${x.day}`;   // a train's trip: its public number (all its pieces) and day
 // A board file holds per station and direction its next BOARD_ROWS trains not yet gone (src/trafikverket.js
 // boardGone), planned from BOARD_BACK_MS ago on (a very late train still counts). Until 2026-11-19 it held the first
@@ -56,6 +57,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   const rows = new Rows();            // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
   const days = new Set(seed?.days ?? []);   // days loaded (YYYY-MM-DD)
   let messages = [], messagesAt = null, lastChange = Date.now(), stopped = false, loading = null;
+  const again = new Set();            // days held but to be asked again (03:30, a stream gap)
   const counts = { asks: 0, loads: 0, changes: 0, rows: 0 };
 
   // A row in; never over a newer version of it (a change that came while its day was loading). loading: days being
@@ -74,7 +76,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   // One day's rows, in slices of planned time from 6 h before to 36 h after its start (overnight trains), halved
   // while Trafikverket says the answer would be too big; one question a second.
   async function loadDay(day, from = null) {
-    const start = Date.parse(`${day}T00:00:00+01:00`);
+    const start = midnightOf(day);   // (the real Swedish midnight; until 2026-11-22 winter time all year)
     const all = [];
     async function slice(a, b) {
       await wait(1000);
@@ -109,10 +111,16 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   async function keepDays() {
     if (loading) return loading;
     loading = (async () => {
-      const now = Date.now(), today = swedishDay(now), yesterday = swedishDay(now - 24 * HOUR), tomorrow = swedishDay(now + 24 * HOUR);
-      const want = [today, yesterday, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
+      // By the calendar: until 2026-11-22 now ± 24 h, which around the clock changes named the wrong days (28 Mar from
+      // 23:00 tomorrow was 30 Mar: the boards lost every train after midnight; 30 Mar 00-01 yesterday was 28 Mar: every
+      // night train vanished for an hour; TODO 62).
+      const now = Date.now(), { day: today, hour } = swedishParts(now), yesterday = addDays(today, -1), tomorrow = addDays(today, 1);
+      const want = [today, yesterday, ...(hour >= 18 ? [tomorrow] : [])];
       for (const d of [...days]) if (!want.includes(d)) { days.delete(d); for (const [k, x] of rows) if (x.day === d) rows.delete(k); }
-      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null);
+      // A day asked again (03:30, a stream gap) stays in memory while its new copy comes (loadDay's clean copy removes
+      // what Trafikverket no longer has): until 2026-11-22 it was taken out first, so no tap files were made meanwhile
+      // (~21 s a night; for the whole outage if Trafikverket was down at 03:30).
+      for (const d of want) if (!days.has(d) || again.has(d)) { again.delete(d); await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null); }
       const running = new Set(), cut = Date.now() - KEEP_RUNNING_MS;   // (the time after the loads)
       for (const x of rows.values()) if (x.day === yesterday && x.r[6] * 1000 >= cut) running.add(tripOf(x));
       for (const [k, x] of rows) if (x.day === yesterday && !running.has(tripOf(x))) rows.delete(k);
@@ -136,7 +144,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
       let n = 0;
       for (const a of r.TrainAnnouncement ?? []) if (put(a)) n++;
       counts.changes += n;
-      if (gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: today loaded again`); days.delete(swedishDay(Date.now())); keepDays(); }
+      if (gap > CHANGES_BACK_MS - MIN && days.size) { log(`timetable: changes missed for ${Math.round(gap / MIN)} min: every day held loaded again`); for (const d of days) again.add(d); keepDays(); }   // (every day: until 2026-11-22 only today, so yesterday's night trains and tomorrow kept what they missed)
       if (n) onChange();
     },
     onStatus: s => { if (s.error) log(`timetable changes: ${s.mode}: ${s.error}`); },
@@ -159,7 +167,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   const dayTimer = seed ? null : setInterval(() => {
     const hm = new Date(Date.now()).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' });
     const today = swedishDay(Date.now());
-    if (hm >= '03:30' && resyncDay !== today && days.has(today)) { resyncDay = today; days.delete(today); }
+    if (hm >= '03:30' && resyncDay !== today && days.has(today)) { resyncDay = today; again.add(today); }
     keepDays();
   }, MIN);
   const msgTimer = seed ? null : setInterval(loadMessages, 2 * MIN);
@@ -186,8 +194,14 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   const ofTrains = g => byGroup().train.get(g) ?? [], ofStations = g => byGroup().station.get(g) ?? [];
   return {
     ready: () => Boolean(seed) || days.has(swedishDay(Date.now())),   // seeded: all there is, at once
-    // Cards: today's and yesterday's trains (tomorrow's only on boards, until the day turns).
-    card: (g, t) => { const today = swedishDay(t); return out(ofTrains(g).filter(x => x.day <= today), { kind: `card-${g}`, t }); },
+    // Cards: yesterday's trains still running, today's, and tomorrow's that start within CARD_AHEAD_MS (whole: a train
+    // with any stop that soon). Until 2026-11-22 tomorrow's were only on boards, so in the late evening a tap on a
+    // train after midnight got an empty card (TODO 62); all of tomorrow would double the files from 18:00.
+    card: (g, t) => {
+      const today = swedishDay(t), tomorrow = addDays(today, 1), list = ofTrains(g), soon = new Set();
+      for (const x of list) if (x.day === tomorrow && x.r[6] !== null && x.r[6] * 1000 < t + CARD_AHEAD_MS) soon.add(tripOf(x));
+      return out(list.filter(x => x.day <= today || (x.day === tomorrow && soon.has(tripOf(x)))), { kind: `card-${g}`, t });
+    },
     // Boards: per station and direction its next BOARD_ROWS advertised trains not gone at t (above). (Memory rows have
     // base 0: their times are seconds since 1970.)
     board: (g, t) => {
