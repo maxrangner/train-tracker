@@ -41,6 +41,14 @@ import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
 import { roll, arrive } from './motion.js';
+// The sheet's ideas (build plan parts 3 and 6, 2026-11-23): My trains and the change, "You seem to be on", Peek, the
+// shop window, Share, "Why are we standing?".
+import { createMyTrains } from './my-trains.js';
+import { createRide } from './ride.js';
+import { createPeek } from './peek.js';
+import { createShopWindow } from './shop-window.js';
+import { shareTrain, sharedNumber, dropShared } from './share.js';
+import { whyStanding, STAND_MS as STOOD_MS } from './why-standing.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -55,6 +63,10 @@ const filesBase = replay ? null : (import.meta.env.DEV && hashOpt.get('files')) 
 const fromFiles = Boolean(filesBase);
 if (fromFiles) setTapAsker(filesTapAsker(kind => positionsFeed?.latestNow?.(kind) ?? Promise.resolve(null), now));   // (asked at once: 2026-11-22)
 const live = !replay && (hasKey || fromFiles);   // live data of some kind: stations, disruptions, stats, messages
+// A shared train (src/share.js; #train=531): opened once the trains are in (openShared, below); out of the address at
+// once, as #view.
+const sharedAt = sharedNumber();
+if (sharedAt) dropShared();
 // The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement is as
 // good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).
 const FILES_DELAY_MS = 30 * 1000;
@@ -140,6 +152,7 @@ const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(fal
 const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers, "i")
 // The pages of the one sheet (src/stack.js): made at the end of this file, used by everything that opens something.
 let stack = null;
+let myTrains = null, ride = null, peek = null, shop = null;   // the sheet's ideas (made after the stack, at the end)
 const panelEl = document.getElementById('panel');
 const panel = createPanel(panelEl, {
   stationName,
@@ -147,6 +160,8 @@ const panel = createPanel(panelEl, {
   onCloseTap: id => stack.close(`train:${id}`),
   onMore: full => stack.setLevel(full ? 2 : 1),
   onStop: sig => openStation(sig),
+  // under its tiles: why it stands, Share, Add my change (trainExtras, below)
+  extra: id => trainExtras(id),
   // the line on how its place is known (also each second, below), for a card just opened
   statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
@@ -245,6 +260,7 @@ const panel = createPanel(panelEl, {
 const map = createMap('map', {
   // A plain tap on the map (not a drag): with the menu open it only closes the menu.
   onMapTap() {
+    if (peek?.ate()) return true;   // (the finger lifted after a peek: src/peek.js)
     if (navEl.hidden) return false;
     closeNav();
     return true;
@@ -398,11 +414,67 @@ function trainPage(id) {
     hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    every() { if (panel.openId === id) drawExtras(id); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
 }
+// ---- A train's page, under its tiles (2026-11-23): "Why are we standing?", Share, Add my change ----
+const extrasEl = Object.assign(document.createElement('div'), { className: 'tr-extras' });
+// How long the train has stood still (ms) by its reported speeds (src/speed-log.js): from its newest report back while
+// each is under 2 km/h (or, sending no speed, within 40 m of the newest). A train silent since its last report (531 at
+// Hjärup on 17 Nov sent nothing for over an hour) counts as standing since then; whyFor also wants it drawn standing.
+function stoodFor(id, at) {
+  const list = speedLog.of(id, at);
+  const last = list.at(-1);
+  if (!last) { const rep = trains.get(id); return rep?.time ? Math.max(0, at - rep.time) : 0; }
+  const m = (a, b) => Math.hypot((a.lon - b.lon) * Math.cos(a.lat * Math.PI / 180), a.lat - b.lat) * 111195;
+  let since = last.time;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const e = list[i];
+    if (e.speed !== null ? e.speed >= 2 : m(e, last) > 40) break;
+    since = e.time;
+  }
+  return at - since;
+}
+// The reason a train stands (src/why-standing.js), or null while it moves, has stood under STOOD_MS, or its route isn't in.
+function whyFor(id) {
+  const x = frameById.get(id), route = panel.openId === id ? panel.route : null;
+  if (!x || x.stale || !route || (x.v ?? 0) >= STAND_MS || stoodFor(id, now()) < STOOD_MS) return null;
+  return whyStanding({ train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
+    lines: d => disruptions.stretchesOf(d), now: now() });
+}
+function whyHtml(w) {
+  if (!w || w.kind === 'stop') return '';
+  const text = w.kind === 'disruption' ? t('whyDisruption', w.header) : w.kind === 'note' ? t('whyNote', w.text)
+    : w.kind === 'waiting' ? t('whyWaiting', w.station, hhmm(w.planned)) : t('whyNone');
+  const inner = `<small>${esc(t('whyTitle'))}</small><span>${esc(text)}</span>`;
+  return w.kind === 'disruption' ? `<button type="button" class="why dis" data-go="dis:${esc(w.id)}">${icon('warning', 17)}<span class="why-t">${inner}</span>${icon('chevron', 16)}</button>`
+    : `<div class="why ${w.kind}">${icon(w.kind === 'none' ? 'info' : 'warning', 17)}<span class="why-t">${inner}</span></div>`;
+}
+function drawExtras(id) {
+  const route = panel.openId === id ? panel.route : null;
+  const ahead = (route?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
+  const html = whyHtml(whyFor(id)) + `<div class="tr-acts"><button type="button" class="chip" data-x="share">${icon('share', 17)}${esc(t('share'))}</button>` +
+    (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>';
+  if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }
+}
+function trainExtras(id) { drawExtras(id); return extrasEl; }
+extrasEl.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-x="share"]') || !panel.openId) return;
+  const n = panel.number ?? trains.get(panel.openId)?.number;
+  if (!n) return;
+  shareTrain({ number: n, title: t('shareTitle', n), text: t('shareText', n),
+    note: (how, url) => map.note(how === 'copied' ? t('linkCopied', url) : t('linkShown', url)) });
+});
+// What a page of the sheet's ideas needs to know about a train: its numbers (and its route, while its card has it).
+function trainInfo(id) {
+  const r = trains.get(id), m = trainMeta.get(id), x = r ?? m;
+  if (!x) return null;
+  return { number: String(x.number), operational: x.operational, date: x.date, route: panel.openId === id ? panel.route : null };
+}
+
 // Open a train on the map: its page, and the camera follows it. go: also fly there, zoomed in to the toys.
 function openTrain(id, { go = false } = {}) {
   if (!id || !trains.get(id)) return false;
@@ -432,10 +504,14 @@ new MutationObserver(() => { if (boardEl.classList.contains('full') && stack?.to
 function stationPage(sig) {
   const st0 = stations.get(sig);
   if (!st0) return null;
+  // Under the board (2026-11-23): "Save a trip from here" (My trains), and once ever the tip about Peek.
+  const extra = Object.assign(document.createElement('div'), { className: 'st-extras' });
+  extra.innerHTML = `<button type="button" class="chip" data-go="newtrip:${esc(sig)}">${icon('trip', 17)}${esc(t('saveTripHere'))}</button>`;
   return {
     name: () => stations.get(sig)?.name ?? st0.name, kind: 'station',
     show(el, { prev, dir, again = false }) {
-      el.append(boardEl);
+      el.append(boardEl, extra);
+      if (!again && !peekTipSeen()) extra.insertAdjacentHTML('afterbegin', `<p class="tip">${icon('info', 16)}<span>${esc(t('peekTip'))}</span></p>`);
       const st = stations.get(sig) ?? st0;
       if (board.openSig !== sig) board.open(st);
       map.unfollow();
@@ -455,6 +531,12 @@ function stationPage(sig) {
     star: { on: () => favourites.has('station', sig), toggle: () => favourites.toggle('station', sig) },
     redraw: () => board.relabel(),
   };
+}
+// The Peek tip shows on the first board ever opened on this phone (then remembered).
+const PEEK_TIP = 'peekTipSeen';
+function peekTipSeen() {
+  try { if (localStorage.getItem(PEEK_TIP) === 'true') return true; localStorage.setItem(PEEK_TIP, 'true'); } catch { /* shown, not remembered */ }
+  return false;
 }
 async function openStation(sig, { go = false } = {}) {
   if (!stations.get(sig)) return;
@@ -619,6 +701,13 @@ document.getElementById('help-button').onclick = () => { closeNav(); stack.open(
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
+// The stations whose name holds the text (the search; also My trains' station picker), those starting with it first.
+function menuStations(text) {
+  const q = fold(text);
+  return [...stations.values()]
+    .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
+    .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
+}
 const menu = createMenu({
   input: document.getElementById('search'),
   list: document.getElementById('search-results'),
@@ -626,12 +715,7 @@ const menu = createMenu({
     .filter(r => String(r.number).startsWith(digits))
     .sort((a, b) => String(a.number).length - String(b.number).length || Number(a.number) - Number(b.number))
     .map(r => ({ id: r.id, operational: r.operational, date: r.date, number: r.number, company: lateness.brand(r.id), time: r.time })),
-  findStations(text) {
-    const q = fold(text);
-    return [...stations.values()]
-      .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
-      .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
-  },
+  findStations: text => menuStations(text),
   async searchTimetable(number) {
     const found = await fetchRunsByNumber(number, now());
     return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to), at: found.length > 1 && t.start !== null ? hhmm(t.start) : null }));
@@ -870,6 +954,7 @@ function wantStats() { if (live) stats.wantCancelled(askCancelled, now()); daySt
 const pageData = {
   frame: () => frameAll, lateOf, numberOf: id => trains.get(id)?.number ?? '?',
   favourites, stations: () => stations, location: () => map.location, stationName,
+  myTrains: () => myTrains?.mineHtml() ?? null,   // the saved trips and pinned changes in Mine (src/my-trains.js)
   disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
   snapshot, filter, still: STAND_MS,
   legend: { get: () => legend, set: (k) => { legend = legend === k ? null : k; light(legend ? legendTest(legend) : null); homeDef.redraw(); } },
@@ -1306,6 +1391,9 @@ setInterval(() => {
 // ---- The one sheet: made last, once everything its pages use is there (src/stack.js) ----
 function define(key) {
   if (key === 'home') return homeDef;
+  // My trains ('trip:', 'change:', 'newtrip', 'addchange:') and the ride page ('ride:'): their own modules
+  const own = myTrains?.define(key) ?? ride?.define(key);
+  if (own !== undefined) return own;
   const i = key.indexOf(':'), type = i < 0 ? key : key.slice(0, i), v = i < 0 ? '' : key.slice(i + 1);
   switch (type) {
     case 'train': return trainPage(v);
@@ -1352,4 +1440,39 @@ window.__stack = {
   get heights() { return stack.heights; }, get searching() { return stack.searching; },
   open: (key, opts) => stack.open(key, opts), back: () => stack.back(), home: level => stack.home(level), setLevel: i => stack.setLevel(i),
 };
+
+// ---- The sheet's ideas (build plan parts 3 and 6, 2026-11-23) ----
+const openTrainRow = r => pickTrain({ id: r.key, operational: r.operational, date: r.date, number: r.number, onMap: Boolean(trains.get(r.key)) });
+const followOnly = id => map.follow(() => placeNow(id), () => {});
+// My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
+myTrains = createMyTrains({ stack, line, stationName, findStations: text => menuStations(text), openTrain: openTrainRow, trainInfo,
+  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); } });
+// "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
+ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frameAll, info: id => trainInfo(id), stationName, lateOf,
+  follow: followOnly, unfollow: () => map.unfollow() });
+// Peek: hold a station on the map (src/peek.js).
+peek = createPeek({ box: mapEl, stationAt: (x, y) => map.stationAt(x, y), load: sig => fetchBoard(sig, 'Avgang', now(), 3), stationName,
+  blocked: () => Boolean(shop?.running) });
+// The shop window (src/shop-window.js; Settings → Shop window).
+shop = createShopWindow({ map, enabled: () => settings.shopWindow,
+  busy: () => stack.level > 0 || stack.searching || !navEl.hidden || Boolean(hooks.dayOther?.()),
+  trains() {
+    const said = new Map(speedLog.moving(now()));
+    return frameAll.filter(x => !x.stale).map(x => ({ id: x.id, number: trains.get(x.id)?.number ?? '', brand: x.brand, lon: x.lon, lat: x.lat,
+      speed: said.get(x.id) ?? (x.v ?? 0) * 3.6, bearing: x.bearing ?? 0, late: lateOf(x.id) }));
+  },
+  disruptions: () => (live && disruptions.loaded ? disruptions.list.filter(d => !isWork(d)).map(d => ({ id: d.id, header: d.header, place: disruptions.placeOf(d) })) : []),
+  follow: followOnly, unfollow: () => map.unfollow() });
+// A shared link (#train=531, src/share.js): today's run of that number, once the trains are in (on the map: there;
+// otherwise its run now, the next one, or the latest, as a starred train).
+if (sharedAt) {
+  (async () => {
+    await map.shown;
+    const t0 = Date.now();
+    while (!trains.count && Date.now() - t0 < 15000) await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 1200));
+    pickFavouriteTrain(sharedAt);
+  })();
+}
+if (import.meta.env.DEV) window.__ideas = { myTrains, ride, peek, shop, why: id => whyFor(id), stoodFor: id => stoodFor(id, now()), favourites };
 

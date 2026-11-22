@@ -105,7 +105,7 @@ export function createDisruptions({ load, now, station, net, onData }) {
   }
 
   // loaded: the first answer has come (until then the list says "Laddar…", not "no disruptions"; 2026-11-20).
-  return { start, get list() { return list; }, get loaded() { return last > 0; }, byId: id => list.find(d => d.id === id) ?? null, placeOf, boundsOf };
+  return { start, get list() { return list; }, get loaded() { return last > 0; }, byId: id => list.find(d => d.id === id) ?? null, placeOf, boundsOf, stretchesOf };
 }
 
 // The places of a disruption in words: "Göteborg C – Alingsås".

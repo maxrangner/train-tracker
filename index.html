@@ -237,6 +237,91 @@
         .panel-star[aria-pressed="true"] { color: var(--c-some); }
     .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .menu-text { margin: 0; color: var(--ink); }
+
+    /* ---- The sheet's ideas (build plan parts 3 and 6, 2026-11-23) ---- */
+    /* A train's page under its tiles: why it stands, Share, Add my change. */
+    .tr-extras { display: grid; gap: 8px; margin: 4px 0 2px; }
+    .tr-acts, .st-extras { display: flex; flex-wrap: wrap; gap: 8px; }
+    .st-extras { margin-top: 4px; }
+    .tr-acts .chip, .st-extras .chip { gap: 7px; }
+    .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
+      background: var(--t-some-bg); color: var(--t-some); font: inherit; }
+    .why.none { background: var(--hover); color: var(--muted); }
+    .why.dis { background: var(--t-late-bg); color: var(--t-late); cursor: pointer; }
+    .why-t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+    .why-t small { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+    .why-t span { color: var(--ink); font-size: 15px; font-weight: 650; }
+    .tip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 9px 12px; border-radius: 12px; background: var(--hover); color: var(--muted); font-size: 13.5px; }
+    .tip .icon { color: var(--accent); }
+    /* My trains: Mine's rows, a trip's page, a change, a new trip. */
+    .r-ic.trip { color: var(--accent); }
+    .r-ic.trip.tight { background: var(--t-some-bg); color: var(--t-some); }
+    .r-ic.trip.lost { background: var(--t-late-bg); color: var(--t-late); }
+    .add-row .r-ic { color: var(--accent); }
+    .add-row b { color: var(--accent); }
+    .trip-row .via { font-style: normal; font-weight: 500; color: var(--muted); font-size: 13px; }
+    .trip-next { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--hover); }
+    .trip-next small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .trip-next b { font-size: 30px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+    .trip-next b .m { font-size: 18px; }
+    .trip-next > span:not(.tag) { grid-column: 1; color: var(--muted); font-size: 14.5px; font-weight: 600; }
+    .trip-next > .tag { grid-column: 2; grid-row: 2 / span 2; justify-self: end; }
+    .trip-next.tight { background: var(--t-some-bg); } .trip-next.tight b { color: var(--t-some); }
+    .trip-next.lost { background: var(--t-late-bg); } .trip-next.lost b { color: var(--t-late); }
+    .trip-next.ok b { color: var(--t-ontime); }
+    .m.some { color: var(--t-some); } .m.late { color: var(--t-late); }
+    .trip-fails { margin: -4px 2px 0; color: var(--muted); font-size: 14px; font-weight: 600; }
+    .trip-pair { border: 1px solid var(--line); border-radius: 14px; padding: 0 10px; margin-bottom: 8px; }
+    .trip-pair .bd-row { border-bottom: 0; }
+    .trip-chg, .chg-min { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 10px; font-size: 13.5px; font-weight: 700; }
+    .chg-min { display: inline-flex; padding: 3px 8px; font-size: 12.5px; white-space: nowrap; }
+    :is(.trip-chg, .chg-min).ok { background: var(--t-ontime-bg); color: var(--t-ontime); }
+    :is(.trip-chg, .chg-min).tight { background: var(--t-some-bg); color: var(--t-some); }
+    :is(.trip-chg, .chg-min).lost { background: var(--t-late-bg); color: var(--t-late); }
+    .nt-fields { display: grid; gap: 8px; }
+    .nt-field { display: grid; gap: 1px; width: 100%; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--hover); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    .nt-field small { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .nt-field b { font-size: 16.5px; font-weight: 700; }
+    .nt-field.on { box-shadow: inset 0 0 0 2px var(--accent); }
+    .nt-addvia { justify-self: start; }
+    .nt-q { width: 100%; box-sizing: border-box; }
+    .nt-save { justify-self: start; }
+    .nt-save:disabled { opacity: .45; cursor: default; }
+    /* The line above the bar's own mark (a trip, a change, a train you seem to be on). */
+    #line .ln-ic { flex: none; display: grid; color: var(--accent); }
+    #line .ln-ic.tight { color: var(--t-some); } #line .ln-ic.lost { color: var(--t-late); }
+    #line .line-main > .tag { flex: none; margin-left: 2px; }
+    /* The ride page: big and simple. */
+    .ride { display: grid; gap: 12px; }
+    .ride-lab { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .ride .ttl { font-size: 24px; white-space: normal; }
+    .ride-next { display: grid; grid-template-columns: 1fr auto; align-items: end; column-gap: 12px; padding: 14px 16px; border-radius: 18px; background: var(--hover); }
+    .ride-next > small:first-child { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .ride-next > b { font-size: 28px; font-weight: 800; line-height: 1.15; }
+    .ride-min { grid-row: 2 / span 2; grid-column: 2; font-size: 18px; font-weight: 700; color: var(--muted); }
+    .ride-min b { font-size: 46px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .ride-next > small:last-child { color: var(--muted); font-size: 14px; }
+    .ride .tile b { font-size: 26px; }
+    .ride .show-only { justify-self: start; }
+    /* Peek: the bubble at the finger. */
+    #peek { pointer-events: none; z-index: 12; min-width: 240px; max-width: min(320px, calc(100vw - 16px)); }
+    #peek .state { padding: 8px 12px; }
+    .pk-row { display: grid; grid-template-columns: 44px 1fr auto 22px; align-items: center; column-gap: 8px; padding: 6px 10px; font-size: 14px; }
+    .pk-row b { font-variant-numeric: tabular-nums; }
+    .pk-row span:not(.tag) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .pk-row i { font-style: normal; color: var(--muted); text-align: center; font-weight: 700; }
+    .pk-row .tag { margin: 0; }
+    .pk-row.canceled b, .pk-row.canceled span:not(.tag) { text-decoration: line-through; color: var(--muted); }
+    #peek .empty { padding: 4px 12px 8px; }
+    /* The shop window: everything pressable fades, one line of words at the bottom; a touch anywhere ends it. */
+    html.shop :is(#sheet, #line, #status, #nav, #trail, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease !important; }
+    #shop { position: fixed; inset: 0; z-index: 30; background: transparent; }
+    .shop-line { position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); margin: 0; max-width: calc(100% - 40px);
+      padding: 10px 18px; border-radius: 22px; background: var(--card); color: var(--ink); box-shadow: var(--shadow); font: 650 16px/1.3 var(--font); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .shop-line.in { animation: shop-in .6s ease both; }
+    @keyframes shop-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+    @media (prefers-reduced-motion: reduce) { .shop-line.in { animation: none; } }
+    .help-tips { margin: 0; padding: 0 0 0 18px; display: grid; gap: 8px; font-size: 14.5px; line-height: 1.4; }
     .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
     .set-row > span:first-child, .set-row > label { font-size: 14px; }
     .seg { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--hover); }
@@ -1049,6 +1134,8 @@
         <div class="seg" data-key="colourBlind" role="group" aria-label="Colour-blind mode" data-t-aria="colourBlind"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span><span data-t="allPlaces">All places</span><small class="set-sub" data-t="allPlacesSub">between the stops, on a train's page</small></span>
         <div class="seg" data-key="allPlaces" role="group" aria-label="All places" data-t-aria="allPlaces"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
+      <div class="set-row"><span><span data-t="shopWindow">Shop window</span><small class="set-sub" data-t="shopWindowSub">on its side, untouched for 30 s: the map tours by itself</small></span>
+        <div class="seg" data-key="shopWindow" role="group" aria-label="Shop window" data-t-aria="shopWindow"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="debug-only set-section menu-label" data-t="debug">Debug</div>
@@ -1096,6 +1183,25 @@
         <button id="bug-button" class="about-btn" type="button"><span class="about-ic"></span><span data-t="reportBug">Report a bug</span></button>
       </div>
       <p class="about-soon" data-t="comingSoon">Both buttons work soon.</p>
+      <h3 data-t="helpTips">Good to know</h3>
+      <ul class="help-tips" data-lang="en">
+        <li><b>My trains.</b> Home → Mine → New trip, or "Save a trip from here" on a station's board: today's trains between two stations, with a change if you like. The next one shows just above the search bar; a tap opens the trip.</li>
+        <li><b>Add my change.</b> On a train's page: pick where you change and the train you change to. Mine then shows the minutes you have, both tracks, yellow when tight, red when lost.</li>
+        <li><b>Peek.</b> Hold a finger on a station on the map: its next three departures, until you let go. With a mouse, hold the button.</li>
+        <li><b>You seem to be on…</b> With My location on, the app notices the train you ride on and offers to ride along: next stop, minutes, track. Your place stays on the phone; it is never saved or sent.</li>
+        <li><b>Why are we standing?</b> A train that has stood still for a minute says why, when Trafikverket says it: a disruption on the line, its own note, or how late it is leaving.</li>
+        <li><b>Share.</b> On a train's page: a link that opens Spårat on that train.</li>
+        <li><b>Shop window.</b> Lay the phone on its side and leave it for 30 s: the buttons fade and the map tours Sweden (the fastest train, the most late, a disruption, two trains meeting). A touch brings everything back. Off in Settings.</li>
+      </ul>
+      <ul class="help-tips" data-lang="sv" hidden>
+        <li><b>Mina tåg.</b> Hem → Mina → Ny resa, eller "Spara en resa härifrån" på en stations tavla: dagens tåg mellan två stationer, med ett byte om du vill. Nästa tåg syns precis ovanför sökfältet; ett tryck öppnar resan.</li>
+        <li><b>Lägg till mitt byte.</b> På ett tågs sida: välj var du byter och tåget du byter till. Under Mina syns då minuterna du har och båda spåren, gult när det är snålt, rött när bytet missas.</li>
+        <li><b>Snabbtitt.</b> Håll fingret på en station på kartan: dess tre nästa avgångar, tills du släpper. Med mus: håll knappen nere.</li>
+        <li><b>Du verkar sitta på…</b> Med Min plats på märker appen tåget du åker med och erbjuder att åka med: nästa stopp, minuter, spår. Din plats stannar i telefonen; den sparas eller skickas aldrig.</li>
+        <li><b>Varför står vi?</b> Ett tåg som har stått still en minut säger varför, när Trafikverket säger det: en störning på linjen, deras egen anteckning, eller hur sent det går.</li>
+        <li><b>Dela.</b> På ett tågs sida: en länk som öppnar Spårat på det tåget.</li>
+        <li><b>Skyltfönster.</b> Lägg telefonen på sidan och låt den vara i 30 s: knapparna tonas bort och kartan visar runt i Sverige (snabbaste tåget, det mest sena, en störning, två tåg som möts). Ett tryck tar tillbaka allt. Stängs av i Inställningar.</li>
+      </ul>
       <h3 data-t="credits">Credits</h3>
       <ul class="about-credits" data-lang="en"><li><span>Trains, timetables, stations, tracks, disruptions</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (open data)</b></li><li><span>Map data</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, ODbL</b></li><li><span>Map tiles</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Map style</span><b>Positron and Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> and CARTO (CC BY 4.0), recoloured</b></li><li><span>Drawn with</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Fonts</span><b>Outfit and Noto Sans, SIL Open Font License</b></li><li><span>Spårat: source code (free software, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
       <ul class="about-credits" data-lang="sv" hidden><li><span>Tåg, tidtabeller, stationer, spår, störningar</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (öppna data)</b></li><li><span>Kartdata</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> bidragsgivare, ODbL</b></li><li><span>Kartrutor</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Kartstil</span><b>Positron och Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> och CARTO (CC BY 4.0), omfärgade</b></li><li><span>Byggd med</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Typsnitt</span><b>Outfit och Noto Sans, SIL Open Font License</b></li><li><span>Spårat: källkod (fri programvara, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>

@@ -89,7 +89,7 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
 // In the one sheet (2026-11-22, src/stack.js): onCloseTap(id) is what its × does (the page goes; the × is hidden and
 // stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
 // sets .full); onStop(sig): a stop in the timeline tapped (its station's page).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop }) {
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, extra = null }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -556,6 +556,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
           (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
     wireHead();
+    // The page's own parts under the tiles (src/main.js: why it stands, Share, Add my change; 2026-11-23)
+    const x = stops.length ? extra?.(openId) : null;
+    if (x) { const at = el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
@@ -639,5 +642,5 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   const hide = () => { el.hidden = true; };
   const show = () => { if (openId) el.hidden = false; };
   const toggleFollow = () => { if (!openId || !canFollow) return; setFollowing(!following); onFollow?.(openId, following); };
-  return { open, close, hide, show, setFollowing, toggleFollow, get following() { return following && canFollow; }, get canFollow() { return Boolean(openId) && canFollow; }, get number() { return number; }, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
+  return { open, close, hide, show, setFollowing, toggleFollow, get following() { return following && canFollow; }, get canFollow() { return Boolean(openId) && canFollow; }, get number() { return number; }, get route() { return shown?.train?.id === openId ? shown.route ?? null : null; }, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }
