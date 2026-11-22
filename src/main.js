@@ -1038,7 +1038,7 @@ async function fileOf(kind) {
   return f;
 }
 // { count, byBrand (null from a file made before 2026-11-21) }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null })) : fetchCancelledToday(swedishDay(now())); }
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null, day: f.day ?? null })) : fetchCancelledToday(swedishDay(now())); }
 // Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
 async function filesArrivals(midnight, since) {
   const full = await fileOf('arrivals');

@@ -121,12 +121,15 @@ export function createDayStats({ now, loadArrivals = fetchDayArrivals }) {
     // numbers saved earlier today; Max, 2026-11-21: the graph "doesn't indicate loading before appearing") }.
     // brand: only that company's trains (its arrivals, its stations, trains: its train numbers seen today).
     view(brand = null) {
+      // The day turned while the page was open: the new day at once (until 2026-11-22 yesterday's bars stood under
+      // "Today" until the next ask, up to 5 minutes; TODO 62).
+      if (day !== null && swedishDay(now()) !== day) { reset(swedishDay(now())); lastTry = 0; }
       const hourNow = Math.min(HOURS - 1, Math.floor((now() - midnight) / 3600000));
       const state = asOf !== null ? 'ok' : failed ? 'failed' : 'loading';
       const busy = asking && (asOf === null || asOf < openedAt);
-      if (brand === null) return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow, stations: perStation, busy };
+      if (brand === null) return { state, failed, hours: counts.slice(0, hourNow + 1), hourNow, stations: perStation, busy, midnight };
       // no company known for any row (the public page's files before the server's 2026-11-21 update): not known
-      if (state === 'ok' && brandOf.size === 0) return { state: 'unknown', failed, hours: [], hourNow, stations: new Map(), trains: null, busy };
+      if (state === 'ok' && brandOf.size === 0) return { state: 'unknown', failed, hours: [], hourNow, stations: new Map(), trains: null, busy, midnight };
       if (brandView?.brand !== brand || brandView.version !== version) {
         const c = Array.from({ length: HOURS }, () => [0, 0, 0]), st = new Map(), numbers = new Set();
         for (const [id, v] of rows) {
@@ -139,7 +142,7 @@ export function createDayStats({ now, loadArrivals = fetchDayArrivals }) {
         }
         brandView = { brand, version, counts: c, stations: st, trains: numbers.size };
       }
-      return { state, failed, hours: brandView.counts.slice(0, hourNow + 1), hourNow, stations: brandView.stations, trains: brandView.trains, busy };
+      return { state, failed, hours: brandView.counts.slice(0, hourNow + 1), hourNow, stations: brandView.stations, trains: brandView.trains, busy, midnight };
     },
   };
 }

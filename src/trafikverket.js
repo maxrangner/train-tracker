@@ -2,7 +2,7 @@
 // Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
 // version, so the page and the fetcher ask Trafikverket the same things.
 import { joinPieces, tripsOf, NUMBER_FIELDS } from './trip.js';
-import { swedishDay, addDays } from './clock.js';
+import { swedishDay, addDays, midnightOf } from './clock.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 // In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
@@ -453,7 +453,9 @@ export async function fetchBoard(sig, activity, at, n) {
 // cancelled and its time passed). The question asks from 2 hours before Swedish midnight on (a day's length plus a
 // clock change), the day itself is cut here. Stockholm C's departures on a weekday: about 900 rows.
 export async function fetchStationDay(sig, activity, at) {
-  const day = swedishDay(at), from = Date.parse(`${day}T00:00:00Z`) - 2 * 3600000;
+  // From an hour before the real Swedish midnight (until 2026-11-22 UTC midnight - 2 h, which in summer is exactly
+  // Swedish midnight: with GT a 00:00 train was left out; TODO 62).
+  const day = swedishDay(at), from = midnightOf(day) - 3600000;
   const r = await askTap('day', { sig, act: activity, at },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="4000">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
