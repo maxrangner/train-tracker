@@ -148,6 +148,8 @@ add(check('upload-check', depsOf('tools/upload-check.mjs'), plain(['tools/upload
 add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { short: true })));
 // The monitor's mail rules on made-up timelines (offline, under a second; in the check since 2026-11-22).
 add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// The sun's line against published sunrise and sunset times (offline, under a second; 2026-11-22).
+add(check('sun-check', depsOf('tools/sun-check.mjs'), plain(['tools/sun-check.mjs'], { short: true })));
 // An odd row stops no feed (positions, passings, a reader that throws; offline, under a second; 2026-11-22).
 add(check('stream-guard-check', depsOf('tools/stream-guard-check.mjs'), plain(['tools/stream-guard-check.mjs'], { short: true })));
 // The fetcher's planned-route questions when one fails: the rest still asked (offline, under a second; 2026-11-22).
