@@ -49,7 +49,7 @@ const replay = new URLSearchParams(location.hash.slice(1)).get('replay');
 const hashOpt = new URLSearchParams(location.hash.slice(1));
 const filesBase = replay ? null : (import.meta.env.DEV && hashOpt.get('files')) || import.meta.env.VITE_DATA_URL || null;
 const fromFiles = Boolean(filesBase);
-if (fromFiles) setTapAsker(filesTapAsker(kind => positionsFeed?.latest?.(kind) ?? Promise.resolve(null), now));
+if (fromFiles) setTapAsker(filesTapAsker(kind => positionsFeed?.latestNow?.(kind) ?? Promise.resolve(null), now));   // (asked at once: 2026-11-22)
 const live = !replay && (hasKey || fromFiles);   // live data of some kind: stations, disruptions, stats, messages
 // The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement is as
 // good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).
