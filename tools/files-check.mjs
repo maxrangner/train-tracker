@@ -56,7 +56,9 @@ function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordA
   globalThis.fetch = (url, opts = {}) => {
     const name = String(url).split('/').pop();
     asked.push({ name, at: Date.now() });
-    const answer = val => Promise.resolve({ ok: val !== null, status: val === null ? 404 : 200, json: async () => val });
+    // (with the site's Date header, whole seconds, as one.com sends)
+    const headers = { get: k => (k.toLowerCase() === 'date' ? new Date(Math.floor((Date.now() + ahead) / 1000) * 1000).toUTCString() : null) };
+    const answer = val => Promise.resolve({ ok: val !== null, status: val === null ? 404 : 200, headers, json: async () => val });
     const m = /^live-(\d+)\.json$/.exec(name);
     if (m) {
       const made = Number(m[1]) * 5000 + 50;
@@ -140,7 +142,9 @@ const handlers = (extra = {}) => ({ onRecords() {}, onStatus() {}, onPassings() 
 // 6b. a phone clock off (point 11, TODO 41): before 2026-11-21 a clock 30 s slow found a 30-s-old file every time
 // and never learnt better; 2 minutes slow found nothing. Three minutes on the pretend clock; "fresh": read within 5 s
 // of being made (the newest file); the live requests in the third minute against the 12 a minute of the reads.
-for (const [ahead, what] of [[0, 'right'], [-10000, '10 s fast'], [30000, '30 s slow'], [60000, '1 minute slow'], [120000, '2 minutes slow']]) {
+// A clock far off (TODO 62, 2026-11-22: more than about two minutes off never found a file): set from the site's Date header.
+for (const [ahead, what] of [[0, 'right'], [-10000, '10 s fast'], [30000, '30 s slow'], [60000, '1 minute slow'], [120000, '2 minutes slow'],
+  [-300000, '5 minutes fast'], [3600000, '1 hour slow'], [-3600000, '1 hour fast']]) {
   const reads = [];   // { at: phone's clock since start, age: by the site's clock }
   let asked, start;
   await fast(async (sleep) => {
@@ -154,7 +158,7 @@ for (const [ahead, what] of [[0, 'right'], [-10000, '10 s fast'], [30000, '30 s 
   const freshFrom = lastStale === undefined ? 0 : (reads.find(r => r.at > lastStale)?.at ?? Infinity);
   const third = asked.filter(a => a.at - start >= 120000 && /^live-/.test(a.name)).length;
   const fresh = reads.filter(r => r.at >= 120000).length;
-  const limit = ahead > 0 ? 20000 : 10000;   // (the first file can be 5-6.5 s old, by when the page opens in a slot)
+  const limit = Math.abs(ahead) > 150000 ? 30000 : ahead > 0 ? 20000 : 10000;   // (the first file can be 5-6.5 s old, by when the page opens in a slot)
   ok(freshFrom <= limit && third <= fresh + 1 && fresh >= 11,
     `a clock ${what}: fresh files from ${(freshFrom / 1000).toFixed(0)} s on (limit ${limit / 1000} s); third minute: ${fresh} files read with ${third} live requests`);
 }

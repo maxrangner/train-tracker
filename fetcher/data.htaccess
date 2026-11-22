@@ -14,5 +14,7 @@ Header always set Cache-Control "public, max-age=300" "expr=%{REQUEST_STATUS} ==
 Header always set Cache-Control "no-store" "expr=%{REQUEST_STATUS} != 200"
 Header always set Content-Encoding "gzip" "expr=%{REQUEST_STATUS} == 200"
 Header always set Access-Control-Allow-Origin "*"
+# The Date header readable by the apps too (a phone clock far off is set from it: src/files-source.js; 2026-11-22)
+Header always set Access-Control-Expose-Headers "Date"
 </FilesMatch>
 </IfModule>
