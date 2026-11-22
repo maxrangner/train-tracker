@@ -32,11 +32,7 @@ const NOTES_KEY = 'notesShown';
 let notesOpen = false;
 try { notesOpen = localStorage.getItem(NOTES_KEY) === 'true'; } catch { /* storage blocked: folded */ }
 const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
-// "All places" (the switch above the stops), remembered on this device like the notes' fold.
-const PLACES_KEY = 'allPlaces';
-let placesOn = false;
-try { placesOn = localStorage.getItem(PLACES_KEY) === 'true'; } catch { /* storage blocked: off */ }
-const rememberPlaces = on => { try { localStorage.setItem(PLACES_KEY, String(on)); } catch { /* used now, not remembered */ } };
+// "All places": Settings → All places since 2026-11-22 (settings.allPlaces; a switch on the card until then).
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
 const notesBox = (lines, problems) => (notesOpen
   ? `<div class="tv-box open"><button type="button" class="tv-toggle tv-fold" aria-expanded="true" aria-label="${t('foldNotes')}">${icon('chevronUp', 15)}</button>` +
@@ -90,7 +86,10 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
   (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
 
 // places(id, route, stops): the places passed without stopping between the card's stops (src/places-ahead.js tripPlaces).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf }) {
+// In the one sheet (2026-11-22, src/stack.js): onCloseTap(id) is what its × does (the page goes; the × is hidden and
+// stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
+// sets .full); onStop(sig): a stop in the timeline tapped (its station's page).
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -111,7 +110,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${icon('follow', 15)}<span>${t(following ? 'following' : 'follow')}</span></button>` : '') +
     `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>`;
   function wireHead() {
-    el.querySelector('.panel-close').onclick = close;
+    el.querySelector('.panel-close').onclick = () => (onCloseTap ? onCloseTap(openId) : close());
     const f = el.querySelector('.panel-follow');
     if (f) f.onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
     const s = el.querySelector('.panel-star');
@@ -452,7 +451,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // "All places": the places between the stops, in soft boxes (one per run of passed or ahead places), a small dot on
     // the line beside each; passed ones with the planned time and the minutes off, ahead ones (worked out from the
     // route: Trafikverket lists them only once passed) the name only. The train's line goes between the two.
-    const between = placesOn && places ? places(openId, route, stops) : null;
+    const between = settings.allPlaces && places ? places(openId, route, stops) : null;
     const nowLine = `<div class="tl-now"><span></span><span class="tl-node"><span class="tl-train">${icon('train', 17)}</span></span><span class="tl-now-text"></span></div>`;
     const placeRows = (list, withNow) => {
       const parts = [];
@@ -496,7 +495,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       // Where the train is: the minutes to the next stop (or till it leaves the one it stands at), each second
       // (showGlance; Max, 2026-11-15: "Nu · nästa station X" said nothing new).
       const now = i === nextIdx && i > 0 && !between ? nowLine : '';
-      return now + `<div class="tl-row ${state}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
+      return now + `<div class="tl-row ${state}" data-sig="${esc(s.station)}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
         `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>` +
         (between ? placeRows(between[i], i === nextIdx - 1 && nextIdx > 0) : '');
@@ -553,18 +552,15 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
-          (places ? `<div class="tl-switch"><span>${t('allPlaces')}<small>${t('allPlacesSub')}</small></span>` +
-            `<button type="button" class="tl-switch-btn" role="switch" aria-checked="${placesOn}" aria-label="${t('allPlaces')}"></button></div>` : '') +
           `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>` +
           (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
     wireHead();
     const more = el.querySelector('.panel-more');
-    if (more) more.onclick = () => glide(el, () => el.classList.toggle('full'));   // (glides: Max's phone test, 2026-11-17)
+    if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
-    const sw = el.querySelector('.tl-switch-btn');
-    if (sw) sw.onclick = () => { placesOn = !placesOn; rememberPlaces(placesOn); draw(train, route); };
+    if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();
     if (infoScrolled) el.querySelector('.panel-info-box').scrollTop = infoScrolled;
@@ -582,7 +578,16 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   }
   function toNext() {
     const box = el.querySelector('.panel-table'), next = el.querySelector('.tl-now') ?? el.querySelector('.tl-row.next');
-    if (box && next && box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
+    if (!box || !next) return;
+    // In the sheet the page scrolls, not the timeline (src/stack.js): the page, so the train's place is in its middle.
+    const page = el.closest('.pg');
+    // (only when the train's place is below the fold: the card's head and tiles stay in view when they can)
+    if (page) {
+      const at = next.getBoundingClientRect().top - page.getBoundingClientRect().top;
+      if (page.clientHeight && el.classList.contains('full') && at > page.clientHeight - 60) page.scrollTop += at - page.clientHeight * 0.6;
+      return;
+    }
+    if (box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
   let wasFull = el.classList.contains('full'), switchTimer = 0;
   new MutationObserver(() => {
@@ -599,7 +604,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
 
   // The open train's route is drawn (main.js): with "All places" on, the places worked out from it come in.
   function placesReady(id) {
-    if (placesOn && id === openId && shown?.route && shown.train?.id === openId) draw(shown.train, shown.route);
+    if (settings.allPlaces && id === openId && shown?.route && shown.train?.id === openId) draw(shown.train, shown.route);
   }
 
   // Draw it again as it is (Settings → Language changed): no new request, the map stays as it is.
@@ -633,5 +638,6 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // and shown again; it stays up to date meanwhile.
   const hide = () => { el.hidden = true; };
   const show = () => { if (openId) el.hidden = false; };
-  return { open, close, hide, show, setFollowing, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
+  const toggleFollow = () => { if (!openId || !canFollow) return; setFollowing(!following); onFollow?.(openId, following); };
+  return { open, close, hide, show, setFollowing, toggleFollow, get following() { return following && canFollow; }, get canFollow() { return Boolean(openId) && canFollow; }, get number() { return number; }, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }

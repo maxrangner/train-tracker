@@ -410,7 +410,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // Not on a secure address: the button greyed (round 4: a plain grey icon, not MapLibre's red slash), a tap explains.
   if (!window.isSecureContext) map.getContainer().classList.add('geo-off');
   geoBox?.addEventListener('pointerdown', () => { if (!window.isSecureContext) showNote(t('noLocation')); }, true);
-  geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); });
+  geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); here = null; });
+  // Where this phone is while My location is on (Home's "Near you", src/home.js): never stored or sent.
+  let here = null;
+  geolocate.on('geolocate', (e) => { here = { lon: e.coords.longitude, lat: e.coords.latitude, at: Date.now() }; });
   // The button's words in the page's language (again after a change of language: relabel).
   function relabelControls() {
     const b = geoBox?.querySelector('button');
@@ -1314,6 +1317,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // was let go (Max, 2026-11-13 evening: "snaps into a slightly different position after letting go", "snaps and
   // turns"; measured at 55° tilt: the size round the train jumped 29 % in one frame; flat, nothing moved).
   let following = null;       // { getPlace, onEnd, locked, focus: { x, y }, place }
+  let rideStop = null;        // a ride under way (ride below): stops it
   if (import.meta.env.DEV) window.__followFocus = () => following?.focus ?? null;   // for tools/follow-check.mjs
   const pointers = new Set(); // fingers (or the mouse button) down on the map
   const box = map.getContainer();
@@ -1334,22 +1338,29 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   });
   const GAP = 10, CARD_W = 420;
   const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
+  // The one sheet (src/stack.js, 2026-11-22): the map's free part is above it (a phone) or beside and above it (a
+  // wider screen, where it floats at the bottom left). sheetH: its resting height (at most half: setSheet). TOP: the
+  // live mark at the top; nothing else covers the map's top since the top bar went.
+  let sheetH = Math.round(size.h * 0.12);
+  const TOP = 48;
   // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
   // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
   // needs, so the free map is to its right.
-  const NARROW_PX = 440, TOP_BAR = 62;
+  const NARROW_PX = 440;
   const narrow = () => size.w < NARROW_PX;
   // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
-  // The bottom card's top edge (a phone), with a margin.
-  const panelTop = () => size.h - (Math.round(size.h * 0.45) + 20);
-  // Where a train is held: the middle of the screen when the card leaves it free (Max, 2026-11-15: "the default set
-  // position for following does not have the train centered in view"), otherwise the middle of the map above it.
-  const defaultFocus = () => (narrow() ? { x: size.w / 2, y: panelTop() / 2 }
-    : cardInMiddle() ? { x: (cardRight() + size.w) / 2, y: size.h / 2 } : { x: size.w / 2, y: size.h / 2 });
-  // Is a screen point behind the card?
-  const behindCard = (at, margin = 0) => at.x < cardRight() + margin &&
-    (narrow() ? at.y > size.h - Math.round(size.h * 0.45) - 10 - margin : at.y > TOP_BAR - margin);
+  // The sheet's top edge, with a margin.
+  const sheetTop = () => size.h - sheetH - (narrow() ? 0 : GAP);
+  const panelTop = () => sheetTop() - 20;
+  // A wide screen's sheet raised past a third of the screen: the free map is beside it, not above it.
+  const sheetSide = () => !narrow() && sheetH > size.h * 0.34;
+  // Where a train is held: the middle of the free map, above the sheet (Max, 2026-11-15: "the default set position
+  // for following does not have the train centered in view"), beside it on a wide screen when it is raised.
+  const defaultFocus = () => (sheetSide() ? { x: cardInMiddle() ? (cardRight() + size.w) / 2 : size.w / 2, y: size.h / 2 }
+    : { x: size.w / 2, y: Math.round((TOP + sheetTop()) / 2) });
+  // Is a screen point behind the sheet?
+  const behindCard = (at, margin = 0) => (narrow() || at.x < cardRight() + margin) && at.y > sheetTop() - margin;
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -1425,8 +1436,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const { w, h } = size, at = map.project([p.lon, p.lat]);
     if (at.x < -LET_GO_PX || at.x > w + LET_GO_PX || at.y < -LET_GO_PX || at.y > h + LET_GO_PX || behindCard(at, -LET_GO_PX)) return stopFollowing(true);
     // Kept 30 px inside the edges, and 30 px clear of the card.
-    const x0 = Math.max(30, Math.min(w - 30, at.x)), x = narrow() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
-    following.focus = { x, y: Math.max(70, Math.min((narrow() && behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
+    const x0 = Math.max(30, Math.min(w - 30, at.x)), x = !sheetSide() ? x0 : Math.max(Math.min(w - 30, cardRight() + 30), x0);
+    following.focus = { x, y: Math.max(TOP + 20, Math.min((behindCard({ x, y: h }, 30) ? panelTop() : h) - 30, at.y)) };
     following.moved = true;     // put there by a drag: kept when the screen's size changes
     following.locked = false;   // locks again at once, or glides back inside the edges
     following.glide = null;
@@ -1574,7 +1585,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const h = map.getContainer().clientHeight;
     flying = true;
     map.fitBounds(bounds,
-      { padding: narrow() ? { top: 70, bottom: Math.round(h * 0.45) + 30, left: 30, right: 60 } : { top: 80, bottom: 30, left: cardRight() + 30, right: 80 },
+      { padding: sheetSide() ? { top: TOP + 20, bottom: 30, left: cardRight() + 30, right: 80 }
+        : { top: TOP + 20, bottom: Math.min(h - TOP - 80, sheetH + 30), left: 30, right: narrow() ? 60 : 80 },
         duration: 1000, maxZoom: 13 });
   }
 
@@ -1653,6 +1665,65 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       map.setTransformCameraUpdate(holdTrain);
     },
     unfollow() { following = null; zoomAroundCenter(false); followRotation(false); map.setTransformCameraUpdate(null); },
+    // The sheet came to rest at this height (src/stack.js; at most its half height): the free map is above it. A
+    // followed train not dragged elsewhere glides to the new free middle (A's sheet, 2026-11-22).
+    setSheet(h) {
+      if (Math.abs(h - sheetH) < 1) return;
+      sheetH = h;
+      if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
+    },
+    // The camera rides the rails (Max's pick A, 2026-11-22: between a train and a station on its route, instead of a
+    // jump): along these places ({ lon, lat }, in order), ending on the last at zoom z, held where defaultFocus is
+    // (above the sheet). It starts and ends slowly; a long way lifts the camera so the line is seen passing under it.
+    // A finger on the map, or another ride, stops it. With "reduce motion" it jumps. Resolves when it is there (true)
+    // or was stopped (false).
+    ride(points, z1) {
+      return ready.then(() => new Promise((resolve) => {
+        rideStop?.(false);
+        if (!points?.length) { resolve(false); return; }
+        if (following) stopFollowing(false);
+        const mx = lon => (lon + 180) / 360, my = lat => (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2;
+        const unx = X => X * 360 - 180, uny = Y => Math.atan(Math.sinh(Math.PI * (1 - 2 * Y))) * 180 / Math.PI;
+        const P = points.map(q => [mx(q.lon), my(q.lat)]), cum = [0];
+        for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+        const total = cum[cum.length - 1], z0 = map.getZoom(), f = defaultFocus();
+        // the place shown at the focus, not the screen's middle: the centre is that much off it (flat, north up: exact;
+        // turned, the offset turns with the map)
+        const b = map.getBearing() * Math.PI / 180, dx = f.x - size.w / 2, dy = f.y - size.h / 2;
+        const ox = dx * Math.cos(b) + dy * Math.sin(b), oy = -dx * Math.sin(b) + dy * Math.cos(b);
+        const centreAt = (X, Y, z) => { const k = 512 * 2 ** z; return [unx(X - ox / k), uny(Y - oy / k)]; };
+        const px = total * 512 * 2 ** Math.min(z0, z1);
+        const lift = Math.max(0, Math.min(4.4, Math.log2(px / (size.w * 1.3))));
+        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const ms = px < 40 ? 420 : Math.round(800 + 80 * lift), t0 = performance.now();
+        const ease = u => (u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2);
+        let raf = 0;
+        const end = (ok) => { cancelAnimationFrame(raf); flying = false; rideStop = null; box.removeEventListener('pointerdown', byFinger, true); resolve(ok); };
+        const byFinger = () => end(false);
+        rideStop = end;
+        box.addEventListener('pointerdown', byFinger, true);
+        const last = P[P.length - 1];
+        if (still || total === 0) { map.jumpTo({ center: centreAt(last[0], last[1], z1), zoom: z1 }); end(true); return; }
+        flying = true;
+        const step = () => {
+          const u = Math.max(0, Math.min(1, (performance.now() - t0) / ms)), e = ease(u), L = total * e;
+          let i = 1;
+          while (i < cum.length - 1 && cum[i] < L) i++;
+          const piece = cum[i] - cum[i - 1], g = piece ? (L - cum[i - 1]) / piece : 1;
+          const z = Math.max(3.8, z0 + (z1 - z0) * e - lift * Math.sin(Math.PI * u));
+          map.jumpTo({ center: centreAt(P[i - 1][0] + (P[i][0] - P[i - 1][0]) * g, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * g, z), zoom: z });
+          if (u < 1) raf = requestAnimationFrame(step); else end(true);
+        };
+        raf = requestAnimationFrame(step);
+      }));
+    },
+    get riding() { return Boolean(rideStop); },
+    // Where this phone is while My location is on ({ lon, lat }), else null.
+    get location() { return here; },
+    // A short note on the map, for 5 s (also: why My location isn't there).
+    note: text => showNote(text),
+    // The camera's middle and zoom now ({ lon, lat, z }).
+    camera() { const c = map.getCenter(); return { lon: c.lng, lat: c.lat, z: map.getZoom() }; },
     get following() { return Boolean(following); },
     // Resolves once the camera has come to the followed train (or follows none, or after SETTLE_MAX_MS): heavy work
     // for a tapped train (its route) waits for it, so the glide isn't held up (Max, 2026-11-15: "very jerky").

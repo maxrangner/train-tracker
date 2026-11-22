@@ -23,7 +23,8 @@ import { hhmm, now } from './clock.js';
 import { t } from './i18n.js';
 import { glide } from './sheet.js';
 
-export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, isStarred, onStar, messages = null }) {
+// onCloseTap(): what its × does in the one sheet (src/stack.js: the page goes; the × is hidden, kept for the tools).
+export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, onCloseTap, isStarred, onStar, messages = null }) {
   let station = null;     // { sig, name }
   let activity = 'Avgang';
   let rowsSeen = new Set();   // the rows shown since the board or its tab opened (their trains' keys)
@@ -96,7 +97,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       row.append(tabs, el.querySelector('.board-find'));
       el.querySelector('.board-find').onclick = () => (finding ? stopFind() : startFind());
     }
-    el.querySelector('.panel-close').onclick = close;
+    el.querySelector('.panel-close').onclick = () => (onCloseTap ? onCloseTap() : close());
     const s = el.querySelector('.panel-star');
     if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
     // Departures ⇄ Arrivals: the old rows stay, dimmed, until the new ones are there (Max, 2026-11-15: emptied to

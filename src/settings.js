@@ -53,6 +53,10 @@ const DEFAULTS = {
   pillSide: 'auto',
   // Lateness colours colour-blind people can tell apart (Max, 2026-11-21; src/colours.js LATE_SAFE), off.
   colourBlind: false,
+  // The train card's stops with every place passed without stopping between them (src/panel.js, src/places-ahead.js;
+  // Max, 2026-11-21, sketch C: a switch on the card; moved here 2026-11-22, his wish). Until then kept by itself as
+  // localStorage 'allPlaces': read once below.
+  allPlaces: false,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -77,11 +81,14 @@ const KEYS = {
   nameSide: { param: 'nameside' },
   pillSide: { param: 'pillside' },
   colourBlind: { param: 'cb' },
+  allPlaces: { param: 'places' },
 };
 const STORE = 'settings';
 
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') ?? {}; } catch { /* storage blocked or broken: defaults */ }
+// (the card's own switch until 2026-11-22: taken over once)
+try { if (saved.allPlaces === undefined && localStorage.getItem('allPlaces') === 'true') saved.allPlaces = true; } catch { /* storage blocked */ }
 const hash = new URLSearchParams(location.hash.slice(1));
 // A number from lo to hi in half steps, or undefined.
 const halves = (lo, hi) => v => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
@@ -107,6 +114,7 @@ const valid = {
   nameSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  allPlaces: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
