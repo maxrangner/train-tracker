@@ -49,3 +49,6 @@
 .conn-tag.bad { background: var(--t-late-bg); color: var(--t-late); }
 .conn-tag.grey { background: var(--t-unknown-bg); color: var(--t-unknown); }
 @media (prefers-reduced-motion: reduce) { .conn-dot i { animation: none; } }
+/* Errors on the page after the start (index.html window.__pageErrors; 2026-11-22) */
+.conn-error-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+.conn-error-list small { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 4px; }

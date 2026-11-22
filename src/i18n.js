@@ -13,7 +13,7 @@ const EN = {
   navOpen: 'Menu', navAria: 'Menu', closeSearch: 'Close the search', navStats: 'Statistics',
  
   connTitle: 'Connection', connSweden: 'Sweden right now', connReporting: 'trains with new positions', connPulse: 'The pulse: new positions',
-  connNumbers: 'Numbers', connOnMap: 'trains on the map', connFresh: 'trains with a new position in the last minute', connBehind: 'behind live',
+  connErrors: 'Errors on this page', connErrorsNote: 'The map goes on; a reload clears them.', connNumbers: 'Numbers', connOnMap: 'trains on the map', connFresh: 'trains with a new position in the last minute', connBehind: 'behind live',
   connBehindNote: s => `The map runs ${s} s behind, so the trains glide smoothly between reports.`,
   connMeaning: 'What it means', connPausedTag: 'paused', connGreyTag: 'grey train',
   connLegendLive: 'Positions stream in from Trafikverket. Everything works.',
@@ -263,7 +263,7 @@ const SV = {
   navOpen: 'Meny', navAria: 'Meny', closeSearch: 'Stäng sökningen', navStats: 'Statistik',
  
   connTitle: 'Anslutning', connSweden: 'Sverige just nu', connReporting: 'tåg med nya positioner', connPulse: 'Pulsen: nya positioner',
-  connNumbers: 'I siffror', connOnMap: 'tåg på kartan', connFresh: 'tåg med nya positioner senaste minuten', connBehind: 'eftersläpning',
+  connErrors: 'Fel på sidan', connErrorsNote: 'Kartan fungerar vidare; ladda om sidan för att rensa.', connNumbers: 'I siffror', connOnMap: 'tåg på kartan', connFresh: 'tåg med nya positioner senaste minuten', connBehind: 'eftersläpning',
   connBehindNote: s => `Kartan ligger ${s} s efter, så att tågen glider mjukt mellan rapporterna.`,
   connMeaning: 'Vad betyder det?', connPausedTag: 'pausad', connGreyTag: 'grått tåg',
   connLegendLive: 'Positionerna strömmar in från Trafikverket. Allt fungerar.',

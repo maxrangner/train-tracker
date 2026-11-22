@@ -68,11 +68,13 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     const f = failed.get(name) ?? { tries: 0, at: 0 };
     failed.set(name, { tries: f.tries + 1, at: Date.now() });
   };
-  // One file by name (null: not there, or asked again too soon after failing). Only what came is kept.
-  function get(name) {
+  // One file by name (null: not there, or asked again too soon after failing). Only what came is kept. now: asked for
+  // a tap (a person waiting), so the wait after failing doesn't apply (until 2026-11-22 it did: after a tunnel the
+  // board and card said "not ready yet" without asking, for up to 5 minutes; the code review of 2026-11-21, finding 6).
+  function get(name, now = false) {
     if (cache.has(name)) return cache.get(name);
     const f = failed.get(name);
-    if (f && Date.now() - f.at < Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (f.tries - 1))) return Promise.resolve(null);
+    if (!now && f && Date.now() - f.at < Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (f.tries - 1))) return Promise.resolve(null);
     const p = ask(name).then((r) => {
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`${name}: ${r.status}`);
@@ -270,6 +272,8 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     tick().then(schedule);
   };
   stop.latest = latest;
+  // For taps (filesTapAsker): the newest file of a kind, asked at once even if it failed a moment ago.
+  stop.latestNow = kind => (names[kind] ? get(names[kind], true) : Promise.resolve(null));
   stop.nextAt = () => (paused || stopped || misses ? null : nextAt);
   stop.pausedSince = () => (mode === 'paused' ? lastFile?.t ?? null : null);
   // For tools/files-check.mjs: how much the reader keeps.

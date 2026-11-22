@@ -22,6 +22,7 @@ import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIV
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
+import { askRoutes as askRoutesOnce, MAX_BACK_MS } from './ask-routes.mjs';
 import { GROUPS } from '../src/tap-files.js';
 import { FORMAT } from '../src/live-file.js';
 
@@ -163,40 +164,20 @@ every('passings-add file', MIN, 75000, () => {
   if (passingsBaseAt !== null) shelf.put('passings-add', t, buildPassings(state, t, passingsBaseAt));
 });
 
-// Planned routes, asked once for everyone the way the page asks for its own trains (src/main.js askRoutes): trains on
-// the map whose known route ends within 30 minutes (or isn't known), at most every 5 minutes per train, 30 minutes back
-// (the first time 90, more when late) to 90 minutes ahead; the first time with the company.
-const BACK_MS = 30 * MIN, FIRST_BACK_MS = 90 * MIN, MAX_BACK_MS = 4 * 60 * MIN, LATE_MIN = 15;
-let plannedBaseAt = null;
-async function askRoutes() {
-  const t = Date.now();
-  const want = state.trains(t).filter(r => !r.gone && (state.plannedOf(r.id)?.until ?? 0) < t + 30 * MIN && !(t - (state.plannedOf(r.id)?.asked ?? 0) < 5 * MIN));
-  if (!want.length) return;
-  const again = want.filter(r => state.plannedOf(r.id)?.asked), first = want.filter(r => !state.plannedOf(r.id)?.asked);
-  const late = first.filter(r => state.lateBy(r.id) > LATE_MIN), onTime = first.filter(r => !(state.lateBy(r.id) > LATE_MIN));
-  state.markAsked(want.map(r => r.id), t);
-  const groups = [[again, BACK_MS, false], [onTime, FIRST_BACK_MS, true],
-    [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(r => state.lateBy(r.id))) * MIN), true]];
-  for (const [list, back, withBrand] of groups) {
-    if (!list.length) continue;
-    try {
-      state.addPlanned(await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * MIN, { withBrand }), Date.now());
-    } catch (e) {
-      state.markAsked(list.map(r => r.id), 0);
-      throw e;
-    }
-  }
-}
+// Planned routes for the trains on the map: fetcher/ask-routes.mjs.
+let plannedBaseAt = null, plannedBaseIds = null;
+const askRoutes = () => askRoutesOnce(state, fetchPlannedRoutes);
 if (!replayName) every('planned routes', 30000, 10000, askRoutes);   // a replay brings its own
 const shownIds = t => state.trains(t).map(r => r.id);
 every('planned file', 10 * MIN, 40000, () => {
   const t = Date.now();
-  shelf.put('planned', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS));
-  plannedBaseAt = t;
+  const ids = shownIds(t);
+  shelf.put('planned', t, buildPlanned(state, t, ids, t - MAX_BACK_MS));
+  plannedBaseAt = t; plannedBaseIds = new Set(ids);
 });
 every('planned-add file', MIN, 100000, () => {
   const t = Date.now();
-  if (plannedBaseAt !== null) shelf.put('planned-add', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS, plannedBaseAt));
+  if (plannedBaseAt !== null) shelf.put('planned-add', t, buildPlanned(state, t, shownIds(t), t - MAX_BACK_MS, plannedBaseAt, plannedBaseIds));
 });
 
 if (KEY) every('disruptions', 5 * MIN, 2000, async () => {
@@ -249,7 +230,11 @@ const timetable = replayName
 if (timetable) {
   stops.push(() => timetable.stop());
   const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`, `day-${g}`]);
-  every('tap files', 30000, 30000, () => {
+  // A full round (all 96: at the start, 18:00, 03:30, after a stream gap) held the thread 4.1 s until 2026-11-22: no
+  // live file, streams unread (the code review of 2026-11-21, finding 7). Now 0.7 s in all on the saved day of 17 Nov,
+  // and the thread is let go after every file (the longest ~20 ms), so the live file and the streams go on.
+  const breather = () => new Promise(r => setImmediate(r));
+  every('tap files', 30000, 30000, async () => {
     if (!timetable.ready()) return;
     const t = Date.now();
     const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
@@ -258,6 +243,7 @@ if (timetable) {
       const [what, g] = k.split('-');
       shelf.put(k, t, { v: FORMAT, ...timetable[what](g, t) });
       groupAt[k] = t;
+      await breather();
     }
     const oldest = Math.min(...Object.values(groupAt));
     shelf.put('taps-add', t, { v: FORMAT, ...timetable.changes(oldest - MIN, t) });

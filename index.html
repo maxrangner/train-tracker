@@ -1074,10 +1074,20 @@
   <div id="disruption" class="card" role="dialog" aria-label="Disruption" hidden></div>
   <script>
     // Show any error on screen (phones have no console to look at), and say so if the program never starts.
+    // Once the map is up (the program started, the start screen gone) an error goes to the connection screen behind the
+    // pill (window.__pageErrors, the event 'page-error'; src/main.js) and the pill goes on working: until 2026-11-22 it
+    // replaced the pill's words, so the pill said "Error: …" until a reload (the code review of 2026-11-21, finding 8).
     (function () {
       var shown = false;
+      window.__pageErrors = [];
       function show(text) {
         var splash = document.getElementById('splash');   // the start screen would hide the error
+        if (window.__started && (!splash || splash.hidden || splash.classList.contains('gone')) && document.querySelector('#status .count')) {
+          window.__pageErrors.push({ text: String(text), at: Date.now() });
+          if (window.__pageErrors.length > 5) window.__pageErrors.shift();
+          window.dispatchEvent(new Event('page-error'));
+          return;
+        }
         if (splash) splash.classList.add('gone');
         var el = document.getElementById('status');
         if (!el) return;

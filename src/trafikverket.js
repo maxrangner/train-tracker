@@ -75,6 +75,13 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
   let stopped = false;
   let pollingSince = null;   // when it started asking every 10 s (null: following the stream)
 
+  // An answer the reader can't take (an odd row) is skipped and said in the console, and the feed goes on: until
+  // 2026-11-22 the first answer after (re)connecting was read outside any guard, so one such row stopped the page's
+  // feed until a reload and made the fetcher exit, again at every restart (the code review of 2026-11-21, finding 9).
+  const deliver = (result, extra) => {
+    try { onResult(result, extra); } catch (e) { console.error(`an answer could not be read, skipped: ${e.message}`); }
+  };
+
   const closeStream = () => {
     clearTimeout(silentTimer);
     if (es) { es.close(); es = null; }
@@ -105,7 +112,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
     }
     if (stopped) return;   // stopped while the answer was on its way: no new stream
     lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
-    onResult(result, { first });
+    deliver(result, { first });
     const url = result.INFO?.SSEURL;
     if (!url) return streamFailed('no stream address in the answer');
     // Only Trafikverket's own streams over HTTPS (Codex's review, 2026-11-17; measured: https://api.trafikinfo.trafikverket.se).
@@ -124,7 +131,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
       arm();
       if (e.lastEventId) lastChangeId = e.lastEventId;
       try {
-        for (const r of JSON.parse(e.data).RESPONSE.RESULT) onResult(r);
+        for (const r of JSON.parse(e.data).RESPONSE.RESULT) deliver(r);
       } catch { /* a message we can't read is skipped */ }
     };
     // EventSource retries by itself after a network blip; only a closed stream (e.g. the address expired) needs us.
@@ -142,7 +149,7 @@ export function follow({ makeQuery, onResult, onStatus, silentMs = 60000, retryS
       if (stopped) return;
       lastChangeId = result.INFO?.LASTCHANGEID ?? lastChangeId;
       pollFails = 0;
-      onResult(result);
+      deliver(result);
       onStatus({ mode: 'polling' });
     } catch (e) {
       pollFails++;
@@ -212,7 +219,7 @@ export function followPassings({ onPassings, onStatus, sinceMinutes = 90, retryS
 export function passingsOf(rows) {
   const list = [];
   for (const a of rows ?? []) {
-    if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber) continue;
+    if (a.Deleted || !a.TimeAtLocation || !a.AdvertisedTimeAtLocation || !a.OperationalTrainNumber || !a.ScheduledDepartureDateTime) continue;
     list.push({
       key: trainKey(a.OperationalTrainNumber, a.ScheduledDepartureDateTime),
       minutes: Math.round((Date.parse(a.TimeAtLocation) - Date.parse(a.AdvertisedTimeAtLocation)) / 60000),

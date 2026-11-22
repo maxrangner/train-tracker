@@ -41,6 +41,26 @@ try {
       const bad = [r.w > MAX_W && `${r.w} px wide (max ${MAX_W})`, r.h > oneLine + 1 && `${r.h} px high, more than one line`, r.cut && 'cut off'].filter(Boolean);
       (bad.length ? fails : notes).push(`${lang}, ${r.name}: "${r.text}" ${bad.length ? bad.join(', ') : `${r.w} px`}`);
     }
+    // An error after the start (the code review of 2026-11-21, finding 8): the pill goes on working (its words are
+    // written again within 2 s) and the error is listed on the connection screen behind it.
+    if (lang === 'en') {
+      await page.evaluate(() => { window.dispatchEvent(new ErrorEvent('error', { message: 'pill-check test error', filename: 'http://x/src/test.js', lineno: 1 })); });   // (a thrown error from the test browser's own script reads "Script error.")
+      await sleep(500);
+      await page.evaluate(() => { document.querySelector('#status .count').textContent = 'x'; });
+      await sleep(2500);
+      const after = await page.evaluate(() => {
+        const count = document.querySelector('#status .count');
+        document.getElementById('status').click();
+        return { count: Boolean(count), text: count?.textContent ?? document.getElementById('status').textContent };
+      });
+      await sleep(1500);
+      const listed = await page.evaluate(() => { const c = document.querySelector('#conn-page .conn-errors'); return c && !c.hidden ? c.textContent : null; });
+      if (!after.count || after.text === 'x' || /^Error/.test(after.text)) fails.push(`after an error the pill stopped working: "${after.text}"`);
+      else notes.push(`after an error the pill goes on: "${after.text}"`);
+      if (!listed || !listed.includes('pill-check test error')) fails.push(`the error is not on the connection screen (${listed ?? 'no list shown'})`);
+      else notes.push('the error is listed on the connection screen');
+      errors.splice(0, errors.length, ...errors.filter(e => !e.includes('pill-check test error')));
+    }
     if (errors.length) fails.push(`${lang}: page errors: ${errors.slice(0, 3).join(' | ')}`);
     await page.close();
   }

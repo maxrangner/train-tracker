@@ -17,7 +17,12 @@ import { swedishDay } from '../src/clock.js';
 import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey, BOARD_BACK_MS } from '../src/tap-files.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
-const KEEP_RUNNING_MS = 6 * HOUR;     // yesterday's rows kept while planned less than this ago
+// Yesterday's trains are kept whole while any of their stops is planned less than KEEP_RUNNING_MS ago (or ahead); at
+// the start yesterday is loaded from YESTERDAY_BACK_MS back (no train in Sweden runs 24 hours). Until 2026-11-22 each
+// row went on its own when planned more than 6 h ago, so a night train's card and green route started mid-trip (the
+// code review of 2026-11-21, finding 2; on 17-18 Nov all 83 trains still running after midnight: tools/night-trains-check.mjs).
+const KEEP_RUNNING_MS = 6 * HOUR, YESTERDAY_BACK_MS = 24 * HOUR;
+const tripOf = x => `${x.r[1] || x.r[0]}|${x.day}`;   // a train's trip: its public number (all its pieces) and day
 // A board file holds per station and direction its next BOARD_ROWS trains not yet gone (src/trafikverket.js
 // boardGone), planned from BOARD_BACK_MS ago on (a very late train still counts). Until 2026-11-19 it held the first
 // 120 rows from 90 minutes back, gone or not (Codex's beta review point 2). Measured on the day of 17 Nov: a board of
@@ -28,12 +33,27 @@ const CHANGES_BACK_MS = 15 * MIN;     // the changes stream starts from changes 
 const FIELDS = TAP_FIELDS.map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 const Q = filter => `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9"><FILTER>${filter}</FILTER>${FIELDS}</QUERY>`;
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// A moment's Swedish day, remembered per hour (Sweden's offset from UTC is whole hours, so the day turns on an hour):
+// a full round of tap files asked it for every row, 4.6 of its 6 s (measured 2026-11-22 on the saved day of 17 Nov).
+const dayByHour = new Map();
+function dayOf(ms) {
+  const h = Math.floor(ms / HOUR);
+  let d = dayByHour.get(h);
+  if (d === undefined) { d = swedishDay(h * HOUR); if (dayByHour.size > 2000) dayByHour.clear(); dayByHour.set(h, d); }
+  return d;
+}
+// The rows in memory; any change counts up `version`, so the rows by group (below) are sorted out again only then.
+class Rows extends Map {
+  version = 0;
+  set(k, v) { this.version++; return super.set(k, v); }
+  delete(k) { this.version++; return super.delete(k); }
+}
 
 // seed (checks and replays: tools/board-check.mjs, fetcher/main.mjs --replay): { days, rows, messages (optional,
 // Trafikverket's TrainStationMessage shape) } put in at once; nothing asked, no stream, no timers.
 export function createTimetable({ log, onChange = () => {}, onLoaded = () => {}, seed = null }) {
   const w = words();                  // one word list for everything in memory
-  const rows = new Map();             // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
+  const rows = new Rows();            // rowKey -> { r (base 0: times in seconds since 1970), mod (ms), day }
   const days = new Set(seed?.days ?? []);   // days loaded (YYYY-MM-DD)
   let messages = [], messagesAt = null, lastChange = Date.now(), stopped = false, loading = null;
   const counts = { asks: 0, loads: 0, changes: 0, rows: 0 };
@@ -84,15 +104,18 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
     onLoaded(day);   // every card and board file made again (a loaded day's rows are older than the changes file)
   }
 
-  // Which days to hold now: yesterday (only rows planned in the last 6 h), today, and tomorrow from 18:00.
+  // Which days to hold now: yesterday (only trains with a stop planned in the last 6 h, whole), today, and tomorrow
+  // from 18:00. Today first: the tap files wait for it (ready()).
   async function keepDays() {
     if (loading) return loading;
     loading = (async () => {
       const now = Date.now(), today = swedishDay(now), yesterday = swedishDay(now - 24 * HOUR), tomorrow = swedishDay(now + 24 * HOUR);
-      const want = [yesterday, today, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
+      const want = [today, yesterday, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
       for (const d of [...days]) if (!want.includes(d)) { days.delete(d); for (const [k, x] of rows) if (x.day === d) rows.delete(k); }
-      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - KEEP_RUNNING_MS : null);
-      for (const [k, x] of rows) if (x.day === yesterday && x.r[6] * 1000 < now - KEEP_RUNNING_MS) rows.delete(k);
+      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null);
+      const running = new Set(), cut = Date.now() - KEEP_RUNNING_MS;   // (the time after the loads)
+      for (const x of rows.values()) if (x.day === yesterday && x.r[6] * 1000 >= cut) running.add(tripOf(x));
+      for (const [k, x] of rows) if (x.day === yesterday && !running.has(tripOf(x))) rows.delete(k);
     })().catch(e => log(`timetable: loading failed: ${e.message}; tried again in a minute`)).finally(() => { loading = null; });
     return loading;
   }
@@ -150,17 +173,28 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
     return { ...extra, b, d: fw.list, r };
   };
   const all = () => [...rows.values()];
+  // The rows by group, of the train (its public number, else its internal one) and of the station: made once while
+  // nothing changes (a round of 96 files went through all 94k rows for each file; 2026-11-22).
+  let groups = null;
+  const byGroup = () => {
+    if (groups?.version === rows.version) return groups;
+    groups = { version: rows.version, train: new Map(), station: new Map() };
+    const push = (m, g, x) => { let l = m.get(g); if (!l) m.set(g, l = []); l.push(x); };
+    for (const x of rows.values()) { push(groups.train, groupOf(x.r[1] || x.r[0]), x); push(groups.station, groupOf(x.r[3]), x); }
+    return groups;
+  };
+  const ofTrains = g => byGroup().train.get(g) ?? [], ofStations = g => byGroup().station.get(g) ?? [];
   return {
     ready: () => Boolean(seed) || days.has(swedishDay(Date.now())),   // seeded: all there is, at once
     // Cards: today's and yesterday's trains (tomorrow's only on boards, until the day turns).
-    card: (g, t) => { const today = swedishDay(t); return out(all().filter(x => x.day <= today && groupOf(x.r[1] || x.r[0]) === g), { kind: `card-${g}`, t }); },
+    card: (g, t) => { const today = swedishDay(t); return out(ofTrains(g).filter(x => x.day <= today), { kind: `card-${g}`, t }); },
     // Boards: per station and direction its next BOARD_ROWS advertised trains not gone at t (above). (Memory rows have
     // base 0: their times are seconds since 1970.)
     board: (g, t) => {
       const by = new Map();
       const ms = v => (v === null || v === undefined ? null : v * 1000);
-      for (const x of rows.values()) {
-        if (!(x.r[5] & 1) || (x.r[5] & 4) || x.r[6] * 1000 < t - BOARD_BACK_MS || groupOf(x.r[3]) !== g) continue;
+      for (const x of ofStations(g)) {
+        if (!(x.r[5] & 1) || (x.r[5] & 4) || x.r[6] * 1000 < t - BOARD_BACK_MS) continue;
         if (boardGone({ planned: x.r[6] * 1000, estimated: ms(x.r[7]), actual: ms(x.r[8]), canceled: Boolean(x.r[5] & 2) }, t)) continue;
         const k = x.r[3] + x.r[4];
         if (!by.has(k)) by.set(k, []);
@@ -171,7 +205,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
     // A station's whole day: every advertised row (not deleted) at the group's stations planned on t's Swedish day.
     day: (g, t) => {
       const today = swedishDay(t);
-      return out(all().filter(x => (x.r[5] & 1) && !(x.r[5] & 4) && x.r[6] !== null && groupOf(x.r[3]) === g && swedishDay(x.r[6] * 1000) === today)
+      return out(ofStations(g).filter(x => (x.r[5] & 1) && !(x.r[5] & 4) && x.r[6] !== null && dayOf(x.r[6] * 1000) === today)
         .sort((a, b) => a.r[6] - b.r[6]), { kind: `day-${g}`, t });
     },
     changes: (since, t) => out(all().filter(x => x.mod >= since), { kind: 'taps-add', t, since }),
