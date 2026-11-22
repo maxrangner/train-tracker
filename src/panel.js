@@ -581,7 +581,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (!box || !next) return;
     // In the sheet the page scrolls, not the timeline (src/stack.js): the page, so the train's place is in its middle.
     const page = el.closest('.pg');
-    if (page) { if (page.clientHeight && el.classList.contains('full')) page.scrollTop += next.getBoundingClientRect().top - page.getBoundingClientRect().top - page.clientHeight / 2; return; }
+    // (only when the train's place is below the fold: the card's head and tiles stay in view when they can)
+    if (page) {
+      const at = next.getBoundingClientRect().top - page.getBoundingClientRect().top;
+      if (page.clientHeight && el.classList.contains('full') && at > page.clientHeight - 60) page.scrollTop += at - page.clientHeight * 0.6;
+      return;
+    }
     if (box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
   let wasFull = el.classList.contains('full'), switchTimer = 0;

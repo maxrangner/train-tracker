@@ -63,11 +63,11 @@ export function homePage(d) {
   function legendHtml(c) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
     if (!total) return '';
-    const words = { ontime: t('stKeyOnTime'), some: t('stKeySome'), late: t('stKeyLate'), unknown: t('stNoNews') };
+    const words = { ontime: t('onTime'), some: t('stKeySome'), late: t('stKeyLate'), unknown: t('stNoNews') };
     return `<div class="lg"${on ? ' data-on' : ''}>${LG.filter(k => c[k] > 0).map(k => `<button type="button" class="lg-p t-${k}${on === k ? ' on' : ''}" ` +
       `style="flex-grow:${c[k]}" data-legend="${k}" aria-pressed="${on === k}" aria-label="${esc(`${c[k]} · ${words[k]}`)}"><i></i>` +
       `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>` +
-      `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(words[on])) : t('lgHint')}</p>`;
+      `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(t({ ontime: 'stLegOnTime', some: 'stLegSome', late: 'stLegLate', unknown: 'stLegUnknown' }[on]))) : t('lgHint')}</p>`;
   }
   function mineHtml(frame) {
     const byNumber = new Map(frame.map(x => [String(d.numberOf(x.id)), x]));
@@ -95,7 +95,8 @@ export function homePage(d) {
     const problems = list.filter(x => !isWork(x));
     return `<h4 class="lab">${t('disruptions')}</h4><div class="dis-list">${problems.slice(0, 3).map(x => disRowHtml(x, d.stationName, Date.now())).join('')}` +
       (!problems.length ? `<p class="empty">${t(list.length ? 'noProblemsNow' : 'noDisruptions')}</p>` : '') + '</div>' +
-      (list.length ? `<div class="rows">${groupRow({ key: 'dislist', name: t('allDisruptions'), sub: t('disCount', problems.length, list.length - problems.length) })}</div>` : '');
+      (list.length ? `<div class="rows"><button type="button" class="row" data-go="dislist"><span class="r-ic warn">${icon('warning', 18)}</span>` +
+        `<span class="r-main"><b>${t('allDisruptions')}</b><small>${esc(t('disCount', problems.length, list.length - problems.length))}</small></span>${icon('chevron', 18)}</button></div>` : '');
   }
   function mostLateHtml(frame) {
     const late = frame.map(x => ({ x, m: d.lateOf(x.id) })).filter(o => o.m > 0).sort((a, b) => b.m - a.m).slice(0, 5);
