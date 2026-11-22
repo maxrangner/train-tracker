@@ -52,8 +52,9 @@ export const buildPassings = (state, t, since = null) => ({ v: FORMAT, t, kind: 
   ...(since === null ? {} : { since }), passings: state.passings(t, since).map(passingRow) });
 
 // Planned rows of these trains; brands: key -> company.
-export function buildPlanned(state, t, ids, from, since = null) {
-  const { rows, brands } = state.plannedRows(t, ids, from, since);
+// inBase (planned-add only): the ids the base file was made for; a train on the map not among them gets all its rows.
+export function buildPlanned(state, t, ids, from, since = null, inBase = null) {
+  const { rows, brands } = state.plannedRows(t, ids, from, since, inBase ? new Set(ids.filter(id => !inBase.has(id))) : null);
   return { v: FORMAT, t, kind: since === null ? 'planned' : 'planned-add', since, rows: rows.map(plannedRow), brands };
 }
 

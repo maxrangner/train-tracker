@@ -15,7 +15,7 @@ const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDeparture
 // first answer after starting (a recording says so itself: via 'start').
 export function toRecord(p, first = p?.via === 'start') {
   const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
-  if (!m || !p.Train) return null;
+  if (!m || !p.Train?.OperationalTrainNumber || !p.Train.OperationalTrainDepartureDate) return null;   // (a row without them: skipped, 2026-11-22)
   return {
     id: trainKey(p.Train.OperationalTrainNumber, p.Train.OperationalTrainDepartureDate),
     operational: p.Train.OperationalTrainNumber,
