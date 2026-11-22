@@ -9,7 +9,7 @@
 import { pathOf, progressAlong } from './path.js';
 import { icon } from './icons.js';
 import { t, lang } from './i18n.js';
-import { hhmm } from './clock.js';
+import { hhmm, swedishDay } from './clock.js';
 
 const ASK_EVERY_MS = 5 * 60 * 1000;
 import { esc } from './html.js';
@@ -115,8 +115,10 @@ export function placesText(d, stationName) {
 
 // When it started and when it is expected to end, in words.
 export function timesText(d, now) {
-  const day = ms => new Date(ms).toLocaleDateString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { day: 'numeric', month: 'short', timeZone: 'Europe/Stockholm' });
-  const when = ms => (day(ms) === day(now) ? hhmm(ms) : `${day(ms)} ${hhmm(ms)}`);
+  // (the year too when it isn't this year's: until 2026-11-22 a disruption from the same date a year ago read as today's)
+  const year = ms => new Date(ms).toLocaleDateString('sv-SE', { year: 'numeric', timeZone: 'Europe/Stockholm' });
+  const day = ms => new Date(ms).toLocaleDateString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { day: 'numeric', month: 'short', ...(year(ms) !== year(now) ? { year: 'numeric' } : {}), timeZone: 'Europe/Stockholm' });
+  const when = ms => (swedishDay(ms) === swedishDay(now) ? hhmm(ms) : `${day(ms)} ${hhmm(ms)}`);
   return d.until ? t('disruptionUntil', when(d.since), when(d.until)) : t('disruptionSince', when(d.since));
 }
 

@@ -177,6 +177,58 @@ async function night(n) {
   ok(off.size === 0 && [...seen].some(id => id === '991/2026-11-12'), `the midnight recording: every train's day is its trip's (${off.size} not; 989 as ${[...seen].filter(id => id.startsWith('991/')).join(', ') || 'not seen'})`);
 }
 
+// The page at the day's turn and on the clock-change days (step 5).
+{
+  const { createDayStats } = await import('../src/day-stats.js');
+  const { createStats } = await import('../src/stats.js');
+  const { hhmm } = await import('../src/clock.js');
+  const tv = await import('../src/trafikverket.js');
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
+  // Today's graph: a page open across midnight shows the new day at once, not yesterday's bars.
+  let T = at('2026-11-18T23:58');
+  const arrivals = mid => [{ id: `1|Cst|${mid}`, planned: mid + 3600000, actual: mid + 3600000, brand: 'SJ' }];
+  const ds = createDayStats({ now: () => T, loadArrivals: async mid => arrivals(mid) });
+  ds.open(); await settle();
+  const before = ds.view();
+  T = at('2026-11-19T00:02');
+  const after = ds.view();
+  ds.tick(); await settle();
+  const asked = ds.view();
+  ok(before.state === 'ok' && after.state === 'loading' && after.hours.length === 1 && asked.state === 'ok' && asked.midnight === midnightOf('2026-11-19'),
+    `the day graph at 00:02: the new day at once (${before.state} -> ${after.state}, ${after.hours.length} hour; asked: ${asked.state})`);
+  // Its hours named by the clock on the clock-change days.
+  for (const [day, slot, want] of [['2026-03-29', 2, '03'], ['2026-03-29', 22, '23'], ['2026-10-25', 3, '02'], ['2026-10-25', 24, '23']]) {
+    T = at(`${day}T12:00`);
+    const v = ds.view();
+    ok(hhmm(v.midnight + slot * 3600000).slice(0, 2) === want, `the day graph on ${day}: bar ${slot} is the hour ${want} (${hhmm(v.midnight + slot * 3600000).slice(0, 2)})`);
+  }
+  // "Cancelled today": yesterday's count is not today's.
+  const st = createStats({ keep: false });
+  T = at('2026-11-18T23:50');
+  st.wantCancelled(async () => ({ count: 144, day: '2026-11-18' }), T); await settle();
+  T = at('2026-11-19T00:02');
+  st.wantCancelled(async () => ({ count: 144, day: '2026-11-18' }), T); await settle();
+  const stale = st.cancelledCount();
+  T = at('2026-11-19T00:04');
+  st.wantCancelled(async () => ({ count: 3, day: '2026-11-19' }), T); await settle();
+  ok(stale === null && st.cancelledCount() === 3, `cancelled today after midnight: yesterday's 144 not shown (${stale}), today's 3 within minutes (${st.cancelledCount()})`);
+  // The key page's whole-day search in summer: a train at 00:00 (Trafikverket's GT is "after").
+  tv.setTapAsker(null); tv.setKey?.('x');
+  const rowsAt = ['2026-06-15T00:00:00.000+02:00', '2026-06-15T23:59:00.000+02:00', '2026-06-14T23:59:00.000+02:00'];
+  globalThis.fetch = async (url, opts = {}) => {
+    const from = Date.parse(/<GT name="AdvertisedTimeAtLocation" value="([^"]+)"/.exec(String(opts.body))?.[1]);
+    const list = rowsAt.filter(x => Date.parse(x) > from).map((x, i) => ({ AdvertisedTrainIdent: String(100 + i), OperationalTrainNumber: String(100 + i), ScheduledDepartureDateTime: x.slice(0, 10), AdvertisedTimeAtLocation: x }));
+    return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ RESPONSE: { RESULT: [{ TrainAnnouncement: list }] } }), text: async () => '' };
+  };
+  const summer = await tv.fetchStationDay('Cst', 'Avgang', Date.parse('2026-06-15T12:00:00+02:00')).catch(e => ({ error: e.message }));
+  ok(Array.isArray(summer) && summer.length === 2, `the key page's whole day on a summer day: the 00:00 train in (${Array.isArray(summer) ? summer.length + ' of 2' : summer.error})`);
+  // A disruption from the same date a year ago shows its year.
+  globalThis.location ??= { hash: '', search: '' };   // (the page's settings read the address)
+  const { timesText } = await import('../src/disruptions.js');
+  const txt = timesText({ since: Date.parse('2025-11-19T08:00:00+01:00'), until: null }, Date.parse('2026-11-19T12:00:00+01:00'));
+  ok(/2025/.test(txt), `a disruption from a year ago shows its year ("${txt}")`);
+}
+
 for (const n of NIGHTS) {
   try { await night(n); } catch (e) { fails.push(`${n.name}: stopped: ${e.stack?.split('\n').slice(0, 3).join(' | ')}`); }
 }

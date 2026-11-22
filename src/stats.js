@@ -80,7 +80,7 @@ export function createStats({ keep = true } = {}) {
   let firstBatch = true;             // the first answer holds the last 10 minutes at once: not "arriving"
   let firstAt = null;                // when positions started arriving live
   let passings = [];                 // [{ key, station, time }] of the last 15 minutes
-  const cancelled = { count: null, byBrand: null, at: 0, asking: false, failed: false };
+  const cancelled = { count: null, byBrand: null, at: 0, asking: false, failed: false, day: null };
 
   // "Fastest" is the speed the train itself reports, from a report under a minute old, not the drawn speed: a drawn
   // train goes faster than the real one while it catches up with its data (live 2026-11-13: "398 km/h" for a
@@ -124,13 +124,22 @@ export function createStats({ keep = true } = {}) {
     },
     // Cancelled trains today: asked when the page opens, at most every 10 minutes. ask(): () => Promise<{ count,
     // byBrand }> (byBrand null: not known per company, a file from before 2026-11-21).
+    // Tied to its Swedish day (2026-11-22, TODO 62: after midnight yesterday's total stood as today's for 5-15 minutes):
+    // when the day turns it is asked at once, and an answer for another day (the server's file from before midnight)
+    // counts as not known yet, asked again within a minute. n.day: the answer's day (null: today's).
     wantCancelled(ask, at) {
-      if (cancelled.asking || (cancelled.at && at - cancelled.at < 10 * 60000)) return;
+      const today = swedishDay(at);
+      if (cancelled.day !== null && cancelled.day !== today) Object.assign(cancelled, { count: null, byBrand: null, at: 0, day: null });
+      if (cancelled.asking || (cancelled.at && at - cancelled.at < (cancelled.count === null ? 60000 : 10 * 60000))) return;
       cancelled.asking = true;
-      ask().then((n) => { cancelled.count = n.count; cancelled.byBrand = n.byBrand ?? null; cancelled.failed = false; })
+      ask().then((n) => {
+        if (n.day && n.day !== today) return;
+        cancelled.count = n.count; cancelled.byBrand = n.byBrand ?? null; cancelled.failed = false; cancelled.day = today;
+      })
         .catch((e) => { cancelled.failed = true; console.warn('cancelled today:', e.message); })
         .finally(() => { cancelled.asking = false; cancelled.at = at; });
     },
+    cancelledCount: () => cancelled.count,   // (for tools/dates-check.mjs)
     // The positions' rate and age, for the page's last line and Settings → Debug: null until 5 s of live data.
     rate(at) {
       const secs = firstAt === null ? 0 : Math.min(RATE_MS, at - firstAt) / 1000;
