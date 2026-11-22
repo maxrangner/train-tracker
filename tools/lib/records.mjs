@@ -11,7 +11,7 @@ export function readPositions(file, keep = () => true) {
     const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
     if (!m || !p.Train) continue;
     recs.push({
-      id: `${p.Train.OperationalTrainNumber}/${p.Train.OperationalTrainDepartureDate.slice(0, 10)}`,
+      id: `${p.Train.OperationalTrainNumber}/${(p.Train.JourneyPlanDepartureDate ?? p.Train.OperationalTrainDepartureDate).slice(0, 10)}`,   // the trip's day, as toRecord (2026-11-22)
       lon: Number(m[1]), lat: Number(m[2]), speed: p.Speed ?? null, bearing: p.Bearing ?? null,
       time: reportTime(p, p.via === 'start'), got: Date.parse(p.got), gone: p.Deleted === true || p.Status?.Active === false,
     });

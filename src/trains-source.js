@@ -8,7 +8,8 @@ const RECENT_MS = 10 * 60 * 1000;
 // bytes; about 62 -> 38 MB an hour at rush hour). The recorder (tools/collect.mjs) still saves everything.
 // ModifiedTime (Trafikverket's receive time) tells a report stamped by a clock running behind (src/report-time.js);
 // it adds about 13 % (night of 2026-11-14).
-const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDepartureDate', 'Train.AdvertisedTrainNumber',
+// Train.JourneyPlanDepartureDate (2026-11-22, TODO 62): the trip's day, as the timetable's ScheduledDepartureDateTime.
+const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDepartureDate', 'Train.JourneyPlanDepartureDate', 'Train.AdvertisedTrainNumber',
   'Position.WGS84', 'TimeStamp', 'Status.Active', 'Bearing', 'Speed', 'Deleted', 'ModifiedTime'].map(f => `<INCLUDE>${f}</INCLUDE>`).join('');
 
 // Trafikverket's position object -> our plain record. Null if it has no usable position. first: it came in the
@@ -16,10 +17,16 @@ const FIELDS = ['Train.OperationalTrainNumber', 'Train.OperationalTrainDeparture
 export function toRecord(p, first = p?.via === 'start') {
   const m = /POINT \(([-\d.]+) ([-\d.]+)/.exec(p?.Position?.WGS84 ?? '');
   if (!m || !p.Train?.OperationalTrainNumber || !p.Train.OperationalTrainDepartureDate) return null;   // (a row without them: skipped, 2026-11-22)
+  // The train's day is its trip's (JourneyPlanDepartureDate), as in the timetable. OperationalTrainDepartureDate is the
+  // day of this internal number's piece: a trip that takes a new number after midnight (3 a night: 989 as 991, 1738 as
+  // 21738, 8777 as 18778) got the next day's date until 2026-11-22, so it had no lateness, company or planned route,
+  // its card showed that evening's run, and both pieces were on the map for 8-14 minutes (TODO 62). Matched the
+  // timetable for 145 of 145 trains in the midnight recording; the piece's own date only when it is missing.
+  const day = p.Train.JourneyPlanDepartureDate ?? p.Train.OperationalTrainDepartureDate;
   return {
-    id: trainKey(p.Train.OperationalTrainNumber, p.Train.OperationalTrainDepartureDate),
+    id: trainKey(p.Train.OperationalTrainNumber, day),
     operational: p.Train.OperationalTrainNumber,
-    date: p.Train.OperationalTrainDepartureDate.slice(0, 10),
+    date: day.slice(0, 10),
     number: p.Train.AdvertisedTrainNumber || p.Train.OperationalTrainNumber,
     lon: Number(m[1]),
     lat: Number(m[2]),
