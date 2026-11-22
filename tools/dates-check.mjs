@@ -123,6 +123,13 @@ async function night(n) {
         if ((route?.stops?.length ?? route?.length ?? 0) < 2) short++;
       }
       ok(n0 > 0 && short === 0, `${n.name}, ${label(t)}: the ${n0} trains still running from ${eve} have their cards (${short} without)`);
+      // The number search and a starred train after midnight: last night's run while it still runs (src/trafikverket.js
+      // fetchRunsByNumber, pickRun; until 2026-11-22 only today's was asked).
+      const night = [...byNumber.get(eve)].find(([number, rows]) => crossing.has(number) && Math.max(...rows.map(r => Date.parse(r.AdvertisedTimeAtLocation))) > t + HOUR && byNumber.get(turn).has(number));
+      if (night) {
+        const runs = await tv.fetchRunsByNumber(night[0], t).catch(() => []), pick = tv.pickRun(runs, t);
+        ok(runs.some(r => r.date === eve) && pick?.date === eve, `${n.name}, ${label(t)}: searching ${night[0]} finds last night's run still going (${runs.map(r => r.date).join(', ') || 'none'}); a star opens it (${pick?.date ?? 'none'})`);
+      }
     });
   }
   // (In the first two minutes after midnight the day before yesterday may still be held: the days are looked at once a minute.)
