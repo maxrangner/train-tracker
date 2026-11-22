@@ -77,7 +77,7 @@ export const buildHistory = (slot, trains) => {
   return { v: FORMAT, t, kind: 'history', slot, every: HISTORY_EVERY_MS, trains: trains.map(tr => historyRow(tr, t)) };
 };
 
-// The shelf: name -> { kind, at, json, gz }. onAdd/onRemove let the uploader follow it.
+// The shelf: name -> { kind, at, until (kept until), json, gz }. onAdd/onRemove let the uploader follow it.
 export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
   const files = new Map();
   const current = {};   // kind -> newest name
@@ -85,7 +85,7 @@ export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
     put(kind, t, obj) {
       const name = nameOf(kind, t);
       const json = Buffer.from(JSON.stringify(obj));
-      const f = { kind, at: t, json, gz: gzipSync(json, { level: 6 }) };
+      const f = { kind, at: t, until: keptUntil(kind, t), json, gz: gzipSync(json, { level: 6 }) };   // (until worked out once: a history file's needs the Swedish date)
       files.set(name, f);
       current[kind] = name;
       onAdd(name, f);
@@ -94,7 +94,7 @@ export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
     // Remove what is past its keep time (never the newest of a kind).
     sweep(t) {
       for (const [name, f] of files) {
-        if (current[f.kind] === name || t <= keptUntil(f.kind, f.at)) continue;
+        if (current[f.kind] === name || t <= f.until) continue;
         files.delete(name);
         onRemove(name, f);
       }
