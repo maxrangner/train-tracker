@@ -57,6 +57,9 @@ const DEFAULTS = {
   // Max, 2026-11-21, sketch C: a switch on the card; moved here 2026-11-22, his wish). Until then kept by itself as
   // localStorage 'allPlaces': read once below.
   allPlaces: false,
+  // The sun's line (Max's idea 6, 2026-11-22: "with toggle in settings"; src/sun.js): night as a soft shade on the map
+  // and the trains' windows lit where it is night. On (the plan's choice; Max can turn it off).
+  dayNight: true,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -82,6 +85,7 @@ const KEYS = {
   pillSide: { param: 'pillside' },
   colourBlind: { param: 'cb' },
   allPlaces: { param: 'places' },
+  dayNight: { param: 'daynight' },
 };
 const STORE = 'settings';
 
@@ -115,6 +119,7 @@ const valid = {
   pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   allPlaces: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  dayNight: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>
