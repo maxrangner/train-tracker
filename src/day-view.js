@@ -233,7 +233,9 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
     for (let at = first; at < t1 - 0.4 * 3600000 * step; at += 3600000) {
       const hh = Number(hhmm(at).slice(0, 2));
       if (hh % step) continue;
-      ticks.push(`<span style="left:${x(at).toFixed(1)}px">${hhmm(at).slice(0, 2)}</span>`);
+      const xa = x(at);
+      if (xa > W - 34) continue;   // (clear of "now")
+      ticks.push(`<span${xa < 10 ? ' class="first"' : ''} style="left:${xa.toFixed(1)}px">${hhmm(at).slice(0, 2)}</span>`);
     }
     ticks.push(`<span class="now" style="left:${W}px">${esc(t('dayNow'))}</span>`);
     ticksEl.innerHTML = ticks.join('');
@@ -387,6 +389,7 @@ export const DAY_CSS = `
 .day-ticks { position: relative; height: 14px; margin-right: 76px; color: var(--muted); font: 600 11px/14px var(--font); font-variant-numeric: tabular-nums; }
 .day-ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .day-ticks span.now { transform: translateX(-100%); }
+.day-ticks span.first { transform: none; }
 #day-frame { position: fixed; inset: 0; z-index: 4; pointer-events: none; box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 26px color-mix(in srgb, var(--accent) 45%, transparent); }
 #day-clock { position: fixed; z-index: 5; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); height: 30px;
   display: inline-flex; align-items: center; padding: 0 12px; border-radius: 15px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-s);
