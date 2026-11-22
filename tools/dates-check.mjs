@@ -155,6 +155,22 @@ async function night(n) {
   clock.restore();
 }
 
+// The journey date: in the midnight recording (2026-11-12T23-02-56) three trips take a new internal number after
+// midnight (989 as 991, 1738 as 21738, 8777 as 18778); their day is still the trip's (12 Nov), as in the timetable.
+{
+  const { toRecord } = await import('../src/trains-source.js');
+  const lines = readFileSync(new URL('../data/positions-2026-11-12T23-02-56-574Z.jsonl', import.meta.url), 'utf8').trim().split('
+').map(l => JSON.parse(l));
+  const off = new Set(), seen = new Set();
+  for (const p of lines) {
+    const r = toRecord(p);
+    if (!r) continue;
+    if (['989', '1738', '8777'].includes(String(r.number))) seen.add(r.id);
+    if (p.Train?.JourneyPlanDepartureDate && r.date !== p.Train.JourneyPlanDepartureDate.slice(0, 10)) off.add(r.id);
+  }
+  ok(off.size === 0 && [...seen].some(id => id === '991/2026-11-12'), `the midnight recording: every train's day is its trip's (${off.size} not; 989 as ${[...seen].filter(id => id.startsWith('991/')).join(', ') || 'not seen'})`);
+}
+
 for (const n of NIGHTS) {
   try { await night(n); } catch (e) { fails.push(`${n.name}: stopped: ${e.stack?.split('\n').slice(0, 3).join(' | ')}`); }
 }
