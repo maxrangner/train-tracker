@@ -28,9 +28,10 @@ export const LIMITS = {
   offlineRows: 3,          // an internet loss is mailed (afterwards) from 3 minutes
   settleRows: 3,           // after an internet loss, the network rules wait 3 minutes (streams come back after ~1)
   clearRows: 10,           // "too many requests" counts as over after 10 quiet minutes
+  clockS: 30, clockRows: 3, // the Linux PC's clock more than 30 s off one.com's, 3 minutes running (over: within 10 s)
 };
 
-const hm = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+const hm = t => new Date(t).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' });
 const span = (a, b) => `${hm(a)}–${hm(b)}`;
 const mins = ms => Math.max(1, Math.round(ms / 60000));
 const LOOK = {
@@ -73,6 +74,13 @@ const PROBLEMS = {
     on: (r, h) => h.slice(-2).length === 2 && h.slice(-2).every(x => x.up && x.upFor >= 180 && [200, 404].includes(x.one.status) && (x.one.age === null || x.one.age > LIMITS.fileS)),
     off: r => r.up && r.one.age !== null && r.one.age <= LIMITS.fileS,
     subject: 'the map\'s data on one.com is stale', ok: 'the map\'s data on one.com is fresh', look: 'Viewers see "live data paused". ' + LOOK.network },
+  // The Linux PC's clock (2026-11-22, TODO 62): a clock 15 minutes fast left the live file empty; slow, the newest
+  // reports looked old; every viewer's page sets its clock by the files. r.one.clockOff: seconds ahead of one.com's.
+  'clock-off': { net: true,
+    on: (r, h) => h.slice(-LIMITS.clockRows).length === LIMITS.clockRows && h.slice(-LIMITS.clockRows).every(x => x.one?.clockOff != null && Math.abs(x.one.clockOff) > LIMITS.clockS),
+    off: (r, h) => h.slice(-LIMITS.clockRows).every(x => x.one?.clockOff != null && Math.abs(x.one.clockOff) <= 10),
+    subject: "the Linux PC's clock is wrong", ok: "the Linux PC's clock is right",
+    look: 'On the Linux PC: timedatectl (it should say "System clock synchronized: yes"). If it says no: sudo timedatectl set-ntp true (turns on setting the clock from the internet).' },
   'no-reports': { net: true,
     on: r => r.up && r.upFor >= LIMITS.reportS && r.hour >= LIMITS.dayFrom && r.hour < LIMITS.dayTo && (r.reportAge === null || r.reportAge > LIMITS.reportS),
     off: r => r.up && r.reportAge !== null && r.reportAge <= 120,
@@ -85,7 +93,7 @@ export function createRules({ summaryAt = '07:00' } = {}) {
   const open = new Map();        // key -> { since, mailed }
   const lastMail = new Map();    // key -> when its problem mail went
   const sent = [];               // every mail made (for the summary), newest last
-  let offlineSince = null, offlineLast = null, settle = 0;
+  let offlineSince = null, offlineLast = null, settle = 0, summaryDay = null;
 
   function step(row) {
     history.push(row);
@@ -135,8 +143,11 @@ export function createRules({ summaryAt = '07:00' } = {}) {
     }
 
     // The daily summary.
-    const [sh, sm] = summaryAt.split(':').map(Number);
-    if (row.hour === sh && row.minute === sm) {
+    // At or after its time, once a day, within two hours (until 2026-11-22 only at that very minute: a time in the hour
+    // the clock goes back mailed twice, one in the hour skipped in March never).
+    const [sh, sm] = summaryAt.split(':').map(Number), m = row.hour * 60 + row.minute, due = sh * 60 + sm;
+    if (m >= due && m < due + 120 && summaryDay !== row.day) {
+      summaryDay = row.day;
       const s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject));
       mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text });
     }
@@ -155,6 +166,7 @@ function detail(key, r) {
     case 'uploads-failing': return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${r.upError ? ` The fetcher says: ${r.upError}` : ''}`;
     case 'onecom-refused': return 'one.com refused the monitor\'s read of the newest file.';
     case 'stale-file': return r.one.age === null ? 'No recent file is found on one.com.' : `The newest file on one.com is ${r.one.age} s old.`;
+    case 'clock-off': return `The Linux PC's clock is ${Math.abs(r.one.clockOff)} s ${r.one.clockOff > 0 ? 'ahead of' : 'behind'} one.com's.`;
     case 'no-reports': return r.reportAge === null ? 'No position report since the fetcher started.' : `The newest position report is ${Math.round(r.reportAge / 60)} min old.`;
     default: return '';
   }
@@ -191,7 +203,7 @@ export function summary(rows, mails, openKeys) {
   const d = dayNumbers(rows);
   const problems = mails.filter(m => m.kind === 'problem' || m.kind === 'offline');
   const fine = !problems.length && !openKeys.length;
-  const day = rows.length ? new Date(rows.at(-1).t).toLocaleDateString('sv-SE') : '';
+  const day = rows.length ? new Date(rows.at(-1).t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : '';
   const lines = [
     rows.length < 1380 ? `(The monitor has watched for ${Math.round(rows.length / 60 * 10) / 10} h of the last 24.)` : 'The last 24 hours:',
     '',

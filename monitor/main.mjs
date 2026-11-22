@@ -14,6 +14,7 @@ import { createServer, get as httpGet } from 'node:http';
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRules, dayNumbers, isOffline } from './rules.mjs';
+import { swedishParts } from '../src/clock.js';
 import { createMailer } from './mail.mjs';
 
 const MIN = 60000;
@@ -35,7 +36,7 @@ const DATA_URL = cfg.MONITOR_DATA_URL ? cfg.MONITOR_DATA_URL.replace(/\/?$/, '/'
 const PAGE_PORT = Number(cfg.MONITOR_PORT ?? 8092);
 const DAY_DIR = process.env.STATE_DIRECTORY ?? cfg.MONITOR_DAY_DIR ?? 'monitor-days';
 const summaryAt = arg('--summary-at', cfg.MONITOR_SUMMARY_AT ?? '07:00');
-const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
+const log = (...a) => console.log(new Date(Date.now()).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }), ...a);
 
 // The fetcher's status: over HTTP (MONITOR_FETCHER=http://127.0.0.1:8091/status, Windows and tests), or from its local
 // socket file (MONITOR_FETCHER=unix:/run/sparat/status.sock, the Linux service: no network address, plan step 2).
@@ -107,26 +108,31 @@ async function readOne() {
   if (!DATA_URL) return { status: 'off', age: null };
   if (testOffline()) return { status: 'error', age: null };
   const now = Date.now();
-  let status = 404;
+  let status = 404, clockOff = null;
+  // The Linux PC's clock against one.com's (the answer's Date header, whole seconds): the files are named by this
+  // clock, and every viewer's page sets its own by them (TODO 62, 2026-11-22: nothing checked it).
+  const clockOf = (res) => { const d = Date.parse(res.headers.get('date') ?? ''); if (clockOff === null && Number.isFinite(d)) clockOff = Math.round((Date.now() - (d + 500)) / 1000); };
   for (let back = 1; back <= 4; back++) {   // the newest finished 5-s file, then older ones (as the page will)
     const slot = Math.floor(now / LIVE_MS) - back;
     try {
       const res = await fetch(`${DATA_URL}live-${slot}.json`, { method: 'HEAD', signal: AbortSignal.timeout(10000), headers: { 'Accept-Encoding': 'gzip' }, redirect: 'error' });
       status = res.status;
-      if (res.status === 200) return { status: 200, age: Math.round((now - slot * LIVE_MS) / 1000) };
-      if (res.status !== 404) return { status: res.status, age: null };
-    } catch { return { status: 'error', age: null }; }
+      clockOf(res);
+      if (res.status === 200) return { status: 200, age: Math.round((now - slot * LIVE_MS) / 1000), clockOff };
+      if (res.status !== 404) return { status: res.status, age: null, clockOff };
+    } catch { return { status: 'error', age: null, clockOff }; }
   }
-  return { status, age: null };
+  return { status, age: null, clockOff };
 }
 
 // ---------- the minute row ----------
 const rows = [];
 let base = null;              // the fetcher's counts at the last row (same process)
 const diff = (a, b) => (a ?? 0) - (b ?? 0);
+// Swedish time whatever the Linux PC's own zone (until 2026-11-22 the PC's: in UTC the 07:00 summary, the day's
+// numbers and the daytime rules would have run an hour or two off; TODO 62).
 function localParts(t) {
-  const d = new Date(t);
-  return { day: d.toLocaleDateString('sv-SE'), hour: d.getHours(), minute: d.getMinutes() };
+  return swedishParts(t);
 }
 async function minuteRow() {
   const one = await readOne();
@@ -184,7 +190,7 @@ async function tick() {
   const prev = rows.at(-1);
   if (prev && prev.day !== row.day) writeDay(rows.filter(x => x.day === prev.day));
   rows.push(row);
-  while (rows.length > 1440) rows.shift();
+  while (rows.length > 1500) rows.shift();   // 25 hours: the day the clock goes back has 1,500 minutes (1,440 lost its first hour)
   if (prev?.offline && !row.offline) mailer?.nudge();
   for (const m of rules.step(row)) {
     log(`${m.kind}: ${m.subject}`);

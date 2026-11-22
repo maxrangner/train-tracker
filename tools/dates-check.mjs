@@ -241,6 +241,10 @@ if (!process.env.DATES_CHECK_CHILD) {
   const r = spawnSync(process.execPath, [fileURLToPath(import.meta.url)], { env: { ...process.env, TZ: 'UTC', DATES_CHECK_CHILD: '1' }, encoding: 'utf8' });
   process.stdout.write(r.stdout); process.stderr.write(r.stderr);
   if (r.status !== 0) bad++;
+  // The monitor's mail rules on a computer in UTC (its rows in Swedish time whatever the zone; the Linux PC's is not known).
+  const m = spawnSync(process.execPath, [fileURLToPath(new URL('./monitor-check.mjs', import.meta.url))], { env: { ...process.env, TZ: 'UTC' }, encoding: 'utf8' });
+  console.log(`${m.status === 0 ? 'ok  ' : 'FAIL'} [UTC] the monitor's check${m.status === 0 ? '' : `:\n${m.stdout.split('\n').filter(l => l.startsWith('FAIL')).join('\n')}`}`);
+  if (m.status !== 0) bad++;
   console.log(bad ? `dates-check FAILED (${bad})` : 'dates-check ok: every date pass holds, in Swedish time and in UTC');
 }
 process.exit(bad ? 1 : 0);
