@@ -155,6 +155,9 @@ add(check('ask-routes-check', depsOf('tools/ask-routes-check.mjs'), plain(['tool
 // Night trains keep all their stops in the fetcher's memory past midnight (the saved day of 17 Nov; ~15 s; 2026-11-22).
 add(check('night-trains-check', [...depsOf('tools/night-trains-check.mjs'), 'data/measure/day-2026-11-17.json'],
   plain(['tools/night-trains-check.mjs'], { short: true })));
+// A full round of tap files stays quick (the saved day of 17 Nov; ~5 s; 2026-11-22).
+add(check('tap-round-check', [...depsOf('tools/tap-round-check.mjs'), 'data/measure/day-2026-11-17.json'],
+  plain(['tools/tap-round-check.mjs'], { short: true })));
 
 // The replays: each recording through the train code, its routes (none drawn straight across: tools/path-check.mjs,
 // 0 of 73,368 pieces since 2026-11-14), and the open train's line following the train (tools/route-follow-check.mjs).
