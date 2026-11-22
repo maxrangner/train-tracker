@@ -152,6 +152,9 @@ add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/moni
 add(check('stream-guard-check', depsOf('tools/stream-guard-check.mjs'), plain(['tools/stream-guard-check.mjs'], { short: true })));
 // The fetcher's planned-route questions when one fails: the rest still asked (offline, under a second; 2026-11-22).
 add(check('ask-routes-check', depsOf('tools/ask-routes-check.mjs'), plain(['tools/ask-routes-check.mjs'], { short: true })));
+// Night trains keep all their stops in the fetcher's memory past midnight (the saved day of 17 Nov; ~15 s; 2026-11-22).
+add(check('night-trains-check', [...depsOf('tools/night-trains-check.mjs'), 'data/measure/day-2026-11-17.json'],
+  plain(['tools/night-trains-check.mjs'], { short: true })));
 
 // The replays: each recording through the train code, its routes (none drawn straight across: tools/path-check.mjs,
 // 0 of 73,368 pieces since 2026-11-14), and the open train's line following the train (tools/route-follow-check.mjs).
