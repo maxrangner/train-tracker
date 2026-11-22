@@ -222,6 +222,8 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
       return out(ofStations(g).filter(x => (x.r[5] & 1) && !(x.r[5] & 4) && x.r[6] !== null && dayOf(x.r[6] * 1000) === today)
         .sort((a, b) => a.r[6] - b.r[6]), { kind: `day-${g}`, t });
     },
+    // Rows as they come (a replay's later rows, fetcher/replay.mjs): put in like the changes stream's.
+    add(list) { let n = 0; for (const a of list) if (put(a)) n++; if (n) onChange(); return n; },
     changes: (since, t) => out(all().filter(x => x.mod >= since), { kind: 'taps-add', t, since }),
     index: t => { const ops = {}; for (const x of rows.values()) if (x.r[1]) ops[x.r[0]] = x.r[1]; return { kind: 'taps-index', t, groups: GROUPS, ops }; },
     messages: t => ({ kind: 'messages', t, at: messagesAt, messages: messages.map(m => [m.LocationCode, m.FreeText, m.StartDateTime ?? null, m.EndDateTime ?? null, m.Status ?? null]) }),

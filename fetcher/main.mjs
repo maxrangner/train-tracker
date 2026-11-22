@@ -120,10 +120,12 @@ const onPositionRecords = rs => {
   for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
 };
 const onPassingList = (list, how) => state.addPassings(list, Date.now(), how);
-let replayTimetable = null;   // a replay's timetable rows, for its tap files (below)
+let replayTimetable = null, replayDays = null;   // a replay's first timetable rows and its days, for its tap files (below)
+const replayLater = [];       // its later rows, until the timetable is made (then straight to it)
+let replayAdd = rows => replayLater.push(...rows);
 const stops = replayName
   ? [startReplay(replayName, { onRecords: onPositionRecords, onPassings: onPassingList, onPlanned: rows => state.addPlanned(rows, Date.now()),
-      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); }, onTimetable: rows => { replayTimetable = rows; } })]
+      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); }, onTimetable: (rows, days) => { replayTimetable = rows; replayDays = days; }, onTimetableRows: rows => replayAdd(rows) })]
   : [
     followPositions({ onRecords: onPositionRecords, onStatus: onFeed('positions'), retryStreamMs: MIN }),
     followPassings({ onPassings: onPassingList, onStatus: onFeed('passings'), retryStreamMs: MIN }),
@@ -217,10 +219,11 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
 // sees the tap files of the code about to be released; no station messages).
 let tapRound = null;
 const timetable = replayName
-  ? createTimetable({ log, seed: { days: [...new Set((replayTimetable ?? []).map(a => (a.ScheduledDepartureDateTime ?? '').slice(0, 10)))], rows: replayTimetable ?? [] } })
+  ? createTimetable({ log, seed: { days: replayDays ?? [], rows: replayTimetable ?? [] } })
   : KEY ? createTimetable({ log, onLoaded: () => tapRound?.loaded() }) : null;
 if (timetable) {
   stops.push(() => timetable.stop());
+  if (replayName) { timetable.add(replayLater.splice(0)); replayAdd = rows => timetable.add(rows); }
   tapRound = createTapRound({ timetable, shelf });
   every('tap files', 30000, 30000, () => tapRound.tick());
   const notReady = () => { throw new Error('the timetable is still loading'); };   // every() tries again in a minute

@@ -229,6 +229,25 @@ async function night(n) {
   ok(/2025/.test(txt), `a disruption from a year ago shows its year ("${txt}")`);
 }
 
+// The fetcher's --replay (fetcher/replay.mjs): at the start only the recording's first answer; later rows when their
+// time comes (until 2026-11-22 all at once: trains shown as passed before they passed, rows changed later in every
+// changes file).
+{
+  const { startReplay } = await import('../fetcher/replay.mjs');
+  const name = '2026-11-11T21-45-41-004Z';
+  let first = null, firstAt = null;
+  const later = [];
+  const stop = startReplay(name, { onRecords() {}, onPassings() {}, onPlanned() {}, onStatus() {},
+    onTimetable: (rows) => { first = rows; firstAt = Date.now(); }, onTimetableRows: rows => later.push(...rows) });
+  stop();
+  // (the recording's own first answer can hold an actual time a few minutes ahead: 3786 at Uö, 2 min; Trafikverket's)
+  const all = readFileSync(new URL(`../data/timetable-${name}.jsonl`, import.meta.url), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const starts = all.filter(r => r.via === 'start').length;
+  const ahead = (first ?? []).filter(r => r.TimeAtLocation && Date.parse(r.TimeAtLocation) > firstAt + 10 * MIN).length;
+  ok(first?.length === starts && starts < all.length && ahead === 0,
+    `the fetcher's replay: the first answer at the start (${first?.length ?? 0} of ${all.length} rows; the other ${all.length - starts} when their time comes), none passed 10 min ahead (${ahead})`);
+}
+
 for (const n of NIGHTS) {
   try { await night(n); } catch (e) { fails.push(`${n.name}: stopped: ${e.stack?.split('\n').slice(0, 3).join(' | ')}`); }
 }
