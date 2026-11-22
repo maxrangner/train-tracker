@@ -114,7 +114,8 @@ export function createMenu({ button, el, findTrains, findStations, searchTimetab
       }
       const more = found.filter(tr => !tr.keys.some(k => onMap.has(k)));
       for (const tr of more.slice(0, MAX_ROWS)) {
-        list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
+        // (two runs of the number, e.g. last night's still running after midnight and today's: each with its start time)
+        list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.at, tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
           () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
       }
       if (!trains.length && !more.length) list.append(stateEl('empty', t('noTrainToday', q), 'li'));
