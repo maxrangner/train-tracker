@@ -291,11 +291,13 @@
     .sel-label[hidden] { display: none; }
     /* Its arrow to the train, ringed like the label (Max, 2026-11-22: "Small arrows pointing to the train dynamically
        moving around"): up to it from under it, down from above, sideways from beside it (src/map.js holdLabel). */
-    .sel-label::before { content: ''; position: absolute; left: 50%; top: -5px; width: 9px; height: 9px; margin-left: -4.5px;
-      background: inherit; transform: rotate(45deg); border-radius: 2px 0 0 0; box-shadow: -2px -2px 0 0 var(--accent); }
-    .sel-label.up::before { top: auto; bottom: -5px; border-radius: 0 0 2px 0; box-shadow: 2px 2px 0 0 var(--accent); }
-    .sel-label.right::before { left: -5px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 0 0 2px; box-shadow: -2px 2px 0 0 var(--accent); }
-    .sel-label.left::before { left: auto; right: -5px; top: 50%; margin: -4.5px 0 0 0; border-radius: 0 2px 0 0; box-shadow: 2px -2px 0 0 var(--accent); }
+    /* A solid triangle in the ring's colour standing on the ring (2 px outside the label), so it reads as one with it
+       (Max, 2026-11-22: an outlined arrow in the card's colour read as a loose "<" with a gap: "Not acceptable at all"). */
+    .sel-label::before { content: ''; position: absolute; width: 0; height: 0; border: 0 solid transparent;
+      left: 50%; top: -8px; margin-left: -6px; border-width: 0 6px 7px; border-bottom-color: var(--accent); }
+    .sel-label.up::before { top: auto; bottom: -8px; border-width: 7px 6px 0; border-bottom-color: transparent; border-top-color: var(--accent); }
+    .sel-label.right::before { left: -8px; top: 50%; margin: -6px 0 0 0; border-width: 6px 7px 6px 0; border-bottom-color: transparent; border-right-color: var(--accent); }
+    .sel-label.left::before { left: auto; right: -8px; top: 50%; margin: -6px 0 0 0; border-width: 6px 0 6px 7px; border-bottom-color: transparent; border-left-color: var(--accent); }
     .sel-label.stale { opacity: 0.45; }
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
