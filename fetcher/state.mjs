@@ -108,8 +108,9 @@ export function createState() {
         if (r.gone || t - r.time > MAX_AGE_MS) continue;   // as trains(t) shows them
 
         let tr = b.get(r.id);
-        if (!tr) b.set(r.id, tr = { id: r.id, number: r.number, brand: null, from: t, until: t, points: [] });
-        tr.until = t;
+        const at = Math.round(t / 1000) * 1000;
+        if (!tr) b.set(r.id, tr = { id: r.id, number: r.number, brand: null, from: at, until: at, points: [] });
+        tr.until = at;
         tr.number = r.number;
         const brand = planned.get(r.id)?.brand ?? lastPassing.get(r.id)?.brand ?? null;
         if (brand) tr.brand = brand;

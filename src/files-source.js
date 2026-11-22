@@ -17,7 +17,7 @@
 // Handlers as startTrainSource / startReplaySource: onRecords(records), onStatus({ mode, error }), onPassings(list),
 // onPlanned(rows), plus onStations(Map) and onFile(fileTime, lastRecordAt) (a file came, even with no new reports;
 // lastRecordAt: when the fetcher last got a position report, on its clock, or null from fetchers before 0.6.0).
-import { trainOf, passingOf, plannedOf, LIVE_MS, FORMAT } from './live-file.js';
+import { trainOf, passingOf, plannedOf, LIVE_MS, FORMAT, HISTORY_MS, historySlot, historyName } from './live-file.js';
 import { setClock } from './clock.js';
 import { groupOf, withChanges, BOARD_BACK_MS } from './tap-files.js';
 
@@ -45,6 +45,7 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   let names = {};               // kind -> newest file name (from the live file)
   const loaded = {};            // kind -> the name taken in last (planned, planned-add, stations)
   const cache = new Map();      // file name -> promise of its contents (names never change content); only files that came
+  const historyStore = new Map();   // the same for the day's history files (stop.history)
   const failed = new Map();     // file name -> { tries, at }: not there or not read; asked again after a growing wait
   const loading = {};           // 'passings' | 'planned' | 'stations' -> its promise while it is being taken in
   const trainSeen = new Map();  // train id -> time of its newest report taken in
@@ -72,8 +73,10 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   // One file by name (null: not there, or asked again too soon after failing). Only what came is kept. now: asked for
   // a tap (a person waiting), so the wait after failing doesn't apply (until 2026-11-22 it did: after a tunnel the
   // board and card said "not ready yet" without asking, for up to 5 minutes; the code review of 2026-11-21, finding 6).
-  function get(name, now = false) {
-    if (cache.has(name)) return cache.get(name);
+  // store: where it is kept (the day's history files have their own, so a day of them never pushes out what the live
+  // page needs), and how many it holds.
+  function get(name, now = false, store = cache, most = 400) {
+    if (store.has(name)) return store.get(name);
     const f = failed.get(name);
     if (!now && f && Date.now() - f.at < Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** (f.tries - 1))) return Promise.resolve(null);
     const p = ask(name).then((r) => {
@@ -81,12 +84,12 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
       if (!r.ok) throw new Error(`${name}: ${r.status}`);
       return r.json();
     }).then((v) => {
-      if (v === null) { cache.delete(name); fail(name); return null; }
+      if (v === null) { store.delete(name); fail(name); return null; }
       failed.delete(name);
       return v;
-    }, (e) => { cache.delete(name); fail(name); throw e; });
-    cache.set(name, p);
-    if (cache.size > 400) cache.delete(cache.keys().next().value);
+    }, (e) => { store.delete(name); fail(name); throw e; });
+    store.set(name, p);
+    if (store.size > most) store.delete(store.keys().next().value);
     return p;
   }
   // The newest of a kind the live file names (null: not made yet, or not there now).
@@ -282,12 +285,31 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
     tick().then(schedule);
   };
   stop.latest = latest;
+  // The day (build plan part 4, 2026-11-22): the history files of the 15-minute slots from `from` to `to` (the page's
+  // clock), only finished ones (the slot running now is not made yet). -> { slots: [{ slot, t (its start), rows (the
+  // file's train rows, src/live-file.js historyOf) or null (no file: a gap; or it could not be read, error) }], upTo
+  // (the end of the last finished slot) }. Kept in their own store (a day + yesterday evening: 110), so the live
+  // page's files stay; a slot not there is asked again after get's growing wait.
+  stop.history = async (from, to) => {
+    const done = historySlot(Date.now() + skew) - 1;   // the newest finished slot
+    const first = historySlot(from), last = Math.min(historySlot(to), done);
+    const want = [];
+    for (let slot = first; slot <= last; slot++) want.push(slot);
+    const slots = await Promise.all(want.map(async (slot) => {
+      try {
+        const f = await get(historyName(slot), false, historyStore, 110);
+        if (f && (f.v ?? 1) > FORMAT) return { slot, t: slot * HISTORY_MS, rows: null, error: 'a newer format' };
+        return { slot, t: slot * HISTORY_MS, rows: f?.trains ?? null, ...(f ? { every: f.every } : {}) };
+      } catch (e) { return { slot, t: slot * HISTORY_MS, rows: null, error: e.message }; }
+    }));
+    return { slots, upTo: (done + 1) * HISTORY_MS };
+  };
   // For taps (filesTapAsker): the newest file of a kind, asked at once even if it failed a moment ago.
   stop.latestNow = kind => (names[kind] ? get(names[kind], true) : Promise.resolve(null));
   stop.nextAt = () => (paused || stopped || misses ? null : nextAt);
   stop.pausedSince = () => (mode === 'paused' ? lastFile?.t ?? null : null);
   // For tools/files-check.mjs: how much the reader keeps.
-  stop.sizes = () => ({ cache: cache.size, failed: failed.size, trainSeen: trainSeen.size, passSeen: passSeen.size });
+  stop.sizes = () => ({ cache: cache.size, history: historyStore.size, failed: failed.size, trainSeen: trainSeen.size, passSeen: passSeen.size });
   return stop;
 }
 

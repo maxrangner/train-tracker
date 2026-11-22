@@ -735,6 +735,85 @@
    "rows[][2]": [
     "number"
    ]
+  },
+  "history": {
+   "": [
+    "object"
+   ],
+   "v": [
+    "number"
+   ],
+   "t": [
+    "number"
+   ],
+   "kind": [
+    "string"
+   ],
+   "slot": [
+    "number"
+   ],
+   "every": [
+    "number"
+   ],
+   "trains": [
+    "array",
+    "rows"
+   ],
+   "trains[][0]": [
+    "string"
+   ],
+   "trains[][1]": [
+    "string"
+   ],
+   "trains[][2]": [
+    "null",
+    "string"
+   ],
+   "trains[][3]": [
+    "number"
+   ],
+   "trains[][4]": [
+    "number"
+   ],
+   "trains[][5]": [
+    "array"
+   ],
+   "trains[][5][]": [
+    "number"
+   ],
+   "trains[][6]": [
+    "array"
+   ],
+   "trains[][6][]": [
+    "number"
+   ],
+   "trains[][7]": [
+    "array"
+   ],
+   "trains[][7][]": [
+    "number"
+   ],
+   "trains[][8]": [
+    "array"
+   ],
+   "trains[][8][]": [
+    "null",
+    "number"
+   ],
+   "trains[][9]": [
+    "array"
+   ],
+   "trains[][9][]": [
+    "null",
+    "number"
+   ],
+   "trains[][10]": [
+    "array"
+   ],
+   "trains[][10][]": [
+    "null",
+    "number"
+   ]
   }
  }
 }

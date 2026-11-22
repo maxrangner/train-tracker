@@ -10,14 +10,13 @@
 // straight and along the rails (src/rail-net.js); trains moving (over 100 m between the points). Also how long a
 // frame of every train takes (day.at(T)), at x60 and x600 (60 frames a second).
 // Run: node tools/history-size.mjs [recording names...] [--no-draw]
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import { toRecord } from '../src/trains-source.js';
-import { passingsOf, trainKey } from '../src/trafikverket.js';
 import { historyRow, historySlot, HISTORY_MS, FORMAT } from '../src/live-file.js';
 import { netFromJSON } from '../src/rail-net.js';
 import { createDayTrains } from '../src/day-trains.js';
 import { createState } from '../fetcher/state.mjs';
+import { eventsOf, feed } from './lib/history-play.mjs';
 
 const args = process.argv.slice(2);
 const DRAW = !args.includes('--no-draw');
@@ -25,7 +24,6 @@ const given = args.filter(a => !a.startsWith('--'));
 const RECS = given.length ? given.map(n => [n, null]) : [
   ['2026-11-17T15-00-00-001Z', 'rush'], ['2026-11-19T10-30-00-013Z', 'day'], ['2026-11-19T22-28-02-750Z', 'night']];
 const HOURS = { rush: 6, day: 11, night: 7 };
-const lines = f => existsSync(f) ? readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
 const gz = o => gzipSync(JSON.stringify(o), { level: 6 }).length;
 const kb = n => (n / 1024).toFixed(0);
 const pct = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))] ?? 0; };
@@ -40,9 +38,8 @@ const stepsOf = (trs, t, slot, every) => ({ v: FORMAT, t, kind: 'history', slot,
 
 const perDay = { 30000: { plain: {}, steps: {} }, 60000: { plain: {}, steps: {} } };
 for (const [name, role] of RECS) {
-  const pos = lines(`data/positions-${name}.jsonl`), tt = lines(`data/timetable-${name}.jsonl`);
-  if (!pos.length) { console.log(`skip ${name}: no recording in data/`); continue; }
-  const events = [...pos.map(p => ['p', Date.parse(p.got), p]), ...tt.map(a => ['t', Date.parse(a.got), a])].sort((a, b) => a[1] - b[1]);
+  const events = eventsOf(name);
+  if (!events.length) { console.log(`skip ${name}: no recording in data/`); continue; }
   const first = events[0][1], last = events.at(-1)[1];
   // (every 10 s only as a yardstick for the drawing: how far off the trains are when points are close)
   const runs = [30000, 60000, ...(DRAW ? [10000] : [])].map(every => ({ every, state: createState(), next: Math.ceil(first / every) * every + 50, slot: null, files: [] }));
@@ -58,23 +55,12 @@ for (const [name, role] of RECS) {
     run.slot = slot;
     run.state.sampleHistory(t);
   };
-  for (const [kind, got, x] of events) {
-    for (const run of runs) while (got >= run.next) { sample(run, run.next); run.next += run.every; }
-    for (const { state } of runs) {
-      if (kind === 'p') {
-        const r = toRecord(x);
-        if (r) state.addRecords([r], got);
-      } else {
-        state.addPassings(passingsOf([x]), got, { first: x.via === 'start' });
-        if (!x.Deleted && x.AdvertisedTimeAtLocation && x.OperationalTrainNumber)
-          state.addPlanned([{ key: trainKey(x.OperationalTrainNumber, x.ScheduledDepartureDateTime), sig: x.LocationSignature,
-            activity: x.ActivityType, planned: Date.parse(x.AdvertisedTimeAtLocation), brand: x.ProductInformation?.[0]?.Description ?? null }], got);
-      }
-    }
-    if (kind === 'p' && x.via !== 'start') {
-      const r = toRecord(x);
-      if (r && !r.gone) (truth.get(r.id) ?? truth.set(r.id, []).get(r.id)).push({ time: r.time, lon: r.lon, lat: r.lat });
-    }
+  // (several samplings side by side in one pass: tools/lib/history-play.mjs play() takes one)
+  for (const e of events) {
+    for (const run of runs) while (e[1] >= run.next) { sample(run, run.next); run.next += run.every; }
+    let r = null;
+    for (const { state } of runs) r = feed(state, e);
+    if (r && !r.gone && e[2].via !== 'start') (truth.get(r.id) ?? truth.set(r.id, []).get(r.id)).push({ time: r.time, lon: r.lon, lat: r.lat });
   }
   console.log(`\n${name}${role ? ` (${role})` : ''}: ${((last - first) / 3600e3).toFixed(1)} h, ${truth.size} trains reporting`);
   for (const run of runs) {

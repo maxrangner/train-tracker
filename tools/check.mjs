@@ -158,6 +158,10 @@ add(check('night-trains-check', [...depsOf('tools/night-trains-check.mjs'), 'dat
 // The date passes (TODO 62): four nights on a fake clock, in Swedish time and in UTC (~2.5 min; 2026-11-22).
 add(check('dates-check', [...depsOf('tools/dates-check.mjs'), 'data/measure/day-2026-11-17.json', 'data/positions-2026-11-12T23-02-56-574Z.jsonl'],
   plain(['tools/dates-check.mjs'], { short: true }), { order: 5 }));
+// The day's history files (build plan part 4): a recording through the fetcher's memory and files and back, names and
+// keep times (midnight, the clock-change days), the page's reader and day-trains (offline, ~1 s; 2026-11-22).
+add(check('history-check', [...depsOf('tools/history-check.mjs'), 'data/positions-2026-11-19T22-28-02-750Z.jsonl', 'data/timetable-2026-11-19T22-28-02-750Z.jsonl'],
+  plain(['tools/history-check.mjs'], { short: true })));
 // A full round of tap files stays quick (the saved day of 17 Nov; ~5 s; 2026-11-22).
 add(check('tap-round-check', [...depsOf('tools/tap-round-check.mjs'), 'data/measure/day-2026-11-17.json'],
   plain(['tools/tap-round-check.mjs'], { short: true })));

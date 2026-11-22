@@ -2,7 +2,8 @@
 // from tools/collect.mjs) instead of following Trafikverket's two streams, at normal speed, with every time moved to
 // now (as if it were happening today), so the page reading the files can be checked the same way every time, without
 // Trafikverket and without the key (public-plan step 3). The planned routes are given at once from the recording's
-// timetable (the page's own replay does the same, src/replay-source.js).
+// timetable (the page's own replay does the same, src/replay-source.js). The day's history files come out of it as
+// live: fetcher/main.mjs samples the memory this feeds (historyTick), one file per 15 minutes on the clock.
 import { readFileSync, existsSync } from 'node:fs';
 import { toRecord } from '../src/trains-source.js';
 import { passingsOf, trainKey } from '../src/trafikverket.js';

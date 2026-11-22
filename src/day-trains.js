@@ -2,13 +2,15 @@
 // files (src/live-file.js historyRow; read by src/files-source.js history()). Plain JavaScript, no page parts, so Node
 // measures it (tools/history-size.mjs) and checks it (tools/history-check.mjs).
 //   const day = createDayTrains({ net });   // net: the rail network (src/rail-net.js), or null: straight lines
-//   day.add(file)                           // a history file as it came (any order; the same slot twice is ignored)
+//   day.add(file)                           // a history file, or a slot of files-source's history() (any order; the
+//                                           // same slot twice is ignored)
 //   day.at(T)                               // every train on the map at moment T, in the shape src/trains.js placedAt
 //                                           // gives, plus what the map shows about it (below)
 // Between two points a train moves at an even pace from the one to the next: along the rails when the network finds
 // a way between them no longer than 1.5 times the straight line + 300 m (else straight). Each way is worked out once,
 // when a train first needs it, and kept. Before its first point and after its last a train stands at that point; it is
-// on the map while a slot says it was (from .. until, + one sample), so a gap with no file shows no trains.
+// on the map while a slot says it was (from its first report or sample .. its last sample + one), so a gap with no
+// file shows no trains.
 import { polyAt } from './rail-net.js';
 import { historyOf, HISTORY_EVERY_MS } from './live-file.js';
 
@@ -29,15 +31,19 @@ export function createDayTrains({ net = null } = {}) {
   const slots = new Set();
   const counts = { ways: 0, straight: 0 };
 
+  // file: a history file ({ t, slot, every, trains }) or one of src/files-source.js history()'s slots ({ slot, t,
+  // every, rows }; rows null: a gap, nothing added).
   function add(file) {
-    if (!file?.trains || slots.has(file.slot)) return;
+    const rows = file?.trains ?? file?.rows;
+    if (!rows || slots.has(file.slot)) return;
     slots.add(file.slot);
-    for (const row of file.trains) {
+    for (const row of rows) {
       const h = historyOf(row, file.t);
       let tr = trains.get(h.id);
       if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, spans: [], points: [], way: new Map() });
       if (h.brand) tr.brand = h.brand;
-      tr.spans.push({ from: h.from, until: h.until + (file.every ?? HISTORY_EVERY_MS) });   // until the next sample
+      // From its first report on (a train is first sampled up to a minute after its report came), until the next sample.
+      tr.spans.push({ from: Math.min(h.from, h.points[0]?.time ?? h.from), until: h.until + (file.every ?? HISTORY_EVERY_MS) });
       const last = tr.points.at(-1)?.time ?? -Infinity;
       tr.points.push(...h.points);
       if (h.points.length && h.points[0].time <= last) {   // a slot that came out of order: sorted again, repeats out
