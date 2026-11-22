@@ -8,7 +8,8 @@
 //   - a phone clock 30 s, 1 minute or 2 minutes slow reads fresh files soon (point 11, TODO 41); a right or fast clock
 //     as before, with at most one extra request a minute;
 //   - a station board cuts after dropping trains that are gone (point 2);
-//   - the text protector (src/html.js, point 1).
+//   - the text protector (src/html.js, point 1);
+//   - a tap right after its file failed asks again at once (the code review of 2026-11-21, finding 6).
 // Run: node tools/files-check.mjs     exit code 0: all hold; 1: one failed
 import { startFilesSource, filesTapAsker } from '../src/files-source.js';
 import { setTapAsker, fetchBoard, fetchStationDay } from '../src/trafikverket.js';
@@ -50,7 +51,7 @@ const ok = (good, what) => { console.log(`${good ? 'ok  ' : 'FAIL'} ${what}`); i
 // A pretend site: live-<slot>.json exists from 0.6 s after its slot began, for a minute, unless liveOk() says no.
 // ahead: the site's clock minus this "phone's" (30000: the phone is 30 s slow).
 // other(name) -> the file's contents, null for 404, or 'stall' for an answer that never comes (until aborted).
-function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordAt = null, ahead = 0 } = {}) {
+function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordAt = null, ahead = 0, files = {} } = {}) {
   const asked = [];
   globalThis.fetch = (url, opts = {}) => {
     const name = String(url).split('/').pop();
@@ -61,7 +62,7 @@ function site({ liveOk = () => true, other = () => null, v = FORMAT, lastRecordA
       const made = Number(m[1]) * 5000 + 50;
       const now = Date.now() + ahead;
       if (!liveOk() || made + 600 > now || now - made > 60000) return answer(null);
-      return answer({ v, t: made, kind: 'live', trains: [], passings: [], files: { stations: 'stations-1.json', planned: 'planned-1.json' },
+      return answer({ v, t: made, kind: 'live', trains: [], passings: [], files: { stations: 'stations-1.json', planned: 'planned-1.json', ...files },
         feeds: { positions: 'stream', passings: 'stream', lastRecordAt: lastRecordAt ?? made - 1000 } });
     }
     const val = other(name);
@@ -185,6 +186,28 @@ for (const [ahead, what] of [[0, 'right'], [-10000, '10 s fast'], [30000, '30 s 
   setTapAsker(filesTapAsker(async kind => (kind === `board-${groupOf('Mc')}` ? file : null), () => now));
   const old = await fetchStationDay('Mc', 'Avgang', now);
   ok(old.partial && old.length > 0, `no day file (an older server): the board file's trains, marked partial (${old.length})`);
+}
+// 9. a tap right after its file failed (the code review of 2026-11-21, finding 6): asked again at once, not after the
+// background files' wait (30 s, doubling up to 5 minutes).
+{
+  let boardAsks = 0, up = false;
+  site({ other: n => (n === 'board-1.json' ? (boardAsks++, up ? { t: 1, b: 0, d: [], r: [] } : null) : n === 'stations-1.json' ? { stations: [] } : n === 'planned-1.json' ? { rows: [], brands: {} } : null),
+    files: { board: 'board-1.json' } });
+  let got = null;
+  await fast(async (sleep) => {
+    const stop = startFilesSource('http://site/', handlers());
+    await sleep(6000);
+    const a = await stop.latestNow('board');           // a 404 (out of reach)
+    for (let i = 0; i < 3; i++) await stop.latestNow('board');   // tapped again three times while still out of reach
+    up = true;
+    await sleep(2000);
+    got = await stop.latestNow('board');               // back: a tap 2 s later, the file comes
+    const bg = boardAsks;
+    await stop.latest('board');                        // (the background reader would still wait)
+    ok(a === null && boardAsks === bg, `the background reader still waits after a failure (${boardAsks} asks)`);
+    stop();
+  });
+  ok(got !== null && boardAsks === 5, `a tap right after failures asks again at once and gets the file (${boardAsks} asks, ${got ? 'got it' : 'nothing'})`);
 }
 // 8. the text protector.
 ok(esc(`<b>"Sto'ck" & co</b>`) === '&lt;b&gt;&quot;Sto&#39;ck&quot; &amp; co&lt;/b&gt;', 'station names and ids are shown as typed (& < > " \')');
