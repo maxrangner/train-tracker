@@ -286,18 +286,15 @@
     /* Held on whole screen pixels (src/map.js setSelectedPlace): the text no longer snaps a pixel back and forth when
        the followed train's place hovers at a pixel's edge (Max, 2026-11-15: far out "the label pill vibrates"). */
     .sel-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; text-align: center;
-      font: 700 12.5px/1.2 var(--font); color: var(--ink); background: var(--card); padding: 4px 9px 5px; border-radius: 12px;
-      box-shadow: 0 0 0 2px var(--accent), var(--shadow-s); }
+      font: 700 12.5px/1.2 var(--font); color: var(--ink); padding: 4px 9px 5px; border-radius: 12px; isolation: isolate;
+      box-shadow: var(--shadow-s); }
     .sel-label[hidden] { display: none; }
     /* Its arrow to the train, ringed like the label (Max, 2026-11-22: "Small arrows pointing to the train dynamically
        moving around"): up to it from under it, down from above, sideways from beside it (src/map.js holdLabel). */
-    /* A solid triangle in the ring's colour standing on the ring (2 px outside the label), so it reads as one with it
-       (Max, 2026-11-22: an outlined arrow in the card's colour read as a loose "<" with a gap: "Not acceptable at all"). */
-    .sel-label::before { content: ''; position: absolute; width: 0; height: 0; border: 0 solid transparent;
-      left: 50%; top: -8px; margin-left: -6px; border-width: 0 6px 7px; border-bottom-color: var(--accent); }
-    .sel-label.up::before { top: auto; bottom: -8px; border-width: 7px 6px 0; border-bottom-color: transparent; border-top-color: var(--accent); }
-    .sel-label.right::before { left: -8px; top: 50%; margin: -6px 0 0 0; border-width: 6px 7px 6px 0; border-bottom-color: transparent; border-right-color: var(--accent); }
-    .sel-label.left::before { left: auto; right: -8px; top: 50%; margin: -6px 0 0 0; border-width: 6px 0 6px 7px; border-bottom-color: transparent; border-left-color: var(--accent); }
+    /* Its card, ring and arrow are one outline drawn behind the text (src/map.js bubblePath; Max, 2026-11-22: a separate
+       arrow met the round end with gaps). The label itself keeps only the soft shadow. */
+    .sel-bg { position: absolute; left: -1px; top: -1px; width: calc(100% + 2px); height: calc(100% + 2px); overflow: visible; z-index: -1; }
+    .sel-bg path { fill: var(--card); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
     .sel-label.stale { opacity: 0.45; }
     .sel-label .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
     .sel-label b { font-weight: 800; } .sel-label i { font-style: normal; color: var(--muted); }
