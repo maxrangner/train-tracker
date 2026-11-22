@@ -17,7 +17,12 @@ import { swedishDay } from '../src/clock.js';
 import { TAP_FIELDS, GROUPS, groupOf, words, encodeRow, decodeRow, rowKey, BOARD_BACK_MS } from '../src/tap-files.js';
 
 const MIN = 60000, HOUR = 60 * MIN;
-const KEEP_RUNNING_MS = 6 * HOUR;     // yesterday's rows kept while planned less than this ago
+// Yesterday's trains are kept whole while any of their stops is planned less than KEEP_RUNNING_MS ago (or ahead); at
+// the start yesterday is loaded from YESTERDAY_BACK_MS back (no train in Sweden runs 24 hours). Until 2026-11-22 each
+// row went on its own when planned more than 6 h ago, so a night train's card and green route started mid-trip (the
+// code review of 2026-11-21, finding 2; on 17-18 Nov all 83 trains still running after midnight: tools/night-trains-check.mjs).
+const KEEP_RUNNING_MS = 6 * HOUR, YESTERDAY_BACK_MS = 24 * HOUR;
+const tripOf = x => `${x.r[1] || x.r[0]}|${x.day}`;   // a train's trip: its public number (all its pieces) and day
 // A board file holds per station and direction its next BOARD_ROWS trains not yet gone (src/trafikverket.js
 // boardGone), planned from BOARD_BACK_MS ago on (a very late train still counts). Until 2026-11-19 it held the first
 // 120 rows from 90 minutes back, gone or not (Codex's beta review point 2). Measured on the day of 17 Nov: a board of
@@ -84,15 +89,18 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
     onLoaded(day);   // every card and board file made again (a loaded day's rows are older than the changes file)
   }
 
-  // Which days to hold now: yesterday (only rows planned in the last 6 h), today, and tomorrow from 18:00.
+  // Which days to hold now: yesterday (only trains with a stop planned in the last 6 h, whole), today, and tomorrow
+  // from 18:00. Today first: the tap files wait for it (ready()).
   async function keepDays() {
     if (loading) return loading;
     loading = (async () => {
       const now = Date.now(), today = swedishDay(now), yesterday = swedishDay(now - 24 * HOUR), tomorrow = swedishDay(now + 24 * HOUR);
-      const want = [yesterday, today, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
+      const want = [today, yesterday, ...(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', hour12: false }) >= '18' ? [tomorrow] : [])];
       for (const d of [...days]) if (!want.includes(d)) { days.delete(d); for (const [k, x] of rows) if (x.day === d) rows.delete(k); }
-      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - KEEP_RUNNING_MS : null);
-      for (const [k, x] of rows) if (x.day === yesterday && x.r[6] * 1000 < now - KEEP_RUNNING_MS) rows.delete(k);
+      for (const d of want) if (!days.has(d)) await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null);
+      const running = new Set(), cut = Date.now() - KEEP_RUNNING_MS;   // (the time after the loads)
+      for (const x of rows.values()) if (x.day === yesterday && x.r[6] * 1000 >= cut) running.add(tripOf(x));
+      for (const [k, x] of rows) if (x.day === yesterday && !running.has(tripOf(x))) rows.delete(k);
     })().catch(e => log(`timetable: loading failed: ${e.message}; tried again in a minute`)).finally(() => { loading = null; });
     return loading;
   }
