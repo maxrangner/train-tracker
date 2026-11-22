@@ -2,7 +2,7 @@
 // Plain JavaScript that runs in the page and in Node: the fetcher (fetcher/) uses these same queries for the public
 // version, so the page and the fetcher ask Trafikverket the same things.
 import { joinPieces, tripsOf, NUMBER_FIELDS } from './trip.js';
-import { swedishDay } from './clock.js';
+import { swedishDay, addDays, midnightOf } from './clock.js';
 
 const API = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 // In the page the key comes from Vite (.env); the fetcher (fetcher/main.mjs) runs this module in Node, where there is
@@ -453,7 +453,9 @@ export async function fetchBoard(sig, activity, at, n) {
 // cancelled and its time passed). The question asks from 2 hours before Swedish midnight on (a day's length plus a
 // clock change), the day itself is cut here. Stockholm C's departures on a weekday: about 900 rows.
 export async function fetchStationDay(sig, activity, at) {
-  const day = swedishDay(at), from = Date.parse(`${day}T00:00:00Z`) - 2 * 3600000;
+  // From an hour before the real Swedish midnight (until 2026-11-22 UTC midnight - 2 h, which in summer is exactly
+  // Swedish midnight: with GT a 00:00 train was left out; TODO 62).
+  const day = swedishDay(at), from = midnightOf(day) - 3600000;
   const r = await askTap('day', { sig, act: activity, at },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="4000">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
@@ -502,7 +504,24 @@ export function trainsOfNumber(rows) {
   return tripsOf(rows).filter(trip => trip.day).map(trip => ({
     key: trainKey(trip.operational, trip.day), operational: trip.operational, date: trip.day.slice(0, 10), number,
     from: trip.from, to: trip.to, product: trip.product, keys: trip.ops.map(op => trainKey(op, trip.day)),
+    start: Number.isFinite(trip.start) ? trip.start : null, end: Number.isFinite(trip.end) ? trip.end : null,   // planned, ms (2026-11-22)
   }));
+}
+// The runs of a public number around moment t: yesterday's while still running (planned end less than RUNNING_MS ago:
+// a night train after midnight), then today's (TODO 62, 2026-11-22: after midnight only today's were asked, so a night
+// train still running was found only while it was on the map).
+const RUNNING_MS = 30 * 60000;
+export async function fetchRunsByNumber(number, t) {
+  const today = swedishDay(t), yesterday = addDays(today, -1);
+  const [before, now] = await Promise.all([fetchTrainsByNumber(number, yesterday).catch(() => []), fetchTrainsByNumber(number, today)]);
+  return [...before.filter(r => r.end !== null && r.end > t - RUNNING_MS), ...now];
+}
+// Which run a starred train opens: the one running now, else the next, else the latest.
+export function pickRun(runs, t) {
+  if (!runs.length) return null;
+  return runs.find(r => r.start !== null && r.start <= t && (r.end ?? r.start) + RUNNING_MS >= t)
+    ?? runs.filter(r => r.start !== null && r.start > t).sort((a, b) => a.start - b.start)[0]
+    ?? runs.at(-1);
 }
 
 // ---------- Planned routes ----------

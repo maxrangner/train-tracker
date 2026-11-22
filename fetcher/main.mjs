@@ -16,14 +16,14 @@ import { readFileSync, existsSync } from 'node:fs';
 import { NodeEventSource } from './event-source.mjs';
 import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCancelledToday, fetchDayArrivals, fetchStations } from '../src/trafikverket.js';
 import { followPositions } from '../src/trains-source.js';
-import { swedishDay } from '../src/clock.js';
+import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
 import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
 import { askRoutes as askRoutesOnce, MAX_BACK_MS } from './ask-routes.mjs';
-import { GROUPS } from '../src/tap-files.js';
+import { createTapRound } from './tap-round.mjs';
 import { FORMAT } from '../src/live-file.js';
 
 globalThis.EventSource ??= NodeEventSource;
@@ -60,7 +60,7 @@ const servePort = arg('--serve') ? Number(arg('--serve')) : null;
 const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 
 // Times in the log are this computer's local time (as the Linux journal shows them).
-const log = (...a) => console.log(new Date().toLocaleString('sv-SE'), ...a);
+const log = (...a) => console.log(new Date(Date.now()).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }), ...a);   // (Swedish time whatever the PC's zone)
 
 // ---------- load on Trafikverket, counted ----------
 // Counted from the start (the monitor, monitor/main.mjs, takes the differences): questions, streams opened, bytes
@@ -120,10 +120,12 @@ const onPositionRecords = rs => {
   for (const r of rs) if (r.time > (feeds.newestReport ?? 0) && r.time <= Date.now() + MIN) feeds.newestReport = r.time;
 };
 const onPassingList = (list, how) => state.addPassings(list, Date.now(), how);
-let replayTimetable = null;   // a replay's timetable rows, for its tap files (below)
+let replayTimetable = null, replayDays = null;   // a replay's first timetable rows and its days, for its tap files (below)
+const replayLater = [];       // its later rows, until the timetable is made (then straight to it)
+let replayAdd = rows => replayLater.push(...rows);
 const stops = replayName
   ? [startReplay(replayName, { onRecords: onPositionRecords, onPassings: onPassingList, onPlanned: rows => state.addPlanned(rows, Date.now()),
-      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); }, onTimetable: rows => { replayTimetable = rows; } })]
+      onStatus: s => { onFeed('positions')(s); onFeed('passings')(s); }, onTimetable: (rows, days) => { replayTimetable = rows; replayDays = days; }, onTimetableRows: rows => replayAdd(rows) })]
   : [
     followPositions({ onRecords: onPositionRecords, onStatus: onFeed('positions'), retryStreamMs: MIN }),
     followPassings({ onPassings: onPassingList, onStatus: onFeed('passings'), retryStreamMs: MIN }),
@@ -197,12 +199,6 @@ if (KEY) every('stations', 24 * 60 * MIN, 1000, async () => {
 
 // Today's arrivals (the stats page's graph): the whole day once, then only what changed every 5 minutes (as
 // src/day-stats.js asks); a whole-day file is made from memory every hour, a changes file every 5 minutes.
-// Swedish midnight of moment t (src/day-stats.js swedishMidnight).
-function swedishMidnight(t) {
-  const utc = Date.parse(`${swedishDay(t)}T00:00:00Z`);
-  const h = Number(new Date(utc).toLocaleString('sv-SE', { hour: '2-digit', hour12: false, timeZone: 'Europe/Stockholm' }));
-  return utc - h * 3600000;
-}
 const arr = { day: null, rows: new Map(), asOf: null, changed: new Map(), fullAt: 0 };
 // (its rows: fetcher/files.mjs buildArrivals)
 if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
@@ -218,36 +214,18 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
 });
 
 // ---------- taps from files (plan step 4, 2026-11-17: fetcher/timetable.mjs, src/tap-files.js) ----------
-// The card and board files in groups, made in turns: all at the first round (a page opening needs them), then the
-// oldest card and the oldest board every 30 s (each one about every 16 minutes), with a changes file every 30 s that brings every row changed
-// since the oldest of them, so a tap is at most ~30 s behind Trafikverket. The index every 10 minutes, the station
-// messages every 2 minutes. A replay uses its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37:
-// the format check on this computer then sees the tap files of the code about to be released; no station messages).
-const groupAt = {};   // card-NN / board-NN / day-NN -> when its file in use was made
+// The tap files (fetcher/tap-round.mjs). The index every 10 minutes, the station messages every 2 minutes. A replay uses
+// its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37: the format check on this computer then
+// sees the tap files of the code about to be released; no station messages).
+let tapRound = null;
 const timetable = replayName
-  ? createTimetable({ log, seed: { days: [...new Set((replayTimetable ?? []).map(a => (a.ScheduledDepartureDateTime ?? '').slice(0, 10)))], rows: replayTimetable ?? [] } })
-  : KEY ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
+  ? createTimetable({ log, seed: { days: replayDays ?? [], rows: replayTimetable ?? [] } })
+  : KEY ? createTimetable({ log, onLoaded: () => tapRound?.loaded() }) : null;
 if (timetable) {
   stops.push(() => timetable.stop());
-  const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`, `day-${g}`]);
-  // A full round (all 96: at the start, 18:00, 03:30, after a stream gap) held the thread 4.1 s until 2026-11-22: no
-  // live file, streams unread (the code review of 2026-11-21, finding 7). Now 0.7 s in all on the saved day of 17 Nov,
-  // and the thread is let go after every file (the longest ~20 ms), so the live file and the streams go on.
-  const breather = () => new Promise(r => setImmediate(r));
-  every('tap files', 30000, 30000, async () => {
-    if (!timetable.ready()) return;
-    const t = Date.now();
-    const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
-      : ['card', 'board', 'day'].map(w => GROUP_KINDS.filter(k => k.startsWith(w)).sort((a, b) => groupAt[a] - groupAt[b])[0]);
-    for (const k of due) {
-      const [what, g] = k.split('-');
-      shelf.put(k, t, { v: FORMAT, ...timetable[what](g, t) });
-      groupAt[k] = t;
-      await breather();
-    }
-    const oldest = Math.min(...Object.values(groupAt));
-    shelf.put('taps-add', t, { v: FORMAT, ...timetable.changes(oldest - MIN, t) });
-  });
+  if (replayName) { timetable.add(replayLater.splice(0)); replayAdd = rows => timetable.add(rows); }
+  tapRound = createTapRound({ timetable, shelf });
+  every('tap files', 30000, 30000, () => tapRound.tick());
   const notReady = () => { throw new Error('the timetable is still loading'); };   // every() tries again in a minute
   every('taps index', 10 * MIN, 45000, () => { if (!timetable.ready()) notReady(); const t = Date.now(); shelf.put('taps-index', t, { v: FORMAT, ...timetable.index(t) }); });
   every('messages file', 2 * MIN, 50000, () => { const t = Date.now(); shelf.put('messages', t, { v: FORMAT, ...timetable.messages(t) }); });

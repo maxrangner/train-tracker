@@ -1,17 +1,20 @@
 // Checks the monitor's mail rules (monitor/rules.mjs) on made-up timelines: each must give exactly the expected mails
 // and no others. No internet, no key. Run: node tools/monitor-check.mjs [--show] (--show prints every mail made).
 import { createRules, isOffline } from '../monitor/rules.mjs';
+import { swedishParts } from '../src/clock.js';
 
 const MIN = 60000;
 const show = process.argv.includes('--show');
-// Local time from a Swedish clock string (this check's rows say what hour it is, as the monitor's do).
-const at = s => new Date(s).getTime();
+// A Swedish clock string as a moment ('2026-11-17T10:00' is Swedish time, winter; an offset may be given), and the
+// rows' day, hour and minute in Swedish time as the monitor makes them (monitor/main.mjs; since 2026-11-22 whatever the
+// computer's own zone: this check is also run with TZ=UTC).
+const at = s => Date.parse(/[+-]\d\d:\d\d$/.test(s) ? s : `${s}:00+01:00`);
 function normal(t, over = {}) {
-  const d = new Date(t);
-  return { t, day: d.toLocaleDateString('sv-SE'), hour: d.getHours(), minute: d.getMinutes(),
+  const p = swedishParts(t);
+  return { t, day: p.day, hour: p.hour, minute: p.minute,
     up: true, upFor: 6 * 3600, restarts: 0, asks: 3, refused: 0, trvFailed: 0, bytesIn: 400000, streamsOpened: 0,
     feeds: 'stream/stream', uploads: true, upOk: 13, upFailed: 0, reconnects: 0, bytesOut: 300000, upAgo: 3,
-    reportAge: 4, trains: 120, one: { status: 200, age: 5 }, sizes: { live: 4200, passings: 40000 },
+    reportAge: 4, trains: 120, one: { status: 200, age: 5, clockOff: 0 }, sizes: { live: 4200, passings: 40000 },
     memMB: 90, cpuPct: 0.1, ...over };
 }
 // A timeline: `minutes` rows from `start`; change(i, row) may alter row i (minutes from the start).
@@ -86,6 +89,13 @@ const cases = [
     if (i >= 40 && i < 50) Object.assign(r, { up: false, upAgo: null });
     if (i === 50) r.restarts = 1;
   }), ['problem stale-file', 'problem uploads-failing', 'problem fetcher-down', 'ok fetcher-down', 'ok uploads-failing', 'ok stale-file']],
+  // The summary on the clock-change days, at a time in the hour that repeats (25 Oct) or is skipped (29 Mar): once.
+  ['the summary at 02:30 on 25 Oct (the hour comes twice): once', run('2026-10-25T01:00:00+02:00', 240, () => {}, { summaryAt: '02:30' }), ['summary summary']],
+  ['the summary at 02:30 on 29 Mar (no such time): once, at 03:00', run('2026-03-29T01:00:00+01:00', 180, () => {}, { summaryAt: '02:30' }), ['summary summary']],
+  // The Linux PC's clock (2026-11-22): 2 minutes ahead for 10 minutes; a single odd minute is no mail.
+  ["the Linux PC's clock 2 minutes ahead for 10 minutes", run('2026-11-17T10:00', 60, (i, r) => { if (i >= 30 && i < 40) r.one = { ...r.one, clockOff: 120 }; }),
+    ['problem clock-off', 'ok clock-off']],
+  ["the Linux PC's clock off in one minute only", run('2026-11-17T10:00', 60, (i, r) => { if (i === 30) r.one = { ...r.one, clockOff: -90 }; }), []],
   ['the daily summary at 07:00, a quiet night', run('2026-11-17T05:00', 125), ['summary summary']],
   ['the daily summary after a problem', run('2026-11-17T05:00', 125, (i, r) => { if (i === 30) r.refused = 1; }),
     ['problem trv-refused', 'ok trv-refused', 'summary summary']],

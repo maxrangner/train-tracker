@@ -52,6 +52,7 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   let lastFile = null;          // the newest live file taken in: { t, at (this computer's clock) }
   let skew = 0;                 // the fetcher's clock minus this computer's (learnt from the files)
   const skewSamples = [];
+  let siteClock = null;         // the newest answer's Date header: { d (the site's clock), at (this computer's) }
   let needPassings = false, timer = null, stopped = false, paused = false, mode = 'starting', lastError = null, busy = false;
   let misses = 0;               // looks in a row that found no live file while none had come for 20 s
   let lead = 0;                 // slots past the clock's own where the newest live file was found (a slow clock), until
@@ -94,6 +95,8 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
   // One live file, fetched without the cache (a 404 may exist a second later).
   async function live(slot) {
     const r = await ask(`live-${slot}.json`);
+    const d = Date.parse(r.headers?.get?.('date') ?? '');   // the site's clock (whole seconds), for a phone clock far off
+    if (Number.isFinite(d)) siteClock = { d, at: Date.now() };
     if (r.status === 404) return null;
     if (!r.ok) throw new Error(`live file: ${r.status}`);
     return r.json();
@@ -221,6 +224,13 @@ export function startFilesSource(base, { onRecords, onStatus, onPassings, onPlan
         for (const j of FAR_AHEAD) {
           file = await live(slot + j);
           if (file) { took = slot + j; aheadAt = 0; break; }
+        }
+        // Still nothing: a clock more than about two minutes off (set by hand) never found a file and the map stayed
+        // "paused" (TODO 62, 2026-11-22). The site's own clock (an answer's Date header, ±1 s) sets this page's
+        // roughly; the files then fine-tune it (learnClock). The fetcher and the site keep the right time.
+        if (!file && siteClock && Date.now() - siteClock.at < 10000) {
+          const s = siteClock.d + 500 - siteClock.at;
+          if (Math.abs(s - skew) > 60000) { skew = s; skewSamples.length = 0; lead = 0; setClock(Date.now() + skew); misses = 0; }
         }
       }
       if (file && took > slot) lead += took - slot;

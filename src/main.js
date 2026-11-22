@@ -20,7 +20,7 @@ import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
 import { initSheets, onTap } from './sheet.js';
 import { logoSvg } from './logo.js';
 import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchTrainsByNumber, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey } from './trafikverket.js';
+import { followPassings, fetchStations, fetchPlannedRoutes, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey, fetchRunsByNumber, pickRun } from './trafikverket.js';
 import { startFilesSource, filesTapAsker } from './files-source.js';
 import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -558,8 +558,8 @@ const menu = createMenu({
       .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
   },
   async searchTimetable(number) {
-    const found = await fetchTrainsByNumber(number, swedishDay(now()));
-    return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to) }));
+    const found = await fetchRunsByNumber(number, now());
+    return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to), at: found.length > 1 && t.start !== null ? hhmm(t.start) : null }));
   },
   onPickTrain: pickTrain,
   onPickStation: st => openStation(st.sig, { go: true }),
@@ -571,13 +571,14 @@ const menu = createMenu({
     }),
     stations: favourites.stations.map(sig => stations.get(sig)).filter(Boolean),
   }),
-  // A starred train: on the map, fly there; otherwise today's run of that number (the next one, or the latest).
+  // A starred train: on the map, fly there; otherwise its run now, the next one, or the latest (yesterday's while it
+  // still runs after midnight; until 2026-11-22 the day's first run, TODO 62).
   async onPickFavouriteTrain(number) {
     const r = trains.reports().find(x => String(x.number) === number);
     if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
     try {
-      const found = await fetchTrainsByNumber(number, swedishDay(now()));
-      if (found.length) { const t = found[0]; pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
+      const t = pickRun(await fetchRunsByNumber(number, now()), now());
+      if (t) { pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
     } catch (e) { console.warn('favourite:', e.message); }
   },
 });
@@ -1037,7 +1038,7 @@ async function fileOf(kind) {
   return f;
 }
 // { count, byBrand (null from a file made before 2026-11-21) }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null })) : fetchCancelledToday(swedishDay(now())); }
+function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null, day: f.day ?? null })) : fetchCancelledToday(swedishDay(now())); }
 // Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
 async function filesArrivals(midnight, since) {
   const full = await fileOf('arrivals');

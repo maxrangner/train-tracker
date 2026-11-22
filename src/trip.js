@@ -67,11 +67,11 @@ export function tripsOf(rows) {
     const anchor = left.reduce((a, p) => (p.t0 < a.t0 ? p : a));
     const joined = grow(left, anchor);
     for (const p of joined) left.splice(left.indexOf(p), 1);
-    trips.push({ operational: anchor.op, day: anchor.day, ops: joined.map(p => p.op),
+    trips.push({ operational: anchor.op, day: anchor.day, ops: joined.map(p => p.op), end: Math.max(...joined.map(p => p.t1)),
       from: joined.map(p => p.from).find(Boolean) ?? null, to: joined.map(p => p.to).findLast(Boolean) ?? null,
       product: joined.map(p => p.product).find(Boolean) ?? null, t0: anchor.t0 });
   }
-  return trips.sort((a, b) => a.t0 - b.t0).map(({ t0, ...trip }) => trip);
+  return trips.sort((a, b) => a.t0 - b.t0).map(({ t0, ...trip }) => ({ ...trip, start: t0 }));   // start, end: planned (ms)
 }
 
 // rows: TrainAnnouncement rows of one public number on one day (any internal numbers; Deleted ones are dropped).

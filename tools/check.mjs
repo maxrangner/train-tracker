@@ -155,6 +155,9 @@ add(check('ask-routes-check', depsOf('tools/ask-routes-check.mjs'), plain(['tool
 // Night trains keep all their stops in the fetcher's memory past midnight (the saved day of 17 Nov; ~15 s; 2026-11-22).
 add(check('night-trains-check', [...depsOf('tools/night-trains-check.mjs'), 'data/measure/day-2026-11-17.json'],
   plain(['tools/night-trains-check.mjs'], { short: true })));
+// The date passes (TODO 62): four nights on a fake clock, in Swedish time and in UTC (~2.5 min; 2026-11-22).
+add(check('dates-check', [...depsOf('tools/dates-check.mjs'), 'data/measure/day-2026-11-17.json', 'data/positions-2026-11-12T23-02-56-574Z.jsonl'],
+  plain(['tools/dates-check.mjs'], { short: true }), { order: 5 }));
 // A full round of tap files stays quick (the saved day of 17 Nov; ~5 s; 2026-11-22).
 add(check('tap-round-check', [...depsOf('tools/tap-round-check.mjs'), 'data/measure/day-2026-11-17.json'],
   plain(['tools/tap-round-check.mjs'], { short: true })));

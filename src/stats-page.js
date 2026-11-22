@@ -19,6 +19,7 @@ const COMPANIES_SHOWN = 6;          // "Show all" opens the rest
 const GAUGE_MAX = 250;              // km/h at the speedometer's end (the fastest reported in the recordings: 206)
 import { esc } from './html.js';
 import { roll } from './motion.js';
+import { hhmm } from './clock.js';
 const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const num = (n, digits = 0) => Number(n).toLocaleString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { maximumFractionDigits: digits, minimumFractionDigits: digits });
 const pct = (n, all) => (all ? Math.round(100 * n / all) : 0);
@@ -262,6 +263,10 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
       return;
     }
     const hours = day.hours, slots = Math.max(24, hours.length);
+    // An hour's name by the clock (the bars count hours since midnight: on the 23- and 25-hour days they differ;
+    // until 2026-11-22 a 03:30 arrival on 29 Mar stood under "02-03", TODO 62).
+    const hh = hr => (day.midnight ? hhmm(day.midnight + hr * 3600000).slice(0, 2) : String(hr).padStart(2, '0'));
+    const hhEnd = hr => (hh(hr + 1) === '00' ? '24' : hh(hr + 1));
     const key = `${builtLang}|${hours.map(c => c.join(',')).join(';')}`;
     if (box._key !== key) {
       box._key = key;
@@ -277,7 +282,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
         });
         svg += `<g data-h="${hr}"${hr === hourOn ? ' class="st-on"' : ''}><rect class="st-hit" x="${hr * W}" y="0" width="${W}" height="${TOP + H + 13}"/>${bars}</g>`;
       });
-      svg += [0, 6, 12, 18, 23].map(hr => `<text x="${hr * W + 5}" y="${TOP + H + 11}" text-anchor="middle">${String(hr).padStart(2, '0')}</text>`).join('');
+      svg += [0, 6, 12, 18, slots - 1].map(hr => `<text x="${hr * W + 5}" y="${TOP + H + 11}" text-anchor="middle">${hh(hr)}</text>`).join('');
       box.innerHTML = `<svg class="st-day${hourOn !== null && hourOn < hours.length ? ' st-sel' : ''}" viewBox="0 0 ${slots * W} ${TOP + H + 13}" role="img" aria-label="${esc(t('stToday'))}">${svg}</svg><div class="st-hour"></div>`;
       box._html = null;
       $(box, 'svg').addEventListener('click', (e) => {
@@ -293,7 +298,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     const chip = $(box, '.st-hour');
     if (hourOn !== null && hourOn < hours.length) {
       const c = hours[hourOn], n = tot[hourOn];
-      put(chip, `<b>${String(hourOn).padStart(2, '0')}–${String(hourOn + 1).padStart(2, '0')}</b><span>${t('stArrivalsN', num(n))}</span>` +
+      put(chip, `<b>${hh(hourOn)}–${hhEnd(hourOn)}</b><span>${t('stArrivalsN', num(n))}</span>` +
         `<span class="tag ontime">${pct(c[0], n)} %</span><span class="tag some">${pct(c[1], n)} %</span><span class="tag late">${pct(c[2], n)} %</span>`);
     } else {
       const all = tot.reduce((a, b) => a + b, 0), ok2 = hours.reduce((a, c) => a + c[0], 0), ok5 = hours.reduce((a, c) => a + c[0] + c[1], 0);

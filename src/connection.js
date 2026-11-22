@@ -12,6 +12,7 @@
 //   onBatch(count): a batch of new positions came (a file, or the stream's next message).
 // Animations run only while the page is open, and none when the phone asks for less motion.
 import { t } from './i18n.js';
+import { now, hhmmss } from './clock.js';   // (Swedish time on the page's clock, as every other time: 2026-11-22)
 import { roll, forgetRoll } from './motion.js';
 import { icon } from './icons.js';
 import OUTLINE from './sweden-outline.json';
@@ -86,7 +87,7 @@ export function createConnection(el, { getTrains, reportTimeOf }) {
     // Errors on the page after the start (index.html window.__pageErrors): the newest first, with the time.
     const errs = window.__pageErrors ?? [];
     $('.conn-errors').hidden = !errs.length;
-    $('.conn-error-list').innerHTML = errs.slice().reverse().map(e => `<li><small>${esc(new Date(e.at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</small> ${esc(e.text)}</li>`).join('');
+    $('.conn-error-list').innerHTML = errs.slice().reverse().map(e => `<li><small>${esc(hhmmss(e.at + (now() - Date.now())))}</small> ${esc(e.text)}</li>`).join('');
     const chain = $('.conn-chain');
     chain.hidden = !info.chain.length;
     chain.innerHTML = info.chain.map(c => `<div class="link ${c.st}"><i>${icon(c.icon, 18)}</i><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></div>`).join('');
