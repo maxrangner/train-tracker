@@ -41,6 +41,8 @@ import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
 import { roll, arrive } from './motion.js';
+import { createDayView, DAY_CSS } from './day-view.js';
+import { sunAt, altitude, HORIZON } from './sun.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -122,7 +124,18 @@ const propsFor = (r, sim) => ({
   // time just "2311" (Max, 2026-11-21, option i B).
   num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined || minutesOf(r) === 0 ? '' : minutesText(minutesOf(r)),
   rest: sim?.syncing && !sim.stale ? ' »»' : '',
+  night: sim?.night ? 1 : 0,   // (on the night side of the sun's line: its dot's glow)
 });
+// A train at an earlier moment (The day, src/day-trains.js): its own number, company and lateness then.
+const pastProps = x => ({ label: label(x.number, x.late ?? undefined), late: lateClass(x.late), stale: false, company: x.brand ?? '',
+  num: String(x.number), mins: x.late === null || x.late === undefined || x.late === 0 ? '' : minutesText(x.late), rest: '', night: x.night ? 1 : 0 });
+// The sun's line (src/sun.js; Settings → Day and night): night where the sun is below the horizon at the moment drawn;
+// its place worked out once a minute. A train there has lit windows (3D) or a glow round its dot.
+let sunMinute = null, sunPlace = null;
+const sunFor = (T) => { const m = Math.floor(T / 60000); if (m !== sunMinute) { sunMinute = m; sunPlace = sunAt(T); } return sunPlace; };
+const nightAt = (x, sun) => (sun && altitude(x.lat, x.lon, sun) < HORIZON ? 1 : 0);
+// The day (build plan part 4; src/day-view.js): made the first time ☰ → The day is opened (the page reading files only).
+let dayView = null;
 
 // Where a train is drawn in this frame (the camera follows exactly this place).
 // A short buzz when a train is opened or followed (round 4). In the app through Capacitor's haptics plugin (Max,
@@ -252,12 +265,17 @@ const map = createMap('map', {
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
   getTrains3d: () => frameTrains,
-  // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
-  alongTrack: (id, d) => trains.along(id, d),
+  // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn. (The day's
+  // trains at an earlier moment are drawn straight: the live train's track is somewhere else by now.)
+  alongTrack: (id, d) => (dayView?.past ? null : trains.along(id, d)),
+  // The sun's line shows the moment drawn: the live map's, or The day's.
+  sunTime: () => (dayView?.past ? dayView.moment : now() - DRAW_DELAY_MS),
   // Tapping a train opens its page and the camera follows it. A tap on nothing (A's sheet, 2026-11-22): the search
   // closes; else the sheet goes down to rest; resting, the page on top closes (as a tap beside a train's card closed
   // it before: Max, 2026-11-13 evening, "single click while following should deselect train").
+  // At an earlier moment (The day): a small bubble over the train instead (number, company, lateness then).
   onTrainTap(id) {
+    if (dayView?.past && (id || dayView.bubbleShown)) { if (id) dayView.bubble([id]); else dayView.hideBubble(); return; }
     if (openTrain(id)) return;
     if (stack.searching) { stack.back(); return; }
     if (stack.level > 0) stack.setLevel(0);
@@ -265,7 +283,7 @@ const map = createMap('map', {
   },
   onStationTap(sig) { openStation(sig); },
   onDisruptionTap(id) { openDisruption(id); },
-  onGroupTap(list) { showPicker(list); },
+  onGroupTap(list) { if (dayView?.past) dayView.bubble(list.map(x => x.id)); else showPicker(list); },
 });
 
 // Buttons press in while held (index.html "Motion"; Max's pick 1, 2026-11-20). An iPhone shows :active on a touch
@@ -567,10 +585,17 @@ versionEl.addEventListener('click', () => {
   sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
 });
 // Esc steps back one page, as the back chip (2026-11-22): a menu or the search first; at Home the sheet goes down.
+// The day's bubble goes first; its ribbon closes when there is nothing else to step back from.
+const dayBack = () => {
+  if (dayView?.bubbleShown) { dayView.hideBubble(); return true; }
+  if (dayView?.isOpen && stack.top() === 'home' && !stack.searching && stack.level === 0) { dayView.close(); return true; }
+  return false;
+};
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!navEl.hidden) { closeNav(); return; }
   if (document.activeElement?.matches?.('.board-q')) return;   // (the board's own search closes itself)
+  if (dayBack()) return;
   stack.back();
 });
 // The phone's back button in the Android app (Max, 2026-11-17; the stack since 2026-11-22): one page back per press;
@@ -588,6 +613,7 @@ if (window.Capacitor?.isNativePlatform?.()) {
   import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
     if (keyboardUp()) { document.activeElement.blur(); return; }
     if (!navEl.hidden) { closeNav(); return; }
+    if (dayBack()) return;
     if (!stack.back()) App.minimizeApp();
   }));
 }
@@ -611,7 +637,56 @@ function closeNav() {
 }
 onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
 document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target)) closeNav(); }, true);
-// The day (another part of the plan fills it in: hooks.onDay). Until then the row is there and says so.
+// The day (build plan part 4, src/day-view.js): the ribbon above the search bar, the sheet down to rest. Only the page
+// reading the server's files has the day's history; the dev page with the key (or a replay) says so. Again: closes it.
+document.head.append(Object.assign(document.createElement('style'), { textContent: DAY_CSS }));
+const NARROW = matchMedia('(max-width: 439px)');
+let sheetPad = 0;
+// The map's free part: above the sheet, and above the ribbon while it is open (the slider and the buttons ride on it).
+function padMap() {
+  const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0;
+  document.documentElement.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
+  map.setSheet(sheetPad + h);
+}
+addEventListener('resize', () => { if (dayView?.isOpen) { padMap(); dayView.draw(); } });
+hooks.onDay = () => {
+  if (!fromFiles || !positionsFeed?.history) { map.note(t('dayNeedsFiles')); return; }
+  if (!dayView) {
+    dayView = createDayView({ history: (a, b) => positionsFeed.history(a, b), now, delay: DRAW_DELAY_MS, net: () => net,
+      onMode(past) {
+        lastDraw = 0;
+        if (past) { stack.home(0); map.unfollow(); }
+        else {
+          frameAll = [];   // (the live trains at once, from the next frame)
+          const top = stack.top();
+          if (top && stack.pageDef(top)?.kind === 'onlylive') stack.replace(top);
+        }
+        map.sunUpdate(true);
+      },
+      onClose: padMap });
+    if (import.meta.env.DEV) window.__day = dayView;   // (tools/day-check.mjs)
+  }
+  if (dayView.isOpen) { dayView.close(); return; }
+  stack.home(0);
+  dayView.open();
+  padMap();
+};
+// Pages that show live data (a train's card, a board, a disruption, a group's trains) at an earlier moment: "Only
+// live. Back to live?" in their place (Max, 2026-11-22: The day is the map only).
+const LIVE_ONLY = new Set(['train', 'station', 'pick', 'dis', 'dislist', 'co', 'kind', 'late', 'still']);
+function defineNow(key) {
+  const def = define(key);
+  if (!def || !dayView?.past || !LIVE_ONLY.has(key.split(':')[0])) return def;
+  return {
+    name: def.name, kind: 'onlylive',
+    show(el) {
+      if (!dayView?.past) { setTimeout(() => { if (stack.top() === key) stack.replace(key); }); return; }
+      el.innerHTML = `<div class="only-live"><p>${esc(t('dayOnlyLive'))}</p><small class="sub">${esc(t('dayOnlyLiveSub'))}</small>` +
+        `<button type="button" class="only-live-go">${esc(t('dayBackLive'))}</button></div>`;
+      el.querySelector('.only-live-go').onclick = () => dayView.live();
+    },
+  };
+}
 
 document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
 document.getElementById('open-settings').onclick = () => { closeNav(); stack.open('page:settings'); };
@@ -721,12 +796,47 @@ function showFollowed(r, place) {
 // frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
+// The day at an earlier moment (src/day-view.js): the trains from the day's history (src/day-trains.js) instead of the
+// live ones; the live engine runs on untouched underneath (its places worked out once a second, for Home and the
+// search). Drawn when the moment moved (at most 30 times a second), else as the live map is.
+let dayDrawn = null, liveAllAt = 0, sunDrawnAt = 0;
+function dayFrame(ts) {
+  dayView.tick(ts);
+  const T = dayView.moment;
+  if (T === null) return;   // (a play just came to the end: live from the next frame)
+  if (ts - liveAllAt > 1000) {
+    liveAllAt = ts;
+    frameAll = (netIn ? trains.placedAt(now() - DRAW_DELAY_MS) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+    frameById = new Map(frameAll.map(x => [x.id, x]));
+  }
+  if (T !== dayDrawn ? ts - lastDraw >= 33 : ts - lastDraw >= Math.max(250, map.trainsEvery())) {
+    lastDraw = ts;
+    dayDrawn = T;
+    const near = map.nearView(), sun = settings.dayNight ? sunFor(T) : null, features = [];
+    frameTrains = [];
+    for (const x of dayView.at(T, near)) {
+      if (filter.active && !filter.shows(x.brand)) continue;
+      x.night = nightAt(x, sun);
+      frameTrains.push(x);
+      if (near(x.lon, x.lat)) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] }, properties: { id: x.id, bearing: x.bearing, ...pastProps(x) } });
+    }
+    map.setTrains({ type: 'FeatureCollection', features });
+    if (import.meta.env.DEV) window.__last3d = frameTrains;
+  }
+  map.tick(ts);
+  map.setSelectedPlace(null, null);
+  dayView.placeBubble((lon, lat) => map.project(lon, lat));
+  // the sun's line with the moment (it draws itself again only when the moment has moved a minute)
+  if (ts - sunDrawnAt > 150) { sunDrawnAt = ts; map.sunUpdate(); }
+}
 function frame(ts) {
+  if (dayView?.past) { dayFrame(ts); requestAnimationFrame(frame); return; }
   const t = now() - DRAW_DELAY_MS;
   const openId = panel.openId;
   const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
   if (due || !frameAll.length) {
-    frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
+    const sun = settings.dayNight ? sunFor(t) : null;
+    frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id), night: nightAt(x, sun) }));
     // only some trains: a group's page or the lateness bar's colour (lightTest) while it is open, else the filter
     frameTrains = lightTest ? frameAll.filter(x => x.id === openId || lightTest(x))
       : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
@@ -734,7 +844,7 @@ function frame(ts) {
   } else if (openId && frameById.has(openId)) {
     const x = trains.placedOne(openId, t);
     if (x) {
-      const one = { ...x, brand: lateness.brand(x.id) }, old = frameById.get(openId);
+      const old = frameById.get(openId), one = { ...x, brand: lateness.brand(x.id), night: old.night };
       frameById.set(openId, one);
       for (const list of [frameAll, frameTrains]) { const i = list.indexOf(old); if (i >= 0) list[i] = one; }
     }
@@ -792,9 +902,10 @@ settingsPage.querySelector('.panel-close').onclick = () => stack.close('page:set
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
-    || key === 'routeNames' || key === 'nameSide' || key === 'pillSide' || key === 'routeEdge' || key === 'colourBlind') map.applySettings();
+    || key === 'routeNames' || key === 'nameSide' || key === 'pillSide' || key === 'routeEdge' || key === 'colourBlind') { map.applySettings(); dayView?.draw(); }
   if (key === 'language') {
     translatePage();
+    dayView?.relabel();
     nameSwatches();
     map.relabel();   // "3 trains" on the map
     menu.refresh();
@@ -809,6 +920,7 @@ onSettingChange((key) => {
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
+  if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
   if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
@@ -1258,6 +1370,7 @@ setInterval(() => {
     else stack.close(key);
     if (!wasFollowing && panel.openId === to) { map.unfollow(); panel.setFollowing(false); }
   }
+  if (!dayView?.past) map.sunUpdate();   // (the sun's line moves on once a minute; The day's moment: its own frame)
   const error = statusError();
   // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
   const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
@@ -1324,8 +1437,8 @@ function define(key) {
 }
 stack = createStack({
   sheet: document.getElementById('sheet'),
-  define,
-  onPad: h => map.setSheet(h),
+  define: defineNow,
+  onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(legend ? legendTest(legend) : null);
@@ -1334,7 +1447,7 @@ stack = createStack({
     if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
   },
 });
-stack.onSearch((on) => { closeNav(); if (on) menu.open(); });
+stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');

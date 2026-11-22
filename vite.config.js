@@ -12,8 +12,14 @@ const changed = git('status --porcelain --untracked-files=no') !== '';
 // No live link from the dev page back to this PC (Max, 2026-11-19): with it, the page reloaded itself every time the
 // phone dropped the link (going out of the browser and back, the wifi napping), every 10-20 s at times. The cost: after
 // a change in the code, the dev page is reloaded by hand. The public page and the app never had the link.
+// The fetcher's files for a phone on the home wifi (2026-11-23, The day): a fetcher running here with --serve answers
+// only on this computer (127.0.0.1:8097), which the phone can't reach; the dev page hands them on under /fetcher/, so
+// the phone's page uses #files=/fetcher/ (the page itself is http://192.168.x.x:<port>/). Only the dev server does this.
+// FETCHER=http://127.0.0.1:<port> for a fetcher on another port.
+const FETCHER = process.env.FETCHER ?? 'http://127.0.0.1:8097';
+
 export default {
-  server: { ws: false },
+  server: { ws: false, proxy: { '/fetcher/': { target: FETCHER, changeOrigin: true, rewrite: p => p.replace(/^\/fetcher/, '') } } },
   define: {
     __VERSION__: JSON.stringify(version),
     __BUILD__: JSON.stringify(commit + (changed ? '+' : '')),

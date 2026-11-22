@@ -37,7 +37,7 @@ const EN = {
   home: 'Home', backTo: w => `Back to ${w}`, backToShort: 'Back to', cancel: 'Cancel',
   theDay: 'The day', daySoon: 'The day is coming soon.', helpAbout: 'Help & About',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
-  dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayLoading: 'loading',
+  dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
   dayNow: 'now', dayDrag: 'The day: drag back in time', dayClose: 'Close The day', dayThen: c => `at ${c}`, dayLateUnknown: 'lateness not known',
   dayOnlyLive: 'Only live. Back to live?', dayOnlyLiveSub: 'The day shows the map only: no cards or boards for an earlier moment.',
   dayNeedsFiles: "The day needs the server's files (what our server kept of today). This page asks Trafikverket itself, so it has none.",
@@ -306,7 +306,7 @@ const SV = {
   // Det enda bladet (Max val A, 2026-11-22).
   home: 'Hem', backTo: w => `Tillbaka till ${w}`, backToShort: 'Tillbaka till', cancel: 'Avbryt',
   theDay: 'Dagen', daySoon: 'Dagen kommer snart.', helpAbout: 'Hjälp och om',
-  dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayLoading: 'hämtar',
+  dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
   dayNow: 'nu', dayDrag: 'Dagen: dra bakåt i tiden', dayClose: 'Stäng Dagen', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
   dayOnlyLive: 'Bara live. Tillbaka till live?', dayOnlyLiveSub: 'Dagen visar bara kartan: inga kort eller tavlor för en tidigare tid.',
   dayNeedsFiles: 'Dagen behöver serverns filer (det vår server sparat av dagen). Den här sidan frågar Trafikverket själv, så den har inga.',
