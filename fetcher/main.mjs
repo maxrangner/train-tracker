@@ -23,7 +23,7 @@ import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
 import { askRoutes as askRoutesOnce, MAX_BACK_MS } from './ask-routes.mjs';
-import { GROUPS } from '../src/tap-files.js';
+import { createTapRound } from './tap-round.mjs';
 import { FORMAT } from '../src/live-file.js';
 
 globalThis.EventSource ??= NodeEventSource;
@@ -212,36 +212,17 @@ if (KEY) every('arrivals', 5 * MIN, 6000, async () => {
 });
 
 // ---------- taps from files (plan step 4, 2026-11-17: fetcher/timetable.mjs, src/tap-files.js) ----------
-// The card and board files in groups, made in turns: all at the first round (a page opening needs them), then the
-// oldest card and the oldest board every 30 s (each one about every 16 minutes), with a changes file every 30 s that brings every row changed
-// since the oldest of them, so a tap is at most ~30 s behind Trafikverket. The index every 10 minutes, the station
-// messages every 2 minutes. A replay uses its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37:
-// the format check on this computer then sees the tap files of the code about to be released; no station messages).
-const groupAt = {};   // card-NN / board-NN / day-NN -> when its file in use was made
+// The tap files (fetcher/tap-round.mjs). The index every 10 minutes, the station messages every 2 minutes. A replay uses
+// its recording's timetable (seeded, nothing asked; since 2026-11-19, TODO 37: the format check on this computer then
+// sees the tap files of the code about to be released; no station messages).
+let tapRound = null;
 const timetable = replayName
   ? createTimetable({ log, seed: { days: [...new Set((replayTimetable ?? []).map(a => (a.ScheduledDepartureDateTime ?? '').slice(0, 10)))], rows: replayTimetable ?? [] } })
-  : KEY ? createTimetable({ log, onLoaded: () => { for (const k in groupAt) delete groupAt[k]; } }) : null;
+  : KEY ? createTimetable({ log, onLoaded: () => tapRound?.loaded() }) : null;
 if (timetable) {
   stops.push(() => timetable.stop());
-  const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`, `day-${g}`]);
-  // A full round (all 96: at the start, 18:00, 03:30, after a stream gap) held the thread 4.1 s until 2026-11-22: no
-  // live file, streams unread (the code review of 2026-11-21, finding 7). Now 0.7 s in all on the saved day of 17 Nov,
-  // and the thread is let go after every file (the longest ~20 ms), so the live file and the streams go on.
-  const breather = () => new Promise(r => setImmediate(r));
-  every('tap files', 30000, 30000, async () => {
-    if (!timetable.ready()) return;
-    const t = Date.now();
-    const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
-      : ['card', 'board', 'day'].map(w => GROUP_KINDS.filter(k => k.startsWith(w)).sort((a, b) => groupAt[a] - groupAt[b])[0]);
-    for (const k of due) {
-      const [what, g] = k.split('-');
-      shelf.put(k, t, { v: FORMAT, ...timetable[what](g, t) });
-      groupAt[k] = t;
-      await breather();
-    }
-    const oldest = Math.min(...Object.values(groupAt));
-    shelf.put('taps-add', t, { v: FORMAT, ...timetable.changes(oldest - MIN, t) });
-  });
+  tapRound = createTapRound({ timetable, shelf });
+  every('tap files', 30000, 30000, () => tapRound.tick());
   const notReady = () => { throw new Error('the timetable is still loading'); };   // every() tries again in a minute
   every('taps index', 10 * MIN, 45000, () => { if (!timetable.ready()) notReady(); const t = Date.now(); shelf.put('taps-index', t, { v: FORMAT, ...timetable.index(t) }); });
   every('messages file', 2 * MIN, 50000, () => { const t = Date.now(); shelf.put('messages', t, { v: FORMAT, ...timetable.messages(t) }); });
