@@ -6,8 +6,9 @@
 # where its page is opened.
 [Unit]
 Description=Spårat monitor (watches the fetcher, mails about problems)
-Wants=network-online.target
-After=network-online.target sparat-fetcher.service
+# (time-sync.target: start once the clock is set from the internet, if systemd-time-wait-sync is on; 2026-11-22)
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target sparat-fetcher.service
 
 [Service]
 Type=simple

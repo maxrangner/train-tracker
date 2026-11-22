@@ -36,7 +36,7 @@ export function createMailer(cfg, log, { offline = () => false } = {}) {
       try {
         if (offline()) throw new Error('test: no internet');
         const late = Date.now() - m.t > 2 * 60000;
-        const written = new Date(m.t).toLocaleString('sv-SE');
+        const written = new Date(m.t).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' });
         await transport.sendMail({
           from: cfg.MAIL_FROM || `Spårat monitor <${cfg.MAIL_USER}>`, to: cfg.MAIL_TO,
           subject: `Spårat: ${m.subject}`,

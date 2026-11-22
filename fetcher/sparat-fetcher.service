@@ -6,8 +6,9 @@
 # no address on this PC or in the home network, only the internet (IPv4) and the name lookup on 127.0.0.53.
 [Unit]
 Description=Spårat fetcher (Trafikverket -> small files for the map)
-Wants=network-online.target
-After=network-online.target
+# (time-sync.target: start once the clock is set from the internet, if systemd-time-wait-sync is on; 2026-11-22)
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
 
 [Service]
 Type=simple
