@@ -148,6 +148,8 @@ add(check('upload-check', depsOf('tools/upload-check.mjs'), plain(['tools/upload
 add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { short: true })));
 // The monitor's mail rules on made-up timelines (offline, under a second; in the check since 2026-11-22).
 add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// My trains: direct trains and changes from two whole-day boards, on the saved day of 17 Nov (offline, ~10 s; 2026-11-22).
+add(check('trips-check', [...depsOf('tools/trips-check.mjs'), 'data/measure/day-2026-11-17.json'], plain(['tools/trips-check.mjs'], { short: true })));
 // The sun's line against published sunrise and sunset times (offline, under a second; 2026-11-22).
 add(check('sun-check', depsOf('tools/sun-check.mjs'), plain(['tools/sun-check.mjs'], { short: true })));
 // An odd row stops no feed (positions, passings, a reader that throws; offline, under a second; 2026-11-22).
