@@ -146,6 +146,8 @@ add(check('libraries', null, async () => {
 add(check('upload-check', depsOf('tools/upload-check.mjs'), plain(['tools/upload-check.mjs'], { short: true }), { order: 17 }));
 // Taps from files (plan step 4): a saved day's timetable through the files' format and back, offline. A second.
 add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { short: true })));
+// The monitor's mail rules on made-up timelines (offline, under a second; in the check since 2026-11-22).
+add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
 
 // The replays: each recording through the train code, its routes (none drawn straight across: tools/path-check.mjs,
 // 0 of 73,368 pieces since 2026-11-14), and the open train's line following the train (tools/route-follow-check.mjs).
