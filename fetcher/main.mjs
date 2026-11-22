@@ -18,13 +18,13 @@ import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCanc
 import { followPositions } from '../src/trains-source.js';
 import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
-import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIVE_MS } from './files.mjs';
+import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
 import { askRoutes as askRoutesOnce, MAX_BACK_MS } from './ask-routes.mjs';
 import { createTapRound } from './tap-round.mjs';
-import { FORMAT } from '../src/live-file.js';
+import { FORMAT, HISTORY_MS, HISTORY_EVERY_MS, historySlot } from '../src/live-file.js';
 
 globalThis.EventSource ??= NodeEventSource;
 const MIN = 60000;
@@ -145,9 +145,27 @@ function every(name, ms, first, fn) {
   later(first, run);
 }
 
+// The day (build plan part 4, 2026-11-22): with the first live file of each minute a sample of every train
+// (fetcher/state.mjs sampleHistory), and when a 15-minute slot has ended its file (history-<slot>.json). A slot this
+// run started in the middle of goes out with what it has; a replay (--replay) makes them the same way.
+let sampledAt = null, historyAt = null;   // the minute last sampled, the slot being gathered
+function historyTick(t) {
+  const minute = Math.floor(t / HISTORY_EVERY_MS);
+  if (minute === sampledAt) return;
+  sampledAt = minute;
+  const slot = historySlot(t);
+  if (historyAt !== null && slot !== historyAt) {
+    const trains = state.takeHistory(historyAt);
+    if (trains.length) shelf.put('history', historyAt * HISTORY_MS, buildHistory(historyAt, trains));
+  }
+  historyAt = slot;
+  state.sampleHistory(t);
+}
+
 // The live file, at the start of every 5-s slot.
 function liveTick() {
   const t = Date.now();
+  try { historyTick(t); } catch (e) { log(`history: ${e.message}`); }
   // Uploading: only what is on one.com (fetcher/upload.mjs names()); else (--serve) everything on the shelf.
   const names = uploader ? uploader.names() : shelf.names(); delete names.live;
   const live = buildLive(state, t, names);

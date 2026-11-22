@@ -4,7 +4,8 @@
 // live-<slot>.json, slot = floor(time / 5 s); the live file names the current version of every other file.
 // Each file is kept a while after a newer one exists (KEEP), then removed (from the shelf, and from one.com).
 import { gzipSync } from 'node:zlib';
-import { FORMAT, trainRow, passingRow, plannedRow, LIVE_MS, liveName } from '../src/live-file.js';
+import { FORMAT, trainRow, passingRow, plannedRow, LIVE_MS, liveName, historyRow, historyName, historySlot, historyUntil,
+  HISTORY_MS, HISTORY_EVERY_MS } from '../src/live-file.js';
 
 export { LIVE_MS };
 const MIN = 60000;
@@ -26,12 +27,18 @@ export const KINDS = {
   'taps-add': [30000, 3 * MIN],
   'taps-index': [10 * MIN, 15 * MIN],
   messages: [2 * MIN, 5 * MIN],
+  // The day (build plan part 4, 2026-11-22): one file per 15-minute slot, made when the slot ends, kept until 01:00
+  // Swedish time the night after its day (keptUntil below, not this number: the longest it can be is about 25 h).
+  history: [HISTORY_MS, 25 * 60 * MIN],
 };
 const GROUP_KEEP = 25 * MIN;   // card-NN, board-NN, day-NN: kept 25 minutes after made (a newer one comes within ~16)
 export const keepOf = kind => KINDS[kind]?.[1] ?? (/^(card|board|day)-\d+$/.test(kind) ? GROUP_KEEP : 15 * MIN);
+// Until when a file of `kind` made at `at` is kept (a history file: its slot's start; src/live-file.js historyUntil).
+export const keptUntil = (kind, at) => kind === 'history' ? historyUntil(at) : at + keepOf(kind);
 // The live file's name comes from its 5-s slot (a page works it out from the clock); every other file is named by
 // the moment it was made (the live file tells its name), so even a file made twice in one period gets a new name.
-export const nameOf = (kind, t) => kind === 'live' ? liveName(t) : `${kind}-${t}.json`;
+// A history file is named by its 15-minute slot (the page works the names out too).
+export const nameOf = (kind, t) => kind === 'live' ? liveName(t) : kind === 'history' ? historyName(historySlot(t)) : `${kind}-${t}.json`;
 
 // The live file: every train's latest position, the passings received in the last 30 s (a page asking every 5 s
 // may miss a few files and still get every passing; back after longer, it reads the passings file), the other
@@ -63,7 +70,14 @@ export function buildPlanned(state, t, ids, from, since = null, inBase = null) {
 // at the row's end since 2026-11-21: Statistik's company page). Read by src/main.js filesArrivals.
 export const buildArrivals = (kind, t, day, rows) => ({ v: 1, t, kind, day, rows: [...rows].map(([id, [p, a, b]]) => [id, p, a, b ?? null]) });
 
-// The shelf: name -> { kind, at, json, gz }. onAdd/onRemove let the uploader follow it.
+// The day: a finished 15-minute slot's trains (fetcher/state.mjs takeHistory) as its file; t: the slot's start.
+// Format: src/live-file.js historyRow.
+export const buildHistory = (slot, trains) => {
+  const t = slot * HISTORY_MS;
+  return { v: FORMAT, t, kind: 'history', slot, every: HISTORY_EVERY_MS, trains: trains.map(tr => historyRow(tr, t)) };
+};
+
+// The shelf: name -> { kind, at, until (kept until), json, gz }. onAdd/onRemove let the uploader follow it.
 export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
   const files = new Map();
   const current = {};   // kind -> newest name
@@ -71,7 +85,7 @@ export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
     put(kind, t, obj) {
       const name = nameOf(kind, t);
       const json = Buffer.from(JSON.stringify(obj));
-      const f = { kind, at: t, json, gz: gzipSync(json, { level: 6 }) };
+      const f = { kind, at: t, until: keptUntil(kind, t), json, gz: gzipSync(json, { level: 6 }) };   // (until worked out once: a history file's needs the Swedish date)
       files.set(name, f);
       current[kind] = name;
       onAdd(name, f);
@@ -80,7 +94,7 @@ export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {
     // Remove what is past its keep time (never the newest of a kind).
     sweep(t) {
       for (const [name, f] of files) {
-        if (current[f.kind] === name || t - f.at <= keepOf(f.kind)) continue;
+        if (current[f.kind] === name || t <= f.until) continue;
         files.delete(name);
         onRemove(name, f);
       }

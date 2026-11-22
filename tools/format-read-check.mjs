@@ -4,7 +4,7 @@
 // which every field has its own value, reads them with the readers as RELEASED (src/live-file.js and src/tap-files.js
 // taken from the version tag with git, into a temp folder) and with today's, and fails when a field the released
 // reader knows reads differently. Covers the row kinds: the live file's trains and passings, passings, planned,
-// cards, boards, taps-add, and (2026-11-21, TODO 37's rest) arrivals + arrivals-add and the station messages: their
+// cards, boards, taps-add, history (2026-11-22), and (2026-11-21, TODO 37's rest) arrivals + arrivals-add and the station messages: their
 // readers are src/main.js filesArrivals (taken out of the tag's main.js by its name and run on its own: the page
 // itself can't run here) and src/files-source.js filesTapAsker (the tag's module with what it imports). Kinds with
 // named fields (stations, disruptions, stats, taps-index) can't swap by position, and a renamed field fails
@@ -21,7 +21,8 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import * as now from '../src/live-file.js';
 import * as tapsNow from '../src/tap-files.js';
-import { buildLive, buildPassings, buildPlanned, buildArrivals } from '../fetcher/files.mjs';
+import { buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory } from '../fetcher/files.mjs';
+import { historySlot } from '../src/live-file.js';
 import { filesTapAsker } from '../src/files-source.js';
 import { createTimetable } from '../fetcher/timetable.mjs';
 
@@ -84,6 +85,10 @@ const files = [
   ['live passings', live.passings.map(r => [r]), 'passingOf'],
   ['passings', buildPassings(state, T).passings.map(r => [r]), 'passingOf'],
   ['planned', (f => f.rows.map(r => [r, f.brands]))(buildPlanned(state, T, [], 0)), 'plannedOf'],
+  // The day's history (2026-11-22): a train with two points, every field its own value.
+  ['history', (f => f.trains.map(r => [r, f.t]))(buildHistory(historySlot(T), [{ id: '1234/2026-11-19', number: '5678', brand: 'SJ Regional',
+    from: T + 60000, until: T + 240000, points: [{ time: T + 37000, lon: 18.12345, lat: 59.54321, speed: 87, bearing: 213, late: 3 },
+      { time: T + 101000, lon: 18.13456, lat: 59.55432, speed: null, bearing: null, late: -1 }] }])), 'historyOf'],
 ];
 const tapFiles = [['card', tt.card(tapsNow.groupOf('91'), T)], ['board', tt.board(tapsNow.groupOf('Cst'), T)], ['taps-add', tt.changes(0, T)]];
 for (const [k, f] of tapFiles) if (!f.r.length) { console.log(`format-read-check: the made-up ${k} file is empty (the check itself is broken)`); process.exit(1); }
