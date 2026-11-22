@@ -1,0 +1,119 @@
+// The steps the screen checks take on the page, in one place (the plan of 2026-11-22, part 0): since the one sheet
+// (src/stack.js) a layout change means editing this file, not every check. Each step acts as a person would (a tap on
+// the field, typing, a tap on a row) and waits until the page has answered. The page exposes window.__stack (src/main.js):
+// keys(), top(), names(), level, heights, searching, open(key), back(), home(level), setLevel(i).
+//   import { waitForMap, pageKey, openSearch, openTrainByNumber, ... } from './lib/screen.mjs';
+import { openMap, sleep } from './browser.mjs';
+
+// A new page on the map (tools/lib/browser.mjs openMap), once the sheet is there too.
+export async function waitForMap(browser, options = {}) {
+  const page = await openMap(browser, options);
+  await until(page, () => Boolean(window.__stack?.top()), 10000);
+  return page;
+}
+
+// Wait until fn (run in the page) is true, at most ms; returns whether it came true.
+export async function until(page, fn, ms = 5000, arg) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    if (await page.evaluate(fn, arg).catch(() => false)) return true;
+    await sleep(100);
+  }
+  return false;
+}
+
+// The stack's top page key ('home', 'train:<id>', 'station:<sig>', 'page:settings', ...), its keys, the sheet's height.
+export const pageKey = page => page.evaluate(() => window.__stack.top());
+export const pageKeys = page => page.evaluate(() => window.__stack.keys());
+export const sheetLevel = page => page.evaluate(() => window.__stack.level);
+export const setLevel = async (page, i) => { await page.evaluate(n => window.__stack.setLevel(n), i); await sleep(450); };
+
+// Down to Home at rest: menus and the search closed, every page gone.
+export async function toRest(page) {
+  await page.evaluate(() => { document.getElementById('nav').hidden = true; if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
+  await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0);
+  await sleep(300);
+}
+
+// The search: Home's field tapped (the sheet rises to full); the results are #search-results.
+export async function openSearch(page) {
+  await toRest(page);
+  await page.click('#search');
+  await until(page, () => window.__stack.searching && window.__stack.level === 2);
+  await sleep(350);
+}
+// Type into the search (after openSearch).
+export async function typeSearch(page, text) {
+  await page.evaluate(() => { const i = document.getElementById('search'); i.value = ''; i.dispatchEvent(new Event('input')); });
+  await page.type('#search', text, { delay: 20 });
+  await sleep(300);
+}
+
+// A train by its number: searched, its row tapped (one on the map first, else today's timetable's); waits for its card.
+// Returns its page key, or null when none was found.
+export async function openTrainByNumber(page, number) {
+  await openSearch(page);
+  await typeSearch(page, String(number));
+  // the timetable rows come after 350 ms and an answer
+  await until(page, () => Boolean(document.querySelector('#search-results [data-go^="train:"]')) && !document.querySelector('#search-results .state.loading'), 8000);
+  const key = await page.evaluate(() => { const b = document.querySelector('#search-results [data-go^="train:"]'); if (!b) return null; b.click(); return b.dataset.go; });
+  if (!key) return null;
+  await until(page, k => window.__stack.top() === k, 3000, key);
+  await until(page, () => Boolean(document.querySelector('#panel .panel-more, #panel .state.empty, #panel .state.error')), 10000);
+  return key;
+}
+
+// A station by its name (or the start of it): searched, the first station row tapped. Returns its page key, or null.
+export async function openStationByName(page, name) {
+  await openSearch(page);
+  await typeSearch(page, name);
+  const key = await page.evaluate(() => { const b = document.querySelector('#search-results [data-go^="station:"]'); if (!b) return null; b.click(); return b.dataset.go; });
+  if (!key) return null;
+  await until(page, k => window.__stack.top() === k, 3000, key);
+  await until(page, () => Boolean(document.querySelector('#board .bd-row, #board .state.empty, #board .state.error')), 10000);
+  return key;
+}
+
+// ☰: its small menu open (rows: #open-day, #open-settings, #help-button).
+export async function openMenu(page) {
+  await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); });
+  if (await page.evaluate(() => document.getElementById('nav').hidden)) await page.click('#nav-button');
+  await until(page, () => !document.getElementById('nav').hidden);
+  await sleep(200);
+}
+// A row of ☰'s menu: 'day', 'settings' or 'help' (or its words as shown). Waits for its page (not for The day).
+const ROWS = { day: '#open-day', settings: '#open-settings', help: '#help-button', about: '#help-button' };
+export async function openFromMenu(page, name) {
+  if (await pageKey(page) !== 'home') await toRest(page);
+  await openMenu(page);
+  const sel = ROWS[String(name).toLowerCase()] ?? await page.evaluate((w) => {
+    const b = [...document.querySelectorAll('#nav .nav-row')].find(r => r.textContent.trim().toLowerCase() === w.toLowerCase());
+    return b ? `#${b.id}` : null;
+  }, String(name));
+  if (!sel) throw new Error(`no row "${name}" in ☰`);
+  await page.click(sel);
+  const want = { '#open-settings': 'page:settings', '#help-button': 'page:help' }[sel];
+  if (want) await until(page, k => window.__stack.top() === k, 3000, want);
+  await sleep(400);
+  return pageKey(page);
+}
+
+// The live mark at the top: Connection as a page.
+export async function openConnection(page) {
+  await page.click('#status');
+  await until(page, () => window.__stack.top() === 'page:conn');
+  await sleep(400);
+}
+
+// One step back, as the back chip (or Esc) does: returns the page key after it.
+export async function back(page) {
+  const chip = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-back'); const r = b.getBoundingClientRect(); return window.__stack.top() !== 'home' && r.width > 0 && !window.__stack.searching; });
+  if (chip) await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
+  else await page.keyboard.press('Escape');
+  await sleep(450);
+  return pageKey(page);
+}
+
+// What the sheet shows now, for a check's message: { key, keys, level, names, back (the chip's word) }.
+export const sheetState = page => page.evaluate(() => ({ key: window.__stack.top(), keys: window.__stack.keys(), level: window.__stack.level,
+  names: window.__stack.names(), back: document.querySelector('#sheet .sh-back span')?.textContent ?? '' }));

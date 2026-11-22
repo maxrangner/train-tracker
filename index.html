@@ -71,7 +71,8 @@
     #sheet.dragging { transition: none; }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
     @media (min-width: 440px) {
-      #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; bottom: 10px; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0; }
+      #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; bottom: 10px; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
+        transition: height .36s var(--ez); will-change: height; }
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
@@ -127,6 +128,8 @@
     .pg :is(.panel-table, .panel-info-box, .help-body, #settings, #conn-body, .pick-list, .dis-text, .stats-body) { overflow: visible; max-height: none; min-height: 0; margin-right: 0; padding-right: 0; }
     .pg :is(#panel, #board, #picker, #disruption, #settings-page, #help, #conn-page) { max-height: none !important; height: auto !important; display: flex; flex-direction: column; gap: 6px; }
     .pg #disruption { gap: 0; }
+    .pg .stats-body { flex: none; }
+    .pg .panel-head strong { font-size: 22px; }
     .pg .panel-head { min-height: 36px; }
     .pg .tl-head { top: -4px; }
     /* The live map's buttons ride on the sheet's top edge; hidden when it is high (index.html .sheet-tall). */

@@ -56,10 +56,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- heights ----------
   const lowOf = pg => (pg?.def.low ?? (pg?.key === 'home' ? HEAD_PX : PAGE_LOW_PX)) + (wide() ? 0 : safe().bottom);
-  const shownH = () => H[2] - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42;
+  // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
+  // screen: it floats 10 px above the bottom, so it takes the height shown itself (sliding it down would show its
+  // lower part in that gap).
+  const shownH = () => (wide() ? sheet.getBoundingClientRect().height : H[2] - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42);
   function place(h, glide = true) {
     sheet.classList.toggle('dragging', !glide);
-    sheet.style.transform = `translateY(${Math.round(H[2] - h)}px)`;
+    if (wide()) { sheet.style.transform = ''; sheet.style.height = `${Math.round(h)}px`; }
+    else { sheet.style.height = `${H[2]}px`; sheet.style.transform = `translateY(${Math.round(H[2] - h)}px)`; }
     const lvl = h < H[0] + 28 ? 'low' : h > (H[1] + H[2]) / 2 ? 'full' : 'half';
     sheet.dataset.lvl = lvl;
     root.style.setProperty('--sheet-shown', `${Math.round(h)}px`);
@@ -73,7 +77,6 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const h = innerHeight, s = safe();
     const full = wide() ? h - 20 : h - TOP_ROOM_PX - s.top;
     H = [lowOf(top()), Math.round(Math.min(h * 0.6, Math.max(h * 0.5, 360), full - 40)), Math.round(full)];
-    sheet.style.height = `${H[2]}px`;
     place(H[idx], false);
     sheet.getBoundingClientRect();
     sheet.classList.remove('dragging');

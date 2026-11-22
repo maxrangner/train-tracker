@@ -441,13 +441,13 @@ function stationPage(sig) {
       if (again) return;
       // From a train that stops here: the camera rides the train's line here (its line stays on the map meanwhile).
       const prevTrain = prev?.kind === 'train' ? prev.key.slice(6) : null;
-      if (dir > 0 && prevTrain && lastPath?.id === prevTrain && lastPath.sigs.has(sig)) {
+      if (dir !== 0 && prevTrain && lastPath?.id === prevTrain && lastPath.sigs.has(sig)) {
         const cam = map.camera();
         map.ride(along(lastPath.coords, cam, shownAt(st)), rideZoom(cam.z)).then(() => { if (!panel.openId) clearPath(); });
         return;
       }
       if (!panel.openId) clearPath();
-      if (dir > 0) map.goTo(shownAt(st), 13);   // lands above the sheet
+      if (dir !== 0) map.goTo(shownAt(st), dir > 0 ? 13 : 11);   // lands above the sheet
     },
     hide() { if (board.openSig === sig) board.close(); },
     unmount() { if (board.openSig === sig) board.close(); },
