@@ -394,8 +394,9 @@ function trainPage(id) {
       const following = follow(id);
       if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
     },
-    hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } },
-    unmount() { if (panel.openId === id) panel.close(); },
+    // (its card goes back to the holder: an element taken off the page with its page couldn't be found by its id)
+    hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
+    unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
@@ -449,8 +450,8 @@ function stationPage(sig) {
       if (!panel.openId) clearPath();
       if (dir !== 0) map.goTo(shownAt(st), dir > 0 ? 13 : 11);   // lands above the sheet
     },
-    hide() { if (board.openSig === sig) board.close(); },
-    unmount() { if (board.openSig === sig) board.close(); },
+    hide() { if (board.openSig === sig) board.close(); holder.append(boardEl); },
+    unmount() { if (board.openSig === sig) board.close(); if (boardEl.parentElement !== holder && !stack.top()?.startsWith('station:')) holder.append(boardEl); },
     star: { on: () => favourites.has('station', sig), toggle: () => favourites.toggle('station', sig) },
     redraw: () => board.relabel(),
   };
@@ -483,8 +484,8 @@ function pickPage(key) {
       pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
       for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
     },
-    hide() { pickerEl.hidden = true; },
-    unmount() { pickerEl.hidden = true; pickLists.delete(key); },
+    hide() { pickerEl.hidden = true; holder.append(pickerEl); },
+    unmount() { pickerEl.hidden = true; pickLists.delete(key); if (!stack.top()?.startsWith('pick:')) holder.append(pickerEl); },
   };
 }
 
