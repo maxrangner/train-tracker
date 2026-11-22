@@ -152,6 +152,8 @@ add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/moni
 add(check('trips-check', [...depsOf('tools/trips-check.mjs'), 'data/measure/day-2026-11-17.json'], plain(['tools/trips-check.mjs'], { short: true })));
 // "You seem to be on 231": a phone riding recorded trains is offered the right one; standing, a car, poor fixes not (~5 s).
 add(check('seem-on-check', [...depsOf('tools/seem-on-check.mjs'), 'data/positions-2026-11-19T22-28-02-750Z.jsonl'], plain(['tools/seem-on-check.mjs'], { short: true })));
+// The shop window's tour: the fastest, a real meeting, when it starts (the rush of 17 Nov; ~20 s; 2026-11-22).
+add(check('tour-check', [...depsOf('tools/tour-check.mjs'), 'data/positions-2026-11-17T15-00-00-001Z.jsonl'], plain(['tools/tour-check.mjs'], { short: true })));
 // The sun's line against published sunrise and sunset times (offline, under a second; 2026-11-22).
 add(check('sun-check', depsOf('tools/sun-check.mjs'), plain(['tools/sun-check.mjs'], { short: true })));
 // An odd row stops no feed (positions, passings, a reader that throws; offline, under a second; 2026-11-22).
