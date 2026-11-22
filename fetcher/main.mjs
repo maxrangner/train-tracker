@@ -230,7 +230,11 @@ const timetable = replayName
 if (timetable) {
   stops.push(() => timetable.stop());
   const GROUP_KINDS = Array.from({ length: GROUPS }, (_, i) => String(i).padStart(2, '0')).flatMap(g => [`card-${g}`, `board-${g}`, `day-${g}`]);
-  every('tap files', 30000, 30000, () => {
+  // A full round (all 96: at the start, 18:00, 03:30, after a stream gap) held the thread 4.1 s until 2026-11-22: no
+  // live file, streams unread (the code review of 2026-11-21, finding 7). Now 0.7 s in all on the saved day of 17 Nov,
+  // and the thread is let go after every file (the longest ~20 ms), so the live file and the streams go on.
+  const breather = () => new Promise(r => setImmediate(r));
+  every('tap files', 30000, 30000, async () => {
     if (!timetable.ready()) return;
     const t = Date.now();
     const due = GROUP_KINDS.some(k => !groupAt[k]) ? GROUP_KINDS.filter(k => !groupAt[k])
@@ -239,6 +243,7 @@ if (timetable) {
       const [what, g] = k.split('-');
       shelf.put(k, t, { v: FORMAT, ...timetable[what](g, t) });
       groupAt[k] = t;
+      await breather();
     }
     const oldest = Math.min(...Object.values(groupAt));
     shelf.put('taps-add', t, { v: FORMAT, ...timetable.changes(oldest - MIN, t) });
