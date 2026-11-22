@@ -995,6 +995,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     'fill="currentColor" stroke="#fff" stroke-width="6" stroke-linejoin="round"/></svg></div>';
   const selDot = selEl.firstChild, selShape = selEl.querySelector('path');
   const selLabel = Object.assign(document.createElement('div'), { className: 'sel-label', hidden: true });
+  // Its card and ring with the arrow to the train as one outline (Max, 2026-11-22: a separate arrow left dark wedges
+  // where it met the label's round end: "its separate elements, without perfect clearances"): bubblePath.
+  const selBg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  selBg.setAttribute('class', 'sel-bg');
+  selBg.setAttribute('aria-hidden', 'true');
+  const selBgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  selBg.appendChild(selBgPath);
+  let selBgFor = '';
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
   const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
@@ -1021,10 +1029,43 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const layers = ['station-names', 'route-names'].filter(id => map.getLayer(id));
     return !layers.length || !map.queryRenderedFeatures([[b.l, b.t], [b.r, b.b]], { layers }).length;
   }
+  // A label's outline with its arrow (TAIL_W wide at its foot, TAIL_L long) on the side towards its train, in the label's
+  // own pixels; `side` is where the label is from the train. Corners round by up to 12 px (as the label's own); where the
+  // arrow sits on an end too short to stand straight on, that end is a half circle and the arrow's foot meets it on the
+  // circle, so the outline has no gap or step.
+  const TAIL_W = 12, TAIL_L = 7;
+  function bubblePath(w, h, side) {
+    const a = TAIL_W / 2, L = TAIL_L, f = n => +n.toFixed(2);
+    const r = Math.min(12, h / 2), endR = h - 2 * r < 2 * a ? h / 2 : r;
+    const tr = side === 'left' ? endR : r, br = tr, tl = side === 'right' ? endR : r, bl = tl;
+    let d = `M${f(tl)},0`;
+    if (side === 'down') d += `L${f(w / 2 - a)},0L${f(w / 2)},${-L}L${f(w / 2 + a)},0`;
+    d += `L${f(w - tr)},0`;
+    if (side === 'left' && tr === h / 2) {
+      const dx = Math.sqrt(tr * tr - a * a);
+      d += `A${f(tr)},${f(tr)} 0 0 1 ${f(w - tr + dx)},${f(h / 2 - a)}L${f(w + L)},${f(h / 2)}L${f(w - tr + dx)},${f(h / 2 + a)}A${f(tr)},${f(tr)} 0 0 1 ${f(w - tr)},${f(h)}`;
+    } else {
+      d += `A${f(tr)},${f(tr)} 0 0 1 ${f(w)},${f(tr)}`;
+      if (side === 'left') d += `L${f(w)},${f(h / 2 - a)}L${f(w + L)},${f(h / 2)}L${f(w)},${f(h / 2 + a)}`;
+      d += `L${f(w)},${f(h - br)}A${f(br)},${f(br)} 0 0 1 ${f(w - br)},${f(h)}`;
+    }
+    if (side === 'up') d += `L${f(w / 2 + a)},${f(h)}L${f(w / 2)},${f(h + L)}L${f(w / 2 - a)},${f(h)}`;
+    d += `L${f(bl)},${f(h)}`;
+    if (side === 'right' && bl === h / 2) {
+      const dx = Math.sqrt(bl * bl - a * a);
+      d += `A${f(bl)},${f(bl)} 0 0 1 ${f(bl - dx)},${f(h / 2 + a)}L${-L},${f(h / 2)}L${f(bl - dx)},${f(h / 2 - a)}A${f(bl)},${f(bl)} 0 0 1 ${f(bl)},0`;
+    } else {
+      d += `A${f(bl)},${f(bl)} 0 0 1 0,${f(h - bl)}`;
+      if (side === 'right') d += `L0,${f(h / 2 + a)}L${-L},${f(h / 2)}L0,${f(h / 2 - a)}`;
+      d += `L0,${f(tl)}A${f(tl)},${f(tl)} 0 0 1 ${f(tl)},0`;
+    }
+    return `${d}Z`;
+  }
   function holdLabel() {
     if (!selShown) return;
     const w = selLabel.offsetWidth, h = selLabel.offsetHeight;
     if (!w) return;
+    if (selBg.parentNode !== selLabel) selLabel.prepend(selBg);
     const p = map.project(selMarker.getLngLat());   // where the map puts the marker's middle
     const model = selEl.classList.contains('model');
     const dy = model ? LABEL_DY : selEl.offsetHeight / 2 + 8, dx = model ? SIDE_DX : selEl.offsetWidth / 2 + 8;
@@ -1041,6 +1082,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         labelHeld = null;
       }
     }
+    // The outline drawn round the label, its ring 2 px out from it as before (the path 1 px out, its stroke 2 px).
+    const bgFor = `${w}|${h}|${selSide}`;
+    if (bgFor !== selBgFor) { selBgFor = bgFor; selBgPath.setAttribute('d', bubblePath(w + 2, h + 2, selSide)); }
     const { x, y } = selBox(selSide, p, w, h, dy, dx);
     const dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
     if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
@@ -1803,7 +1847,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         selText = text;
         const { number, minutes, rest } = splitLabel(props.label);
         const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
-        selLabel.replaceChildren(...(company ? [el('span', 'co', company)] : []), el('b', '', number),
+        selLabel.replaceChildren(selBg, ...(company ? [el('span', 'co', company)] : []), el('b', '', number),
           ...(minutes === null ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
       }
       const tri = triangles();
