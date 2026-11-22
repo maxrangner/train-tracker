@@ -75,6 +75,17 @@ const cases = [
     if ((i >= 30 && i < 33) || (i >= 40 && i < 43)) Object.assign(r, { up: false, upAgo: null });
     if (i === 33 || i === 43) r.restarts = 1;
   }), ['problem fetcher-down', 'ok fetcher-down']],
+  // The code review of 2026-11-21, finding 1: a problem back within the quiet time and still on when it ends is mailed then.
+  ['the fetcher down 3 minutes, then again 40 minutes within the quiet time (mailed when it ends)', run('2026-11-17T10:00', 100, (i, r) => {
+    if ((i >= 30 && i < 33) || (i >= 40 && i < 80)) Object.assign(r, { up: false, upAgo: null });
+    if (i === 33 || i === 80) r.restarts = 1;
+  }), ['problem fetcher-down', 'ok fetcher-down', 'problem fetcher-down', 'ok fetcher-down']],
+  // Finding 5: uploads failing, then the fetcher stops answering: no "OK again" until it answers and uploads work.
+  ['uploads failing, then the fetcher down 10 minutes (no OK while down)', run('2026-11-17T10:00', 80, (i, r) => {
+    if (i >= 30 && i < 50) Object.assign(r, { upOk: 0, upFailed: 3, upAgo: (i - 29) * 60, one: { status: 200, age: (i - 29) * 60 + 5 } });
+    if (i >= 40 && i < 50) Object.assign(r, { up: false, upAgo: null });
+    if (i === 50) r.restarts = 1;
+  }), ['problem stale-file', 'problem uploads-failing', 'problem fetcher-down', 'ok fetcher-down', 'ok uploads-failing', 'ok stale-file']],
   ['the daily summary at 07:00, a quiet night', run('2026-11-17T05:00', 125), ['summary summary']],
   ['the daily summary after a problem', run('2026-11-17T05:00', 125, (i, r) => { if (i === 30) r.refused = 1; }),
     ['problem trv-refused', 'ok trv-refused', 'summary summary']],

@@ -39,6 +39,9 @@ const LOOK = {
 };
 
 // The problems: key -> [test(row, history) true while it is a problem, test true when it is over, subject, what to do].
+// A problem judged from what the fetcher tells (uploads, the file on one.com, reports) is over only while the fetcher
+// answers (until 2026-11-22 a fetcher that stopped answering closed it with an "OK again": the code review of
+// 2026-11-21, finding 5; "the fetcher is not running" has its own mail).
 // history = the rows so far, newest last. "net" problems are not judged while the internet is out or just back.
 const PROBLEMS = {
   'fetcher-down': { net: false,
@@ -59,7 +62,7 @@ const PROBLEMS = {
     subject: 'the fetcher asks Trafikverket far more than normal', ok: 'the fetcher asks Trafikverket normally', look: 'Something may be looping (normal is 2-4 questions a minute). ' + LOOK.fetcher + '; stopping it: sudo systemctl stop sparat-fetcher' },
   'uploads-failing': { net: true,
     on: r => r.up && r.uploads && (r.upAgo === null ? r.upFor >= LIMITS.uploadS : r.upAgo >= LIMITS.uploadS),
-    off: r => !r.up || !r.uploads || (r.upAgo !== null && r.upAgo < 30),
+    off: r => r.up && (!r.uploads || (r.upAgo !== null && r.upAgo < 30)),
     subject: 'uploads to one.com are failing', ok: 'uploads to one.com work', look: 'one.com may be down or refusing the login. ' + LOOK.network },
   'onecom-refused': { net: true,
     on: r => r.one.status === 429,
@@ -68,11 +71,11 @@ const PROBLEMS = {
   'stale-file': { net: true,
     // Two reads running found no file younger than 60 s (a 404 or an old one; a refused or failed read says nothing).
     on: (r, h) => h.slice(-2).length === 2 && h.slice(-2).every(x => x.up && x.upFor >= 180 && [200, 404].includes(x.one.status) && (x.one.age === null || x.one.age > LIMITS.fileS)),
-    off: r => !r.up || (r.one.age !== null && r.one.age <= LIMITS.fileS),
+    off: r => r.up && r.one.age !== null && r.one.age <= LIMITS.fileS,
     subject: 'the map\'s data on one.com is stale', ok: 'the map\'s data on one.com is fresh', look: 'Viewers see "live data paused". ' + LOOK.network },
   'no-reports': { net: true,
     on: r => r.up && r.upFor >= LIMITS.reportS && r.hour >= LIMITS.dayFrom && r.hour < LIMITS.dayTo && (r.reportAge === null || r.reportAge > LIMITS.reportS),
-    off: r => !r.up || (r.reportAge !== null && r.reportAge <= 120),
+    off: r => r.up && r.reportAge !== null && r.reportAge <= 120,
     subject: 'no new train positions from Trafikverket', ok: 'train positions arrive', look: 'Trafikverket\'s stream may be down (the fetcher retries every minute). ' + LOOK.fetcher },
 };
 
@@ -89,6 +92,10 @@ export function createRules({ summaryAt = '07:00' } = {}) {
     if (history.length > 1440) history.shift();
     const out = [];
     const mail = m => { const x = { t: row.t, ...m }; out.push(x); sent.push(x); if (sent.length > 500) sent.shift(); };
+    const problemMail = (key, p, r, since) => {
+      lastMail.set(key, r.t);
+      mail({ key, kind: 'problem', subject: p.subject, text: `${p.subject.startsWith('one.com') ? p.subject : p.subject[0].toUpperCase() + p.subject.slice(1)} (since about ${hm(since)}).\n\n${detail(key, r)}\n\nWhat to do: ${p.look}` });
+    };
 
     // The internet: lost from the first offline row; mailed when it is back, if it lasted 3 minutes or more.
     if (row.offline) {
@@ -114,14 +121,16 @@ export function createRules({ summaryAt = '07:00' } = {}) {
       if (!o && p.on(row, history)) {
         const quiet = lastMail.has(key) && row.t - lastMail.get(key) < LIMITS.quietMs;
         open.set(key, { since: row.t, mailed: !quiet });
-        if (!quiet) {
-          lastMail.set(key, row.t);
-          mail({ key, kind: 'problem', subject: p.subject, text: `${p.subject.startsWith('one.com') ? p.subject : p.subject[0].toUpperCase() + p.subject.slice(1)} (since about ${hm(row.t)}).\n\n${detail(key, row)}\n\nWhat to do: ${p.look}` });
-        }
+        if (!quiet) problemMail(key, p, row, row.t);
       } else if (o && p.off(row, history)) {
         open.delete(key);
         if (o.mailed) mail({ key, kind: 'ok', subject: `OK again: ${p.ok}`,
           text: `Over: ${p.subject} (${span(o.since, row.t)}, ${mins(row.t - o.since)} min).` });
+      } else if (o && !o.mailed && row.t - lastMail.get(key) >= LIMITS.quietMs) {
+        // Came back within the quiet time and still on when it ends: mailed now (until 2026-11-22 never, however long
+        // it lasted: the code review of 2026-11-21, finding 1).
+        o.mailed = true;
+        problemMail(key, p, row, o.since);
       }
     }
 
