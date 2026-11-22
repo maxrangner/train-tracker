@@ -159,8 +159,7 @@ async function night(n) {
 // midnight (989 as 991, 1738 as 21738, 8777 as 18778); their day is still the trip's (12 Nov), as in the timetable.
 {
   const { toRecord } = await import('../src/trains-source.js');
-  const lines = readFileSync(new URL('../data/positions-2026-11-12T23-02-56-574Z.jsonl', import.meta.url), 'utf8').trim().split('
-').map(l => JSON.parse(l));
+  const lines = readFileSync(new URL('../data/positions-2026-11-12T23-02-56-574Z.jsonl', import.meta.url), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   const off = new Set(), seen = new Set();
   for (const p of lines) {
     const r = toRecord(p);
