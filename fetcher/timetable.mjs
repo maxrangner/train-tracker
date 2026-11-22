@@ -144,7 +144,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   });
 
   async function loadMessages() {
-    const now = new Date().toISOString();
+    const now = new Date(Date.now()).toISOString();   // (Date.now: a faked clock reaches it)
     try {
       counts.asks++;
       const r = await ask(`<QUERY objecttype="TrainStationMessage" namespace="rail.trafficinfo" schemaversion="1">` +
@@ -157,7 +157,7 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
   // Timers: the days every minute (cheap when nothing is due), today again at 03:30, messages every 2 minutes.
   let resyncDay = swedishDay(Date.now());   // today is loaded fresh at start: the clean copy is from tomorrow 03:30 on
   const dayTimer = seed ? null : setInterval(() => {
-    const hm = new Date().toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' });
+    const hm = new Date(Date.now()).toLocaleTimeString('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' });
     const today = swedishDay(Date.now());
     if (hm >= '03:30' && resyncDay !== today && days.has(today)) { resyncDay = today; days.delete(today); }
     keepDays();
