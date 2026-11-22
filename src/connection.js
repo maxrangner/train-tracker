@@ -55,6 +55,7 @@ export function createConnection(el, { getTrains, reportTimeOf }) {
         <div class="conn-ecg"><canvas></canvas></div>
         <div class="conn-chain"></div>
       </div>
+      <div class="conn-card conn-errors" hidden><h4>${esc(t('connErrors'))}</h4><ul class="conn-error-list"></ul><p class="conn-note">${esc(t('connErrorsNote'))}</p></div>
       <div class="conn-card"><h4>${esc(t('connNumbers'))}</h4>
         <div class="conn-nums"><div><b class="n-trains"></b><small>${esc(t('connOnMap'))}</small></div><div><b class="n-fresh"></b><small>${esc(t('connFresh'))}</small></div><div><b class="n-behind"></b><small>${esc(t('connBehind'))}</small></div></div>
         <p class="conn-note conn-behind-note"></p></div>
@@ -82,6 +83,10 @@ export function createConnection(el, { getTrains, reportTimeOf }) {
     $('.n-behind').textContent = `~${Math.round(info.behindS)} s`;
     $('.conn-behind-note').textContent = t('connBehindNote', Math.round(info.behindS));
     $('.conn-ring').style.display = info.nextAt ? '' : 'none';
+    // Errors on the page after the start (index.html window.__pageErrors): the newest first, with the time.
+    const errs = window.__pageErrors ?? [];
+    $('.conn-errors').hidden = !errs.length;
+    $('.conn-error-list').innerHTML = errs.slice().reverse().map(e => `<li><small>${esc(new Date(e.at).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))}</small> ${esc(e.text)}</li>`).join('');
     const chain = $('.conn-chain');
     chain.hidden = !info.chain.length;
     chain.innerHTML = info.chain.map(c => `<div class="link ${c.st}"><i>${icon(c.icon, 18)}</i><b>${esc(c.name)}</b><small>${esc(c.sub)}</small></div>`).join('');
