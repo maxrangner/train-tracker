@@ -58,7 +58,7 @@ export function parts(el) {
 //   stationName(sig), snapshot() -> src/stats.js snapshot of all trains, legend: { get(), set(k) }, statsActions,
 //   filter, still (m/s under which a train stands) }
 export function homePage(d) {
-  let put = null, stats = null, mostLate = null, el = null;
+  let put = null, stats = null, mostLate = null, el = null, up = 0;   // up: the height Home last rested at
   const LG = ['ontime', 'some', 'late', 'unknown'];
   function legendHtml(c) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
@@ -138,8 +138,10 @@ export function homePage(d) {
       stats = createStatsPage(box, { ...d.statsActions, filter: d.filter, redraw: () => draw(), groups: true,
         parts: [head, 'sweden', 'duo', 'punctuality', 'kinds', 'companies', mostLate, 'fastest', 'busiest', 'fun', 'data'] });
     },
-    show() { d.onShow?.(); draw(true); },
-    level(i) { if (i > 0) draw(); },
+    // Statistik's day and cancelled numbers are asked for once Home is pulled up from rest, not while it rests as the
+    // search bar alone (2026-11-23, stats-board-check: they were asked at every start, and "Laddar…" never showed).
+    show() { up = 0; draw(true); },
+    level(i) { if (i > 0 && !up) d.onShow?.(); up = i; if (i > 0) draw(); },
     every(i) { if (i > 0) draw(); },
     redraw: () => draw(true),
   };

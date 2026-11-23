@@ -516,9 +516,14 @@ const board = createBoard(boardEl, {
   // The station's own messages (live only).
   messages: live ? sig => fetchStationMessages(sig, now()) : null,
 });
-// The board's messages or its search want room (it turns .full): the sheet goes to full height.
-new MutationObserver(() => { if (boardEl.classList.contains('full') && stack?.top()?.startsWith('station:') && stack.level < 2) stack.setLevel(2); })
-  .observe(boardEl, { attributes: true, attributeFilter: ['class'] });
+// The board's messages or its search want room (it turns .full): the sheet goes to full height; folded or closed again,
+// back to the height it had (2026-11-23, stats-board-check: it stayed at full; a sheet raised by hand stays up).
+let boardLvl = null;
+new MutationObserver(() => {
+  if (!stack?.top()?.startsWith('station:')) { boardLvl = null; return; }
+  if (boardEl.classList.contains('full')) { if (stack.level < 2) { boardLvl = stack.level; stack.setLevel(2); } }
+  else if (boardLvl !== null) { if (stack.level === 2) stack.setLevel(boardLvl); boardLvl = null; }
+}).observe(boardEl, { attributes: true, attributeFilter: ['class'] });
 function stationPage(sig) {
   const st0 = stations.get(sig);
   if (!st0) return null;
