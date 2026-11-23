@@ -245,11 +245,11 @@ try {
     });
     const g0 = await grab();
     if (dev === 'pc') {
-      ok(!g0.dash && g0.arrow && g0.turn !== 'none' && !/matrix(1, 0, 0, 1/.test(g0.turn), `pc 4: at rest the handle is an arrow pointing down: the sheet hangs from the top (dash ${g0.dash}, arrow ${g0.arrow}, ${g0.turn})`);
+      ok(!g0.dash && g0.arrow && g0.turn !== 'none' && !/matrix\(1, 0, 0, 1/.test(g0.turn), `pc 4: at rest the handle is an arrow pointing down: the sheet hangs from the top (dash ${g0.dash}, arrow ${g0.arrow}, ${g0.turn})`);
       await p.mouse.click(g0.x, g0.y);
       await sleep(700);
       const g1 = await grab(), l1 = (await state()).level;
-      ok(l1 > 0 && (g1.turn === 'none' || /matrix(1, 0, 0, 1/.test(g1.turn)), `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points up (${g1.turn})`);
+      ok(l1 > 0 && (g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn)), `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points up (${g1.turn})`);
     } else ok(g0.dash && !g0.arrow, `phone 4: the handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
 
     // ---- 5: Home's hint only at full ----
