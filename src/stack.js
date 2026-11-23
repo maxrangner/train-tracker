@@ -123,10 +123,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- heights ----------
   const fittedLow = pg => typeof pg?.def.low === 'function';
+  // the handle and the head: on a computer 10 px more (the sheet hangs from the top, room above the search field; index.html)
+  const headPx = () => HEAD_PX + (wide() ? 10 : 0);
   function lowOf(pg) {
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
-    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(HEAD_PX + c + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
-    return (l ?? (pg?.key === 'home' ? HOME_LOW_PX : PAGE_LOW_PX)) + s;
+    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(headPx() + c + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
+    return pg?.key === 'home' ? HOME_LOW_PX + s : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0);
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
   // screen: it floats 10 px above the bottom, so it takes the height shown itself (sliding it down would show its
@@ -167,7 +169,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (!pg?.def.half) return snapHalf(pg);
     const want = pg.def.half();
     if (!(want > 0)) return usualHalf;
-    const h = Math.round(Math.max(low + (fittedLow(pg) ? 0 : 60), Math.min(HEAD_PX + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
+    const h = Math.round(Math.max(low + (fittedLow(pg) ? 0 : 60), Math.min(headPx() + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
     // halfGrows: the page's half only ever taller than the usual one (a train's card: its "More" above the phone's
     // bar on a short screen; on a tall one the usual half, no glide once its stops are in: 2026-11-23)
     return pg.def.halfGrows ? Math.max(usualHalf, h) : h;
@@ -177,7 +179,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function snapHalf(pg) {
     const el = pg?.el;
     if (!el?.isConnected || searching || pg.def.snap === false) return usualHalf;
-    const base = HEAD_PX + (wide() ? 0 : safe().bottom), limit = usualHalf - base;
+    const base = headPx() + (wide() ? 0 : safe().bottom), limit = usualHalf - base;
     const top0 = el.getBoundingClientRect().top - el.scrollTop;
     const boxes = [];
     for (const e of el.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *')) {
