@@ -106,19 +106,29 @@ try {
   // ---- 3. Share (the copied-link way) ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
-  const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('#map .map-note:not([hidden])')?.innerText ?? '',
-    noteH: Math.round(document.querySelector('#map .map-note:not([hidden])')?.getBoundingClientRect().height ?? 0) }));
+  await until(page, () => Boolean(document.querySelector('.tr-extras .share-note')), 3000);
+  const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('.tr-extras .share-note')?.innerText.replace(/\n/g, ' ') ?? '',
+    onMap: Boolean(document.querySelector('#map .map-note:not([hidden])')) }));
   ok(shared.url === 'https://sparat.rangner.com/#train=531' && ['copied', 'shown'].includes(shared.how) && shared.note.includes(shared.url), `Share without a share sheet: ${shared.how}, "${shared.note}"`);
-  // (with the line above the bar showing, the note stretched over the whole map: 2026-11-23, 620 px)
-  ok(shared.noteH > 0 && shared.noteH < 120, `the note is a small box (${shared.noteH} px high)`);
+  // (Max's phone, 2026-11-23: the note over the map was hard to see beside the slider: now under Share, in the card)
+  ok(!shared.onMap, 'the note is in the card, under Share, not over the map');
   await shot(page, '07-share');
 
   // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Mine ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-go^="addchange:"]')?.click());
   ok(await until(page, () => window.__stack.top().startsWith('addchange:')), 'Add my change opens its page');
   await until(page, () => Boolean(document.querySelector('#sheet [data-stop]')));
-  await page.evaluate(() => document.querySelector('#sheet [data-stop]').click());
+  const stopSig = await page.evaluate(() => { const b = document.querySelector('#sheet [data-stop]'); b.click(); return b.dataset.stop; });
   ok(await until(page, () => Boolean(document.querySelector('#sheet [data-dep]')), 10000), 'a stop picked: the trains leaving there, with the minutes to change');
+  // (Max's phone, 2026-11-23: "When clicking a change, the map should show where it is")
+  await sleep(2600);
+  const shownStop = await page.evaluate(async (sig) => {
+    const p = (await (await fetch('/stop-places.json')).json()).places?.[sig];
+    if (!p) return null;
+    const xy = window.__map.project(p), sheetTop = document.getElementById('sheet').getBoundingClientRect().top;
+    return { x: Math.round(xy.x), y: Math.round(xy.y), in: xy.x > 0 && xy.x < innerWidth && xy.y > 0 && xy.y < sheetTop };
+  }, stopSig);
+  ok(shownStop === null || shownStop.in, `the change's station shown on the map above the sheet${shownStop ? ` (${shownStop.x}, ${shownStop.y})` : ' (no place known: not judged)'}`);
   await shot(page, '08-add-change');
   await page.evaluate(() => document.querySelector('#sheet [data-dep]').click());
   ok(await until(page, () => window.__stack.top().startsWith('change:') && Boolean(document.querySelector('.trip-next')), 10000), 'a train picked: the change is pinned and shown');
@@ -140,8 +150,7 @@ try {
   await page.evaluate(() => { window.__map.stop(); window.__map.jumpTo({ center: [13.187, 55.69], zoom: 12.5 }); });
   // (until the map has settled: a busy computer still draws it a while)
   await until(page, () => !window.__map.isMoving() && [...document.querySelectorAll('.station-name')].some(e => e.textContent === 'Lund C'), 8000);
-  // (Share's "Link copied" note stays 5 s over the map and takes a tap where it sits: 2026-11-23 it sat on Lund C in a
-  // whole run, so the plain tap below hit the note, not the map)
+  // (a note over the map takes a tap where it sits: 2026-11-23 Share's sat on Lund C, so the plain tap below hit it)
   await until(page, () => [...document.querySelectorAll('.map-note')].every(n => n.hidden), 8000);
   await sleep(1200);
   const at = await page.evaluate(() => {
@@ -241,13 +250,13 @@ try {
 
   // ---- 8. The shop window, the phone on its side ----
   if (part('shop')) {
-    const p = await waitForMap(browser, { ...hash, shop: 'true', size: { ...PHONE, width: 843, height: 393 } });
+    const p = await waitForMap(browser, { ...hash, shop: 'true', slider: '1', size: { ...PHONE, width: 843, height: 393 } });
     await toRest(p);
     await p.evaluate(() => window.__ideas.shop.pretendIdle());
     ok(await until(p, () => window.__ideas.shop.running && document.documentElement.classList.contains('shop'), 6000), 'on its side and untouched: the shop window starts, the buttons fade');
     await sleep(4500);
     // (the scale slider stayed on 2026-11-23)
-    const shown = await p.evaluate(() => ['#sheet', '.scale', '#status', '.maplibregl-ctrl-bottom-right'].filter(s => { const e = document.querySelector(s); return e && Number(getComputedStyle(e).opacity) > 0.05; }));
+    const shown = await p.evaluate(() => ['#sheet', '.scale', '#status', '.maplibregl-ctrl-bottom-right'].filter(s => { const e = document.querySelector(s); return e && e.getClientRects().length > 0 && Number(getComputedStyle(e).opacity) > 0.05; }));
     ok(shown.length === 0, `everything pressable faded, the scale slider too${shown.length ? ` (still showing: ${shown.join(', ')})` : ''}`);
     const words = await p.evaluate(() => window.__ideas.shop.line);
     ok(/Fastest|Most late|Disruption|meet|live/.test(words), `its line: "${words}"`);

@@ -429,7 +429,7 @@ function trainPage(id) {
       if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
     },
     // (its card goes back to the holder: an element taken off the page with its page couldn't be found by its id)
-    hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
+    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
     every() { if (panel.openId === id) drawExtras(id); },
@@ -471,11 +471,22 @@ function whyHtml(w) {
   return w.kind === 'disruption' ? `<button type="button" class="why dis" data-go="dis:${esc(w.id)}">${icon('warning', 17)}<span class="why-t">${inner}</span>${icon('chevron', 16)}</button>`
     : `<div class="why ${w.kind}">${icon(w.kind === 'none' ? 'info' : 'warning', 17)}<span class="why-t">${inner}</span></div>`;
 }
+// Share's note (Max's phone, 2026-11-23: it sat over the map and the slider): under the buttons, in the card. Where the
+// phone has no share sheet and copying isn't allowed (an http address: the home wifi) the link is shown to copy by
+// hand, selectable, until the card closes; "Link copied" goes after a few seconds.
+let shareNote = null;   // { id, how: 'copied' | 'shown', url, at }
+const SHARE_NOTE_MS = 6000;
+function shareNoteHtml(id) {
+  const n = shareNote;
+  if (!n || n.id !== id || (n.how === 'copied' && Date.now() - n.at > SHARE_NOTE_MS)) return '';
+  return `<p class="share-note" role="status">${icon(n.how === 'copied' ? 'check' : 'share', 16)}<span>${esc(t(n.how === 'copied' ? 'linkCopiedShort' : 'linkShownShort'))}` +
+    `<span class="share-url">${esc(n.url)}</span></span></p>`;
+}
 function drawExtras(id) {
   const route = panel.openId === id ? panel.route : null;
   const ahead = (route?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
   const html = whyHtml(whyFor(id)) + `<div class="tr-acts"><button type="button" class="chip" data-x="share">${icon('share', 17)}${esc(t('share'))}</button>` +
-    (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>';
+    (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>' + shareNoteHtml(id);
   if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }
 }
 function trainExtras(id) { drawExtras(id); return extrasEl; }
@@ -483,8 +494,9 @@ extrasEl.addEventListener('click', (e) => {
   if (!e.target.closest('[data-x="share"]') || !panel.openId) return;
   const n = panel.number ?? trains.get(panel.openId)?.number;
   if (!n) return;
+  const id = panel.openId;
   shareTrain({ number: n, title: t('shareTitle', n), text: t('shareText', n),
-    note: (how, url) => map.note(how === 'copied' ? t('linkCopied', url) : t('linkShown', url)) });
+    note: (how, url) => { shareNote = { id, how, url, at: Date.now() }; drawExtras(id); } });
 });
 // What a page of the sheet's ideas needs to know about a train: its numbers (and its route, while its card has it).
 function trainInfo(id) {
@@ -713,6 +725,7 @@ if (window.Capacitor?.isNativePlatform?.()) {
 
 // ---- ☰ (Max, 2026-11-22: at the right of the search bar): a small menu just above it with The day, Settings and
 // Help & About. Closes with a tap elsewhere, Esc, the phone's back, or by opening one of its rows. ----
+document.querySelector('#sheet .sh-logo').innerHTML = logoSvg({ small: true });   // the logo in the search field (Max, 2026-11-23: "logo is gone")
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
 function openNav() {
@@ -1022,6 +1035,7 @@ onSettingChange((key) => {
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
+  if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
   if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
@@ -1576,6 +1590,7 @@ const openTrainRow = r => pickTrain({ id: r.key, operational: r.operational, dat
 const followOnly = id => map.follow(() => placeNow(id), () => {});
 // My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
 myTrains = createMyTrains({ stack, line, stationName, findStations: text => menuStations(text), openTrain: openTrainRow, trainInfo,
+  showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(shownAt(st), Math.max(12, map.camera().z)); },
   redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); } });
 // "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
 ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frameAll, info: id => trainInfo(id), stationName, lateOf,

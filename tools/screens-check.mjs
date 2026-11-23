@@ -174,10 +174,26 @@ try {
   await page.evaluate(() => window.__map.jumpTo({ zoom: 12, center: [18.06, 59.33], pitch: 0, bearing: 0 }));
   await sleep(800);
 
-  // ---- the compass: hidden while flat, shown when tilted (Trackside on the scale slider), a tap flattens ----
   const compass = () => page.evaluate(() => { const b = document.querySelector('.maplibregl-ctrl-compass'), r = b?.getBoundingClientRect();
     return Boolean(b && r.width > 0 && getComputedStyle(b).display !== 'none' && getComputedStyle(b).visibility !== 'hidden' && Number(getComputedStyle(b.closest('.maplibregl-ctrl')).opacity) > 0.5); });
-  check(!(await compass()), 'flat and north up: no compass');
+  const sliderShown = () => page.evaluate(() => { const s = document.querySelector('.scale'); return Boolean(s && !s.hidden && s.getBoundingClientRect().width > 0); });
+  // ---- the Zoom slider off (the default since Max's phone notes, 2026-11-23): no slider; the compass says 3D while
+  // flat, a tap tilts; tilted it is the compass, a tap flattens ----
+  check(!(await sliderShown()), 'Zoom slider off (the default): no slider on the map');
+  const label3d = await page.evaluate(() => { const s = document.querySelector('.maplibregl-ctrl-compass .ctrl-3d'); return s && getComputedStyle(s).display !== 'none' ? s.textContent : ''; });
+  check((await compass()) && label3d === '3D', `slider off, flat: the compass button says 3D ("${label3d}")`);
+  await click('.maplibregl-ctrl-compass'); await sleep(1500);
+  const q1 = await page.evaluate(() => window.__map.getPitch());
+  check(q1 > 40, `slider off: 3D tilts the view (${q1.toFixed(0)}°)`);
+  await click('.maplibregl-ctrl-compass'); await sleep(1500);
+  const q2 = await page.evaluate(() => window.__map.getPitch());
+  check(q2 < 1, `slider off: the compass makes it flat again (${q2.toFixed(0)}°)`);
+  // ---- Settings → Zoom slider on: the slider shows; the compass hidden while flat, shown when tilted (Trackside), a
+  // tap flattens ----
+  await page.evaluate(() => document.querySelector('.seg[data-key="scaleSlider"] [data-v="true"]').click());
+  await sleep(600);
+  check(await sliderShown(), 'Settings → Zoom slider on: the slider shows');
+  check(!(await compass()), 'slider on, flat and north up: no compass');
   await page.evaluate(() => document.querySelector('.scale-name[data-stop="trackside"]').click());
   await sleep(2500);
   const p1 = await page.evaluate(() => window.__map.getPitch());
@@ -185,6 +201,9 @@ try {
   await click('.maplibregl-ctrl-compass'); await sleep(1500);
   const p2 = await page.evaluate(() => window.__map.getPitch());
   check(p2 < 1, `the compass makes it flat again (${p2.toFixed(0)}°)`);
+  await page.evaluate(() => document.querySelector('.seg[data-key="scaleSlider"] [data-v="false"]').click());
+  await sleep(400);
+  check(!(await sliderShown()), 'Zoom slider off again: the slider goes');
   await page.evaluate(() => window.__map.jumpTo({ zoom: 12, center: [18.06, 59.33], pitch: 0, bearing: 0 }));
   await sleep(1500);
 

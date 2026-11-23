@@ -71,7 +71,7 @@ while (Date.now() - t0 < 30000) { const s = await fetch(`http://127.0.0.1:${live
 
 const browser = await launch();
 try {
-  const page = await waitForMap(browser, { files, view: '7/58.2/15.2', lang: 'en', theme: 'light' });
+  const page = await waitForMap(browser, { files, view: '7/58.2/15.2', lang: 'en', theme: 'light', slider: '1' });
   expect(!page.errors.length, `errors on the page: ${page.errors.join(' | ')}`);
   const day = () => page.evaluate(() => window.__day?.state());
 
