@@ -394,6 +394,7 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
+let lastCardHalf = 0;   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
 function trainPage(id) {
@@ -407,12 +408,14 @@ function trainPage(id) {
   if (!m0) return null;
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
   const number = () => String(meta()?.number ?? m0.number);
-  // How far down the card goes (px from the page's top edge): whole, to "More" (or what it shows yet), or condensed
-  // (its head and the line under it).
+  // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
+  // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
+  // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
   const CARD_GAP = 20;
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
+    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) return wantHalf || lastCardHalf;
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
     if (!whole) {
@@ -421,7 +424,7 @@ function trainPage(id) {
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
-    if (b > 0) wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4;
+    if (b > 0) lastCardHalf = wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4;
     return wantHalf;
   }
   return {
@@ -459,7 +462,7 @@ function trainPage(id) {
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
-    every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
+    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true }); } },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -570,7 +573,7 @@ function stationPage(sig) {
   const extra = Object.assign(document.createElement('div'), { className: 'st-extras' });
   extra.innerHTML = `<button type="button" class="chip" data-go="newtrip:${esc(sig)}">${icon('trip', 17)}${esc(t('saveTripHere'))}</button>`;
   return {
-    name: () => stations.get(sig)?.name ?? st0.name, kind: 'station',
+    name: () => stations.get(sig)?.name ?? st0.name, kind: 'station', snap: false,
     show(el, { prev, dir, again = false }) {
       el.append(boardEl, extra);
       if (!again && !peekTipSeen()) extra.insertAdjacentHTML('afterbegin', `<p class="tip">${icon('info', 16)}<span>${esc(t('peekTip'))}</span></p>`);
@@ -1604,8 +1607,13 @@ stack = createStack({
 stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
 // A train's card that changed its size (the "to Kallhäll" chooser opened or shut, its stops come in, Share's note):
 // the sheet follows at once, not at the next second's tick (Max, 2026-11-23: "the card expands after way too long").
+// Taller at once; shorter only when the person changed the card within the last 1.5 s (the chooser shut): its own
+// content coming in (its stops, a line under the tiles) never moves the sheet down and up again.
+let cardTouched = 0;
+panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
+panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
 if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit(); }).observe(panelEl);
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500 }); }).observe(panelEl);
 }
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
