@@ -857,20 +857,21 @@
     /* The trip line on top (Max's card pick 3, 2026-11-23): the start and the end as pills above the line, each with an
        arrow joined to it pointing at its circle (the bar's end circles sit 8 px in from each side), the end big in the
        accent colour; where the train is, under its own dot. */
-    .cd-trip { position: relative; margin: 2px 0 14px; padding-top: 46px; padding-bottom: 22px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
+    .cd-trip { position: relative; margin: 2px 0 8px; padding-top: 42px; padding-bottom: 20px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
     .cd-names { display: block; position: static; height: 0; margin: 0; }
     .cd-names > * { position: absolute; overflow: visible; }
     .cd-from, .cd-to { display: flex; align-items: center; border-radius: 999px; box-sizing: border-box; }
     .cd-from { left: 0; top: 10px; max-width: 40%; padding: 3px 10px; background: var(--pill); color: var(--muted); font-size: 13px; font-weight: 700; line-height: 16px; }
-    .cd-to { right: 0; top: 0; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
+    .cd-to { right: 0; top: -2px; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
     .cd-names .cd-to.goal { color: var(--accent-ink); }
     .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 1px); border: 7px solid transparent; border-bottom: 0; }
-    /* (the corner over the arrow square, a speech bubble's: on a round corner the arrow stood off with a gap; Max, 2026-11-23) */
-    .cd-from { border-bottom-left-radius: 3px; } .cd-to { border-bottom-right-radius: 3px; }
-    .cd-from::after { left: 1px; border-top-color: var(--pill); }
-    .cd-to::after { right: 1px; border-top-color: var(--accent); }
-    .cd-names .cd-at { top: 68px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
+    /* Each pill's tail: one smooth curved shape out of the pill's flat underside, its tip over the circle (8 px in from the
+       card's edge); the pill stays fully round. (Max, 2026-11-23: a triangle under a round corner left a gap, then a
+       square corner looked rough: "I want a smooth cleanly drawn pill".) The tail's top 2 px lie inside the pill. */
+    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 2px); width: 26px; height: 11px; }
+    .cd-to::after { right: 7px; background: var(--accent); clip-path: path('M0 0 H18 Q24 1 26 11 Q14 4 0 0 Z'); }
+    .cd-from::after { left: 7px; background: var(--pill); clip-path: path('M26 0 H8 Q2 1 0 11 Q12 4 26 0 Z'); }
+    .cd-names .cd-at { top: 62px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); }
     .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
@@ -1025,11 +1026,13 @@
       background: var(--accent); border: 0; color: var(--accent-ink); box-shadow: none; }
     .tl-row.canceled .tl-dot { background: var(--c-late); }
     /* "Track" over the tracks (Max, 2026-11-15), kept at the top while the stops scroll. */
-    .tl-head .tl-all { display: flex; justify-content: flex-end; }
-    .tl-places { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border: 0; border-radius: 13px; background: var(--hover); color: var(--ink);
-      font: 700 11.5px var(--font); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    /* "All places" at the row's left, a button like the card's others (Max, 2026-11-23: "not aligned well… alignt it left") */
+    .tl-head .tl-all { grid-column: 1 / 4; display: flex; justify-content: flex-start; align-items: center; }
+    .tl-places { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 13px; border: 0; border-radius: 17px; background: var(--hover); color: var(--ink);
+      font: 700 13.5px var(--font); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    .tl-places:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .tl-places[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
-    .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; padding: 2px 0 4px;
+    .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; padding: 2px 0 6px;
       background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
       background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
