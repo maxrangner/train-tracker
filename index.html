@@ -72,9 +72,17 @@
       background: var(--bg); color: var(--ink); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
       padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform .36s var(--ez); }
     #sheet.dragging { transition: none; }
+    /* A computer: the sheet hangs from the top left (Max, 2026-11-23: "the main pill should be top right as before... So
+       flip it"; "The flip is only for PC! Phone stays as it is"): its search bar at the top, the arrow at its bottom
+       edge, pulled down it grows down. src/stack.js turns the drag round on a wide screen. */
+    @media (min-width: 440px) {
+      #sheet .sh-grab { order: 99; }
+      #sheet .sh-fade { bottom: 20px; }
+      #sheet .sh-more { display: none; }
+    }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
     @media (min-width: 440px) {
-      #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; bottom: 10px; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
+      #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
         transition: height .36s var(--ez); will-change: height; }
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
@@ -87,7 +95,8 @@
       .sh-grab i { display: none; }
       .sh-arrow { display: grid; place-items: center; width: 36px; height: 18px; border-radius: 9px; color: var(--muted); transition: transform .26s var(--ez), background .15s; }
       .sh-grab:hover .sh-arrow { background: var(--hover); }
-      #sheet:not([data-h="0"]) .sh-arrow { transform: rotate(180deg); }
+      /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
+      #sheet[data-h="0"] .sh-arrow { transform: rotate(180deg); }
     }
     /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
@@ -182,7 +191,7 @@
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
       max-width: calc(100% - 96px); display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px; background: var(--card); color: var(--ink);
       box-shadow: var(--shadow-s); transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
-    @media (min-width: 440px) { #line { left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 20px); max-width: 420px; } }
+    @media (min-width: 440px) { #line { left: calc(10px + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); max-width: 420px; } }
     .sheet-high #line { opacity: 0; pointer-events: none; }
     #line .line-main { min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 6px 0 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
     #line .line-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

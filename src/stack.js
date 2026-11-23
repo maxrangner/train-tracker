@@ -241,14 +241,16 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (!drag) return false;
     drag.top = Math.min(drag.top, y);
     if (!drag.moved) { if (Math.abs(drag.y0 - y) < 8) return false; drag.moved = true; drag.y0 = y; clearTimeout(holdT); closeTrail(); }
-    let h = drag.h0 + (drag.y0 - y);
+    // (a computer: the sheet hangs from the top, so a pull down makes it taller)
+    const grow = wide() ? -1 : 1;
+    let h = drag.h0 + (drag.y0 - y) * grow;
     if (h > H[2]) h = H[2] + (h - H[2]) * 0.2;
     if (h < H[0]) h = H[0] - (H[0] - h) * 0.6;
     // never below Home at rest (a long pull down closes every page and Home rests there: pulled lower, the sheet rose
     // again after the finger let go, a bounce; sheet-moves-check, 2026-11-23)
     h = Math.max(HOME_LOW_PX + (wide() ? 0 : safe().bottom), h);
     const now = performance.now(), dt = now - drag.lt;
-    if (dt > 4) { drag.v = 0.65 * ((drag.ly - y) / dt) + 0.35 * drag.v; drag.ly = y; drag.lt = now; }
+    if (dt > 4) { drag.v = 0.65 * ((drag.ly - y) * grow / dt) + 0.35 * drag.v; drag.ly = y; drag.lt = now; }
     drag.h = h;
     place(h, false);
     const closing = stack.length > 1 && h < H[0] - 30;
@@ -272,7 +274,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     } else { to = 0; H.forEach((x, i) => { if (Math.abs(x - h) < Math.abs(H[to] - h)) to = i; }); }
     // pulled down from the head, never up first: at least one height lower (2026-11-23: a pull of 150 px from full
     // came back up to full, the nearest height)
-    if (d.head && d.i0 > 0 && to >= d.i0 && h < d.h0 - PULL_PX && d.ys - d.top < 10) to = d.i0 - 1;
+    if (!wide() && d.head && d.i0 > 0 && to >= d.i0 && h < d.h0 - PULL_PX && d.ys - d.top < 10) to = d.i0 - 1;
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head') && !el.closest(NOT_GRAB));
