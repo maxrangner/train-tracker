@@ -172,6 +172,8 @@ const panel = createPanel(panelEl, {
   // In the sheet: its × takes its page away, "All stops" raises the sheet, a stop opens its station's page.
   onCloseTap: id => stack.close(`train:${id}`),
   onMore: full => stack.setLevel(full ? 2 : 1),
+  // its messages opened (shown at once: the sheet rises or the page scrolls to them; Max, 2026-11-23) or shut
+  onFold: (open, box) => (open ? stack.reveal(box) : stack.unreveal()),
   onStop: sig => openStation(sig),
   // under its tiles: why it stands, Share, Add my change (trainExtras, below)
   extra: id => trainExtras(id),
@@ -271,12 +273,12 @@ const panel = createPanel(panelEl, {
   },
 });
 const map = createMap('map', {
-  // A plain tap on the map (not a drag): with the menu open it only closes the menu.
+  // A plain tap on the map (not a drag): ☰'s menu closes in the same tap, and the tap goes on to what is under it (the
+  // tap rules R1, R2: src/stack.js; until 2026-11-23 a tap with the menu open only closed the menu).
   onMapTap() {
     if (peek?.ate()) return true;   // (the finger lifted after a peek: src/peek.js)
-    if (navEl.hidden) return false;
     closeNav();
-    return true;
+    return false;
   },
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
@@ -286,16 +288,13 @@ const map = createMap('map', {
   alongTrack: (id, d) => (dayView?.past ? null : trains.along(id, d)),
   // The sun's line shows the moment drawn: the live map's, or The day's.
   sunTime: () => (dayView?.past ? dayView.moment : now() - DRAW_DELAY_MS),
-  // Tapping a train opens its page and the camera follows it. A tap on nothing (A's sheet, 2026-11-22): the search
-  // closes; else the sheet goes down to rest; resting, the page on top closes (as a tap beside a train's card closed
-  // it before: Max, 2026-11-13 evening, "single click while following should deselect train").
+  // Tapping a train opens its page and the camera follows it, whatever is open (R2). A tap on nothing: the tap rules'
+  // R1 (src/stack.js mapTap): the sheet down to the page's lowest height, or, already there, every page closes.
   // At an earlier moment (The day): a small bubble over the train instead (number, company, lateness then).
   onTrainTap(id) {
     if (dayView?.past && (id || dayView.bubbleShown)) { if (id) dayView.bubble([id]); else dayView.hideBubble(); return; }
     if (openTrain(id)) return;
-    if (stack.searching) { stack.back(); return; }
-    if (stack.level > 0) stack.setLevel(0);
-    else if (stack.keys().length > 1) stack.back();
+    stack.mapTap();
   },
   onStationTap(sig) { openStation(sig); },
   onDisruptionTap(id) { openDisruption(id); },
@@ -472,6 +471,8 @@ function trainPage(id) {
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
     every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
     fitted: () => fitted,
+    // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
+    dismiss() { if (panel.openId === id) panel.closePick(); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -1237,6 +1238,10 @@ function disListPage() {
       box.classList.toggle('open', worksOpen);
       box.inert = !worksOpen;
       if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
+      // the sheet shows the opened list at once (Max, 2026-11-23): its end is where the glide will take it
+      const inner = box.firstElementChild;
+      if (worksOpen) stack.reveal(fold, fold.getBoundingClientRect().bottom + 6 + (inner?.scrollHeight ?? 0));
+      else stack.unreveal();
     };
   }
   return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
@@ -1635,6 +1640,8 @@ if (typeof ResizeObserver === 'function') {
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
   if (!b) return;
+  // a company under the search's "Show only": its filter on (the line above the bar, with its ×), and its page (R3)
+  if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
   if (b.dataset.go) stack.open(b.dataset.go, { go: true });
   else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
   else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);

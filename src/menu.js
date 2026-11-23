@@ -1,8 +1,8 @@
 // The search, in the one sheet's head (Max's pick A, 2026-11-22; until then a card dropping from the top bar). Tapping
 // the field raises the sheet to full height (src/stack.js openSearch), so the field ends up high, clear of the phone's
 // keyboard. Every result row is a door: data-go carries the stack key it opens (src/main.js opens it).
-//   - Nothing typed: Recent (the last 5 pages opened), Starred, and "Show only" chips (late now, standing still, the
-//     kinds, the companies on the map): each opens its group's page.
+//   - Nothing typed: Recent (the last 5 pages opened), Starred, and "Show only" chips (the companies on the map): each
+//     shows only that company's trains (src/filter.js) and opens its page.
 //   - Typed: trains (a number: those on the map whose number starts with it, then today's timetable for that exact
 //     number), stations, companies and kinds, disruptions.
 //
@@ -36,13 +36,15 @@ export function createMenu({ input, list, findTrains, findStations, searchTimeta
 
   function empty() {
     const g = groups(), lately = recent().map(rowOf).filter(Boolean), star = starred();
-    // (no counts on them: Max, 2026-11-23, 'Not clear what the numbers represent.. Maybe just remove')
-    const scopes = [chip('late', esc(t('lateNow6'))), chip('still', esc(t('standingStill'))),
-      ...g.kinds.filter(([k]) => k !== 'unknown' && k !== 'other').map(([k]) => chip(`kind:${k}`, esc(t(`kind_${k}`)))),
-      ...g.brands.filter(([b]) => b).map(([b]) => chip(`co:${b}`, `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}`))];
+    // (no counts on them: Max, 2026-11-23, 'Not clear what the numbers represent.. Maybe just remove'). Only the
+    // companies (Max, 2026-11-23, note 3: not "late now", "standing still" or the kinds); a tap sets that company's
+    // filter (the line above the bar, with its ×: src/main.js data-only) and opens its page (Max: "Filtering for an
+    // operator should add a pill over home card that deletes it").
+    const scopes = g.brands.filter(([b]) => b).map(([b]) => chip(`co:${b}`, `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}`, undefined,
+      ` data-only-type="brand" data-only-v="${esc(b)}"`));
     return (lately.length ? `${lab(t('recent'))}<div class="rows">${lately.join('')}</div>` : '') +
       (star ? `${lab(t('favourites'))}<div class="rows">${star}</div>` : `<p class="empty">${esc(t('favouritesHint'))}</p>`) +
-      `${lab(t('showOnly'))}<div class="scopes">${scopes.join('')}</div>`;
+      (scopes.length ? `${lab(t('showOnly'))}<div class="scopes">${scopes.join('')}</div>` : '');
   }
   function trainRowHtml(tr) {
     return `<button type="button" class="row" data-go="train:${esc(tr.id)}"><b class="r-num">${esc(tr.number)}</b><span class="r-main">` +

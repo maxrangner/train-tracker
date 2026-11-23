@@ -35,6 +35,8 @@
 //       through a row (Max, 2026-11-23: Home's "Alla störningar" cut in half: "annoyingly cut off content"); a page
 //       shorter than that: its whole content. }
 //     halfGrows: true (optional): half() may only make the half taller than the usual one, never shorter.
+//     dismiss() (optional): shut what is small and open in the page (the card's "to …" chooser), at once, with no
+//       glide: a map tap (R1 below).
 //     snap: false (optional): no fitting without half(): the usual half (a station's board: its rows come after it
 //       opens, and a half fitted before them moved again once they came: a bounce, sheet-moves-check).
 //   stack.refit({ grow: true }): only taller (content that came in by itself: a sheet that went down and up again for
@@ -46,6 +48,22 @@
 // says there is more of the page below (Max, 2026-11-23: Home "has no indication that there is more content").
 //   onPad(h): the map's free part is above this many pixels (the sheet's resting height, at most half): src/map.js setSheet.
 //   onChange(top): a page came on top (the map's lit trains, the line above the bar).
+//
+// THE TAP RULES (Max, 2026-11-23: "a lot of FIRST taps did nothing, second closed"). Every part follows them; each has
+// a test in tools/tap-check.mjs.
+//   R1. A tap on the map's empty ground always does something visible, in one tap (mapTap): the sheet shown above the
+//       page's lowest resting height (by more than STEP_PX) goes down to it (an expanded card collapses); already
+//       there, every page closes: Home at rest. A map tap never steps back through earlier pages (a train opened from a
+//       "2 trains" list closes with the list). Anything small that is open closes in that same tap, never as a tap of
+//       its own: the search, the trail, ☰'s menu (src/main.js onMapTap), a page's own chooser (def.dismiss(): the
+//       card's "to …" list).
+//   R2. A tap on a train or a station on the map opens it at once, whatever is open (src/main.js onMapTap lets every
+//       tap through).
+//   R3. "Show only" (src/filter.js; the line above the bar with its ×, src/line.js) stays until its × is tapped: no map
+//       tap clears it. A company picked under the search's "Show only" sets it (src/main.js data-only).
+//   R4. Esc and Android's back step back one page (back()); the back chip ("‹ Home") goes home (home()).
+// A part opened inside a page (a fold, the card's messages) is shown at once: reveal(el) (the sheet rises, or at full
+// the page scrolls to it), unreveal() when it is shut again.
 import { reduceMotion } from './motion.js';
 import { icon } from './icons.js';
 import { esc } from './html.js';
@@ -62,6 +80,7 @@ const TOP_ROOM_PX = 52;        // full height leaves this much at the top (the l
 const TAP_PX = 14;             // a tap on the handle: the finger moved less than this (a real finger wanders)...
 const TAP_MS = 450;            // ...and lifted within this
 const PULL_PX = 48;            // a pull down from the head this long lowers the sheet at least one height
+const STEP_PX = 40;            // a map tap lowers the sheet only when that moves it at least this far (R1); else it closes
 const NOT_GRAB = 'button, a, input, select, textarea, label, [role="button"]';   // the head's parts that aren't the handle
 
 export function createStack({ sheet, define, onPad = () => {}, onChange = () => {} }) {
@@ -83,6 +102,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const fadeEl = Object.assign(document.createElement('div'), { className: 'sh-fade' });
   fadeEl.innerHTML = `<button type="button" class="sh-more" tabindex="-1" aria-label="${esc(t('moreBelow'))}">${icon('chevronDown', 18)}</button>`;
   sheet.append(fadeEl);
+  // A computer (440 px wide and up): the handle's dash becomes a small arrow (Max, 2026-11-23: the dash is a phone
+  // thing): ⌃ at rest (a tap raises the sheet), ⌄ raised (a tap lowers it); index.html .sh-arrow. A phone keeps the dash.
+  sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-arrow">${icon('chevronUp', 18)}</span>`);
   fadeEl.firstChild.addEventListener('click', () => {
     if (idx < 2) { setIndex(2); return; }
     const pg = scroller();
@@ -140,11 +162,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function pad() { if (ready) onPad(Math.min(H[idx], H[1])); }
   // Half: the page's own (def.half, see the top), else the usual half.
   let usualHalf = 400;
-  function halfOf(pg) {
+  // (low: the page's low height, when it is about to change: the half is never under it)
+  function halfOf(pg, low = H[0]) {
     if (!pg?.def.half) return snapHalf(pg);
     const want = pg.def.half();
     if (!(want > 0)) return usualHalf;
-    const h = Math.round(Math.max(H[0] + (fittedLow(pg) ? 0 : 60), Math.min(HEAD_PX + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
+    const h = Math.round(Math.max(low + (fittedLow(pg) ? 0 : 60), Math.min(HEAD_PX + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
     // halfGrows: the page's half only ever taller than the usual one (a train's card: its "More" above the phone's
     // bar on a short screen; on a tall one the usual half, no glide once its stops are in: 2026-11-23)
     return pg.def.halfGrows ? Math.max(usualHalf, h) : h;
@@ -450,7 +473,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
   function refit({ grow = false, settle = false } = {}) {
     if (searching) return;
-    let h0 = lowOf(top()), h1 = halfOf(top());
+    // (the half from the new low: from the old one, a card whose chooser shut kept its taller half, its room left empty
+    // under it, and a map tap then only took that room away: Max's case (a), 2026-11-23)
+    let h0 = lowOf(top()), h1 = halfOf(top(), h0);
     if (grow && !(settle && lastDir < 0)) { h0 = Math.max(h0, H[0]); h1 = Math.max(h1, H[1]); }
     if (h0 === H[0] && h1 === H[1]) { syncFade(); return; }
     H[0] = h0; H[1] = h1;
@@ -465,6 +490,55 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (stack.length > 1) { backTo(stack.length - 2); return true; }
     if (idx > 0) { setIndex(0); return true; }
     return false;
+  }
+  // A tap on the map's empty ground (R1 at the top): what is small closes, then the sheet goes down to the page's
+  // lowest height, or, already there, every page closes. Returns what it did: 'down', 'home' or null (Home at rest).
+  function mapTap() {
+    closeTrail();
+    if (searching) { closeSearch(); setIndex(0); return 'down'; }
+    const pg = top();
+    pg.def.dismiss?.();
+    H[0] = lowOf(pg); H[1] = halfOf(pg);   // (what was dismissed took its room with it)
+    revealed = null;
+    // what of the page is shown: below full, at most its half (more is empty room a glide left under it: taking only
+    // that away moves the sheet and shows nothing new, Max's cases (a) and (c) on the computer)
+    const showing = idx === 2 ? shownTo : Math.min(shownTo, H[1]);
+    if (showing - H[0] > STEP_PX) { setIndex(0); return 'down'; }
+    if (stack.length > 1) { home(0); return 'home'; }
+    if (Math.abs(shownTo - H[0]) > 2) setIndex(0);
+    return null;
+  }
+  // A part just opened inside the page on top (el; bottom: where its end will be on the screen, when it is still
+  // gliding open): shown at once. Below full: the sheet takes its new half, or, when the part still ends below what that
+  // shows, rises to full; at full the page scrolls it into view. unreveal(): the part shut again; a sheet risen for it
+  // goes back to the height it had (unless it was moved meanwhile), else it takes its new heights.
+  let revealed = null;   // { key, from, to }
+  function reveal(el, bottom) {
+    const pg = top();
+    if (searching || !pg || !el?.isConnected || !pg.el.contains(el)) return;
+    // (its start and end measured from the top of the page's content)
+    const r = el.getBoundingClientRect(), top0 = pg.el.getBoundingClientRect().top - pg.el.scrollTop;
+    const start = r.top - top0, end = (bottom ?? r.bottom) - top0 + 12;
+    const need = pagesEl.offsetTop + end + (wide() ? 0 : safe().bottom);   // the sheet's height that shows all of it
+    if (idx < 2) {
+      H[0] = lowOf(pg);
+      const h1 = halfOf(pg);
+      if (need <= Math.max(h1, H[idx]) + 2) { H[1] = Math.max(h1, H[1]); if (idx === 0) setIndex(1); else { place(H[1]); pad(); } return; }
+      revealed = { key: pg.key, from: idx, to: 2 };
+      setIndex(2);
+    }
+    // at full: scrolled until its end is in view, its start kept in view (the page's height at full: under the head, less
+    // the fade at the bottom edge)
+    const view = H[2] - pagesEl.offsetTop - 40 - (wide() ? 0 : safe().bottom);
+    const over = end - pg.el.scrollTop - view;
+    if (over > 0) pg.el.scrollBy({ top: Math.max(0, Math.min(over, start - pg.el.scrollTop - 8)), behavior: reduceMotion() ? 'auto' : 'smooth' });
+  }
+  function unreveal() {
+    const pg = top(), was = revealed;
+    revealed = null;
+    if (searching || !pg) return;
+    if (was && was.key === pg.key && idx === was.to) { setIndex(was.from); return; }
+    refit();
   }
   // Take a page off the stack wherever it is (its train is gone, its × was pressed).
   function close(key) {
@@ -581,7 +655,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     trailOpen: () => !trail.hidden, openTrail,
     pageEl: key => stack.find(p => p.key === key)?.el ?? null,
     pageDef: key => stack.find(p => p.key === key)?.def ?? null,
-    measure, refit,
+    measure, refit, mapTap, reveal, unreveal,
   };
   return api;
 }
