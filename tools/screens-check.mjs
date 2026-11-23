@@ -331,6 +331,9 @@ try {
     // on a button: a swipe down lowers it, a tap is still the button's
     await setLevel(page, 2);
     await settle();
+    // (from the page's top: at full a page scrolled down scrolls back first, as on the page above)
+    await page.evaluate(s => { document.querySelector(s).scrollTop = 0; }, pgSel);
+    await sleep(300);
     const more = await centre('#panel .panel-more');
     await swipe(more.x, Math.min(more.y, 560), 250);
     await settle();

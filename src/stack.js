@@ -261,7 +261,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const grow = wide() ? -1 : 1;
     let h = drag.h0 + (drag.y0 - y) * grow;
     if (h > H[2]) h = H[2] + (h - H[2]) * 0.2;
-    if (h < H[0]) h = H[0] - (H[0] - h) * 0.6;
+    // (below its lowest a page that rests low gives way a little; one that closes there follows the finger all the way:
+    // let go, it is where Home rests, no glide after, 2026-11-23)
+    if (h < H[0] && (searching || keepsLow(top()))) h = H[0] - (H[0] - h) * 0.6;
     // never below Home at rest (a long pull down closes every page and Home rests there: pulled lower, the sheet rose
     // again after the finger let go, a bounce; sheet-moves-check, 2026-11-23)
     h = Math.max(HOME_LOW_PX + (wide() ? 0 : safe().bottom), h);
@@ -279,10 +281,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (!d || !d.moved) return;
     eatUntil = performance.now() + 150;
     const h = d.h ?? d.h0;
-    if (sheet.classList.contains('closing')) { home(0); return; }
+    // A page pulled or flicked away: Home as it was (its height and its place in the list; Max, 2026-11-23: going into a
+    // page from Home and back 'should not dismiss the location'); a map tap still leaves Home at rest (R1).
+    if (sheet.classList.contains('closing')) { backTo(0); return; }
     // A flick down closes the page at once; on a page without low, any throw down from its half does.
     const v0 = performance.now() - d.lt > 120 ? 0 : d.v;
-    if (stack.length > 1 && !searching && (v0 < -FLICK_V || (!keepsLow(top()) && v0 < -0.45 && h < H[1] - 6))) { home(0); return; }
+    if (stack.length > 1 && !searching && (v0 < -FLICK_V || (!keepsLow(top()) && v0 < -0.45 && h < H[1] - 6))) { backTo(0); return; }
     let to;
     // A finger that stopped before it lifted throws nothing: the nearest height (2026-11-23, sheet-check: a pull held
     // still at 60 px below its start was thrown on by the speed of its last move).

@@ -1267,7 +1267,7 @@ function disListPage() {
       else stack.unreveal();
     };
   }
-  return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
+  return { name: () => t('disruptions'), kind: 'dislist', startLevel: 2 /* (opens full: Max, 2026-11-23) */, mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
 }
 // A disruption: its words; opened (not come back to), the map shows all of its stretches (one station: flies to it).
 function disPage(id) {

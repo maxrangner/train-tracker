@@ -197,17 +197,13 @@ try {
       await wander(PHONE.width / 2, c.top - 14);
       c = await sheet();
       if (c.level !== 1) fails.push(`4 a wandering tap on the grip above the sheet at low: height ${c.level}, wanted 1`);
-      // a tap on the head's empty part (the card's top line, between its name and its buttons; no bar since
-      // 2026-11-23): half → low
-      const gap = await page.evaluate(() => {
-        const title = document.querySelector('#panel .panel-title').getBoundingClientRect();
-        const next = [...document.querySelectorAll('#panel .panel-head button')].filter(b => b.offsetParent && b.getBoundingClientRect().left > title.right).map(b => b.getBoundingClientRect().left);
-        return { x: (title.right + Math.min(innerWidth - 12, ...next)) / 2, y: title.top + title.height / 2 };
-      });
+      // a tap on the head (the card's top line, its number: no bar since 2026-11-23; the gap before its buttons can be
+      // a few px, a finger there lands on Share): half → low
+      const gap = await page.evaluate(() => { const r = document.querySelector('#panel .panel-title strong').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await page.touchscreen.tap(gap.x, gap.y);
       await sleep(600);
       c = await sheet();
-      if (c.level !== 0) fails.push(`4 a tap on the head between its buttons at half: height ${c.level}, wanted 0`);
+      if (c.level !== 0) fails.push(`4 a tap on the card's top line (its number) at half: height ${c.level}, wanted 0`);
       // a pull down of 110 px from the head at full, held still: lowered (it came back up to full, the nearest height)
       await setLevel(page, 2);
       await settle();

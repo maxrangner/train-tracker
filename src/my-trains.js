@@ -560,7 +560,6 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     }
     return {
       name: () => t(edit ? 'editTrip' : 'addChange'), kind: 'addchange',
-      startLevel: 2,   // (opens full, as a new trip does)
       mount(page) {
         el = page;
         el.addEventListener('click', (e) => {
