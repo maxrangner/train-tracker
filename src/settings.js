@@ -63,6 +63,9 @@ const DEFAULTS = {
   // The sun's line (Max's idea 6, 2026-11-22: "with toggle in settings"; src/sun.js): night as a soft shade on the map
   // and the trains' windows lit where it is night. On (the plan's choice; Max can turn it off).
   dayNight: true,
+  // The scale slider on the map's right edge (Max's idea 10; src/scale-slider.js). Off by default (Max, 2026-11-23: "Put
+  // the zoom bar behind an options toggle. Default off"): off, the compass says 3D while flat, + and − with a mouse.
+  scaleSlider: false,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -90,6 +93,7 @@ const KEYS = {
   allPlaces: { param: 'places' },
   shopWindow: { param: 'shop' },
   dayNight: { param: 'daynight' },
+  scaleSlider: { param: 'slider' },
 };
 const STORE = 'settings';
 
@@ -125,6 +129,7 @@ const valid = {
   allPlaces: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   shopWindow: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   dayNight: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  scaleSlider: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>

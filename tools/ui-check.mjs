@@ -317,7 +317,9 @@ try {
   await sleep(3500);
   const low = await page.evaluate((b) => {
     const m = window.__map, W = m.getCanvas().clientWidth, H = m.getCanvas().clientHeight;
-    return (window.__last3d ?? []).map(x => m.project([x.lon, x.lat])).filter(q => q.x > 30 && q.x < W - 30 && q.y > H * 0.55 && q.y < b - 20)
+    // (only drops the map shows: one under the scale slider's "Trackside" was counted as not drawn, 2026-11-23)
+    const open = q => document.elementFromPoint(q.x, q.y)?.classList.contains('maplibregl-canvas');
+    return (window.__last3d ?? []).map(x => m.project([x.lon, x.lat])).filter(q => q.x > 30 && q.x < W - 30 && q.y > H * 0.55 && q.y < b - 20 && open(q))
       .slice(0, 4).map(q => ({ x: Math.round(q.x) - 12, y: Math.round(q.y) - 12, width: 24, height: 24 }));
   }, await freeBottom(page));
   let lowSeen = 0;

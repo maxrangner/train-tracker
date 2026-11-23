@@ -405,6 +405,7 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
+  let wantHalf = 0;   // the card's half, last measured while compact (half() below)
   const number = () => String(meta()?.number ?? m0.number);
   return {
     name: number, kind: 'train',
@@ -429,10 +430,22 @@ function trainPage(id) {
       if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
     },
     // (its card goes back to the holder: an element taken off the page with its page couldn't be found by its id)
-    hide() { if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
+    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
-    every() { if (panel.openId === id) drawExtras(id); },
+    // Half: down to the card's "More" with room under it (Max's phone, 2026-11-23: "More" lay under Android's own bar at
+    // the bottom of a short screen); never shorter than the usual half (halfGrows). Measured only while the card is
+    // compact and the sheet not at full (with all stops open "More" is elsewhere: the last measure is kept), in steps
+    // of 8 px, read again each second (the why-line or Share's note coming in). No "More" yet: the usual half.
+    halfGrows: true,
+    half() {
+      const more = panel.openId === id ? panelEl.querySelector('.panel-more') : null, pg = panelEl.parentElement;
+      if (!more || !pg || !more.offsetParent) return wantHalf;
+      if (stack.level === 2 || panelEl.classList.contains('full')) return wantHalf;
+      wantHalf = Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
+      return wantHalf;
+    },
+    every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -471,11 +484,22 @@ function whyHtml(w) {
   return w.kind === 'disruption' ? `<button type="button" class="why dis" data-go="dis:${esc(w.id)}">${icon('warning', 17)}<span class="why-t">${inner}</span>${icon('chevron', 16)}</button>`
     : `<div class="why ${w.kind}">${icon(w.kind === 'none' ? 'info' : 'warning', 17)}<span class="why-t">${inner}</span></div>`;
 }
+// Share's note (Max's phone, 2026-11-23: it sat over the map and the slider): under the buttons, in the card. Where the
+// phone has no share sheet and copying isn't allowed (an http address: the home wifi) the link is shown to copy by
+// hand, selectable, until the card closes; "Link copied" goes after a few seconds.
+let shareNote = null;   // { id, how: 'copied' | 'shown', url, at }
+const SHARE_NOTE_MS = 6000;
+function shareNoteHtml(id) {
+  const n = shareNote;
+  if (!n || n.id !== id || (n.how === 'copied' && Date.now() - n.at > SHARE_NOTE_MS)) return '';
+  return `<p class="share-note" role="status">${icon(n.how === 'copied' ? 'check' : 'share', 16)}<span>${esc(t(n.how === 'copied' ? 'linkCopiedShort' : 'linkShownShort'))}` +
+    `<span class="share-url">${esc(n.url)}</span></span></p>`;
+}
 function drawExtras(id) {
   const route = panel.openId === id ? panel.route : null;
   const ahead = (route?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
   const html = whyHtml(whyFor(id)) + `<div class="tr-acts"><button type="button" class="chip" data-x="share">${icon('share', 17)}${esc(t('share'))}</button>` +
-    (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>';
+    (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>' + shareNoteHtml(id);
   if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }
 }
 function trainExtras(id) { drawExtras(id); return extrasEl; }
@@ -483,8 +507,9 @@ extrasEl.addEventListener('click', (e) => {
   if (!e.target.closest('[data-x="share"]') || !panel.openId) return;
   const n = panel.number ?? trains.get(panel.openId)?.number;
   if (!n) return;
+  const id = panel.openId;
   shareTrain({ number: n, title: t('shareTitle', n), text: t('shareText', n),
-    note: (how, url) => map.note(how === 'copied' ? t('linkCopied', url) : t('linkShown', url)) });
+    note: (how, url) => { shareNote = { id, how, url, at: Date.now() }; drawExtras(id); } });
 });
 // What a page of the sheet's ideas needs to know about a train: its numbers (and its route, while its card has it).
 function trainInfo(id) {
@@ -575,12 +600,18 @@ function showPicker(list) {
   pickLists.set(key, [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label))));
   stack.open(key);
 }
+if (import.meta.env.DEV) window.__picker = showPicker;   // (tools/back-check.mjs: one picker over another, then back)
 function pickPage(key) {
   const rows = pickLists.get(key);
   if (!rows) return null;
+  // One #picker for every "N trains here" page: a page lets go of it only while it holds it (back from a second
+  // picker to the first: the first takes it in show, then the second's unmount must not hide it; Max 2026-11-23).
+  let mine = null;
+  const letGo = () => { if (mine?.contains(pickerEl)) { pickerEl.hidden = true; holder.append(pickerEl); } };
   return {
     name: () => t('trainsHere', rows.length), kind: 'pick',
     show(el) {
+      mine = el;
       pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
         `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
         rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
@@ -589,8 +620,15 @@ function pickPage(key) {
       pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
       for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
     },
-    hide() { pickerEl.hidden = true; holder.append(pickerEl); },
-    unmount() { pickerEl.hidden = true; pickLists.delete(key); if (!stack.top()?.startsWith('pick:')) holder.append(pickerEl); },
+    // Half: all its rows, up to about half the screen (Max's phone, 2026-11-23: "2 trains" opened showing one row and
+    // it was unclear it could be pulled up); more rows: the last one cut, pull up to scroll.
+    half() {
+      const list = mine?.contains(pickerEl) ? pickerEl.querySelector('.pick-list') : null;
+      if (!list) return 0;
+      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.42));
+    },
+    hide: letGo,
+    unmount() { letGo(); pickLists.delete(key); },
   };
 }
 
@@ -707,6 +745,7 @@ if (window.Capacitor?.isNativePlatform?.()) {
 
 // ---- ☰ (Max, 2026-11-22: at the right of the search bar): a small menu just above it with The day, Settings and
 // Help & About. Closes with a tap elsewhere, Esc, the phone's back, or by opening one of its rows. ----
+document.querySelector('#sheet .sh-logo').innerHTML = logoSvg({ small: true });   // the logo in the search field (Max, 2026-11-23: "logo is gone")
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
 function openNav() {
@@ -1016,6 +1055,7 @@ onSettingChange((key) => {
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
+  if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
   // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
   if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
   showSettings();
@@ -1515,7 +1555,7 @@ setInterval(() => {
 // ---- The one sheet: made last, once everything its pages use is there (src/stack.js) ----
 function define(key) {
   if (key === 'home') return homeDef;
-  // My trains ('trip:', 'change:', 'newtrip', 'addchange:') and the ride page ('ride:'): their own modules
+  // My trains ('trip:', 'change:', 'newtrip', 'edittrip:', 'addchange:') and the ride page ('ride:'): their own modules
   const own = myTrains?.define(key) ?? ride?.define(key);
   if (own !== undefined) return own;
   const i = key.indexOf(':'), type = i < 0 ? key : key.slice(0, i), v = i < 0 ? '' : key.slice(i + 1);
@@ -1570,6 +1610,7 @@ const openTrainRow = r => pickTrain({ id: r.key, operational: r.operational, dat
 const followOnly = id => map.follow(() => placeNow(id), () => {});
 // My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
 myTrains = createMyTrains({ stack, line, stationName, findStations: text => menuStations(text), openTrain: openTrainRow, trainInfo,
+  showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(shownAt(st), Math.max(12, map.camera().z)); },
   redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); } });
 // "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
 ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frameAll, info: id => trainInfo(id), stationName, lateOf,

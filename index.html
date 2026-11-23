@@ -76,6 +76,13 @@
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+    /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
+       the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
+       tall; the head's empty parts count as the handle too. A phone only. */
+    #sheet-grip { position: fixed; z-index: 4; left: 50%; width: 160px; margin-left: -80px; height: 24px; bottom: var(--sheet-shown, 72px);
+      touch-action: none; transition: bottom .36s cubic-bezier(.2, .85, .25, 1); }
+    #sheet.dragging ~ #sheet-grip { transition: none; }
+    @media (min-width: 440px) { #sheet-grip { display: none; } }
     .sh-head { position: relative; z-index: 2; height: 52px; flex: none; margin: 0 12px; }
     .sh-search, .sh-bar { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; transition: opacity .2s, transform .28s var(--ez); }
     #sheet:not([data-page="home"]) .sh-search { opacity: 0; pointer-events: none; transform: translateY(8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
@@ -121,7 +128,7 @@
     @keyframes pg-in-l { from { opacity: 0; transform: translateX(-28px); } }
     @keyframes pg-out-l { to { opacity: 0; transform: translateX(-28px); } }
     @keyframes pg-out-r { to { opacity: 0; transform: translateX(28px); } }
-    @media (prefers-reduced-motion: reduce) { #sheet, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
     /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
        scrolling, no own height limits (the sheet has them). */
     .pg :is(.panel-close, .panel-follow, .panel-star, .menu-close) { display: none !important; }
@@ -287,8 +294,16 @@
     .nt-field b { font-size: 16.5px; font-weight: 700; }
     .nt-field.on { box-shadow: inset 0 0 0 2px var(--accent); }
     .nt-addvia { justify-self: start; }
-    .nt-q { width: 100%; box-sizing: border-box; }
+    /* the station search under the field it fills: one line high (it was .board-q's flex: 1, a tall pill in the page's column) */
+    .nt-q { width: 100%; box-sizing: border-box; height: 46px; flex: none; }
+    .nt-res:empty { display: none; }
+    .nt-room { display: block; height: 75vh; }
+    .nt-room[hidden] { display: none; }
     .nt-save { justify-self: start; }
+    /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
+    .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
+    .trip-acts .chip { min-height: 38px; font-size: 14px; }
+    .trip-acts .trip-del.armed { background: var(--t-late-bg); color: var(--t-late); font-weight: 800; }
     .nt-save:disabled { opacity: .45; cursor: default; }
     /* The line above the bar's own mark (a trip, a change, a train you seem to be on). */
     #line .ln-ic { flex: none; display: grid; color: var(--accent); }
@@ -317,7 +332,7 @@
     .pk-row.canceled b, .pk-row.canceled span:not(.tag) { text-decoration: line-through; color: var(--muted); }
     #peek .empty { padding: 4px 12px 8px; }
     /* The shop window: everything pressable fades, one line of words at the bottom; a touch anywhere ends it. */
-    html.shop :is(#sheet, #line, #status, #nav, #trail, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease !important; }
+    html.shop :is(#sheet, #sheet-grip, #line, #status, #nav, #trail, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease !important; }
     #shop { position: fixed; inset: 0; z-index: 30; background: transparent; }
     .shop-line { position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); margin: 0; max-width: calc(100% - 40px);
       padding: 10px 18px; border-radius: 22px; background: var(--card); color: var(--ink); box-shadow: var(--shadow); font: 650 16px/1.3 var(--font); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -400,14 +415,21 @@
     .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
-    /* Under the scale slider (src/scale-slider.js, 2026-11-23): My location at the right, the compass (only while the
-       map is turned or tilted) beside it, so both stay clear of the slider above them. */
-    .maplibregl-map .maplibregl-ctrl-bottom-right { display: flex; flex-direction: row-reverse; align-items: flex-end; }
-    .maplibregl-ctrl-bottom-right .maplibregl-ctrl { float: none; clear: none; }
-    .maplibregl-ctrl-bottom-right .maplibregl-ctrl + .maplibregl-ctrl { margin-right: 8px; }
-    .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { border-radius: 50%; }
+    /* With the scale slider on (Settings → Zoom slider, src/scale-slider.js, 2026-11-23; off by default since Max's
+       phone notes the same day): My location at the right, the compass (only while the map is turned or tilted) beside
+       it, so both stay clear of the slider above them; no + and −. Off: the buttons as before the slider (below). */
+    .maplibregl-map.slider-on .maplibregl-ctrl-bottom-right { display: flex; flex-direction: row-reverse; align-items: flex-end; }
+    .slider-on .maplibregl-ctrl-bottom-right .maplibregl-ctrl { float: none; clear: none; }
+    .slider-on .maplibregl-ctrl-bottom-right .maplibregl-ctrl + .maplibregl-ctrl { margin-right: 8px; }
+    .maplibregl-map.slider-on:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
+    .maplibregl-map.slider-on .maplibregl-ctrl-zoom-in, .maplibregl-map.slider-on .maplibregl-ctrl-zoom-out { display: none; }
+    :is(.slider-on, .touch) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { border-radius: 50%; }
     .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) button { width: 48px; height: 48px; }
-    .maplibregl-map:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
+    /* The compass without the slider: "3D" while the map is flat and north up (a tap tilts it), the needle while turned
+       or tilted (src/map.js; Max, 2026-11-20). */
+    .maplibregl-ctrl-compass .ctrl-3d { font: 700 14px/1 var(--font); letter-spacing: .02em; color: var(--ink); }
+    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass .maplibregl-ctrl-icon { display: none; }
+    .maplibregl-map.turned .maplibregl-ctrl-compass .ctrl-3d { display: none; }
     .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
     .sheet-jump .maplibregl-ctrl-bottom-right { transition: none; }   /* (out from behind a tall sheet: in place at once; src/sheet.js) */
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
@@ -1006,6 +1028,19 @@
     @media (prefers-reduced-motion: reduce) { .draw { animation: none; stroke-dashoffset: 0; } .draw-dot { animation: none; opacity: 1; } }
     #splash.gone { opacity: 0; pointer-events: none; }
     .splash-loading { font: 500 15px var(--font); opacity: .6; }
+
+    /* Max's phone notes, 2026-11-23 (one block, so the sheet's own rules above stay as they were). */
+    /* The logo back at the search field's left, a thin line after it, as in the bar before the one sheet (src/main.js
+       draws it; a tap on it opens the search, being part of the field). */
+    .sh-logo { width: 56px; flex: none; display: flex; color: var(--ink); padding-right: 10px; border-right: 1.5px solid var(--line); margin-right: 2px; }
+    .sh-logo svg { width: 100%; height: auto; }
+    .sh-field:has(.sh-logo) { padding-left: 16px; }
+    .trip-chg[data-at] { cursor: pointer; }   /* a change: a tap shows its station on the map (src/my-trains.js) */
+    /* Share's note under the card's buttons (src/main.js shareNoteHtml): the link selectable to copy by hand. */
+    .share-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--hover);
+      color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.35; }
+    .share-note .icon { flex: none; margin-top: 1px; color: var(--accent); }
+    .share-note .share-url { display: block; font-weight: 500; color: var(--muted); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
   </style>
 </head>
 <body>
@@ -1098,7 +1133,7 @@
     <div class="sh-grab" aria-hidden="true"><i></i></div>
     <div class="sh-head">
       <div class="sh-search">
-        <label class="sh-field"><svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
+        <label class="sh-field"><span class="sh-logo" aria-hidden="true"></span><svg class="icon" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/></svg>
           <input id="search" type="search" placeholder="Search trains, stations, companies" data-t-ph="searchPh" autocomplete="off" autocorrect="off" autocapitalize="off"
             spellcheck="false" enterkeyhint="search" aria-label="Search trains, stations, companies" data-t-aria="searchAria"></label>
         <button id="nav-button" type="button" aria-expanded="false" aria-controls="nav" aria-label="Menu" data-t-aria="navOpen"><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h15M4.5 12h15M4.5 17h15"/></svg></button>
@@ -1144,6 +1179,8 @@
         <div class="seg" data-key="shopWindow" role="group" aria-label="Shop window" data-t-aria="shopWindow"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span><span data-t="dayNight">Day and night</span><small class="set-sub" data-t="dayNightSub">night as a shade on the map, lit windows</small></span>
         <div class="seg" data-key="dayNight" role="group" aria-label="Day and night" data-t-aria="dayNight"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
+      <div class="set-row"><span><span data-t="scaleSlider">Zoom slider</span><small class="set-sub" data-t="scaleSliderSub">a bar on the map: Sweden – Town – Trackside</small></span>
+        <div class="seg" data-key="scaleSlider" role="group" aria-label="Zoom slider" data-t-aria="scaleSlider"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="debug-only set-section menu-label" data-t="debug">Debug</div>

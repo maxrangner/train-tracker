@@ -361,23 +361,34 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       return { url: url.replace(m[1], encodeURIComponent(stack.endsWith('Bold') ? 'Noto Sans Bold' : 'Noto Sans Regular')) };
     },
   });
-  // The compass (2026-11-23, the scale slider): only while the map is turned or tilted; a tap turns north up and the
-  // view flat again; it leans with the tilt. The scale slider (below) took over + / − and the 3D button (Max, 2026-11-20
-  // to 22: "3D" on the compass while flat; idea 10 replaces it: the slider's top third tilts the view).
-  map.addControl(new NavigationControl({ showZoom: false, visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
+  // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
+  map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
+  // + and − only with a mouse (index.html, the Soft look 2026-11-15). Without the scale slider (Settings → Zoom slider,
+  // off by default: Max, 2026-11-23) the compass button is always there (Max, 2026-11-20: "when view is at default
+  // position it should say "3d" and tilt the camera so the 3d trains show"): flat and north up it says "3D" and a tap
+  // tilts the view to TILT_3D (zoom and place kept); turned or tilted it is the compass (a tap: flat, north up). With
+  // the slider (its top third tilts the view) the compass shows only while the map is turned or tilted, and + / − go.
+  const TILT_3D = 60;
   const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
   const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
   showPointer();
   mouse?.addEventListener('change', showPointer);
   const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
+  compass?.append(Object.assign(document.createElement('span'), { className: 'ctrl-3d', textContent: '3D', ariaHidden: 'true' }));
   const isTurned = () => Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
   const nameCompass = () => {
-    const name = t('viewFlat');
+    const name = t(isTurned() ? 'viewFlat' : 'view3d');
     if (compass && compass.title !== name) { compass.title = name; compass.setAttribute('aria-label', name); }
   };
+  // Flat: our tap (tilt), before MapLibre's own (which would only make it flat and north up again).
+  compass?.addEventListener('click', (e) => {
+    if (isTurned()) return;
+    e.stopImmediatePropagation();
+    map.easeTo({ pitch: TILT_3D, duration: reduceMotion() ? 0 : 700 });
+  }, true);
   const showTurned = () => {
     const turned = isTurned();
-    if (turned !== map.getContainer().classList.contains('turned')) map.getContainer().classList.toggle('turned', turned);
+    if (turned !== map.getContainer().classList.contains('turned')) { map.getContainer().classList.toggle('turned', turned); nameCompass(); }
   };
   showTurned();
   nameCompass();
@@ -441,6 +452,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     reduce: reduceMotion,
   });
   map.getContainer().appendChild(slider.el);
+  // Settings → Zoom slider (off by default): the slider and its look of the map's buttons (index.html .slider-on)
+  const sliderShow = () => { slider.el.hidden = !settings.scaleSlider; map.getContainer().classList.toggle('slider-on', Boolean(settings.scaleSlider)); };
+  sliderShow();
 
   // The sun's line (Max's idea 6; src/sun.js): night as a soft shade over Sweden, under the cover outside Sweden (so
   // the sea and the neighbours stay plain, as everything outside Sweden does) and the rails. sunTime(): the moment
@@ -2036,6 +2050,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // A place on the screen ({ x, y } in the page), e.g. for The day's bubble over a train.
     project(lon, lat) { const p = map.project([lon, lat]); return { x: p.x, y: p.y }; },   // (#map fills the window from its top left)
     get slider() { return slider; },
+    sliderShow,
     // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map
     // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.
     async applySettings() {

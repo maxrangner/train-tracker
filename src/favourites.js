@@ -41,6 +41,17 @@ export const favourites = {
     if (!fav.trips.some(x => x.key === key)) { fav.trips.push({ key, from, to, via: via || null }); save(); }
     return key;
   },
+  // A trip edited (Max, 2026-11-23): the new stations take the old trip's place in the list (its key follows its
+  // stations; the saved form stays { key, from, to, via }). The same trip already saved elsewhere: kept once, there.
+  // Returns the new key.
+  replaceTrip(oldKey, from, to, via = null) {
+    const key = tripKey(from, to, via), i = fav.trips.findIndex(x => x.key === oldKey);
+    if (i < 0) return this.addTrip(from, to, via);
+    if (key !== oldKey && fav.trips.some(x => x.key === key)) fav.trips.splice(i, 1);
+    else fav.trips[i] = { ...fav.trips[i], key, from, to, via: via || null };
+    save();
+    return key;
+  },
   removeTrip(key) { const n = fav.trips.length; fav.trips = fav.trips.filter(x => x.key !== key); if (fav.trips.length !== n) save(); },
   // The pinned changes of day (YYYY-MM-DD, Swedish); older ones are dropped.
   changes(day) {
