@@ -18,8 +18,22 @@ const changed = git('status --porcelain --untracked-files=no') !== '';
 // FETCHER=http://127.0.0.1:<port> for a fetcher on another port.
 const FETCHER = process.env.FETCHER ?? 'http://127.0.0.1:8097';
 
+// A connection the browser drops halfway (a test browser closing, a phone leaving the wifi) is let go: until
+// 2026-11-23 its "read ECONNRESET" had no listener and stopped the whole dev server (the 5181 page went away several
+// times a day). The public site and the app are plain files: not affected.
+const letGo = () => {};
+const keepServing = {
+  name: 'keep-serving',
+  configureServer(server) { server.httpServer?.on('connection', socket => socket.on('error', letGo)); },
+};
+
 export default {
-  server: { ws: false, proxy: { '/fetcher/': { target: FETCHER, changeOrigin: true, rewrite: p => p.replace(/^\/fetcher/, '') } } },
+  plugins: [keepServing],
+  server: { ws: false, proxy: { '/fetcher/': { target: FETCHER, changeOrigin: true, rewrite: p => p.replace(/^\/fetcher/, ''),
+    configure(proxy) {
+      proxy.on('error', (err, req, res) => { try { if (res && !res.headersSent && res.writeHead) res.writeHead(502); res?.end?.(); } catch { /* gone */ } });
+      proxy.on('proxyReq', (proxyReq, req, res) => { req.on('error', letGo); res.on('error', letGo); proxyReq.on('error', letGo); });
+    } } } },
   define: {
     __VERSION__: JSON.stringify(version),
     __BUILD__: JSON.stringify(commit + (changed ? '+' : '')),
