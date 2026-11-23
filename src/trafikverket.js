@@ -253,6 +253,11 @@ export const routeQuery = (field, value, day) =>
 // answer routeQuery, or null to ask Trafikverket.
 let savedRoutes = null;
 export function useSavedRoutes(fn) { savedRoutes = fn; }
+// The same for a station's board and whole day (2026-11-23, for My trains and Peek on a replay: Trafikverket keeps a
+// day's boards only a few days, so a replay's boards came back empty): fn(sig, activity) -> Promise of
+// { TrainAnnouncement: rows } (that station's rows, in time order), or null to ask as usual.
+let savedBoards = null;
+export function useSavedBoards(fn) { savedBoards = fn; }
 export async function fetchRoute(operationalNumber, departureDate, number = null) {
   const day = departureDate.slice(0, 10);
   const publicNumber = String(number ?? '').replace(/\D/g, '');
@@ -423,7 +428,7 @@ export const boardGone = (x, at) => Boolean((x.actual && x.actual < at) || (x.ca
 // of 4 or 8 rows got 0 trains at big stations at midday. Most gone in 90 minutes measured: 42 (Malmö C, midday);
 // an answer row is about 0.42 kB (Stockholm C, 200 rows 83 kB). The files (src/files-source.js) hand over every row.
 export async function fetchBoard(sig, activity, at, n) {
-  const r = await askTap('board', { sig, act: activity, n, at },
+  const r = (await savedBoards?.(sig, activity)) ?? await askTap('board', { sig, act: activity, n, at },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="${n + 100}">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +
@@ -456,7 +461,7 @@ export async function fetchStationDay(sig, activity, at) {
   // From an hour before the real Swedish midnight (until 2026-11-22 UTC midnight - 2 h, which in summer is exactly
   // Swedish midnight: with GT a 00:00 train was left out; TODO 62).
   const day = swedishDay(at), from = midnightOf(day) - 3600000;
-  const r = await askTap('day', { sig, act: activity, at },
+  const r = (await savedBoards?.(sig, activity)) ?? await askTap('day', { sig, act: activity, at },
     `<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo" schemaversion="1.9" orderby="AdvertisedTimeAtLocation" limit="4000">` +
     `<FILTER><EQ name="LocationSignature" value="${sig}"/><EQ name="ActivityType" value="${activity}"/>` +
     `<EQ name="Advertised" value="true"/><EQ name="Deleted" value="false"/>` +

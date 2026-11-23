@@ -28,6 +28,11 @@ const PATHS = {
   cone: '<path d="M10.2 4h3.6l4.4 15H5.8z"/><path d="M8.5 9.5h7M7.4 14h9.2M3.5 19.5h17"/>',   // rail work (2026-11-18)
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',   // a group's "Show only" (2026-11-22)
   day: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 2"/>',   // ☰ → The day (2026-11-22)
+  // My trains, share (2026-11-23): a trip (two places joined), a change (two arrows), +, share (out of a box).
+  trip: '<circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M8.4 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h6.6"/>',
+  change: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  share: '<path d="M12 14.5V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-6.5"/>',
 };
 export const icon = (name, size = 20, stroke = 2) =>
   `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] ?? ''}</svg>`;

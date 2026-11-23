@@ -77,7 +77,10 @@ export function homePage(d) {
         : `<button type="button" class="row" data-act="favtrain" data-n="${esc(n)}"><b class="r-num">${esc(n)}</b><span class="r-main"><b>${esc(t('train'))}</b><small>${esc(t('notOnMapNow'))}</small></span></button>`;
     }).concat(d.favourites.stations.map(sig => d.stations().get(sig)).filter(Boolean)
       .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' })));
-    return `<h4 class="lab">${t('mine')}</h4><div class="rows">${rows.join('') || `<p class="empty">${t('favouritesHint')}</p>`}</div>`;
+    // My trains (src/my-trains.js, 2026-11-23): the saved trips and pinned changes first, "+ New trip" last.
+    const mt = d.myTrains?.() ?? { rows: [], add: '' };
+    const all = [...mt.rows, ...rows];
+    return `<h4 class="lab">${t('mine')}</h4><div class="rows">${all.join('') || `<p class="empty">${t('favouritesHint')}</p>`}${mt.add}</div>`;
   }
   function nearHtml() {
     const here = d.location();

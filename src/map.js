@@ -413,7 +413,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   geolocate.on('error', () => { if (!window.isSecureContext) showNote(t('noLocation')); relabelControls(); here = null; });
   // Where this phone is while My location is on (Home's "Near you", src/home.js): never stored or sent.
   let here = null;
-  geolocate.on('geolocate', (e) => { here = { lon: e.coords.longitude, lat: e.coords.latitude, at: Date.now() }; });
+  const locationListeners = [];
+  geolocate.on('geolocate', (e) => {
+    here = { lon: e.coords.longitude, lat: e.coords.latitude, at: Date.now() };
+    for (const fn of locationListeners) fn({ ...here, accuracy: e.coords.accuracy ?? 0 });
+  });
   // The button's words in the page's language (again after a change of language: relabel).
   function relabelControls() {
     const b = geoBox?.querySelector('button');
@@ -1593,6 +1597,32 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   return {
     ready,
     shown,
+    // The station a tap at this point of the map would open (its name close in, else its dot from zoom 9), or null
+    // (Peek, 2026-11-23: the same stations a tap finds). x, y: in the map's box.
+    stationAt(x, y) {
+      if (!map.loaded() || !map.getLayer('station-dots')) return null;
+      const pt = { x, y }, named = stationNameAt(pt);
+      if (named && !isAbroad(named)) return named;
+      if (map.getZoom() < 9) return null;
+      const sp = 14, d = f => { const p = map.project(f.geometry.coordinates); return Math.hypot(p.x - x, p.y - y); };
+      const st = map.queryRenderedFeatures([[x - sp, y - sp], [x + sp, y + sp]], { layers: ['station-dots', 'station-names'].filter(l => map.getLayer(l)) })
+        .filter(f => f.properties.sig && !isAbroad(f.properties.sig, { country: f.properties.country || undefined }))
+        .reduce((best, f) => (!best || d(f) < d(best) ? f : best), null);
+      return st?.properties.sig ?? null;
+    },
+    // A flight to a place at exactly this zoom (the shop window's tour), held above the sheet like goTo. Resolves when there.
+    fly(place, zoom, ms = 2600) {
+      return ready.then(() => new Promise((resolve) => {
+        if (following) stopFollowing(false);
+        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        map.once('moveend', () => resolve(true));
+        const f = defaultFocus(), offset = [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2];
+        if (still) map.jumpTo({ center: [place.lon, place.lat], zoom });
+        else map.flyTo({ center: [place.lon, place.lat], zoom, duration: ms, essential: true, offset });
+      }));
+    },
+    // Each fix of My location (the button's, while it is on): fn({ lon, lat, accuracy }) ("You seem to be on", 2026-11-23).
+    onLocation(fn) { locationListeners.push(fn); },
     viewText: () => viewText(map),   // the view now, zoom/lat/lon[/bearing[/tilt]] (for the bug report's link)
     // How long between two refreshes of the dots and labels (ms): the time the fastest train takes to move a quarter
     // of a pixel at this zoom, at least 33 ms (30 a second) and at most a second. Far out a train needs many seconds

@@ -411,4 +411,6 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
 // What other parts of the app fill in later (the plan of 2026-11-22): onDay(), ☰ → The day (src/main.js says "soon"
 // until it is set).
-export const hooks = { onDay: null };
+// dayOther(): true while The day shows another time than now (the shop window waits meanwhile, src/shop-window.js);
+// The day's code sets it (until then null: never).
+export const hooks = { onDay: null, dayOther: null };
