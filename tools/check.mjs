@@ -8,7 +8,7 @@
 // Since 2026-11-21 (Max: "even the smallest fixes needs long tests"): each check knows what it reads (its code, found
 // by tools/lib/deps.mjs from the imports, plus the data it uses) and is skipped when none of it has changed since it
 // last passed (data/.check-stamps.json, shared by every working folder through the data link); a skipped check is
-// named. The checks run two at a time (the CPU rule: at most 2 heavy jobs), the longest first; one that only waits
+// named. The checks run four at a time (AT_ONCE; the run is capped at 90 % CPU), the longest first; one that only waits
 // (the file formats) runs beside them; one measuring smoothness (the splash) runs alone at the end. Each check's output is printed when it ends; the times close the run.
 import { readdirSync, statSync, readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
@@ -26,7 +26,9 @@ capSelf();
 const T0 = Date.now();
 const REBASE = process.argv.includes('--rebaseline');
 const ALL = process.argv.includes('--full') || REBASE || Boolean(process.env.SPARAT_RELEASE);
-const AT_ONCE = 2;
+// Four at a time (2026-11-23, Max: "MUCH MUCH too slow"): the run is held to 90 % of the CPU below normal priority
+// (tools/lib/cpu-cap.mjs), so the PC stays usable; until then two, the only guard. SPARAT_AT_ONCE= to change it.
+const AT_ONCE = Math.max(1, Number(process.env.SPARAT_AT_ONCE) || 4);
 const secs = ms => Math.round(ms / 1000);
 
 // ---------- the recordings ----------
