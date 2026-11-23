@@ -6,11 +6,11 @@
 // back chip (it reads "Disruptions"), and the list comes back scrolled where it was (the page scrolls itself at full).
 // node tools/disruption-check.mjs (with npm run dev and the key; PAGE= for another port).
 import { launch, sleep } from './lib/browser.mjs';
-import { waitForMap, until, setLevel, toRest, back, sheetState, openFromMenu } from './lib/screen.mjs';
+import { waitForMap, until, setLevel, toRest, back, sheetState, openFromMenu, openDisruptions, HOME, pageSel } from './lib/screen.mjs';
 
 const fails = [], notes = [];
 const expect = (ok, what) => { (ok ? notes : fails).push(what); };
-const HOME = '#sheet .pg[data-key="home"]', LIST = '#sheet .pg[data-key="dislist"]';
+const LIST = pageSel('dislist');
 let railWorks = 0;   // rail work in force (the list's fold)
 
 const browser = await launch();
@@ -28,12 +28,7 @@ try {
 
   // ---- Home's count, then the list ----
   const count = await page.evaluate(h => document.querySelector(`${h} [data-go="dislist"] small`)?.textContent ?? '', HOME);
-  const openList = async () => {
-    await toRest(page);
-    await page.evaluate(h => document.querySelector(`${h} [data-go="dislist"]`)?.click(), HOME);
-    await until(page, () => window.__stack.top() === 'dislist', 3000);
-    await sleep(700);
-  };
+  const openList = async () => { await openDisruptions(page); await sleep(200); };
   if (!count) notes.push('no disruption in force at all: Home has no "All disruptions" row, the list not checked');
   else {
     await openList();

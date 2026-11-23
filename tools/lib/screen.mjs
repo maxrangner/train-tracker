@@ -3,6 +3,7 @@
 // the field, typing, a tap on a row) and waits until the page has answered. The page exposes window.__stack (src/main.js):
 // keys(), top(), names(), level, heights, searching, open(key), back(), home(level), setLevel(i).
 //   import { waitForMap, pageKey, openSearch, openTrainByNumber, ... } from './lib/screen.mjs';
+// The sheet's heights: 0 low (at rest), 1 half, 2 full; a page scrolls itself only at full (#sheet[data-h="2"] .pg).
 import { openMap, sleep } from './browser.mjs';
 
 // A new page on the map (tools/lib/browser.mjs openMap), once the sheet is there too.
@@ -96,6 +97,21 @@ export async function openFromMenu(page, name) {
   if (want) await until(page, k => window.__stack.top() === k, 3000, want);
   await sleep(400);
   return pageKey(page);
+}
+
+// Home's parts are drawn (its Statistik parts, and its Disruptions part once they are in: live only).
+export const HOME = '#sheet .pg[data-key="home"]';
+export const pageSel = key => `#sheet .pg[data-key="${key}"]`;
+// The list of disruptions (live only): Home's "All disruptions" row tapped; waits for its page. Returns whether it
+// opened (false without disruptions: no row).
+export async function openDisruptions(page, { wait = 45000 } = {}) {
+  await toRest(page);
+  await until(page, h => Boolean(document.querySelector(`${h} .dis-list`)), wait, HOME);
+  const row = await page.evaluate(h => { const b = document.querySelector(`${h} [data-go="dislist"]`); b?.click(); return Boolean(b); }, HOME);
+  if (!row) return false;
+  await until(page, () => window.__stack.top() === 'dislist', 3000);
+  await sleep(500);
+  return true;
 }
 
 // The live mark at the top: Connection as a page.
