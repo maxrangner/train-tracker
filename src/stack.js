@@ -127,9 +127,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const h = d.h ?? d.h0;
     if (sheet.classList.contains('closing')) { home(0); return; }
     let to;
-    if (Math.abs(d.v) > 0.45) {
-      to = d.v > 0 ? H.findIndex(x => x > h + 6) : H.length - 1 - [...H].reverse().findIndex(x => x < h - 6);
-      if (to < 0 || to > 2) to = d.v > 0 ? 2 : 0;
+    // A finger that stopped before it lifted throws nothing: the nearest height (2026-11-23, sheet-check: a pull held
+    // still at 60 px below its start was thrown on by the speed of its last move).
+    const v = performance.now() - d.lt > 120 ? 0 : d.v;
+    if (Math.abs(v) > 0.45) {
+      to = v > 0 ? H.findIndex(x => x > h + 6) : H.length - 1 - [...H].reverse().findIndex(x => x < h - 6);
+      if (to < 0 || to > 2) to = v > 0 ? 2 : 0;
     } else { to = 0; H.forEach((x, i) => { if (Math.abs(x - h) < Math.abs(H[to] - h)) to = i; }); }
     setIndex(to);
   }
