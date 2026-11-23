@@ -203,9 +203,11 @@ try {
     await swipe(a.x, a.y + 250, -180);
     const scrolled = await page.evaluate(s => document.querySelector(s).scrollTop, pgSel);
     check(scrolled > 20 && (await level()) === 2 && (await isFull()), `a swipe up on the train's page scrolls it (${Math.round(scrolled)} px), the sheet stays at full`);
-    await sleep(1200);   // (the swipe's own glide of the scroll ends first)
-    await page.evaluate(s => { document.querySelector(s).scrollTop = 0; }, pgSel);
-    await sleep(400);
+    // (the swipe's own glide of the scroll ends first: on a loaded PC it ran on past a fixed 1.2 s, 2026-11-23)
+    for (let i = 0, still = 0; i < 40 && still < 3; i++) {
+      await sleep(150);
+      still = await page.evaluate(s => { const p = document.querySelector(s); const was = p.scrollTop; p.scrollTop = 0; return was === 0; }, pgSel) ? still + 1 : 0;
+    }
     // (pulls of 250 px: the test browser's touches come too slowly for a swipe's speed to count, 2026-11-23, so the
     // sheet goes to the nearest height; a quick swipe's throw is in tools/sheet-check.mjs)
     a = await at();
