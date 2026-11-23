@@ -27,7 +27,9 @@ const LIST_MAX = 14;            // trains on a trip's page
 
 // deps: { stack, line, stationName(sig), findStations(text) -> [{ sig, name }], openTrain({ key, operational, date,
 //   number }), trainInfo(id) -> { number, operational, date, route } | null, redrawHome() }
-export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome }) {
+// showStation(sig): the map shows that station above the sheet (a change tapped: Max, 2026-11-23, "the map should show
+// where it is").
+export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome, showStation = () => {} }) {
   // ---------- the stations' days, kept a minute ----------
   const cache = new Map();   // 'sig|act' -> { at, rows, p }
   function day(sig, act) {
@@ -178,6 +180,8 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   // ---------- pages ----------
   const openRow = (el) => {
     el.addEventListener('click', (e) => {
+      const at = e.target.closest('[data-at]');
+      if (at) { showStation(at.dataset.at); return; }
       const b = e.target.closest('[data-train]');
       if (!b) return;
       const [key, operational, date, number] = JSON.parse(b.dataset.train);
@@ -193,8 +197,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       `<span class="bd-name"><b>${esc(`→ ${stationName(toSig)} ${hhmm(when(a))}`)}</b><small>${esc(`${d.number} ${d.product ?? ''}`)}</small></span>` +
       `<span class="bd-tag">${lateTag(gone ? { canceled: true } : d)}</span><span class="tl-trk">${esc(d.track || '')}</span></button>`;
   }
-  const chgBox = (ch, second, rescue = null) => (!second ? `<div class="trip-chg lost">${icon('change', 16)}<span>${esc(t('noOnward'))}</span></div>`
-    : `<div class="trip-chg ${changeClass(ch)}">${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
+  const chgAt = at => (at ? ` data-at="${esc(at)}" role="button" tabindex="0"` : '');
+  const chgBox = (ch, second, rescue = null, at = null) => (!second ? `<div class="trip-chg lost"${chgAt(at)}>${icon('change', 16)}<span>${esc(t('noOnward'))}</span></div>`
+    : `<div class="trip-chg ${changeClass(ch)}"${chgAt(at)}>${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
       (ch?.lost && rescue ? `<div class="trip-chg rescue">${icon('change', 16)}<span>${esc(t('changeRescue', hhmm(when(rescue.second.dep)), rescue.second.number, rescue.change.tracks[1]))}</span></div>` : ''));
 
   function tripPage(key) {
@@ -219,7 +224,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         if (r.trains) {
           list = r.trains.filter(notGone).slice(0, LIST_MAX).map(x => legRow(x, trip.to)).join('');
         } else {
-          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue)}` +
+          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue, trip.via)}` +
             `${p.second ? legRow(p.second, trip.to) : ''}</div>`).join('');
         }
         body = big + `<h4 class="lab">${esc(t('todaysTrains'))}</h4><div class="bd trip-list">${list}</div>`;
@@ -258,7 +263,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         body = `<div class="trip-next ${changeClass(ch)}"><small>${esc(t('toChange'))}</small><b>${ch.lost ? esc(t('changeLost')) : esc(t('minutesN', ch.minutes))}</b>` +
           `<span>${esc(`${t('trackShort')} ${ch.tracks[0] ?? '–'} → ${ch.tracks[1] ?? '–'}`)}</span></div>` +
           (ch.tight && !ch.lost ? `<p class="trip-fails">${esc(t('changeTight'))}</p>` : '') +
-          `<div class="bd trip-list trip-pair">${row(r.arr, t('arrivesAt', stationName(c.at)))}${chgBox(ch, r.dep)}${row(r.dep, t('leavesFrom', stationName(c.at), r.dep.to ? stationName(r.dep.to) : ''))}</div>`;
+          `<div class="bd trip-list trip-pair">${row(r.arr, t('arrivesAt', stationName(c.at)))}${chgBox(ch, r.dep, null, c.at)}${row(r.dep, t('leavesFrom', stationName(c.at), r.dep.to ? stationName(r.dep.to) : ''))}</div>`;
       }
       const html = head + body;
       if (el._h !== html) { el.innerHTML = html; el._h = html; }
@@ -266,7 +271,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return {
       name: () => `${c.a.number} → ${c.b.number}`, kind: 'trip',
       mount(page) { el = page; openRow(el); },
-      show() { draw(); loadChange(c).then(() => { draw(); drawLine(); }); },
+      show(_, { dir } = {}) { if (dir !== 0) showStation(c.at); draw(); loadChange(c).then(() => { draw(); drawLine(); }); },
       every() { if (stale(c.at)) loadChange(c).then(draw); else draw(); },
       star: { on: () => Boolean(favourites.change(c.key)),
         toggle: () => { if (favourites.change(c.key)) favourites.removeChange(c.key); else favourites.addChange(c); drawLine(); redrawHome(); } },
@@ -366,6 +371,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           const s = e.target.closest('[data-stop]'), d = e.target.closest('[data-dep]');
           if (s) {
             at = s.dataset.stop; deps = null; draw();
+            showStation(at);
             day(at, 'Avgang').then((rows) => { deps = rows; draw(); }).catch(() => { deps = []; draw(); });
             return;
           }
