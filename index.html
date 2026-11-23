@@ -866,6 +866,8 @@
     .cd-names .cd-to.goal { color: var(--accent-ink); }
     .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 1px); border: 7px solid transparent; border-bottom: 0; }
+    /* (the corner over the arrow square, a speech bubble's: on a round corner the arrow stood off with a gap; Max, 2026-11-23) */
+    .cd-from { border-bottom-left-radius: 3px; } .cd-to { border-bottom-right-radius: 3px; }
     .cd-from::after { left: 1px; border-top-color: var(--pill); }
     .cd-to::after { right: 1px; border-top-color: var(--accent); }
     .cd-names .cd-at { top: 68px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
