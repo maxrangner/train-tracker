@@ -269,6 +269,12 @@
     .lg-hint b { color: var(--ink); }
     .home-stats.stats-body { padding: 0; gap: 12px; }
     .home-stats > .big { margin: 6px 0 0; }
+    /* Parts as cards (Max's heading pick C, 2026-11-23: "hard to see where one section ends and the other begins"): each
+       of Home's parts a soft card of its own, its heading inside, big and plain, the same on every page. */
+    .pg[data-key="home"] > .sec:not([hidden]) { background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
+    .pg[data-key="home"] > .sec.home-stats:not([hidden]) { padding: 12px 12px 14px; }
+    .pg :is(.lab, .big) { font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 2px 0 10px; }
+    .pg[data-key="home"] .home-stats > .big { margin: 2px 2px 10px; }
     .st-groups .st-sec-bars > .st-sub { display: none; }
     .st-groups .st-brow { cursor: pointer; }
     .most-late { display: grid; }
