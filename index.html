@@ -865,12 +865,13 @@
     .cd-to { right: 0; top: -2px; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
     .cd-names .cd-to.goal { color: var(--accent-ink); }
     .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Each pill's tail: one smooth curved shape out of the pill's flat underside, its tip over the circle (8 px in from the
-       card's edge); the pill stays fully round. (Max, 2026-11-23: a triangle under a round corner left a gap, then a
-       square corner looked rough: "I want a smooth cleanly drawn pill".) The tail's top 2 px lie inside the pill. */
-    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 2px); width: 26px; height: 11px; }
-    .cd-to::after { right: 7px; background: var(--accent); clip-path: path('M0 0 H18 Q24 1 26 11 Q14 4 0 0 Z'); }
-    .cd-from::after { left: 7px; background: var(--pill); clip-path: path('M26 0 H8 Q2 1 0 11 Q12 4 26 0 Z'); }
+    /* Each pill's tail, as Max drew it (2026-11-23): the pill's outer side runs straight on down and curves into a point
+       over its circle (8 px in from the card's edge); the tail's inner edge sweeps back into the pill's underside. One
+       shape laid over the pill's lower outer quarter (from its middle down), so there is no seam or corner. */
+    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: 50%; z-index: 0; }
+    .cd-from em, .cd-to em { position: relative; z-index: 1; }   /* (the words over the tail's part inside the pill) */
+    .cd-to::after { right: 0; width: 30px; height: 27px; background: var(--accent); clip-path: path('M0 0 H30 V6 Q30 19 22 27 Q19 19 6 17 L0 17 Z'); }
+    .cd-from::after { left: 0; width: 24px; height: 21px; background: var(--pill); clip-path: path('M24 0 H0 V4 Q0 14 8 21 Q10 14 18 11 L24 11 Z'); }
     .cd-names .cd-at { top: 62px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); }
     .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
