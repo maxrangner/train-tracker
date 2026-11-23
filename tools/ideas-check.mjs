@@ -144,6 +144,10 @@ try {
     return ['Lu', 'Hm', 'Hb'].every(s => { const st = window.__stationAt(s); return st && b.contains([st.lon, st.lat]); });
   }, 4000);
   ok(inView, `its stations all in view${onMap.inView ? '' : ' (after the camera settled)'}`);
+  // the map's labels and "2 trains" follow (2026-11-23: they waited for a lit train to move, and the trip's stood still)
+  const labels = () => page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-labels'] }).length);
+  const labelled = await until(page, () => window.__map.queryRenderedFeatures({ layers: ['train-labels'] }).length <= window.__drawn().drawn + 1, 5000);
+  ok(labelled, `the map's labels only for the lit trains (${await labels()} labels drawn)`);
   // its change taken away again in Edit (Max, 2026-11-23: an added stop couldn't be removed): the × on the change field
   await page.evaluate(() => window.__stack.open('edittrip:Lu>Hm>Hb'));
   ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x'))), 'Edit of a trip with a change: its change field has a ×');

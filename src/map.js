@@ -1529,7 +1529,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     if (!dotsHeld || map.isMoving() || modelsAt(z)) {
       src.setData(geojson);
       dotsHeld = new globalThis.Map(geojson.features.map(f => [f.properties.id, f]));
-      return;
+      return 'whole';   // (all sent again: setTrains sends the labels' groups once the camera rests)
     }
     const quarterPx = 0.25 * 40075016.686 * Math.cos(map.getCenter().lat * Math.PI / 180) / (512 * 2 ** z);
     const add = [], seen = new Set();
@@ -1557,6 +1557,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // Close in: the trains as the map was last drawn for (setTrains), id -> feature; null: draw next time.
   let drawnHeld = null;
   let groupsFor;   // the selected train when the groups were last sent (setTrains)
+  let groupsStale = false;   // dots sent while the camera moved, the groups not yet (setTrains)
   // Has a train in the view (or a fifth of it beyond, as the 3D layer takes them) moved a tenth of a pixel, turned a
   // fifth of a degree (the end of a long toy model moves about a tenth of a pixel), changed its words or colours,
   // come or gone, since the map was last drawn for them?
@@ -1723,11 +1724,16 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       drawnHeld = null;
       lastTrainsSent = t;
       const sent = sendDots(geojson);
+      // Dots sent while the camera moved: the groups follow once it rests. Until 2026-11-23 they waited for a dot to
+      // move: a saved trip lit only its standing train while the map glided to it, and every other train's number
+      // and "2 trains" stayed on the map (Max's note 12).
+      if (sent === 'whole') groupsStale = true;
       // The map's labels and their "3 trains" groups (hidden where the labels are the page's bubbles: then they
       // needn't be worked out). A group source rebuilds every tile in view on any change, so it is sent only when a
       // dot was (a train moved a quarter pixel, changed, came or went) or the selected train changed (2026-11-19).
-      if (!labelsOnPage() && (sent || groupsFor !== selected)) {
+      if (!labelsOnPage() && (sent === true || (groupsStale && !map.isMoving()) || groupsFor !== selected)) {
         groupsFor = selected;
+        groupsStale = false;
         data['train-groups'] = selected ? { type: 'FeatureCollection', features: geojson.features.filter(f => f.properties.id !== selected) } : geojson;
         map.getSource('train-groups')?.setData(data['train-groups']);
       }
