@@ -28,6 +28,7 @@
 //       the page's top edge (under the head); the stack adds the head and the phone's safe area, and keeps it between
 //       low + 60 px and full - 40 px. Read when the page comes on top and on stack.refit() (call it when the page's
 //       content changed its wanted height). Without it, half is the sheet's usual half (about half the screen). }
+//     halfGrows: true (optional): half() may only make the half taller than the usual one, never shorter.
 //   onPad(h): the map's free part is above this many pixels (the sheet's resting height, at most half): src/map.js setSheet.
 //   onChange(top): a page came on top (the map's lit trains, the line above the bar).
 import { reduceMotion } from './motion.js';
@@ -95,7 +96,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function halfOf(pg) {
     const want = pg?.def.half?.();
     if (!(want > 0)) return usualHalf;
-    return Math.round(Math.max(H[0] + 60, Math.min(HEAD_PX + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
+    const h = Math.round(Math.max(H[0] + 60, Math.min(HEAD_PX + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
+    // halfGrows: the page's half only ever taller than the usual one (a train's card: its "More" above the phone's
+    // bar on a short screen; on a tall one the usual half, no glide once its stops are in: 2026-11-23)
+    return pg.def.halfGrows ? Math.max(usualHalf, h) : h;
   }
   function measure() {
     const h = innerHeight, s = safe();

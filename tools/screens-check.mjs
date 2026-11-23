@@ -207,8 +207,16 @@ try {
   await page.evaluate(() => window.__map.jumpTo({ zoom: 12, center: [18.06, 59.33], pitch: 0, bearing: 0 }));
   await sleep(1500);
 
-  // ---- a train's page at full: swipes on the page and on a button ----
+  // ---- a train's page at half: its "More" clear of the screen's bottom (Max's phone, 2026-11-23: under Android's bar) ----
   const t2 = await openTrain();
+  if (t2) {
+    await setLevel(page, 1);
+    await sleep(1600);   // (its half is read again each second)
+    const more = await page.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(); return b ? { bottom: Math.round(b.bottom), h: innerHeight } : null; });
+    check(!more || more.bottom <= more.h - 20, `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 20 or more)`);
+  }
+
+  // ---- a train's page at full: swipes on the page and on a button ----
   if (!t2) fails.push('swipe: no train with its stops could be opened');
   else {
     const pgSel = `#sheet .pg[data-key="${t2.key}"]`;
