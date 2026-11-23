@@ -77,7 +77,9 @@ export async function openStationByName(page, name) {
 
 // ☰: its small menu open (rows: #open-day, #open-settings, #help-button).
 export async function openMenu(page) {
-  await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); });
+  // (the search left: the sheet glides down first; a click aimed at ☰ while it slid can land beside it, on a loaded PC
+  // in a whole check, 2026-11-23)
+  if (await page.evaluate(() => { const s = window.__stack.searching; if (s) window.__stack.back(); return s; })) await sleep(500);
   if (await page.evaluate(() => document.getElementById('nav').hidden)) await page.click('#nav-button');
   await until(page, () => !document.getElementById('nav').hidden);
   await sleep(200);
