@@ -16,8 +16,13 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { RUSH_HOUR, CARD_HOUR, PAGE } from './lib/browser.mjs';
 import { depsOf, filesIn, stampOf } from './lib/deps.mjs';
+import { capSelf, oneCheckAtATime } from './lib/cpu-cap.mjs';
 import { CHECKS, MARGINS, ALWAYS, FOLLOW_MIN, FOLLOW_ON, FOLLOW_FLIPS } from './check-limits.mjs';
 
+// The PC stays usable: one check at a time on this PC, the whole run at most 90 % of the CPU at below-normal priority
+// (Max, 2026-11-23; tools/lib/cpu-cap.mjs).
+await oneCheckAtATime();
+capSelf();
 const T0 = Date.now();
 const REBASE = process.argv.includes('--rebaseline');
 const ALL = process.argv.includes('--full') || REBASE || Boolean(process.env.SPARAT_RELEASE);
@@ -316,6 +321,7 @@ const SCREENS = [
   ['stats and board', 'tools/stats-board-check.mjs', 40], // Max's notes of 2026-11-21: Statistik's loading, dimming, company pages, the board's search (live)
   ['card moves', 'tools/sheet-moves-check.mjs', 35],     // every card moves in one go, no bounce (Max, 2026-11-21)
   ['ideas', 'tools/ideas-check.mjs', 90],                 // My trains, the change, why standing, share, peek, you seem to be on, a #train= link, the shop window (2026-11-23)
+  ['pc', 'tools/pc-check.mjs', 20],                      // a computer's screen and mouse: the map always drags (Max's PC notes, 2026-11-23)
 ];
 const screenJobs = [];
 if (!pageUp) {
