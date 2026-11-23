@@ -405,6 +405,7 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
+  let wantHalf = 0;   // the card's half, last measured while compact (half() below)
   const number = () => String(meta()?.number ?? m0.number);
   return {
     name: number, kind: 'train',
@@ -433,12 +434,16 @@ function trainPage(id) {
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
     // Half: down to the card's "More" with room under it (Max's phone, 2026-11-23: "More" lay under Android's own bar at
-    // the bottom of the screen). In steps of 8 px, read again each second (the why-line or Share's note coming in), so
-    // a pixel's change doesn't move the sheet. No "More" yet (the stops still loading): the usual half.
+    // the bottom of a short screen); never shorter than the usual half (halfGrows). Measured only while the card is
+    // compact and the sheet not at full (with all stops open "More" is elsewhere: the last measure is kept), in steps
+    // of 8 px, read again each second (the why-line or Share's note coming in). No "More" yet: the usual half.
+    halfGrows: true,
     half() {
       const more = panel.openId === id ? panelEl.querySelector('.panel-more') : null, pg = panelEl.parentElement;
-      if (!more || !pg || !more.offsetParent) return 0;
-      return Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
+      if (!more || !pg || !more.offsetParent) return wantHalf;
+      if (stack.level === 2 || panelEl.classList.contains('full')) return wantHalf;
+      wantHalf = Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
+      return wantHalf;
     },
     every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
