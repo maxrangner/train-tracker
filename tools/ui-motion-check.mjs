@@ -139,7 +139,7 @@ try {
     const refreshed = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
     check(refreshed === 0, `6: the card's refresh moves no rows (${refreshed} arriving)`);
     // ---- 5: card to card (Max's pick 5, 2026-11-20: no "Laddar…" between them). Since the one sheet (2026-11-22) the
-    // second train is a page of its own over the first (the back chip names the first): its card is never hidden or
+    // second train is a page of its own over the first (the back chip says Home): its card is never hidden or
     // "Laddar…" on the way and shows the new number. (Its number no longer rolls from the first one's: a new page slides in.)
     await page.click('#panel .panel-more');   // (compact again)
     await sleep(800);
@@ -157,7 +157,7 @@ try {
       key: window.__stack.top(), chip: document.querySelector('#sheet .sh-back span')?.textContent }));
     const want2 = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id2);
     if (!id2) notes.push('5 not checked: no second lone train near the middle');
-    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && sw.chip === first,
+    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && /^(Home|Hem)$/.test(sw.chip ?? ''),
       `5: card to card: ${sw.key} over ${first} (the back chip "${sw.chip}"), ${sw.heads.join(' → ')}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late}`);
     await toRest(page);
   }

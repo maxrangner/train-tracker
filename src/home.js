@@ -201,8 +201,8 @@ export function groupPage(key, d) {
       if (dir >= 0) d.fit(mine());
       d.onShow?.(g);
     },
-    hide() { d.onLight(null); },
-    unmount() { d.onLight(null); },
+    // (which trains are lit is the page on top's: main.js stack onChange. A group taken down after back had lit nothing
+    // again, after Home had lit its lateness colour: the bar said "On time" while the map showed all; Max, 2026-11-23)
     every: () => draw(),
     toggleShowOnly() { if (g.type === 'brand' || g.type === 'kind') { d.filter.toggle(g.type, g.v); draw(); } },
     redraw: () => draw(true),

@@ -394,6 +394,7 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
+let lastCardHalf = 0;   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
 function trainPage(id) {
@@ -405,8 +406,31 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
-  let wantHalf = 0;   // the card's half, last measured while compact (half() below)
+  let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
+  let fitted = false;              // its whole card measured once (its first fit: stack.refit's settle)
   const number = () => String(meta()?.number ?? m0.number);
+  // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
+  // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
+  // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
+  const CARD_GAP = 20;
+  function cardTo(whole) {
+    const pg = panelEl.parentElement;
+    if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
+    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
+      if (wantHalf || lastCardHalf) return wantHalf || lastCardHalf;
+      return stack.shown > stack.heights[1] ? 0 : Math.max(1, Math.round(stack.shown - 72));
+    }
+    const top = pg.getBoundingClientRect().top - pg.scrollTop;
+    const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
+    if (!whole) {
+      const b = Math.max(below(panelEl.querySelector('.panel-head')), below(panelEl.querySelector('.panel-alert')));
+      if (b > 0) wantLow = Math.ceil(b + 14);   // (14: the tiles start 18 px under that line, and must not peek in)
+      return wantLow;
+    }
+    const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
+    if (b > 0) { lastCardHalf = wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4; fitted = true; }
+    return wantHalf;
+  }
   return {
     name: number, kind: 'train',
     show(el, { prev, dir, go = false, again = false }) {
@@ -433,19 +457,17 @@ function trainPage(id) {
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
-    // Half: down to the card's "More" with room under it (Max's phone, 2026-11-23: "More" lay under Android's own bar at
-    // the bottom of a short screen); never shorter than the usual half (halfGrows). Measured only while the card is
-    // compact and the sheet not at full (with all stops open "More" is elsewhere: the last measure is kept), in steps
-    // of 8 px, read again each second (the why-line or Share's note coming in). No "More" yet: the usual half.
-    halfGrows: true,
-    half() {
-      const more = panel.openId === id ? panelEl.querySelector('.panel-more') : null, pg = panelEl.parentElement;
-      if (!more || !pg || !more.offsetParent) return wantHalf;
-      if (stack.level === 2 || panelEl.classList.contains('full')) return wantHalf;
-      wantHalf = Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
-      return wantHalf;
-    },
-    every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
+    // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
+    // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
+    // only while the card is compact and the sheet not at full (with all stops open "More" is elsewhere: the last
+    // measure is kept). No "More" yet (its stops still coming): down to what the card shows, so it only grows.
+    half: () => cardTo(true),
+    // Low: on a computer the whole card down to "More" (Max, 2026-11-23: "the most compact view should be including all
+    // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
+    // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
+    low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
+    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
+    fitted: () => fitted,
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -556,7 +578,7 @@ function stationPage(sig) {
   const extra = Object.assign(document.createElement('div'), { className: 'st-extras' });
   extra.innerHTML = `<button type="button" class="chip" data-go="newtrip:${esc(sig)}">${icon('trip', 17)}${esc(t('saveTripHere'))}</button>`;
   return {
-    name: () => stations.get(sig)?.name ?? st0.name, kind: 'station',
+    name: () => stations.get(sig)?.name ?? st0.name, kind: 'station', snap: false,
     show(el, { prev, dir, again = false }) {
       el.append(boardEl, extra);
       if (!again && !peekTipSeen()) extra.insertAdjacentHTML('afterbegin', `<p class="tip">${icon('info', 16)}<span>${esc(t('peekTip'))}</span></p>`);
@@ -709,7 +731,8 @@ versionEl.addEventListener('click', () => {
   clearTimeout(sayTimer);
   sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
 });
-// Esc steps back one page, as the back chip (2026-11-22): a menu or the search first; at Home the sheet goes down.
+// Esc steps back one page, as Android's back (2026-11-22; the back chip goes home since 2026-11-23): a menu or the
+// search first; at Home the sheet goes down.
 // The day's bubble goes first; its ribbon closes when there is nothing else to step back from.
 const dayBack = () => {
   if (dayView?.bubbleShown) { dayView.hideBubble(); return true; }
@@ -930,6 +953,7 @@ function showFollowed(r, place) {
 // frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
+if (import.meta.env.DEV) window.__drawn = () => ({ all: frameAll.length, drawn: frameTrains.length });   // (tools/back-check.mjs)
 // The day at an earlier moment (src/day-view.js): the trains from the day's history (src/day-trains.js) instead of the
 // live ones; the live engine runs on untouched underneath (its places worked out once a second, for Home and the
 // search). Drawn when the moment moved (at most 30 times a second), else as the live map is.
@@ -1581,12 +1605,24 @@ stack = createStack({
   onChange(pg) {
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(legend ? legendTest(legend) : null);
-    else if (pg.def.kind !== 'group') light(null);
-    // a train's line stays only under its own page and a station's (where the camera may still ride it)
-    if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
+    else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
+    // a train's line stays only under its own page and a station's (where the camera may still ride it); a trip's
+    // page keeps its own stations' names (showTrip below) but no train's line
+    if (pg.def.kind === 'trip' && !panel.openId) { map.setPath(null); map.setAbroad(null); }
+    else if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
   },
 });
 stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
+// A train's card that changed its size (the "to Kallhäll" chooser opened or shut, its stops come in, Share's note):
+// the sheet follows at once, not at the next second's tick (Max, 2026-11-23: "the card expands after way too long").
+// Taller at once; shorter only when the person changed the card within the last 1.5 s (the chooser shut): its own
+// content coming in (its stops, a line under the tiles) never moves the sheet down and up again.
+let cardTouched = 0;
+panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
+panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500, settle: stack.pageDef(stack.top())?.fitted?.() === false }); }).observe(panelEl);
+}
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
@@ -1611,7 +1647,24 @@ const followOnly = id => map.follow(() => placeNow(id), () => {});
 // My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
 myTrains = createMyTrains({ stack, line, stationName, findStations: text => menuStations(text), openTrain: openTrainRow, trainInfo,
   showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(shownAt(st), Math.max(12, map.camera().z)); },
-  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); } });
+  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); },
+  // A saved trip on the map (Max, 2026-11-23): all its stations in view with their names, only its next train(s) lit
+  // while one is on the map (none yet: every train stays).
+  showTrip({ sigs, trains: ids }) {
+    const pts = sigs.map(s => stations.get(s)).filter(Boolean).map(shownAt).filter(p => Number.isFinite(p.lon));
+    if (pts.length > 1) {
+      map.unfollow();
+      const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
+      map.fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
+    }
+    map.setRouteStations(sigs);
+    const on = new Set(ids.filter(id => frameById.has(id)));
+    light(on.size ? x => on.has(x.id) : null);
+  } });
+if (import.meta.env.DEV) {   // (tools/ideas-check.mjs)
+  window.__routeSigs = () => map.routeStationsNow;
+  window.__stationAt = (sig) => { const st = stations.get(sig); return st ? shownAt(st) : null; };
+}
 // "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
 ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frameAll, info: id => trainInfo(id), stationName, lateOf,
   follow: followOnly, unfollow: () => map.unfollow() });

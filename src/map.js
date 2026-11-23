@@ -1472,6 +1472,15 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const SETTLE_MAX_MS = 700;
   let dragged = false;
   map.on('dragstart', () => { dragged = true; });
+  // A mouse press on the map always moves the map: a text selection left on the page is cleared first (a press on
+  // selected content dragged the selection as a ghost picture instead; Max's PC, 2026-11-23), and the browser's own
+  // drag of a picture or link never starts there.
+  map.getContainer().addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const sel = getSelection();
+    if (sel && !sel.isCollapsed) sel.removeAllRanges();
+  }, true);
+  map.getContainer().addEventListener('dragstart', e => e.preventDefault(), true);
   map.on('moveend', () => {
     if (flying && !map._camera?.isEasing?.()) landed();
     if (!dragged || pointers.size) return;
@@ -1887,6 +1896,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       map.getSource('abroad')?.setData(data.abroad);
       routeNames();
     },
+    get routeStationsNow() { return routeSigs; },
     // The open train's stations (signatures, in order) get their names in pills; null: none.
     async setRouteStations(sigs) {
       routeSigs = sigs ?? [];

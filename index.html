@@ -61,8 +61,11 @@
     /* One line, never wider than this (Max, 2026-11-19: some texts were "WAY too long"; tools/pill-check.mjs). */
     #status .count { max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; }
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .sheet-high #status { opacity: 0; pointer-events: none; }
+    /* (a phone only: on a wider screen the sheet floats at the left and covers neither; Max's PC notes, 2026-11-23) */
+    @media (max-width: 439px) { .sheet-high #status { opacity: 0; pointer-events: none; } }
     #status { transition: opacity .18s; }
+    /* (no text selection on the map's marks and the sheet's head: a mouse pull selected text over the map; src/stack.js) */
+    #status, #line, #sheet-grip, .sh-head, .maplibregl-ctrl { -webkit-user-select: none; user-select: none; }
 
     #sheet { --ez: cubic-bezier(.2, .85, .25, 1); position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden; touch-action: none; will-change: transform;
@@ -113,6 +116,18 @@
     /* Pages: one at a time; the old one leaves to the side the new one does not come from. At full height a finger
        scrolls the page (the timeline, the board, Settings: they no longer scroll by themselves). */
     .sh-pages { position: relative; flex: 1; min-height: 0; }
+    /* More of the page below what is shown (src/stack.js syncFade; Max, 2026-11-23: Home "has no indication that
+       there is more content lower down"): a soft fade at the sheet's shown bottom edge. --sheet-off: how far the
+       sheet's own bottom is below the screen's (a phone: it slides down). */
+    .sh-fade { position: absolute; left: 0; right: 0; bottom: var(--sheet-off, 0px); height: 32px; z-index: 3; pointer-events: none;
+      background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 40%); opacity: 0; transition: opacity .2s; }
+    #sheet.more-below .sh-fade { opacity: 1; }
+    #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
+    .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 20px; margin-left: -22px; padding: 0;
+      display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--hover); color: var(--muted); cursor: pointer; }
+    #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
+    .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (min-width: 440px) { .sh-more { bottom: 4px; } }
     .pg { position: absolute; inset: 0; overflow: hidden; padding: 4px 16px calc(40px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
       overscroll-behavior: contain; scrollbar-width: thin; box-sizing: border-box; }
     #sheet[data-h="2"] .pg { overflow-y: auto; touch-action: pan-y; }
@@ -139,8 +154,8 @@
     .pg .panel-head strong { font-size: 22px; }
     .pg .panel-head { min-height: 36px; }
     .pg .tl-head { top: -4px; }
-    /* The live map's buttons ride on the sheet's top edge; hidden when it is high (index.html .sheet-tall). */
-    .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; }
+    /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
+    @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
     .maplibregl-ctrl-bottom-right { transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; }
     #sheet.dragging ~ #map .maplibregl-ctrl-bottom-right, .sheet-dragging .maplibregl-ctrl-bottom-right { transition: none; }
 
@@ -299,7 +314,12 @@
     .nt-res:empty { display: none; }
     .nt-room { display: block; height: 75vh; }
     .nt-room[hidden] { display: none; }
-    .nt-save { justify-self: start; }
+    /* the change's field with its × (Max, 2026-11-23: an added stop couldn't be removed) */
+    .nt-via { position: relative; display: grid; gap: inherit; }
+    .nt-via .nt-field { padding-right: 56px; }
+    .nt-x { position: absolute; top: 9px; right: 9px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
+    .nt-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .nt-save { justify-self: start; align-self: flex-start; }   /* (as wide as its words: in the page's column it stretched across) */
     /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
     .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
     .trip-acts .chip { min-height: 38px; font-size: 14px; }
@@ -452,6 +472,8 @@
       background: color-mix(in srgb, var(--bg) 60%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .6s; }
     #credit a { color: inherit; text-decoration: none; }
     #credit.gone { opacity: 0; pointer-events: none; }
+    /* (a phone: above the sheet's grab strip, #sheet-grip, 24 px over the sheet's top; under it its links took no tap) */
+    @media (max-width: 439px) { #credit { bottom: calc(var(--sheet-h, 0px) + 30px + env(safe-area-inset-bottom, 0px)); } }
     @keyframes note-in { from { opacity: 0; transform: translateX(8px); } }
     .geo-off .maplibregl-ctrl-geolocate { pointer-events: none; }   /* the tap reaches the box, which shows the note */
     .geo-off .maplibregl-ctrl-geolocate .maplibregl-ctrl-icon { opacity: 0.35;
@@ -716,6 +738,11 @@
     button.cd-stop { font: inherit; border: 0; cursor: pointer; }
     button.cd-stop[aria-expanded="true"] { box-shadow: inset 0 0 0 2.5px var(--accent); }
     button.cd-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* "till Malmö C ⌄" framed, so it reads as a button (Max's pick 2B, 2026-11-23: like a trip's From/To) */
+    button.cd-stop small { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 8px 4px 11px; border-radius: 999px;
+      border: 1.5px solid var(--accent); color: var(--ink); font-weight: 700; max-width: 100%; box-sizing: border-box; }
+    button.cd-stop small span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+    button.cd-stop small svg { width: 18px; height: 18px; flex: none; color: var(--accent); stroke-width: 2.6; }
     /* The stops ahead to count down to: the list scrolls; the one counted down to in the accent, with ✓. */
     /* Under the tiles, pushing the rest down (on the full card the timeline keeps what is left, scrolling); it slides
        open and closed (Max, 2026-11-16: hiding the timeline was "too jerky"). */
@@ -1201,12 +1228,6 @@
         <div class="seg" data-key="noEstimate" role="group" aria-label="With no expected time" data-t-aria="noEstimate"><button type="button" data-v="guess" data-t="guessLate">Planned + late</button><button type="button" data-v="planned" data-t="plannedOnly">Planned</button></div></div>
       <div class="debug-only set-row"><span data-t="trainSymbol">Train symbol</span>
         <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
-      <div class="debug-only set-row"><span data-t="routeNames">Route station names</span>
-        <div class="seg" data-key="routeNames" role="group" aria-label="Route station names" data-t-aria="routeNames"><button type="button" data-v="contrast" data-t="rnContrast">Contrast</button><button type="button" data-v="pill" data-t="rnPill">Like trains</button><button type="button" data-v="plain" data-t="rnPlain">Text</button></div></div>
-      <div class="debug-only set-row"><span data-t="nameSide">Station names</span>
-        <div class="seg" data-key="nameSide" role="group" aria-label="Station names" data-t-aria="nameSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
-      <div class="debug-only set-row"><span data-t="pillSide">Route station names: place</span>
-        <div class="seg" data-key="pillSide" role="group" aria-label="Route station names: place" data-t-aria="pillSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
     </div>
   </div>
   <!-- The connection screen (Max's pick Y, 2026-11-18), from the live mark: src/connection.js draws it. -->

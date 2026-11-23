@@ -4,6 +4,7 @@
 // The page must be running: `npm run dev` (http://localhost:5173/), or set PAGE to another address (every tool
 // reads it, e.g. a second working folder's page: PAGE=http://localhost:5180/).
 import puppeteer from 'puppeteer-core';
+import { capSelf } from './cpu-cap.mjs';
 
 export const BROWSER_PATH = process.env.BROWSER_PATH ?? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 export const PAGE = (process.env.PAGE ?? 'http://localhost:5173/').replace(/\/?$/, '/');
@@ -20,6 +21,7 @@ export const CARD_HOUR = '2026-11-17T15-00-00-001Z';
 export const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export function launch(options = {}) {
+  capSelf();   // (the test browser at most 90 % of the CPU, below normal priority: tools/lib/cpu-cap.mjs)
   return puppeteer.launch({
     executablePath: BROWSER_PATH,
     headless: true,
