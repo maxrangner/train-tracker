@@ -320,6 +320,8 @@
     .tr-acts, .st-extras { display: flex; flex-wrap: wrap; gap: 8px; }
     .st-extras { margin-top: 4px; }
     .tr-acts .chip, .st-extras .chip { gap: 7px; }
+    /* "Add a change" only on the expanded card (Max, 2026-11-23); its row goes with it */
+    #sheet:not([data-h="2"]) .tr-extras .tr-acts { display: none; }
     .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
       background: var(--t-some-bg); color: var(--t-some); font: inherit; }
     .why.none { background: var(--hover); color: var(--muted); }
