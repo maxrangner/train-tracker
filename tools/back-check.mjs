@@ -82,6 +82,25 @@ try {
       notes.push(`${s0.keys}: trail → ${s1.top} → ${s2.top} → ${s3.top} → at rest → away`);
     }
 
+    // ---- one "N trains here" over another (Max's phone, 2026-11-23: back to "2 trains here" showed an empty page):
+    // back shows the first list's rows again ----
+    await page.evaluate(() => { window.__minimized = false; });
+    await toRest(page);
+    await page.evaluate(() => {
+      const ids = window.__trains.reports().map(r => r.id).filter(Boolean).slice(0, 5);
+      const row = (id, i) => ({ id, label: String(2200 + i), company: 'Test' });
+      window.__picker(ids.slice(0, 2).map(row));
+      setTimeout(() => window.__picker(ids.slice(2, 5).map(row)), 500);
+    });
+    await sleep(1300);
+    const p0 = await state();
+    const p1 = await back();
+    const rows = await page.evaluate(() => { const pg = document.querySelector(`#sheet .pg[data-key="${window.__stack.top()}"]`); return { n: pg?.querySelectorAll('.pick-list li').length ?? 0, shown: Boolean(pg?.querySelector('#picker:not([hidden])')) }; });
+    if (p0.keys.split(' > ').filter(k => k.startsWith('pick:')).length !== 2) fails.push(`two pickers setup: ${say(p0)}`);
+    else if (!p1.top?.startsWith('pick:') || rows.n !== 2 || !rows.shown) fails.push(`back from a picker to the one under: ${say(p1)}, ${rows.n} rows, list shown ${rows.shown} (want the first list's 2 rows)`);
+    else notes.push(`two pickers: back shows the first one's ${rows.n} rows`);
+    await back();
+
     // ---- Home pulled up: back takes it down, the next press leaves ----
     await page.evaluate(() => { window.__minimized = false; });
     await toRest(page);
