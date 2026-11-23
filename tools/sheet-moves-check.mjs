@@ -156,7 +156,7 @@ try {
     const was = { key: await top(), level: await level() };
     await act('over a card: a station from its stops', ev(() => [...document.querySelectorAll('#panel .tl-row[data-sig]')].at(-1)?.click()), 2000);
     const over = await top();
-    await act('over a card: back', ev(() => document.querySelector('#sheet .sh-back').click()), 2000);
+    await act('over a card: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 2000);
     state((await top()) === was.key && (await level()) === was.level, `train: expanded (${was.level}) under ${over}, back as ${await top()} at ${await level()}`);
     // a long pull down: every page closed
     await act('train: a long pull down', async () => { await page.evaluate(() => window.__stack.setLevel(0)); await sleep(500); await drag(200)(); }, 1500);
@@ -176,15 +176,15 @@ try {
   await act('☰: closed by ☰', ev(() => document.getElementById('nav-button').click()), 700);
   await act('Home: pulled up', ev(() => window.__stack.setLevel(2)), 1800);
   await act('Home: a company', ev(() => document.querySelector('#sheet .pg[data-key="home"] [data-filter="brand"]:not([data-v=""])')?.click()), 1800);
-  await act('the company: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1500);
+  await act('the company: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
   await act('Home: a long pull down', drag(700), 1500);
   state((await level()) === 0, `Home: a long pull down left it at ${await level()}`);
   await act('Settings: open', ev(() => { document.getElementById('nav-button').click(); document.getElementById('open-settings').click(); }), 1500);
   await act('Settings: dark', ev(() => document.querySelector('#settings-page [data-key="theme"] [data-v="dark"]')?.click()), 2500);
   await act('Settings: light', ev(() => document.querySelector('#settings-page [data-key="theme"] [data-v="light"]')?.click()), 2500);
-  await act('Settings: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1200);
+  await act('Settings: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1200);
   await act('Anslutning: open', ev(() => document.getElementById('status')?.click()), 1500);
-  await act('Anslutning: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1200);
+  await act('Anslutning: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1200);
   state((await top()) === 'home', `Anslutning closed: ${await top()} on top`);
 
   // ---- 2. live: a station's board ----
@@ -246,13 +246,13 @@ try {
   // a train picked from the board's rows: a page over it; back
   await act('board: a train from its rows', ev(() => document.querySelector('#board .bd-row')?.click()), 3000);
   state((await top()).startsWith('train:'), `a train from the board's rows: ${await top()} on top`);
-  await act('that train: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1500);
+  await act('that train: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
   state((await top()).startsWith('station:'), `back from the train: ${await top()} on top`);
   // a train picked from the board's search
   await act('board: the search again', find, 2500);
   await act('board: Ankomster while searching', ev(() => document.querySelector('#board [data-act="Ankomst"]').click()), 2500);
   await act('board: a train from the search', ev(() => document.querySelector('#board .board-found .bd-row:not(.gone)')?.click()), 3000);
-  await act('that train: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1500);
+  await act('that train: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
   await act('board: a long pull down', async () => { await page.evaluate(() => window.__stack.setLevel(0)); await sleep(500); await drag(200)(); }, 1500);
   state((await top()) === 'home', `board: a long pull down left ${await top()} on top`);
   // the disruptions (live only)
@@ -261,7 +261,7 @@ try {
     await act('Störningar: open', ev(() => document.querySelector('#sheet .pg[data-key="home"] [data-go="dislist"]')?.click()), 1500);
     await act('Störningar: a fold', ev(() => document.querySelector('#sheet .pg[data-key="dislist"] .dis-fold')?.click()), 1200);
     await act('Störningar: a disruption', ev(() => [...document.querySelectorAll('#sheet .pg[data-key="dislist"] .dis-row')].find(r => !r.closest('.dis-works:not(.open)'))?.click()), 2000);
-    await act('the disruption: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1500);
+    await act('the disruption: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
     await act('Störningar: a long pull down', async () => { await page.evaluate(() => window.__stack.setLevel(0)); await sleep(500); await drag(200)(); }, 1500);
     state((await top()) === 'home', `Störningar: a long pull down left ${await top()} on top`);
   } else notes.push('Störningar not checked: no disruption in force now');
@@ -280,7 +280,7 @@ try {
     for (let t0 = Date.now(); Date.now() - t0 < 8000; await sleep(300)) if (await has('#panel .tl-row[data-sig]')) break;
     await page.evaluate(() => [...document.querySelectorAll('#panel .tl-row[data-sig]')].at(-1)?.click());
   }, 2500);
-  await act('a station over a train: back', ev(() => document.querySelector('#sheet .sh-back').click()), 1500);
+  await act('a station over a train: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
   const h = await page.evaluate(() => { const s = getComputedStyle(document.documentElement);
     return [s.getPropertyValue('--sheet-h').trim(), `${Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top)}px`, window.__stack.top()]; });
   state(h[0] === h[1], `the map's buttons at ${h[0]}, the sheet (${h[2]}) ${h[1]} tall`);

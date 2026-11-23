@@ -82,6 +82,23 @@ try {
       notes.push(`${s0.keys}: trail → ${s1.top} → ${s2.top} → ${s3.top} → at rest → away`);
     }
 
+    // ---- the back chip (Max, 2026-11-23: "should always go home"): it says Home over any page and a tap takes every
+    // page away; Android's back above still steps one at a time ----
+    await page.evaluate(() => { window.__minimized = false; });
+    const st2 = await openStationByName(page, 'Stockholm C');
+    await until(page, () => Boolean(document.querySelector('#board .bd-row:not(.gone)')), 10000);
+    await page.evaluate(() => document.querySelector('#board .bd-row:not(.gone)')?.click());
+    await until(page, () => window.__stack.top()?.startsWith('train:'), 4000);
+    await sleep(800);
+    const c0 = await state();
+    const word = await page.evaluate(() => document.querySelector('#sheet .sh-back span')?.textContent.trim());
+    await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
+    await sleep(600);
+    const c1 = await state();
+    if (!st2 || c0.keys.split(' > ').length !== 3) fails.push(`the chip setup: ${say(c0)} (want Home > a station > a train)`);
+    else if (!/^(Home|Hem)$/.test(word ?? '') || c1.keys !== 'home' || c1.away) fails.push(`the back chip over ${say(c0)}: said "${word}", after a tap ${say(c1)} (want "Home", only Home left)`);
+    else notes.push(`the back chip over ${c0.keys}: "${word}", a tap → ${c1.keys}`);
+
     // ---- one "N trains here" over another (Max's phone, 2026-11-23: back to "2 trains here" showed an empty page):
     // back shows the first list's rows again ----
     await page.evaluate(() => { window.__minimized = false; });

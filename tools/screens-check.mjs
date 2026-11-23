@@ -1,6 +1,6 @@
 // Max's notes of 2026-11-20 in the test browser (phone size, a replay), on the one sheet (2026-11-22, src/stack.js):
 //   - one page on top, in the stack's order: a train, a station from its stops over it; only the top page is in the
-//     sheet, the back chip names the one under it, back steps down the stack to Home and nothing is left;
+//     sheet, the back chip says Home (since 2026-11-23), back (Esc) steps down the stack to Home and nothing is left;
 //   - a page over a train lets its card go; back to it, the card is there again and the train followed (until
 //     2026-11-22 Settings → Debug → "Screen over a train" chose this: the stack decides now);
 //   - ☰'s menu answers at once after a swipe of the sheet (a page swiped away, Home swiped down: ☰ 30 ms later opens);
@@ -70,7 +70,7 @@ try {
     const over = await page.evaluate(() => ({ ...{ keys: window.__stack.keys() }, pages: [...document.querySelectorAll('#sheet .sh-pages > .pg:not(.res)')].filter(p => p.isConnected).map(p => p.dataset.key),
       chip: document.querySelector('#sheet .sh-back span')?.textContent, card: document.getElementById('panel').closest('.pg')?.dataset.key ?? null,
       cardShown: !document.getElementById('panel').hidden && Boolean(document.getElementById('panel').closest('.pg')) }));
-    check(over.keys.join(' > ') === `home > ${tr.key} > station:${sig}` && over.pages.length === 1 && over.pages[0] === `station:${sig}` && over.chip === tr.number,
+    check(over.keys.join(' > ') === `home > ${tr.key} > station:${sig}` && over.pages.length === 1 && over.pages[0] === `station:${sig}` && over.chip === 'Home',
       `a station from ${tr.number}'s stops: ${over.keys.join(' > ')}, in the sheet only ${over.pages.join(', ')}, the back chip "${over.chip}"`);
     check(!over.cardShown, `the station over the train: its card let go (shown in ${over.card ?? 'no page'})`);
     const k1 = await back(page);
@@ -91,7 +91,10 @@ try {
     await open();
     await settle();
     const grab = await page.evaluate(() => { const r = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-    await swipe(grab.x, grab.y, Math.min(400, 830 - grab.y), { after: 30 });
+    // (Home: let go at its half, so ☰ is where it rests and the tap tests the tap, not a moving target: Home's half
+    // fits its parts since 2026-11-23 and can lie far below where a 400 px swipe ends)
+    const toHalf = await page.evaluate(() => (window.__stack.top() === 'home' ? Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top - window.__stack.heights[1]) : 0));
+    await swipe(grab.x, grab.y, toHalf > 0 ? toHalf : Math.min(400, 830 - grab.y), { after: 30 });
     await touchTap('#nav-button');
     await sleep(300);
     const s = await sheetState(page);
@@ -213,7 +216,66 @@ try {
     await setLevel(page, 1);
     await sleep(1600);   // (its half is read again each second)
     const more = await page.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(); return b ? { bottom: Math.round(b.bottom), h: innerHeight } : null; });
-    check(!more || more.bottom <= more.h - 20, `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 20 or more)`);
+    // (and no empty space under it: Max's phone, 2026-11-23, second round)
+    check(!more || (more.bottom <= more.h - 20 && more.bottom >= more.h - 40), `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 20 to 40)`);
+    // the chooser ("to Kallhäll"): the sheet follows the card at once (Max, 2026-11-23: "the card expands after way too long")
+    const h0 = await settle();
+    await click('#panel .cd-stop');
+    await sleep(300);
+    const hOpen = await shownH(), lastRow = await page.evaluate(() => Math.round(document.querySelector('#panel .cd-pick .cd-row:last-child')?.getBoundingClientRect().bottom ?? 0));
+    await click('#panel .cd-stop');
+    await sleep(600);
+    const hShut = await shownH();
+    check(hOpen > h0 + 60 && lastRow <= 851 - 20 && Math.abs(hShut - h0) <= 4, `the chooser: the sheet ${h0} → ${hOpen} px 0.3 s after opening (its last stop ends ${851 - lastRow} px above the bottom), ${hShut} px 0.6 s after shutting`);
+    // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
+    await setLevel(page, 0);
+    const low = await page.evaluate(() => {
+      const els = [...document.querySelectorAll('#panel .panel-head, #panel .panel-alert')].filter(e => e.offsetParent);
+      return { h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), gap: Math.round(innerHeight - Math.max(...els.map(e => e.getBoundingClientRect().bottom))) };
+    });
+    check(low.h < 220 && low.gap >= 10 && low.gap <= 30, `a train at low: the condensed card ${low.h} px tall, ${low.gap} px under its last line (want 10 to 30)`);
+    await setLevel(page, 1);
+  }
+  // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at
+  // half no row cut through, and a mark that there is more below ----
+  const homeCuts = (p) => p.evaluate(() => {
+    const sheet = document.getElementById('sheet'), bottom = Math.min(innerHeight, sheet.getBoundingClientRect().bottom);
+    const pg = document.querySelector('#sheet .pg[data-key="home"]');
+    const cut = [...pg.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *')].filter((e) => { const r = e.getBoundingClientRect(); return r.height > 0 && r.height < 220 && r.top < bottom - 20 && r.bottom > bottom + 1; });   // (under the fade's solid lower 20 px nothing shows)
+    const more = document.querySelector('#sheet .sh-more').getBoundingClientRect();
+    return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40 };
+  });
+  const fieldGap = p => p.evaluate(() => { const f = document.querySelector('#sheet .sh-field').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+    return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), side: Math.round(f.left - s.left) }; });
+  await toRest(page);
+  await sleep(500);   // (the glide down ends)
+  const fg = await fieldGap(page);
+  check(Math.abs(fg.below - fg.side) <= 2, `Home at rest: the search field ${fg.below} px from the sheet's bottom, ${fg.side} px from its side`);
+  await setLevel(page, 1);
+  await sleep(400);
+  const hc = await homeCuts(page);
+  check(!hc.cut.length && hc.fade && hc.chevron, `Home at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}`);
+  await toRest(page);
+  // ---- a computer (Max, 2026-11-23): a train's lowest height is the whole card down to "More", nothing under it ----
+  if (t2) {
+    const pc = await waitForMap(browser, { ...base, size: { width: 1500, height: 1000, deviceScaleFactor: 1 } });
+    if (await openTrainByNumber(pc, t2.number)) {
+      await sleep(1200);
+      await pc.evaluate(() => window.__stack.setLevel(0));
+      await sleep(700);
+      const m = await pc.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); return b ? Math.round(s.bottom - b.bottom) : null; });
+      check(m !== null && m >= 12 && m <= 40, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom (want 12 to 40)`);
+      await pc.evaluate(() => window.__stack.home(0));
+      await sleep(600);
+      const pfg = await fieldGap(pc);
+      check(Math.abs(pfg.below - pfg.side) <= 2, `a computer, Home at rest: the search field ${pfg.below} px from the sheet's bottom, ${pfg.side} px from its side`);
+      await pc.evaluate(() => window.__stack.setLevel(1));
+      await sleep(900);
+      const pcut = await homeCuts(pc);
+      check(!pcut.cut.length, `a computer, Home at half: cut through: ${pcut.cut.join(', ') || 'nothing'}`);
+    } else fails.push(`a computer: train ${t2.number} could not be opened`);
+    errors.push(...pc.errors);
+    await pc.close();
   }
 
   // ---- a train's page at full: swipes on the page and on a button ----
@@ -222,6 +284,9 @@ try {
     const pgSel = `#sheet .pg[data-key="${t2.key}"]`;
     const level = () => page.evaluate(() => window.__stack.level);
     const isFull = () => page.evaluate(() => document.getElementById('panel').classList.contains('full'));
+    await page.evaluate(k => window.__stack.open(k), t2.key);   // (again, after Home above)
+    await until(page, () => Boolean(document.querySelector('#panel .panel-more')), 8000);
+    await settle();
     await click('#panel .panel-more');   // All stops: full
     await settle();
     const at = () => page.evaluate(s => { const p = document.querySelector(s), r = p.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 60, top: p.scrollTop }; }, pgSel);

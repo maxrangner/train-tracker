@@ -123,11 +123,16 @@ export async function openConnection(page) {
   await sleep(400);
 }
 
-// One step back, as the back chip (or Esc) does: returns the page key after it.
+// One step back, as Esc and Android's back do (the back chip goes home since 2026-11-23: chipHome): returns the page
+// key after it.
 export async function back(page) {
-  const chip = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-back'); const r = b.getBoundingClientRect(); return window.__stack.top() !== 'home' && r.width > 0 && !window.__stack.searching; });
-  if (chip) await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
-  else await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await sleep(450);
+  return pageKey(page);
+}
+// The back chip ("‹ Home"): every page gone, Home. Returns the page key after it.
+export async function chipHome(page) {
+  await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
   await sleep(450);
   return pageKey(page);
 }

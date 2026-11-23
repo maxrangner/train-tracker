@@ -2,8 +2,9 @@
 // problems only, Settings → Disruptions on the map: Off / Problems / All, default All). On the live page (disruptions
 // are live only), so what is checked depends on what is in force: said when a kind is missing.
 // Since the one sheet (2026-11-22): the count is on Home (its Disruptions part, "All disruptions": n problems · m rail
-// work), the list is the page `dislist` (.dis-body), a disruption the page `dis:<id>` over it; back is the stack's
-// back chip (it reads "Disruptions"), and the list comes back scrolled where it was (the page scrolls itself at full).
+// work), the list is the page `dislist` (.dis-body), a disruption the page `dis:<id>` over it; back (Esc, Android's
+// back) gives the list again, scrolled where it was (the page scrolls itself at full); the back chip says Home (since
+// 2026-11-23).
 // node tools/disruption-check.mjs (with npm run dev and the key; PAGE= for another port).
 import { launch, sleep } from './lib/browser.mjs';
 import { waitForMap, until, setLevel, toRest, back, sheetState, openFromMenu, openDisruptions, HOME, pageSel } from './lib/screen.mjs';
@@ -67,8 +68,8 @@ try {
       expect(again.open === String(!wasOpen), `the fold is remembered after a reload (${again.open})`);
       if (again.open === 'true') { await page.evaluate(L => document.querySelector(`${L} .dis-fold`).click(), LIST); await sleep(300); }
     } else notes.push('no rail work in force now: the fold not checked');
-    // A disruption opened from the list: its page over the list, the back chip names the list (Max, 2026-11-20: a
-    // back arrow), back: the list again, scrolled where it was.
+    // A disruption opened from the list: its page over the list, the back chip says Home (2026-11-23), back (Esc):
+    // the list again, scrolled where it was.
     const visibleRows = () => page.evaluate(L => [...document.querySelectorAll(`${L} .dis-body .dis-row`)].filter(r => !r.closest('.dis-works:not(.open)')).length, LIST);
     const problemsShown = await visibleRows();
     if (problemsShown || works) {
@@ -80,7 +81,7 @@ try {
       await sleep(800);
       const s = await sheetState(page);
       const card = await page.evaluate(() => Boolean(document.querySelector('#sheet .pg #disruption')));
-      expect(s.key === `dis:${id}` && card && s.back === 'Störningar', `a disruption from the list: its page ${s.key} (${card ? 'drawn' : 'empty'}) over ${s.keys.join(' > ')}, the back chip "${s.back}"`);
+      expect(s.key === `dis:${id}` && card && s.back === 'Hem', `a disruption from the list: its page ${s.key} (${card ? 'drawn' : 'empty'}) over ${s.keys.join(' > ')}, the back chip "${s.back}"`);
       const after = await back(page);
       await sleep(300);
       const backAt = await page.evaluate(L => ({ top: document.querySelector(L)?.scrollTop ?? -1 }), LIST);
