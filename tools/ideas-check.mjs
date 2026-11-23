@@ -74,7 +74,7 @@ try {
 
   // ---- a trip with a change ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Lu', 'Hb', 'Hm'); window.__stack.open('trip:Lu>Hm>Hb'); });
-  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Hm>Hb"] .trip-pair, .pg[data-key="trip:Lu>Hm>Hb"] .state.empty')), 15000), 'a trip with a change (Lund C → Göteborg C via Hässleholm C) answers');
+  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Hm>Hb"] .trip-pair, .pg[data-key="trip:Lu>Hm>Hb"] .state.empty')), 15000), 'a trip with a change (Lund C → Helsingborg C via Hässleholm) answers');
   const pairs = await page.evaluate(() => [...document.querySelectorAll('.pg[data-key="trip:Lu>Hm>Hb"] .trip-chg')].map(c => `${c.className.replace('trip-chg ', '')}: ${c.innerText}`));
   ok(pairs.length > 0, `its changes: ${pairs.slice(0, 3).join('; ')}`);
   await setLevel(page, 2);
