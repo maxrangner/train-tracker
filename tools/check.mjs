@@ -16,8 +16,13 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:net';
 import { RUSH_HOUR, CARD_HOUR, PAGE } from './lib/browser.mjs';
 import { depsOf, filesIn, stampOf } from './lib/deps.mjs';
+import { capSelf, oneCheckAtATime } from './lib/cpu-cap.mjs';
 import { CHECKS, MARGINS, ALWAYS, FOLLOW_MIN, FOLLOW_ON, FOLLOW_FLIPS } from './check-limits.mjs';
 
+// The PC stays usable: one check at a time on this PC, the whole run at most 90 % of the CPU at below-normal priority
+// (Max, 2026-11-23; tools/lib/cpu-cap.mjs).
+await oneCheckAtATime();
+capSelf();
 const T0 = Date.now();
 const REBASE = process.argv.includes('--rebaseline');
 const ALL = process.argv.includes('--full') || REBASE || Boolean(process.env.SPARAT_RELEASE);
