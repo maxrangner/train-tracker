@@ -130,6 +130,16 @@ try {
   ok(pairs.length > 0, `its changes: ${pairs.slice(0, 3).join('; ')}`);
   await setLevel(page, 2);
   await shot(page, '04-trip-change');
+  // its change taken away again in Edit (Max, 2026-11-23: an added stop couldn't be removed): the × on the change field
+  await page.evaluate(() => window.__stack.open('edittrip:Lu>Hm>Hb'));
+  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x'))), 'Edit of a trip with a change: its change field has a ×');
+  await page.evaluate(() => document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x').click());
+  const noVia = await page.evaluate(() => ({ field: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="via"]')), add: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="addvia"]')) }));
+  ok(!noVia.field && noVia.add, `the × takes the change away ("Add a change" back: ${noVia.add})`);
+  await page.evaluate(() => document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="save"]').click());
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Hb' && Boolean(window.__ideas.favourites.trip('Lu>Hb')) && !window.__ideas.favourites.trip('Lu>Hm>Hb')),
+    `saved without the change: Lund C → Helsingborg C (${await top(page)})`);
+  await page.evaluate(() => window.__ideas.favourites.removeTrip('Lu>Hb'));
 
   // ---- the first board: "Save a trip from here" and the Peek tip ----
   await openStationByName(page, 'Lund C');

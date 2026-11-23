@@ -302,6 +302,11 @@
     .nt-res:empty { display: none; }
     .nt-room { display: block; height: 75vh; }
     .nt-room[hidden] { display: none; }
+    /* the change's field with its × (Max, 2026-11-23: an added stop couldn't be removed) */
+    .nt-via { position: relative; display: grid; gap: inherit; }
+    .nt-via .nt-field { padding-right: 56px; }
+    .nt-x { position: absolute; top: 9px; right: 9px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
+    .nt-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .nt-save { justify-self: start; align-self: flex-start; }   /* (as wide as its words: in the page's column it stretched across) */
     /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
     .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }

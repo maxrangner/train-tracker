@@ -339,7 +339,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       const can = st.from && st.to && st.from !== st.to;
       el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p><div class="nt-fields">` +
         field('from', t('tripFrom')) + field('to', t('tripTo')) +
-        (st.wantVia || st.via ? field('via', t('tripViaLabel')) : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
+        (st.wantVia || st.via ? `<div class="nt-via">${field('via', t('tripViaLabel'))}<button type="button" class="nt-x" data-nt="novia" aria-label="${esc(t('removeVia'))}">${icon('close', 18)}</button></div>` : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
         `<button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
       const q = el.querySelector('.nt-q'), room = el.querySelector('.nt-room');
       if (q) {
@@ -381,6 +381,8 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           if (!b) return;
           const f = b.dataset.nt;
           if (f === 'save') { save(); return; }
+          // (an added change can be taken away again: Max, 2026-11-23)
+          if (f === 'novia') { st.via = null; st.wantVia = false; st.editing = null; draw(); return; }
           if (f === 'addvia') { st.wantVia = true; st.editing = 'via'; } else st.editing = st.editing === f ? null : f;
           draw();
           if (st.editing) el.querySelector('.nt-q')?.focus({ preventScroll: true });
