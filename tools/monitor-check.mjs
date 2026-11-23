@@ -146,6 +146,36 @@ else console.log('ok   the summary after a restart lists the problem mailed befo
   if (!ok) bad++;
   console.log(`${ok ? 'ok  ' : 'FAIL'} the version in the summary${ok ? '' : `\n${a}\n${b}`}`);
 }
+// The summary as a page with graphs (2026-11-23; monitor/summary-mail.mjs): a whole made-up day with an outage, the
+// days before and the viewers; every number in it, short enough for Gmail (it cuts a mail past 102 kB).
+{
+  const t0 = at('2026-11-23T07:01');
+  const rows = Array.from({ length: 1440 }, (_, i) => {
+    const r = normal(t0 + i * MIN, { trains: 100 + (i % 300), memMB: 300 + (i % 140), cpuPct: 2, ver: '0.8.0', bytesIn: 900000, bytesOut: 230000 });
+    if (i >= 360 && i < 401) Object.assign(r, { trvFailed: 2, feeds: 'poll/poll', one: { status: 'error', age: null } });
+    r.offline = isOffline(r);
+    return r;
+  });
+  const days = [{ day: '2026-11-21', minutes: 1440, trainsMax: 265, bytesIn: 945e6, bytesOut: 247e6, memMax: 365, problems: 0 },
+    { day: '2026-11-22', minutes: 1440, trainsMax: 365, bytesIn: 1041e6, bytesOut: 268e6, memMax: 427, problems: 0 },
+    { day: '2026-11-22', minutes: 300, partial: true, trainsMax: 1, problems: 0 }];
+  const viewers = { at: t0, error: null, days: [{ day: '2026-11-23', people: 412, app: 96, site: 316, peak: 23, peakAt: at('2026-11-23T17:35') }],
+    hours: [{ t: at('2026-11-23T17:00'), people: 38, peak: 21 }] };
+  const ctx = { versionText: 'Spårat 0.8.0 (commit abc1234)', days, viewers };
+  const mails = [{ t: at('2026-11-23T13:42'), kind: 'offline', key: 'offline', subject: 'the internet was out 13:00–13:41 (41 min)' }];
+  const s = summary(rows, mails, [], ctx);
+  const kb = Buffer.byteLength(s.html) / 1000;
+  const want = ['Spårat 0.8.0 (commit abc1234)', '>412<', 'app 96 · site 316', '>23<', 'at 17:35', '>399<', 'the internet was out 13:00–13:41', 'internet out 41 min',
+    'Sun 22', 'Sat 21', '>1 041<', '>427<', 'People at once', 'most 21 at 17:00', 'Trains on the map', 'Running', 'Fetcher CPU', '<!--foot-->', 'watched 24 h of 24'];
+  const missing = want.filter(w => !s.html.includes(w));
+  check(`the summary page: ${kb.toFixed(1)} kB, every number in it, the days before (the whole day's line, not the part one)`,
+    kb < 90 && !missing.length && !s.html.includes('>1<') && /Viewers: 2026-11-23 412 people \(app 96, site 316\), most at once 23 at 17:35/.test(s.text),
+    `missing: ${missing.join(' | ')}`);
+  const none = summary(rows.slice(0, 600), [], [], { versionText: 'Spårat 0.7.0' });
+  check('the summary page without the viewer count (before the release): says so, no viewer graphs, no empty week',
+    none.html.includes('counted from the next release') && !none.html.includes('People at once') && none.html.includes('No days kept yet') && none.html.includes('watched 10 h of 24'));
+}
+function check(name, ok, more = '') { if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n     ${more}`}`); }
 await live();
 console.log(bad ? `monitor check FAILED (${bad})` : 'monitor check ok');
 process.exit(bad ? 1 : 0);
@@ -161,7 +191,9 @@ async function live() {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ now, up: 600, pid: 1, startedAt: now - 600000, memoryMB: 90,
       feeds: { positions: { mode: 'stream' }, passings: { mode: 'stream' }, newestReport: now - 3000 }, state: { trains: 100 },
-      load: { asks: 1, askBytes: 1, streamBytes: 1 }, sizes: {}, cpu: { user: 0, system: 0 } }));
+      load: { asks: 1, askBytes: 1, streamBytes: 1 }, sizes: {}, cpu: { user: 0, system: 0 },
+      viewers: { at: now, error: null, days: [{ day: swedishParts(now).day, people: 5, app: 2, site: 3, peak: 4, peakAt: now }, { day: '<b>x', people: 9 }],
+        hours: [{ t: now - (now % 3600000), people: 5, peak: 4 }] } }));
   });
   let pings = 0;
   const pinger = await serve((req, res) => { pings++; res.writeHead(200); res.end('OK'); });
@@ -181,6 +213,9 @@ async function live() {
     const r1 = lines();
     check(`the monitor live: ${r1.length} rows kept, ${pings} calls to the warning address, version "${r1[0]?.ver}"`,
       a.code === 0 && r1.length >= 5 && Math.abs(pings - r1.length) <= 1 && r1.every(r => r.ver === 'dev' && r.up) && /started \(Spårat dev;/.test(a.out), a.out);
+    const dayLine = JSON.parse(readFileSync(join(dir, 'days.jsonl'), 'utf8').trim().split('\n').at(-1));
+    check(`the day file keeps the viewer count (${JSON.stringify(dayLine.viewers)}), an odd day name from the fetcher dropped`,
+      dayLine.viewers?.people === 5 && dayLine.viewers.app === 2 && dayLine.viewers.peak === 4 && !readFileSync(join(dir, 'days.jsonl'), 'utf8').includes('<b>'));
     const b = await runMonitor('http://127.0.0.1:1/ping', 6);
     const r2 = lines();
     check(`after a restart: ${r1.length} rows read back, ${r2.length - r1.length} more; a dead warning address logged once, no mail`,
