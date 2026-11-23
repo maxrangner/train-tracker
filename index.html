@@ -278,6 +278,7 @@
     :is(.trip-chg, .chg-min).ok { background: var(--t-ontime-bg); color: var(--t-ontime); }
     :is(.trip-chg, .chg-min).tight { background: var(--t-some-bg); color: var(--t-some); }
     :is(.trip-chg, .chg-min).lost { background: var(--t-late-bg); color: var(--t-late); }
+    .trip-chg.rescue { background: var(--t-ontime-bg); color: var(--t-ontime); margin-top: 4px; }   /* a lost change: the later train that works */
     .nt-fields { display: grid; gap: 8px; }
     .nt-field { display: grid; gap: 1px; width: 100%; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--hover); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
     .nt-field small { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
