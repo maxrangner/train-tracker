@@ -235,11 +235,16 @@ try {
     check(lastRow > 0 && lastRow <= 851 - 20 && Math.abs(hShut - h0) <= 4, `the chooser: the sheet ${h0} → ${hOpen} px 0.3 s after opening (its last stop ends ${851 - lastRow} px above the bottom), ${hShut} px after shutting`);
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
+    // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)
+    await sleep(700);
     const low = await page.evaluate(() => {
-      const els = [...document.querySelectorAll('#panel .panel-head, #panel .panel-alert')].filter(e => e.offsetParent);
-      return { h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), gap: Math.round(innerHeight - Math.max(...els.map(e => e.getBoundingClientRect().bottom))) };
+      const head = document.querySelector('#panel .panel-head'), to = document.querySelector('#panel .ph-to');
+      const shown = [...document.querySelectorAll('#panel > :not(.panel-head):not(.cd), #panel .cd > *')].filter(e => e.offsetParent && getComputedStyle(e).opacity !== '0' && e.getBoundingClientRect().top < innerHeight).map(e => e.className);
+      return { h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), gap: Math.round(innerHeight - head.getBoundingClientRect().bottom),
+        dest: to && to.offsetParent ? to.textContent : '', shown };
     });
-    check(low.h < 220 && low.gap >= 10 && low.gap <= 30, `a train at low: the condensed card ${low.h} px tall, ${low.gap} px under its last line (want 10 to 30)`);
+    check(low.h < 200 && low.gap >= 8 && low.gap <= 30 && /→/.test(low.dest) && !low.shown.length,
+      `a train at low: ${low.h} px tall, ${low.gap} px under its head line, "${low.dest}" in it, nothing else showing (${low.shown.join(', ') || 'none'})`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at
