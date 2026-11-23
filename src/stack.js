@@ -213,6 +213,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   document.addEventListener('pointermove', pointerMove);
   document.addEventListener('pointerup', pointerEnd);
   document.addEventListener('pointercancel', pointerEnd);
+  // A mouse pulling the sheet selects no text: the selection it began grew over the map, and a press on the map then
+  // dragged the selection (a ghost picture) instead of the map; "live" showed highlighted (Max's PC, 2026-11-23). Text
+  // made to be copied (the share link, the version) still selects.
+  document.addEventListener('selectstart', (e) => {
+    const el = e.target.nodeType === 1 ? e.target : e.target.parentElement;
+    if (drag && !el?.closest('.share-url, .about-version')) e.preventDefault();
+  }, true);
   // A finger on the page at full height: pulling down from the page's top moves the sheet, anything else scrolls.
   // The finger's moves are listened for on the element it touched: a page redraws its parts (a train's tiles each
   // second), and a touch whose element left the page no longer reaches the sheet, so the pull stopped where it was and
