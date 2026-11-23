@@ -252,7 +252,7 @@ try {
     return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40 };
   });
   const fieldGap = p => p.evaluate(() => { const f = document.querySelector('#sheet .sh-field').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
-    return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), side: Math.round(f.left - s.left) }; });
+    return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), above: Math.round(f.top - s.top), side: Math.round(f.left - s.left) }; });
   await toRest(page);
   await sleep(500);   // (the glide down ends)
   const fg = await fieldGap(page);
@@ -270,11 +270,13 @@ try {
       await pc.evaluate(() => window.__stack.setLevel(0));
       await sleep(700);
       const m = await pc.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); return b ? Math.round(s.bottom - b.bottom) : null; });
-      check(m !== null && m >= 12 && m <= 40, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom (want 12 to 40)`);
+      // (the sheet hangs from the top on a computer since 2026-11-23: its arrow's 20 px row is under "More")
+      check(m !== null && m >= 12 + 20 && m <= 40 + 20, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its arrow's row included (want 32 to 60)`);
       await pc.evaluate(() => window.__stack.home(0));
       await sleep(600);
       const pfg = await fieldGap(pc);
-      check(Math.abs(pfg.below - pfg.side) <= 2, `a computer, Home at rest: the search field ${pfg.below} px from the sheet's bottom, ${pfg.side} px from its side`);
+      // (hanging from the top: the field as far from the top edge as from its side; the arrow's row under it)
+      check(Math.abs(pfg.above - pfg.side) <= 3, `a computer, Home at rest: the search field ${pfg.above} px from the sheet's top, ${pfg.side} px from its side`);
       await pc.evaluate(() => window.__stack.setLevel(1));
       await sleep(900);
       const pcut = await homeCuts(pc);
