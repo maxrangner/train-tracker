@@ -432,7 +432,15 @@ function trainPage(id) {
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
-    every() { if (panel.openId === id) drawExtras(id); },
+    // Half: down to the card's "More" with room under it (Max's phone, 2026-11-23: "More" lay under Android's own bar at
+    // the bottom of the screen). In steps of 8 px, read again each second (the why-line or Share's note coming in), so
+    // a pixel's change doesn't move the sheet. No "More" yet (the stops still loading): the usual half.
+    half() {
+      const more = panel.openId === id ? panelEl.querySelector('.panel-more') : null, pg = panelEl.parentElement;
+      if (!more || !pg || !more.offsetParent) return 0;
+      return Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
+    },
+    every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
