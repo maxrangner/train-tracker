@@ -157,14 +157,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   document.addEventListener('pointerup', pointerEnd);
   document.addEventListener('pointercancel', pointerEnd);
   // A finger on the page at full height: pulling down from the page's top moves the sheet, anything else scrolls.
+  // The finger's moves are listened for on the element it touched: a page redraws its parts (a train's tiles each
+  // second), and a touch whose element left the page no longer reaches the sheet, so the pull stopped where it was and
+  // the sheet stayed there (2026-11-23, screens-check).
   let tch = null;
-  sheet.addEventListener('touchstart', (e) => {
-    tch = idx === 2 && e.touches.length === 1 && !e.target.closest('.sh-grab, .sh-head, input')
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false } : null;
-    touching = true;
-  }, { passive: true });
-  sheet.addEventListener('touchmove', (e) => {
-    if (!tch) return;
+  function touchMove(e) {
+    if (!tch || e.sheetSeen) return;
+    e.sheetSeen = true;   // (heard on the element and again on the sheet)
     const y = e.touches[0].clientY, dy = y - tch.y, dx = e.touches[0].clientX - tch.x;
     if (!tch.on) {
       if (!tch.top || !e.cancelable || dy < -3 || Math.abs(dx) > Math.abs(dy) + 2) { tch = null; return; }
@@ -176,10 +175,22 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     }
     e.preventDefault();
     dragMove(y);
-  }, { passive: false });
-  const touchEnd = () => { touching = false; if (tch?.on) dragEnd(); tch = null; };
-  sheet.addEventListener('touchend', touchEnd);
-  sheet.addEventListener('touchcancel', touchEnd);
+  }
+  function touchEnd(e) {
+    for (const [type, fn] of [['touchmove', touchMove], ['touchend', touchEnd], ['touchcancel', touchEnd]]) e.currentTarget.removeEventListener(type, fn);
+    touching = false; if (tch?.on) dragEnd(); tch = null;
+  }
+  sheet.addEventListener('touchstart', (e) => {
+    tch = idx === 2 && e.touches.length === 1 && !e.target.closest('.sh-grab, .sh-head, input')
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false } : null;
+    touching = true;
+    e.target.addEventListener('touchmove', touchMove, { passive: false });
+    e.target.addEventListener('touchend', touchEnd);
+    e.target.addEventListener('touchcancel', touchEnd);
+  }, { passive: true });
+  // (a listener on the sheet itself too: the browser decides at the touch's start whether its moves may be stopped,
+  // and only where such a listener already is)
+  sheet.addEventListener('touchmove', touchMove, { passive: false });
   sheet.addEventListener('scroll', () => { lastScroll = performance.now(); }, true);
   // A wheel over a sheet that isn't at full raises it a step (a mouse has no pull).
   let wheelAt = 0;
