@@ -113,11 +113,11 @@ try {
   // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Mine ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-go^="addchange:"]')?.click());
   ok(await until(page, () => window.__stack.top().startsWith('addchange:')), 'Add my change opens its page');
-  await until(page, () => Boolean(document.querySelector('[data-stop]')));
-  await page.evaluate(() => document.querySelector('[data-stop]').click());
-  ok(await until(page, () => Boolean(document.querySelector('[data-dep]')), 10000), 'a stop picked: the trains leaving there, with the minutes to change');
+  await until(page, () => Boolean(document.querySelector('#sheet [data-stop]')));
+  await page.evaluate(() => document.querySelector('#sheet [data-stop]').click());
+  ok(await until(page, () => Boolean(document.querySelector('#sheet [data-dep]')), 10000), 'a stop picked: the trains leaving there, with the minutes to change');
   await shot(page, '08-add-change');
-  await page.evaluate(() => document.querySelector('[data-dep]').click());
+  await page.evaluate(() => document.querySelector('#sheet [data-dep]').click());
   ok(await until(page, () => window.__stack.top().startsWith('change:') && Boolean(document.querySelector('.trip-next')), 10000), 'a train picked: the change is pinned and shown');
   const chg = await page.evaluate(() => document.querySelector('.pg[data-kind="trip"] .trip-next')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/min|lost/.test(chg), `the pinned change: "${chg}"`);
@@ -160,7 +160,14 @@ try {
     await sleep(700);
     ok(await page.evaluate(() => document.getElementById('peek').hidden) && await top(page) === 'home', 'let go: the bubble is gone, nothing opened');
     await page.mouse.click(at.x, at.y);
-    ok(await until(page, () => window.__stack.top() === 'station:Lu'), 'a plain tap still opens the board');
+    const opened = await until(page, () => window.__stack.top() === 'station:Lu');
+    // (said when it fails: what is there, and whether the map's own tap there opens it; 2026-11-23 in a whole run it
+    // did, the mouse's tap didn't)
+    const seen = opened ? null : await page.evaluate(p => ({ keys: window.__stack.keys(), level: window.__stack.level, at: document.elementFromPoint(p.x, p.y)?.className,
+      feats: window.__map.queryRenderedFeatures([[p.x - 12, p.y - 12], [p.x + 12, p.y + 12]]).map(f => `${f.layer.id}:${f.properties.sig ?? f.properties.id ?? ''}`).slice(0, 6) }), at);
+    if (seen) { seen.mapTapOpens = await page.evaluate(async (q) => { const m = window.__map; m.fire('click', { point: { x: q.x, y: q.y }, lngLat: m.unproject([q.x, q.y]), originalEvent: new MouseEvent('click') }); await new Promise(r => setTimeout(r, 600)); return window.__stack.top(); }, at);
+    }
+    ok(opened, `a plain tap still opens the board${seen ? ` (${JSON.stringify(seen)})` : ''}`);
   }
   }
 
