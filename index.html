@@ -61,7 +61,8 @@
     /* One line, never wider than this (Max, 2026-11-19: some texts were "WAY too long"; tools/pill-check.mjs). */
     #status .count { max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; }
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .sheet-high #status { opacity: 0; pointer-events: none; }
+    /* (a phone only: on a wider screen the sheet floats at the left and covers neither; Max's PC notes, 2026-11-23) */
+    @media (max-width: 439px) { .sheet-high #status { opacity: 0; pointer-events: none; } }
     #status { transition: opacity .18s; }
     /* (no text selection on the map's marks and the sheet's head: a mouse pull selected text over the map; src/stack.js) */
     #status, #line, #sheet-grip, .sh-head, .maplibregl-ctrl { -webkit-user-select: none; user-select: none; }
@@ -141,8 +142,8 @@
     .pg .panel-head strong { font-size: 22px; }
     .pg .panel-head { min-height: 36px; }
     .pg .tl-head { top: -4px; }
-    /* The live map's buttons ride on the sheet's top edge; hidden when it is high (index.html .sheet-tall). */
-    .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; }
+    /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
+    @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
     .maplibregl-ctrl-bottom-right { transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; }
     #sheet.dragging ~ #map .maplibregl-ctrl-bottom-right, .sheet-dragging .maplibregl-ctrl-bottom-right { transition: none; }
 
