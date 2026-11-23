@@ -930,6 +930,7 @@ function showFollowed(r, place) {
 // frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
 // dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
 let frameAll = [], frameTrains = [], frameById = new Map();
+if (import.meta.env.DEV) window.__drawn = () => ({ all: frameAll.length, drawn: frameTrains.length });   // (tools/back-check.mjs)
 // The day at an earlier moment (src/day-view.js): the trains from the day's history (src/day-trains.js) instead of the
 // live ones; the live engine runs on untouched underneath (its places worked out once a second, for Home and the
 // search). Drawn when the moment moved (at most 30 times a second), else as the live map is.

@@ -134,6 +134,37 @@ try {
     await sleep(400);
     const k2 = await back();
     if (k2.searching || k2.away || k2.level !== 1) fails.push(`back after the keyboard: ${say(k2)} (want: the search closed, Home at half as before)`);
+
+    // ---- the trains lit after back (Max, 2026-11-23: the bar said "On time" and the map showed all, after a group):
+    // Home's lateness colour, a group over it, back: the colour's trains again; one group over another, back: the
+    // first group's trains again ----
+    await page.evaluate(() => { window.__minimized = false; });
+    await toRest(page);
+    await setLevel(page, 1);
+    await page.click('#sheet .lg-p.t-ontime');
+    await sleep(700);
+    const drawn = () => page.evaluate(() => window.__drawn());
+    const lit0 = await drawn();
+    await page.evaluate(() => window.__stack.open('still'));
+    await sleep(900);
+    const still = await drawn();
+    await page.evaluate(() => window.__stack.open('late'));
+    await sleep(900);
+    const late = await drawn();
+    await page.evaluate(() => window.__stack.back());
+    await sleep(900);
+    const backToStill = await drawn();
+    await page.evaluate(() => window.__stack.back());
+    await sleep(900);
+    const backHome = await drawn();
+    const barOn = await page.evaluate(() => document.querySelector('#sheet .lg-p.t-ontime')?.classList.contains('on'));
+    if (!(lit0.drawn < lit0.all)) fails.push(`lateness bar "On time": ${lit0.drawn} of ${lit0.all} drawn (want fewer than all)`);
+    // (a tolerance of a few: trains come and go between the counts)
+    const near = (a, b) => Math.abs(a - b) <= Math.max(3, b * 0.05);
+    if (!near(backToStill.drawn, still.drawn) || near(backToStill.drawn, backToStill.all)) fails.push(`back from "late now" to "standing still": ${backToStill.drawn} of ${backToStill.all} drawn (standing still had ${still.drawn}; late now ${late.drawn})`);
+    else notes.push(`back from one group to another: its ${backToStill.drawn} trains lit again`);
+    if (!barOn || !near(backHome.drawn, lit0.drawn) || near(backHome.drawn, backHome.all)) fails.push(`back to Home with "On time" on (bar shows it: ${barOn}): ${backHome.drawn} of ${backHome.all} drawn (want about ${lit0.drawn})`);
+    else notes.push(`back to Home: the bar's "On time" and its ${backHome.drawn} trains lit again`);
   }
   if (errors.length) fails.push('page errors: ' + errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }
