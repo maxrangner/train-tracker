@@ -1,3 +1,5 @@
+import { summaryHtml } from './summary-mail.mjs';
+
 // When the monitor mails Max (Max, 2026-11-16: "Mostly errors so I can act", plus a daily summary). A pure function of
 // the minute rows (monitor/main.mjs makes them), so tools/monitor-check.mjs can feed made-up timelines.
 //
@@ -234,24 +236,37 @@ export function versionLine(rows, ctx = {}) {
   return `Version: ${now}${runs.length ? `, the whole time watched` : ''}.`;
 }
 
+// The viewers (fetcher/viewers.mjs, from the release after 0.7.0): the day before the summary and today so far.
+export function viewersLine(v, end) {
+  if (!v || !v.days?.length) return null;
+  const today = end ? new Date(end).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : null;
+  const y = v.days.filter(x => x.day < today).at(-1), t = v.days.find(x => x.day === today);
+  return `Viewers: ${y ? `${y.day} ${y.people} people (app ${y.app}, site ${y.site}), most at once ${y.peak}${y.peakAt ? ` at ${hm(y.peakAt)}` : ''}` : 'none counted yesterday'}${t ? `; today so far ${t.people}` : ''}.`;
+}
+
 export function summary(rows, mails, openKeys, ctx = {}) {
   const d = dayNumbers(rows);
   const problems = mails.filter(m => m.kind === 'problem' || m.kind === 'offline');
   const fine = !problems.length && !openKeys.length;
   const day = rows.length ? new Date(rows.at(-1).t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : '';
+  const cpus = rows.map(x => x.cpuPct).filter(x => x !== null && x !== undefined);
+  const cpuAvg = cpus.length ? (cpus.reduce((n, x) => n + x, 0) / cpus.length).toFixed(1) : null;
   const lines = [
     rows.length < 1380 ? `(The monitor has watched for ${Math.round(rows.length / 60 * 10) / 10} h of the last 24.)` : 'The last 24 hours:',
     versionLine(rows, ctx),
     '',
     `Fetcher: running ${d.upPct} % of the time, ${d.restarts} restart(s)${d.offlineMin ? `; internet out ${d.offlineMin} min in all` : ''}.`,
-    `Trafikverket: ${d.asks} questions (${(d.asks / Math.max(1, d.minutes)).toFixed(1)} a minute, most ${d.asksMax} in one minute), ${d.streamsOpened} stream(s) opened, ${d.refused} "too many requests", ${MB(d.bytesIn)} received.`,
+    `Trafikverket: ${d.asks} questions (${(d.asks / Math.max(1, d.minutes)).toFixed(1)} a minute, most ${d.asksMax} in one minute), ${d.streamsOpened} stream(s) opened, ${d.refused} "too many requests", ${d.trvFailed} failed, ${MB(d.bytesIn)} received.`,
     `one.com: ${d.upOk} uploads, ${d.upFailed} failed, ${d.reconnects} reconnects, ${MB(d.bytesOut)} sent; the file viewers read was ${d.fileAgeMed ?? '-'} s old in the middle, ${d.fileAgeMax ?? '-'} s at worst when found${d.fileMissingMin ? `, none recent in ${d.fileMissingMin} minute(s)` : ''}${d.oneRefused ? `; "too many requests" ${d.oneRefused} time(s)` : ''}.`,
     `Train positions: the newest report ${d.reportAgeMed ?? '-'} s old in the middle, ${d.reportAgeMax === null ? '-' : d.reportAgeMax < 120 ? d.reportAgeMax + ' s' : Math.round(d.reportAgeMax / 60) + ' min'} at worst; up to ${d.trainsMax ?? '-'} trains at once.`,
     `File sizes (as viewers get them): ${Object.entries(d.sizes).map(([k, s]) => `${k} ${kB(s.med)} (max ${kB(s.max)})`).join(', ')}.`,
-    `Fetcher memory: up to ${d.memMax ?? '-'} MB.`,
+    `Fetcher memory: up to ${d.memMax ?? '-'} MB; CPU ${cpuAvg ?? '-'} % on average.`,
+    viewersLine(ctx.viewers, rows.at(-1)?.t),
     '',
     problems.length ? `Problems mailed:\n${problems.map(m => `- ${hm(m.t)} ${m.subject}`).join('\n')}` : 'No problems.',
     openKeys.length ? `Still open now: ${openKeys.join(', ')}.` : null,
   ];
-  return { subject: `daily summary ${day}: ${fine ? 'all OK' : `${problems.length} problem(s)${openKeys.length ? ', some still open' : ''}`}`, text: lines.filter(x => x !== null).join('\n') };
+  const watchedH = Math.min(24, Math.round(rows.length / 60 * 10) / 10);
+  const html = summaryHtml({ rows, mails, openKeys, ctx, d, day, fine, problemsCount: problems.length, watchedH });
+  return { subject: `daily summary ${day}: ${fine ? 'all OK' : `${problems.length} problem(s)${openKeys.length ? ', some still open' : ''}`}`, text: lines.filter(x => x !== null).join('\n'), html };
 }
