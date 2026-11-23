@@ -221,8 +221,11 @@ try {
     // the chooser ("to Kallhäll"): the sheet follows the card at once (Max, 2026-11-23: "the card expands after way too long")
     const h0 = await settle();
     await click('#panel .cd-stop');
-    await sleep(300);
-    const hOpen = await shownH(), lastRow = await page.evaluate(() => Math.round(document.querySelector('#panel .cd-pick .cd-row:last-child')?.getBoundingClientRect().bottom ?? 0));
+    // (the list's last stop on screen within 0.6 s: at once to the eye; a busy PC draws a glide later)
+    const lastOf = () => page.evaluate(() => Math.round(document.querySelector('#panel .cd-pick .cd-row:last-child')?.getBoundingClientRect().bottom ?? 0));
+    let lastRow = 0;
+    for (let i = 0; i < 6; i++) { await sleep(100); lastRow = await lastOf(); if (lastRow > 0 && lastRow <= 851 - 20) break; }
+    const hOpen = await shownH();
     await click('#panel .cd-stop');
     // shut: back to where it was within a second (a busy PC draws later; 2026-11-23 runs under load read 0.6 s mid-glide)
     let hShut = 0;
