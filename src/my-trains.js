@@ -217,10 +217,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       const n = nextOf(trip);
       showTrip({ sigs: [trip.from, trip.via, trip.to].filter(Boolean), trains: [n.next?.dep?.key, n.pair?.second?.dep?.key].filter(Boolean) });
     };
-    function act(e) {
-      const b = e.target.closest('[data-trip]');
-      if (!b) return;
-      if (b.dataset.trip === 'edit') { stack.open(`edittrip:${trip.key}`); return; }
+    // Edit and Delete: a pencil and a bin beside the star (Max, 2026-11-23; def.acts below)
+    function act(what) {
+      if (what === 'edit') { stack.open(`edittrip:${trip.key}`); return; }
       const since = performance.now() - armedAt;
       if (since < DELETE_GAP_MS) return;
       if (since < DELETE_ARMED_MS) {
@@ -233,17 +232,15 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         return;
       }
       armedAt = performance.now();
-      draw();
+      stack.refreshBar();
       clearTimeout(disarm);
-      disarm = setTimeout(draw, DELETE_ARMED_MS + 50);
+      disarm = setTimeout(() => { if (stack.top() === `trip:${trip.key}`) stack.refreshBar(); }, DELETE_ARMED_MS + 50);
     }
     function draw() {
       if (!el) return;
       const r = results.get(trip.key), n = nextOf(trip);
-      const acts = favourites.trip(trip.key) ? `<div class="trip-acts"><button type="button" class="chip" data-trip="edit">${icon('edit', 16)}<span>${esc(t('tripEdit'))}</span></button>` +
-        `<button type="button" class="chip trip-del${armed() ? ' armed' : ''}" data-trip="del">${icon('trash', 16)}<span>${esc(t(armed() ? 'tripDeleteAgain' : 'tripDelete'))}</span></button></div>` : '';
       const head = `<div class="g-head"><span class="r-ic trip">${icon('trip', 18)}</span><b class="ttl">${esc(tripName(trip))}</b></div>` +
-        `<p class="sub">${esc(trip.via ? t('tripVia', stationName(trip.via)) : t('tripToday'))}</p>${acts}`;
+        `<p class="sub">${esc(trip.via ? t('tripVia', stationName(trip.via)) : t('tripToday'))}</p>`;
       let body;
       if (!r) body = stateHtml('loading', t('loading'));
       else if (r.error) body = stateHtml('error', t('tripNoAnswer'));
@@ -267,7 +264,10 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     }
     return {
       name: () => tripName(trip), kind: 'trip',
-      mount(page) { el = page; openRow(el); el.addEventListener('click', act); },
+      mount(page) { el = page; openRow(el); },
+      acts: () => (favourites.trip(trip.key) ? [{ id: 'edit', icon: 'edit', label: t('tripEdit') },
+        { id: 'del', icon: 'trash', label: t(armed() ? 'tripDeleteAgain' : 'tripDelete'), armed: armed() }] : []),
+      act,
       // On the map too (Max, 2026-11-23: "Clicking a saved trip should show it on the map"): its stations at once, its
       // next train once today's trains are in (still its page on top then).
       show() {

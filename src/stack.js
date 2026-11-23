@@ -70,7 +70,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const input = sheet.querySelector('#search');
   const results = sheet.querySelector('#search-results');
   const backBtn = sheet.querySelector('.sh-back'), backLab = backBtn.querySelector('span');
-  const starBtn = sheet.querySelector('.sh-star'), folBtn = sheet.querySelector('.sh-follow');
+  const starBtn = sheet.querySelector('.sh-star'), folBtn = sheet.querySelector('.sh-follow'), actsEl = sheet.querySelector('.sh-acts');
   const trail = Object.assign(document.createElement('div'), { id: 'trail', className: 'pop', hidden: true });
   trail.setAttribute('role', 'menu');
   document.body.append(trail);
@@ -372,6 +372,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (backLab.textContent !== word) backLab.textContent = word;
     const aria = t('backTo', word);
     if (backBtn.getAttribute('aria-label') !== aria) backBtn.setAttribute('aria-label', aria);
+    // the page's own buttons beside the star (def.acts(): [{ id, icon, label, armed? }], def.act(id))
+    const acts = pg.def.acts?.() ?? [], actsKey = acts.map(a => `${a.id}${a.armed ? '!' : ''}${a.label}`).join('|');
+    if (actsEl.dataset.k !== actsKey) {
+      actsEl.dataset.k = actsKey;
+      actsEl.hidden = !acts.length;
+      actsEl.innerHTML = acts.map(a => `<button type="button" class="sh-act${a.armed ? ' armed' : ''}" data-act-id="${esc(a.id)}" aria-label="${esc(a.label)}" title="${esc(a.label)}">${icon(a.icon, 20)}<span>${esc(a.label)}</span></button>`).join('');
+    }
     const star = pg.def.star, on = Boolean(star?.on());
     starBtn.hidden = !star;
     if (star && starBtn.getAttribute('aria-pressed') !== String(on)) {
@@ -528,6 +535,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) backBtn.addEventListener(ev, () => clearTimeout(holdT));
   backBtn.addEventListener('contextmenu', e => e.preventDefault());
   starBtn.addEventListener('click', () => { top()?.def.star?.toggle(); syncBar(); });
+  actsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-act-id]'); if (b) { top()?.def.act?.(b.dataset.actId); syncBar(); } });
   folBtn.addEventListener('click', () => { top()?.def.follow?.toggle(); syncBar(); });
 
   // The trail: every page under the top one, newest first; a tap goes back to it.

@@ -92,8 +92,10 @@ try {
   // ---- a saved trip's Edit and Delete (Max's phone, 2026-11-23: "can't be edited or deleted") ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Cst', 'U'); });   // (a second trip: the edited one keeps its place before it)
   const tripKeys = () => page.evaluate(() => window.__ideas.favourites.trips.map(x => x.key));
-  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Mc"] [data-trip="edit"]'))), 'a saved trip\'s page has Edit and Delete');
-  await page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Mc"] [data-trip="edit"]').click());
+  // Edit and Delete: a pencil and a bin beside the star in the sheet's head (Max, 2026-11-23)
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc' && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="edit"]')) && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="del"]'))),
+    'a saved trip has a pencil and a bin beside the star');
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="edit"]').click());
   ok(await until(page, () => window.__stack.top() === 'edittrip:Lu>Mc' && /Lund C/.test(document.querySelector('[data-nt="from"]')?.innerText ?? '') && /Malmö C/.test(document.querySelector('[data-nt="to"]')?.innerText ?? '')),
     'Edit opens the form filled in (Lund C → Malmö C)');
   await page.evaluate(() => document.querySelector('[data-nt="to"]').click());
@@ -106,13 +108,13 @@ try {
   ok(afterEdit.keys[0] === 'Lu>Hm' && !afterEdit.keys.includes('Lu>Mc') && !afterEdit.stack.some(k => k === 'trip:Lu>Mc' || k.startsWith('edittrip:')),
     `the edited trip took the old one's place (${afterEdit.keys.join(', ')}; pages ${afterEdit.stack.join(' > ')})`);
   // Delete: the first tap arms it, a double tap doesn't count, a second tap later deletes
-  const del = () => page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')?.click());
-  await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')));
+  const del = () => page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
+  await until(page, () => window.__stack.top() === 'trip:Lu>Hm' && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="del"]')));
   await del();
   await sleep(100);
   await del();
   await sleep(200);
-  const armed = await page.evaluate(() => ({ text: document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')?.innerText ?? '', saved: Boolean(window.__ideas.favourites.trip('Lu>Hm')) }));
+  const armed = await page.evaluate(() => ({ text: document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.innerText ?? '', saved: Boolean(window.__ideas.favourites.trip('Lu>Hm')) }));
   ok(armed.saved && /again/i.test(armed.text), `Delete tapped twice quickly: still saved, it says "${armed.text}"`);
   await shot(page, '02b-delete-armed');
   await sleep(500);
