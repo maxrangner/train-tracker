@@ -30,7 +30,8 @@ const LIST_MAX = 14;            // trains on a trip's page
 //   number }), trainInfo(id) -> { number, operational, date, route } | null, redrawHome() }
 // showStation(sig): the map shows that station above the sheet (a change tapped: Max, 2026-11-23, "the map should show
 // where it is").
-export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome, showStation = () => {} }) {
+// showTrip({ sigs, trains }): a trip's page shown: the map on its stations (in order), its next train(s) by their ids.
+export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome, showStation = () => {}, showTrip = () => {} }) {
   // ---------- the stations' days, kept a minute ----------
   const cache = new Map();   // 'sig|act' -> { at, rows, p }
   function day(sig, act) {
@@ -212,6 +213,10 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (!trip) return null;
     let el = null, armedAt = 0, disarm = 0;
     const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
+    const onMap = () => {
+      const n = nextOf(trip);
+      showTrip({ sigs: [trip.from, trip.via, trip.to].filter(Boolean), trains: [n.next?.dep?.key, n.pair?.second?.dep?.key].filter(Boolean) });
+    };
     function act(e) {
       const b = e.target.closest('[data-trip]');
       if (!b) return;
@@ -263,7 +268,12 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return {
       name: () => tripName(trip), kind: 'trip',
       mount(page) { el = page; openRow(el); el.addEventListener('click', act); },
-      show() { armedAt = 0; draw(); load(trip).then(() => { draw(); drawLine(); }); },
+      // On the map too (Max, 2026-11-23: "Clicking a saved trip should show it on the map"): its stations at once, its
+      // next train once today's trains are in (still its page on top then).
+      show() {
+        armedAt = 0; draw(); onMap();
+        load(trip).then(() => { draw(); drawLine(); if (stack.top() === `trip:${trip.key}`) onMap(); });
+      },
       every() { if (due(trip)) load(trip).then(draw); else draw(); },
       unmount() { clearTimeout(disarm); },
       star: { on: () => Boolean(favourites.trip(trip.key)),
@@ -339,7 +349,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       const can = st.from && st.to && st.from !== st.to;
       el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p><div class="nt-fields">` +
         field('from', t('tripFrom')) + field('to', t('tripTo')) +
-        (st.wantVia || st.via ? field('via', t('tripViaLabel')) : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
+        (st.wantVia || st.via ? `<div class="nt-via">${field('via', t('tripViaLabel'))}<button type="button" class="nt-x" data-nt="novia" aria-label="${esc(t('removeVia'))}">${icon('close', 18)}</button></div>` : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
         `<button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
       const q = el.querySelector('.nt-q'), room = el.querySelector('.nt-room');
       if (q) {
@@ -381,6 +391,8 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           if (!b) return;
           const f = b.dataset.nt;
           if (f === 'save') { save(); return; }
+          // (an added change can be taken away again: Max, 2026-11-23)
+          if (f === 'novia') { st.via = null; st.wantVia = false; st.editing = null; draw(); return; }
           if (f === 'addvia') { st.wantVia = true; st.editing = 'via'; } else st.editing = st.editing === f ? null : f;
           draw();
           if (st.editing) el.querySelector('.nt-q')?.focus({ preventScroll: true });

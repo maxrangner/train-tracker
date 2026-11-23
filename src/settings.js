@@ -122,9 +122,9 @@ const valid = {
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
-  routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
-  nameSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
-  pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
+  routeNames: v => (v === 'contrast' ? v : undefined),   // (fixed since 2026-11-23: Max, 'Remove debug settings'; a value saved before is ignored)
+  nameSide: v => (v === 'auto' ? v : undefined),   // (fixed, as routeNames)
+  pillSide: v => (v === 'auto' ? v : undefined),   // (fixed, as routeNames)
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   allPlaces: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   shopWindow: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),

@@ -302,7 +302,12 @@
     .nt-res:empty { display: none; }
     .nt-room { display: block; height: 75vh; }
     .nt-room[hidden] { display: none; }
-    .nt-save { justify-self: start; }
+    /* the change's field with its × (Max, 2026-11-23: an added stop couldn't be removed) */
+    .nt-via { position: relative; display: grid; gap: inherit; }
+    .nt-via .nt-field { padding-right: 56px; }
+    .nt-x { position: absolute; top: 9px; right: 9px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
+    .nt-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .nt-save { justify-self: start; align-self: flex-start; }   /* (as wide as its words: in the page's column it stretched across) */
     /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
     .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
     .trip-acts .chip { min-height: 38px; font-size: 14px; }
@@ -455,6 +460,8 @@
       background: color-mix(in srgb, var(--bg) 60%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .6s; }
     #credit a { color: inherit; text-decoration: none; }
     #credit.gone { opacity: 0; pointer-events: none; }
+    /* (a phone: above the sheet's grab strip, #sheet-grip, 24 px over the sheet's top; under it its links took no tap) */
+    @media (max-width: 439px) { #credit { bottom: calc(var(--sheet-h, 0px) + 30px + env(safe-area-inset-bottom, 0px)); } }
     @keyframes note-in { from { opacity: 0; transform: translateX(8px); } }
     .geo-off .maplibregl-ctrl-geolocate { pointer-events: none; }   /* the tap reaches the box, which shows the note */
     .geo-off .maplibregl-ctrl-geolocate .maplibregl-ctrl-icon { opacity: 0.35;
@@ -719,6 +726,11 @@
     button.cd-stop { font: inherit; border: 0; cursor: pointer; }
     button.cd-stop[aria-expanded="true"] { box-shadow: inset 0 0 0 2.5px var(--accent); }
     button.cd-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* "till Malmö C ⌄" framed, so it reads as a button (Max's pick 2B, 2026-11-23: like a trip's From/To) */
+    button.cd-stop small { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 8px 4px 11px; border-radius: 999px;
+      border: 1.5px solid var(--accent); color: var(--ink); font-weight: 700; max-width: 100%; box-sizing: border-box; }
+    button.cd-stop small span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+    button.cd-stop small svg { width: 18px; height: 18px; flex: none; color: var(--accent); stroke-width: 2.6; }
     /* The stops ahead to count down to: the list scrolls; the one counted down to in the accent, with ✓. */
     /* Under the tiles, pushing the rest down (on the full card the timeline keeps what is left, scrolling); it slides
        open and closed (Max, 2026-11-16: hiding the timeline was "too jerky"). */
@@ -1204,12 +1216,6 @@
         <div class="seg" data-key="noEstimate" role="group" aria-label="With no expected time" data-t-aria="noEstimate"><button type="button" data-v="guess" data-t="guessLate">Planned + late</button><button type="button" data-v="planned" data-t="plannedOnly">Planned</button></div></div>
       <div class="debug-only set-row"><span data-t="trainSymbol">Train symbol</span>
         <div class="seg" data-key="trainSymbol" role="group" aria-label="Train symbol" data-t-aria="trainSymbol"><button type="button" data-v="drop" data-t="drop">Drop</button><button type="button" data-v="circle" data-t="circle">Circle</button><button type="button" data-v="triangle" data-t="triangle">Triangle</button><button type="button" data-v="dart" data-t="dart">Dart</button></div></div>
-      <div class="debug-only set-row"><span data-t="routeNames">Route station names</span>
-        <div class="seg" data-key="routeNames" role="group" aria-label="Route station names" data-t-aria="routeNames"><button type="button" data-v="contrast" data-t="rnContrast">Contrast</button><button type="button" data-v="pill" data-t="rnPill">Like trains</button><button type="button" data-v="plain" data-t="rnPlain">Text</button></div></div>
-      <div class="debug-only set-row"><span data-t="nameSide">Station names</span>
-        <div class="seg" data-key="nameSide" role="group" aria-label="Station names" data-t-aria="nameSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
-      <div class="debug-only set-row"><span data-t="pillSide">Route station names: place</span>
-        <div class="seg" data-key="pillSide" role="group" aria-label="Route station names: place" data-t-aria="pillSide"><button type="button" data-v="auto" data-t="sideAuto">Right, else moves</button><button type="button" data-v="right" data-t="sideRight">Right</button><button type="button" data-v="above" data-t="sideAbove">Above</button></div></div>
     </div>
   </div>
   <!-- The connection screen (Max's pick Y, 2026-11-18), from the live mark: src/connection.js draws it. -->

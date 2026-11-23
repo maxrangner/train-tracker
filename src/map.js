@@ -1896,6 +1896,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       map.getSource('abroad')?.setData(data.abroad);
       routeNames();
     },
+    get routeStationsNow() { return routeSigs; },
     // The open train's stations (signatures, in order) get their names in pills; null: none.
     async setRouteStations(sigs) {
       routeSigs = sigs ?? [];
