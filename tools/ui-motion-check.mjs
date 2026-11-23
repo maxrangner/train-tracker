@@ -8,8 +8,11 @@
 //   8 a tapped station (and a disruption sign, live) gets a copy that grows and is removed;
 //   with "reduce motion": none of it. Also the longest pause between frames during the menu, a lateness change and the
 //   search rows, with the processor slowed 4x (measured, not a limit).
+// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, Help & About) and no count; the search's
+// rows are .row / .chip with data-go; a train, Connection and the disruptions are pages in the sheet (tools/lib/screen.mjs).
 // node tools/ui-motion-check.mjs (with npm run dev; PAGE= for another port).
-import { launch, openMap, sleep, CARD_HOUR } from './lib/browser.mjs';
+import { launch, sleep, CARD_HOUR } from './lib/browser.mjs';
+import { waitForMap, toRest, openSearch, openDisruptions, pageSel } from './lib/screen.mjs';
 import { existsSync } from 'node:fs';
 
 const fails = [], oks = [], notes = [];
@@ -33,7 +36,7 @@ async function pauses(page, fn, ms = 900) {
 const animNames = (page, sel) => page.evaluate(s => [...document.querySelectorAll(s)].flatMap(e => e.getAnimations().map(a => a.animationName)), sel);
 
 try {
-  const page = await openMap(browser, base);
+  const page = await waitForMap(browser, base);
   const frames = {};
 
   // ---- 1: a held button presses in ----
@@ -54,14 +57,13 @@ try {
     await page.click('#nav-button');
     await sleep(40);
     const names = await animNames(page, '#nav .nav-row:not([hidden])');
-    check(names.filter(n => n === 'nav-in').length >= 3, `9: the menu's rows follow it in (${names.length} animated: ${[...new Set(names)].join(', ') || 'none'})`);
+    check(names.filter(n => n === 'nav-in').length === 3, `9: the menu's 3 rows follow it in (${names.length} animated: ${[...new Set(names)].join(', ') || 'none'})`);
   });
   await page.click('#nav-button');
   await sleep(400);
 
   // ---- 6: search rows ----
-  await page.click('#menu-button');
-  await sleep(400);
+  await openSearch(page);
   frames.search = await pauses(page, async () => {
     await page.type('#search', '1');
     await sleep(60);
@@ -69,12 +71,14 @@ try {
     check(n >= 3, `6: search rows arrive (${n} arriving)`);
   });
   await sleep(800);
+  // (only rows shown before count: the replay runs on, and a train that came onto the map meanwhile is a new row)
+  const shownBefore = await page.evaluate(() => [...document.querySelectorAll('#search-results [data-go]')].map(e => e.dataset.go));
   await page.evaluate(() => document.getElementById('search').dispatchEvent(new Event('input')));
   await sleep(60);
-  const again = await page.evaluate(() => document.querySelectorAll('#search-results .arrive').length);
-  check(again === 0, `6: the same results again move nothing (${again} arriving)`);
-  await page.keyboard.press('Escape');
-  await sleep(500);
+  const againRows = await page.evaluate(() => [...document.querySelectorAll('#search-results .arrive')].map(e => e.dataset.go ?? e.textContent.trim().slice(0, 30)));
+  const again = againRows.filter(k => shownBefore.includes(k)).length;
+  check(again === 0, `6: the same results again move nothing (${again} arriving${again ? `: ${againRows.slice(0, 3).join(', ')}` : ''}${againRows.length > again ? `; ${againRows.length - again} new since` : ''})`);
+  await toRest(page);
 
   // ---- a card: no roll as it opens; the lateness rolls and pulses; the timeline's rows arrive ----
   // a tap on the lone train nearest the middle (not `except`); its id
@@ -101,7 +105,7 @@ try {
   }, except);
   const id = await tapLone(null);
   await sleep(3500);
-  const card = await page.evaluate(() => ({ open: !document.getElementById('panel').hidden, tiles: document.querySelectorAll('#panel .tile').length,
+  const card = await page.evaluate(() => ({ open: window.__stack.top()?.startsWith('train:') && !document.getElementById('panel').hidden, tiles: document.querySelectorAll('#panel .tile').length,
     late: document.querySelector('#panel .cd-late b')?.textContent, rows: document.querySelectorAll('#panel .tl-row').length, list: Boolean(document.getElementById('picker') && !document.getElementById('picker').hidden) }));
   if (!id || !card.open || card.tiles !== 2) notes.push(`the card's parts not checked (train ${id}, ${JSON.stringify(card)})`);
   else {
@@ -134,7 +138,9 @@ try {
     await sleep(1500);
     const refreshed = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
     check(refreshed === 0, `6: the card's refresh moves no rows (${refreshed} arriving)`);
-    // ---- 5: card to card: another train picked keeps the card; its number rolls; no "Laddar…" ----
+    // ---- 5: card to card (Max's pick 5, 2026-11-20: no "Laddar…" between them). Since the one sheet (2026-11-22) the
+    // second train is a page of its own over the first (the back chip names the first): its card is never hidden or
+    // "Laddar…" on the way and shows the new number. (Its number no longer rolls from the first one's: a new page slides in.)
     await page.click('#panel .panel-more');   // (compact again)
     await sleep(800);
     await page.evaluate(() => { window.__seen = { hidden: false, loading: false, heads: [] };
@@ -143,16 +149,17 @@ try {
         const h = p.querySelector('.panel-title strong')?.textContent; if (h && h !== window.__seen.heads.at(-1)) window.__seen.heads.push(h);
         if (window.__seen.heads.length < 400) requestAnimationFrame(look); };
       requestAnimationFrame(look); });
+    const first = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id);
     const id2 = await tapLone(id);
     await sleep(2500);
     const sw = await page.evaluate(() => ({ ...window.__seen, late: document.querySelector('#panel .cd-late b')?.textContent, tiles: document.querySelectorAll('#panel .tile').length,
-      busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent }));
+      busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent,
+      key: window.__stack.top(), chip: document.querySelector('#sheet .sh-back span')?.textContent }));
     const want2 = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id2);
     if (!id2) notes.push('5 not checked: no second lone train near the middle');
-    else check(!sw.hidden && !sw.loading && sw.heads.length >= 3 && sw.number === want2 && sw.tiles === 2 && !sw.busy,
-      `5: card to card keeps the card and rolls the number (${id} → ${id2}: ${sw.heads.slice(0, 3).join(' → ')}${sw.heads.length > 3 ? ' … ' + sw.heads.at(-1) : ''}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late})`);
-    await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
-    await sleep(600);
+    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && sw.chip === first,
+      `5: card to card: ${sw.key} over ${first} (the back chip "${sw.chip}"), ${sw.heads.join(' → ')}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late}`);
+    await toRest(page);
   }
 
   // ---- 4: Anslutning: no roll as it opens; a change rolls ----
@@ -164,8 +171,7 @@ try {
   let seen = new Set();
   for (let t0 = Date.now(); Date.now() - t0 < 2000; await sleep(40)) seen.add(await page.evaluate(() => document.querySelector('#conn-body .n-trains').textContent));
   check(seen.size >= 4, `4: Anslutning's numbers roll to new ones (${seen.size} values seen)`);
-  await page.evaluate(() => document.querySelector('#conn-page .panel-close')?.click());
-  await sleep(500);
+  await toRest(page);
 
   // ---- 8: a tapped station answers ----
   await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 11 }));
@@ -191,21 +197,21 @@ try {
   await page.close();
 
   // ---- live: Störningar's rows arrive as it opens, a disruption sign answers ----
-  const live = await openMap(browser, { view: '5.5/62/16', train: 'toy', lang: 'sv', theme: 'light' });
-  await live.click('#nav-button');
-  await sleep(400);
-  const hasDis = await live.evaluate(() => !document.getElementById('open-disruptions').hidden);
-  if (!hasDis) notes.push('Störningar not checked (no live link)');
+  const live = await waitForMap(browser, { view: '5.5/62/16', train: 'toy', lang: 'sv', theme: 'light' });
+  // the list's page (Home → All disruptions): its rows looked at from the moment it opens
+  const listIn = await live.evaluate(async (L) => {
+    window.__disArrive = { n: 0, rows: 0 };
+    const look = () => { const el = document.querySelector(L); if (el) { const n = el.querySelectorAll('.arrive').length, rows = el.querySelectorAll('.dis-body > .dis-row, .dis-body > .dis-fold').length;
+      window.__disArrive = { n: Math.max(n, window.__disArrive.n), rows: Math.max(rows, window.__disArrive.rows) }; } if (!window.__disStop) requestAnimationFrame(look); };
+    requestAnimationFrame(look); return true; }, pageSel('dislist'));
+  const hasDis = listIn && await openDisruptions(live);
+  if (!hasDis) notes.push('Störningar not checked (no disruption in force, or no live link)');
   else {
-    await live.evaluate(() => document.getElementById('open-disruptions').click());
-    let n = 0, rows = 0;
-    for (let t0 = Date.now(); Date.now() - t0 < 15000 && !rows; await sleep(30)) {
-      ({ n, rows } = await live.evaluate(() => ({ n: document.querySelectorAll('#disruptions-body .arrive').length, rows: document.querySelectorAll('#disruptions-body > .dis-row, #disruptions-body > .dis-fold').length })));
-    }
+    await sleep(600);
+    const { n, rows } = await live.evaluate(() => { window.__disStop = true; return window.__disArrive; });
     if (!rows) notes.push('Störningar has no rows now: not checked');
     else check(n >= 1, `6: Störningar's rows arrive (${n} arriving of ${rows})`);
-    await live.evaluate(() => document.querySelector('#disruptions-page .panel-close')?.click());
-    await sleep(500);
+    await toRest(live);
     // Each sign in turn, close in, until one has no train or station beside it (a tap there opens the train, its label or the
     // station first, as always: seen 2026-11-20, a live train standing at Norrköping's sign).
     const signs = await live.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['disruption-icons'] }).map(f => f.geometry.coordinates));
@@ -233,21 +239,19 @@ try {
   await live.close();
 
   // ---- reduce motion: none of it ----
-  const quiet = await openMap(browser, { ...base });
+  const quiet = await waitForMap(browser, { ...base });
   await quiet.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await quiet.click('#nav-button');
   await sleep(40);
   const menuAnim = await animNames(quiet, '#nav .nav-row');
   await quiet.click('#nav-button');
   await sleep(300);
-  await quiet.click('#menu-button');
-  await sleep(300);
+  await openSearch(quiet);
   await quiet.type('#search', '1');
   await sleep(60);
   const rowsAnim = await quiet.evaluate(() => document.querySelectorAll('#search-results .arrive').length);
-  const nb2 = await quiet.$('#nav-button'), b2 = await nb2.boundingBox();
-  await quiet.keyboard.press('Escape');
-  await sleep(300);
+  await toRest(quiet);
+  const nb2 = await quiet.$('#nav-button'), b2 = await nb2.boundingBox();   // (☰ is hidden while searching)
   await quiet.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
   await quiet.mouse.down();
   await sleep(150);

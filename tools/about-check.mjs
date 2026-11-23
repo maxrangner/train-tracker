@@ -2,8 +2,11 @@
 // build, the view link, the open train, the phone), the Ko-fi button's link, the "come alive soon" note gone; the map
 // credit there at start, gone after 5 s or a drag, clear of the map's buttons. node tools/about-check.mjs (with
 // npm run dev; PAGE= for another port). Not the phone: whether its mail app opens.
+// The one sheet (2026-11-23): the train opened through tools/lib/screen.mjs, About from ☰ → Help & About; the map's
+// buttons the credit must keep clear of are My location's box and the scale slider (+ / − and 3D went).
 import { mkdirSync } from 'node:fs';
 import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
+import { openTrainByNumber, openFromMenu, until } from './lib/screen.mjs';
 mkdirSync('shots/todo-1117', { recursive: true });   // (pictures aren't in git: a fresh working folder has no such folder)
 
 const browser = await launch();
@@ -18,6 +21,7 @@ async function open(size, hash) {
   for (let t0 = Date.now(); Date.now() - t0 < 30000; await sleep(300)) {
     if (await page.evaluate(() => (window.__trains?.count ?? 0) > 0 && Boolean(window.__map?.loaded())).catch(() => false)) break;
   }
+  await until(page, () => Boolean(window.__stack?.top()), 10000);
   return page;
 }
 try {
@@ -26,9 +30,9 @@ try {
   await sleep(1500);
   const number = await page.evaluate(() => { const f = window.__map.queryRenderedFeatures({ layers: ['train-dots'] })[0];
     return f ? String(window.__trains.get(f.properties.id).number) : null; });
-  await page.evaluate(() => document.getElementById('menu-button').click()); await sleep(300);
-  await page.evaluate((n) => { const i = document.getElementById('search'); i.focus(); i.value = n; i.dispatchEvent(new Event('input', { bubbles: true })); }, number);
-  await sleep(500); await page.keyboard.press('Enter'); await sleep(1200);
+  const key = number && await openTrainByNumber(page, number);
+  if (!key) fails.push(`train ${number} could not be opened from the search`);
+  await sleep(500);
   const mail = await page.evaluate(() => window.__bugMail());
   const [to, query] = mail.replace(/^mailto:/, '').split('?');
   const q = new URLSearchParams(query);
@@ -41,13 +45,12 @@ try {
   const code = await page.evaluate(() => fetch('/src/main.js').then(r => r.text()));
   if (code.includes(whole) || code.includes(['@', 'rangner.com'].join(''))) fails.push('the page\'s code holds the bug address whole');
   if (!/^Spårat \d+\.\d+\.\d+ \(\w+\+?\): felrapport$/.test(subject)) fails.push(`bug mail subject "${subject}"`);
-  for (const want of ['Vad hände?', 'https://sparat.rangner.com/#view=', `Öppet tåg: ${number}`, 'replay ', 'Telefon eller webbläsare: Mozilla'])
+  for (const want of ['Vad hände?', 'https://sparat.rangner.com/#view=', `Valt tåg: ${number}`, 'replay ', 'Telefon eller webbläsare: Mozilla'])
     if (!body.includes(want)) fails.push(`bug mail body lacks "${want}"`);
   notes.push(`bug mail: to ${to}, "${subject}"; About says "${version}"`);
   notes.push('body:\n      ' + body.split('\r\n').join('\n      '));
-  await page.evaluate(() => { document.getElementById('nav-button').click(); });   // About is in the menu (☰, 2026-11-18)
-  await sleep(300);
-  await page.evaluate(() => document.getElementById('help-button').click()); await sleep(400);
+  const helpKey = await openFromMenu(page, 'help');   // About is in the menu (☰ → Help & About; a page since 2026-11-22)
+  if (helpKey !== 'page:help') fails.push(`☰ → Help & About opened ${helpKey}`);
   await page.evaluate(() => document.getElementById('kofi-button').click());
   const opened = await page.evaluate(() => window.__opened);
   if (opened[0] !== 'https://ko-fi.com/X1C729ZIK7') fails.push(`Ko-fi opened ${JSON.stringify(opened)}`);
@@ -58,10 +61,12 @@ try {
 
   // ---- The map credit: phone and PC, light and dark; there at start, clear of the buttons, gone after 5 s / a drag ----
   const credit = p => p.evaluate(() => {
-    const c = document.getElementById('credit'), b = document.querySelector('.maplibregl-ctrl-bottom-right')?.getBoundingClientRect();
+    const c = document.getElementById('credit');
     if (!c) return null;
+    // the map's buttons: My location (and the compass) at the bottom right, the scale slider above them
+    const boxes = [...document.querySelectorAll('.maplibregl-ctrl-bottom-right, .scale')].map(e => e.getBoundingClientRect()).filter(b => b.width && b.height);
     const r = c.getBoundingClientRect(), shown = !c.hidden && getComputedStyle(c).opacity > 0.5;
-    const hit = b && r.right > b.left && r.left < b.right && r.bottom > b.top && r.top < b.bottom;
+    const hit = boxes.some(b => r.right > b.left && r.left < b.right && r.bottom > b.top && r.top < b.bottom);
     return { shown, text: c.textContent, hit: Boolean(hit), w: Math.round(r.width), clipped: c.scrollWidth > c.clientWidth };
   });
   for (const [size, theme] of [[PHONE, 'light'], [PHONE, 'dark'], [{ width: 1280, height: 800 }, 'light']]) {

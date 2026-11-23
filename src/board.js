@@ -228,6 +228,10 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     if (toNow) {   // the first train not gone at the top
       const next = table.querySelector('.bd-row:not(.gone)');
       table.scrollTop = next ? next.offsetTop : table.scrollHeight;   // (the table is the rows' offsetParent)
+      // In the one sheet (2026-11-22) the table doesn't scroll itself: its page does (src/stack.js, at full height).
+      // (2026-11-23, stats-board-check: the search opened at the day's first trains, the next one far below.)
+      const page = table.scrollHeight <= table.clientHeight + 1 ? table.closest('.pg') : null;
+      if (page && next) page.scrollTop += next.getBoundingClientRect().top - page.getBoundingClientRect().top - 4;
     } else table.scrollTop = old;
   }
 
