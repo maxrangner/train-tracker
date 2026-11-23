@@ -1644,7 +1644,14 @@ document.getElementById('sheet').addEventListener('click', (e) => {
   if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
   if (b.dataset.go) stack.open(b.dataset.go, { go: true });
   else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
-  else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  // A company or kind picked on Home is a filter with its pill above the search bar (its × the only way out): a map
+  // tap or a train card closed keeps it (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the
+  // filtering... Filtered view should be able to show clean map with filter as a pill"), as "Show only" in the search.
+  else if (b.dataset.filter) {
+    const type = b.dataset.filter === 'kind' ? 'kind' : 'brand';
+    if (!filter.has(type, b.dataset.v)) filter.toggle(type, b.dataset.v);
+    stack.open(type === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  }
   else if (b.dataset.act === 'favtrain') pickFavouriteTrain(b.dataset.n);
   else if (b.dataset.act === 'showonly') stack.pageDef(stack.top())?.toggleShowOnly?.();
   else if (b.dataset.id && b.classList.contains('dis-row')) stack.open(`dis:${b.dataset.id}`);

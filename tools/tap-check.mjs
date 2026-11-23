@@ -125,6 +125,27 @@ try {
     await sleep(400);
     ok(!(await state()).filter, `${dev} R3: its × clears it`);
 
+    // ---- R3 from Home (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the filtering. Also
+    // in a train card when filtering, if dismissing the train card the filtering goes away"): a company in Home's list
+    // is the filter at once; map taps back to Home and a train opened and closed keep it ----
+    await toRest(p);
+    await p.evaluate(() => window.__stack.setLevel(2));
+    await sleep(700);
+    const hco = await p.evaluate(() => { const b = document.querySelector('.pg[data-key="home"] [data-filter="brand"]'); b?.click(); return b?.dataset.v ?? null; });
+    await sleep(900);
+    if (!hco) notes.push(`${dev} R3 Home: no company row on Home (not checked)`);
+    else {
+      const h0 = await state();
+      await tapsHome();
+      const h1 = await state();
+      const ht = await openChooserTrain(hco);
+      if (ht) await tapsHome();
+      const h2 = await state();
+      ok(h0.filter && h1.filter && h2.filter, `${dev} R3 Home: ${hco} from Home's list is the filter (${h0.filter}); after map taps home (${h1.filter}); after a train opened and closed (${ht ? h2.filter : 'no train'})`);
+      await p.evaluate(() => document.querySelector('#line .line-x')?.click());
+      await sleep(400);
+    }
+
     // ---- R1 (d): a "2 trains" list, a train from it, taps: the card closes, never back to the list ----
     await toRest(p);
     const openPickTrain = async () => {
