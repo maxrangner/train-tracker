@@ -1025,6 +1025,10 @@
       background: var(--accent); border: 0; color: var(--accent-ink); box-shadow: none; }
     .tl-row.canceled .tl-dot { background: var(--c-late); }
     /* "Track" over the tracks (Max, 2026-11-15), kept at the top while the stops scroll. */
+    .tl-head .tl-all { display: flex; justify-content: flex-end; }
+    .tl-places { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 10px; border: 0; border-radius: 13px; background: var(--hover); color: var(--ink);
+      font: 700 11.5px var(--font); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    .tl-places[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
     .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; padding: 2px 0 4px;
       background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
