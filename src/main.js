@@ -607,6 +607,13 @@ function pickPage(key) {
       pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
       for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
     },
+    // Half: all its rows, up to about half the screen (Max's phone, 2026-11-23: "2 trains" opened showing one row and
+    // it was unclear it could be pulled up); more rows: the last one cut, pull up to scroll.
+    half() {
+      const list = mine?.contains(pickerEl) ? pickerEl.querySelector('.pick-list') : null;
+      if (!list) return 0;
+      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.42));
+    },
     hide: letGo,
     unmount() { letGo(); pickLists.delete(key); },
   };
@@ -1535,7 +1542,7 @@ setInterval(() => {
 // ---- The one sheet: made last, once everything its pages use is there (src/stack.js) ----
 function define(key) {
   if (key === 'home') return homeDef;
-  // My trains ('trip:', 'change:', 'newtrip', 'addchange:') and the ride page ('ride:'): their own modules
+  // My trains ('trip:', 'change:', 'newtrip', 'edittrip:', 'addchange:') and the ride page ('ride:'): their own modules
   const own = myTrains?.define(key) ?? ride?.define(key);
   if (own !== undefined) return own;
   const i = key.indexOf(':'), type = i < 0 ? key : key.slice(0, i), v = i < 0 ? '' : key.slice(i + 1);

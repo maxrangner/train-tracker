@@ -89,7 +89,7 @@ try {
   const level = () => page.evaluate(() => window.__stack.level);
   const top = () => page.evaluate(() => window.__stack.top());
   const has = sel => page.evaluate(s => Boolean(document.querySelector(s)), sel);
-  // a tap on the handle (a finger: src/stack.js steps the sheet up a height, from full to low)
+  // a tap on the handle (a finger: src/stack.js toggles low ↔ half, from full to low; 2026-11-23)
   const tapHandle = async () => { const r = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }); await page.touchscreen.tap(r.x, r.y); };
   // a finger on the handle moved by dy, held still, lifted
   const drag = dy => async () => {
@@ -140,9 +140,10 @@ try {
     await act('train: i', ev(() => document.querySelector('#panel .panel-info')?.click()));
     await act('train: i back', ev(() => document.querySelector('#panel .panel-info')?.click()));
     await act('train: Fewer stops', ev(() => document.querySelector('#panel .panel-more').click()));
-    await act('train: the handle to full', tapHandle);
-    await act('train: the handle round to low', tapHandle);
-    await act('train: the handle to half', tapHandle);
+    await act('train: the handle to low', tapHandle);
+    state((await level()) === 0, `train: a tap on the handle at half left the sheet at ${await level()}`);
+    await act('train: the handle back to half', tapHandle);
+    state((await level()) === 1, `train: a tap on the handle at low left the sheet at ${await level()}`);
     await act('train: the stops ahead open', ev(() => document.querySelector('#panel .cd-stop')?.click()));
     await act('train: the stops ahead closed', ev(() => document.querySelector('#panel .cd-stop')?.click()));
     await act('train: a drag up of 250 px', drag(-250));
@@ -214,7 +215,7 @@ try {
     await act('board: its message closed', msgClick);
     state((await level()) === 1, `board: at half, its message open and closed: left at ${await level()}`);
     await act('board: Avgångar', ev(() => document.querySelector('#board [data-act="Avgang"]').click()), 2000);
-    await act('board: the handle to full', tapHandle);
+    await act('board: pulled to full', drag(-320));
     await act('board: at full, its message open', msgClick);
     await act('board: at full, its message closed', msgClick);
     state((await level()) === 2, `board: raised to full by hand, its message open and closed: came back at ${await level()}`);
@@ -228,7 +229,7 @@ try {
   await act('board: the search closed', find, 2500);
   state((await level()) === 1, `board: at half, the search opened and closed: left at ${await level()}`);
   // the board's search, from full
-  await act('board: the handle to full', tapHandle);
+  await act('board: pulled to full', drag(-320));
   await act('board: the search at full', find, 2500);
   await act('board: the keyboard up (full)', kbUp, 1200);
   await act('board: the keyboard down (full)', kbDown, 1200);

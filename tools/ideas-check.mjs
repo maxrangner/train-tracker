@@ -43,6 +43,23 @@ try {
   await until(page, () => Boolean(document.querySelector('[data-go="newtrip"]')));
   await page.evaluate(() => document.querySelector('[data-go="newtrip"]').click());
   await until(page, () => window.__stack.top() === 'newtrip');
+  // The station search (Max's phone, 2026-11-23: a tall pill, and the keyboard covered its results): one line high,
+  // and while typing with the keyboard up (the page 430 px shorter) the field and its first results are above it.
+  const qh = await page.evaluate(() => Math.round(document.querySelector('.nt-q').getBoundingClientRect().height));
+  ok(qh >= 36 && qh <= 56, `the station search field is one line high (${qh} px)`);
+  await page.evaluate(() => document.querySelector('.nt-q').focus());
+  await page.setViewport({ ...PHONE, height: PHONE.height - 430 });
+  await sleep(800);
+  await page.type('.nt-q', 'Lund', { delay: 15 });
+  await sleep(600);
+  const kb = await page.evaluate(() => {
+    const q = document.querySelector('.nt-q').getBoundingClientRect(), rs = [...document.querySelectorAll('.nt-res [data-pick]')].map(r => r.getBoundingClientRect().bottom);
+    return { q: [Math.round(q.top), Math.round(q.bottom)], first: rs.length ? Math.round(rs[0]) : null, shown: rs.filter(y => y <= innerHeight).length, h: innerHeight };
+  });
+  ok(kb.q[0] >= 0 && kb.first !== null && kb.first <= kb.h && kb.shown >= 2, `typing with the keyboard up (${kb.h} px left): the field at ${kb.q.join('-')} px, ${kb.shown} results above the keyboard`);
+  await shot(page, '01a-new-trip-typing');
+  await page.setViewport(PHONE);
+  await sleep(600);
   const pick = async (text, sig) => {
     await page.evaluate(() => { const q = document.querySelector('.nt-q'); q.value = ''; q.focus(); });
     await page.type('.nt-q', text, { delay: 15 });
@@ -71,6 +88,40 @@ try {
   await shot(page, '03-line');
   await page.click('#line .line-main');
   ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc'), 'a tap on the line opens the trip');
+
+  // ---- a saved trip's Edit and Delete (Max's phone, 2026-11-23: "can't be edited or deleted") ----
+  await page.evaluate(() => { window.__ideas.favourites.addTrip('Cst', 'U'); });   // (a second trip: the edited one keeps its place before it)
+  const tripKeys = () => page.evaluate(() => window.__ideas.favourites.trips.map(x => x.key));
+  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Mc"] [data-trip="edit"]'))), 'a saved trip\'s page has Edit and Delete');
+  await page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Mc"] [data-trip="edit"]').click());
+  ok(await until(page, () => window.__stack.top() === 'edittrip:Lu>Mc' && /Lund C/.test(document.querySelector('[data-nt="from"]')?.innerText ?? '') && /Malmö C/.test(document.querySelector('[data-nt="to"]')?.innerText ?? '')),
+    'Edit opens the form filled in (Lund C → Malmö C)');
+  await page.evaluate(() => document.querySelector('[data-nt="to"]').click());
+  await until(page, () => Boolean(document.querySelector('.nt-q')));
+  await pick('Hässleholm', 'Hm');
+  await shot(page, '02a-edit-trip');
+  await page.evaluate(() => document.querySelector('[data-nt="save"]').click());
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Hm'), `saved: its page is Lund C → Hässleholm C (${await top(page)})`);
+  const afterEdit = { keys: await tripKeys(), stack: await page.evaluate(() => window.__stack.keys()) };
+  ok(afterEdit.keys[0] === 'Lu>Hm' && !afterEdit.keys.includes('Lu>Mc') && !afterEdit.stack.some(k => k === 'trip:Lu>Mc' || k.startsWith('edittrip:')),
+    `the edited trip took the old one's place (${afterEdit.keys.join(', ')}; pages ${afterEdit.stack.join(' > ')})`);
+  // Delete: the first tap arms it, a double tap doesn't count, a second tap later deletes
+  const del = () => page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')?.click());
+  await until(page, () => Boolean(document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')));
+  await del();
+  await sleep(100);
+  await del();
+  await sleep(200);
+  const armed = await page.evaluate(() => ({ text: document.querySelector('.pg[data-key="trip:Lu>Hm"] [data-trip="del"]')?.innerText ?? '', saved: Boolean(window.__ideas.favourites.trip('Lu>Hm')) }));
+  ok(armed.saved && /again/i.test(armed.text), `Delete tapped twice quickly: still saved, it says "${armed.text}"`);
+  await shot(page, '02b-delete-armed');
+  await sleep(500);
+  await del();
+  ok(await until(page, () => !window.__ideas.favourites.trip('Lu>Hm') && window.__stack.top() !== 'trip:Lu>Hm'), `a second tap deletes it and closes its page (now ${await top(page)})`);
+  await page.evaluate(() => window.__stack.home(1));
+  await sleep(600);
+  ok(!(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go="trip:Lu>Hm"]')))), 'Mine no longer lists it');
+  await page.evaluate(() => window.__ideas.favourites.removeTrip('Cst>U'));
 
   // ---- a trip with a change ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Lu', 'Hb', 'Hm'); window.__stack.open('trip:Lu>Hm>Hb'); });

@@ -6,8 +6,12 @@
 //   2 the sheet dragged: up and back below its start, held still, comes back to the height it started at (the nearest
 //     height); pulled up and held: full; a pull down held: half; a short quick swipe down from full: half (a swipe goes
 //     on to the next height); a long pull down below its lowest height closes every page (back to Home);
-//   3 every height change glides (heights in between, sampled each frame): All stops, Fewer stops, the handle tap,
-//     a short drag down from full.
+//   3 every height change glides (heights in between, sampled each frame): All stops, Fewer stops, the handle tap
+//     (low ↔ half, from full to low), a short drag down from full;
+//   4 the head (2026-11-23): the handle's target 44 px tall (the grip over the map and the handle), a finger's tap that
+//     wanders 11 px still toggles, a tap on the head between its buttons toggles, a pull down of 110 px from the head
+//     at full lowers it, Home's field pulled up raises the sheet (no search); a group's list ("2 trains here", and a
+//     big one) opens at half showing all its rows, or as tall as half the screen.
 // node tools/sheet-check.mjs (with npm run dev; PAGE= for another port). Not the phone: the feel and the real keyboard.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
@@ -146,10 +150,98 @@ try {
       const tapHandle = async () => { const c = await sheet(); await page.touchscreen.tap(PHONE.width / 2, c.top + 8); };
       await glide('All stops', () => page.evaluate(() => document.querySelector('#panel .panel-more')?.click()), 2);
       await glide('Fewer stops', () => page.evaluate(() => document.querySelector('#panel .panel-more')?.click()), 1);
-      await glide('handle tap up', tapHandle, 2);
+      await glide('handle tap: half to low', tapHandle, 0);
+      await glide('handle tap: low to half', tapHandle, 1);
+      await setLevel(page, 2);
+      await settle();
       await glide('a quick swipe down from full', () => drag([80, 160], { fast: true }), 1);
-      await glide('handle tap up again', tapHandle, 2);
-      await glide('handle tap: round to low', tapHandle, 0);
+      await setLevel(page, 2);
+      await settle();
+      await glide('handle tap: full to low', tapHandle, 0);
+    }
+
+    // ---- 4. The head (Max's phone, 2026-11-23: the handle "seems to hit it but doesn't respond", the sheet hard to
+    // lower) and a group's list opening tall enough for its rows ----
+    if (!(await openCard())) fails.push('setup: no train page for the head');
+    else {
+      await setLevel(page, 0);
+      await settle();
+      // the handle's target: the grip over the map and the handle, top to bottom, at the middle
+      const hit = await page.evaluate(() => {
+        const top = document.getElementById('sheet').getBoundingClientRect().top, x = innerWidth / 2;
+        const ok = y => { const e = document.elementFromPoint(x, y); return Boolean(e && (e.id === 'sheet-grip' || e.closest('.sh-grab'))); };
+        let a = top, b = top;
+        while (ok(a - 1)) a--;
+        while (ok(b + 1)) b++;
+        return { tall: b - a + 1, from: Math.round(a - top), to: Math.round(b - top) };
+      });
+      if (hit.tall < 44) fails.push(`4 the handle's target is ${hit.tall} px tall (${hit.from} to ${hit.to} px from the sheet's top), want 44`);
+      notes.push(`4 the handle's target: ${hit.tall} px tall (${hit.from} to ${hit.to} px from the sheet's top)`);
+      // a finger's tap that wanders 11 px (no click comes then): on the grip above the sheet, low → half
+      const wander = async (x, y) => { const ts = page.touchscreen; await ts.touchStart(x, y); await sleep(30); await ts.touchMove(x, y + 6); await sleep(30); await ts.touchMove(x + 3, y + 11); await sleep(40); await ts.touchEnd(); await sleep(600); };
+      let c = await sheet();
+      await wander(PHONE.width / 2, c.top - 14);
+      c = await sheet();
+      if (c.level !== 1) fails.push(`4 a wandering tap on the grip above the sheet at low: height ${c.level}, wanted 1`);
+      // a tap on the head's empty part (between the back chip and the bar's buttons): half → low
+      const gap = await page.evaluate(() => {
+        const back = document.querySelector('#sheet .sh-back').getBoundingClientRect();
+        const next = [...document.querySelectorAll('#sheet .sh-bar button')].filter(b => !b.hidden && b.getBoundingClientRect().left > back.right).map(b => b.getBoundingClientRect().left);
+        return { x: (back.right + Math.min(innerWidth - 12, ...next)) / 2, y: back.top + back.height / 2 };
+      });
+      await page.touchscreen.tap(gap.x, gap.y);
+      await sleep(600);
+      c = await sheet();
+      if (c.level !== 0) fails.push(`4 a tap on the head between its buttons at half: height ${c.level}, wanted 0`);
+      // a pull down of 110 px from the head at full, held still: lowered (it came back up to full, the nearest height)
+      await setLevel(page, 2);
+      await settle();
+      await drag([30, 70, 110], { hold: 200 });
+      c = await sheet();
+      if (c.level !== 1) fails.push(`4 a pull down of 110 px from the head at full: height ${c.level}, wanted 1`);
+      else notes.push('4 a pull down of 110 px from the head at full: half');
+      // Home's search field pulled up by a finger: the sheet rises, the search doesn't open
+      await toRest(page);
+      const f = await page.evaluate(() => { const r = document.getElementById('search').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+      await page.touchscreen.touchStart(f.x, f.y);
+      for (let k = 1; k <= 12; k++) { await page.touchscreen.touchMove(f.x, f.y - k * 25); await sleep(16); }
+      await sleep(200);
+      await page.touchscreen.touchEnd();
+      await sleep(600);
+      const s4 = await sheetState(page), searching = await page.evaluate(() => window.__stack.searching);
+      if (s4.level < 1 || searching) fails.push(`4 Home's field pulled up 300 px: height ${s4.level}, the search ${searching ? 'opened' : 'closed'}`);
+      await toRest(page);
+      // a group's list ("N trains here"): opens at half showing all its rows, or as tall as half when they don't fit
+      await page.evaluate(() => window.__map.jumpTo({ center: [17.9, 59.3], zoom: 7 }));
+      await sleep(2500);
+      for (const want of [2, 6]) {
+        const n = await page.evaluate(async (want) => {
+          const m = window.__map, gs = m.queryRenderedFeatures({ layers: ['train-labels'] }).filter(g => g.properties.cluster_id !== undefined && (want === 2 ? g.properties.point_count === 2 : g.properties.point_count >= want));
+          for (const g of gs) {
+            const leaves = await m.getSource('train-groups').getClusterLeaves(g.properties.cluster_id, 200, 0);
+            const ids = new Set(leaves.map(l => l.properties.id));
+            const dot = m.queryRenderedFeatures({ layers: ['train-dots'] }).find(d => ids.has(d.properties.id));
+            if (!dot) continue;
+            const q = m.project(dot.geometry.coordinates);
+            m.fire('click', { point: q, lngLat: m.unproject(q), originalEvent: new MouseEvent('click') });
+            return leaves.length;
+          }
+          return 0;
+        }, want);
+        if (!n) { notes.push(`4 no group of ${want === 2 ? '2' : `${want}+`} trains on screen: its list not checked`); continue; }
+        await until(page, () => String(window.__stack.top()).startsWith('pick:'), 3000);
+        await sleep(700);
+        const p = await page.evaluate(() => {
+          const rows = [...document.querySelectorAll('#picker [data-i]')].map(b => b.getBoundingClientRect().bottom);
+          return { level: window.__stack.level, h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), half: Math.round(innerHeight * 0.5),
+            rows: rows.length, shown: rows.filter(y => y <= innerHeight).length };
+        });
+        const good = p.level === 1 && (p.shown === p.rows || p.h >= p.half - 10);
+        if (!good) fails.push(`4 "${n} trains here": height ${p.level}, ${p.h} px, ${p.shown} of ${p.rows} rows shown`);
+        notes.push(`4 "${n} trains here" opens at ${p.h} px: ${p.shown} of ${p.rows} rows shown`);
+        await page.screenshot({ path: `shots/test-0117/picker-${n}.jpg`, quality: 85 });
+        await toRest(page);
+      }
     }
   }
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));
