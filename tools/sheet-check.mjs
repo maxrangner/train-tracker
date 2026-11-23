@@ -24,6 +24,20 @@ const fails = [], notes = [];
 try {
   const page = await waitForMap(browser, { replay: CARD_HOUR, lang: 'sv', view: '11/59.33/18.06' });
 
+  // ---- 0. The map credit at the start (its 5 s, before any touch): every link can be tapped, none under the grip
+  // (2026-11-23: the grab strip covered it) ----
+  const credit = await page.evaluate(() => {
+    const c = document.getElementById('credit');
+    if (!c || c.classList.contains('gone')) return null;
+    return [...c.querySelectorAll('a')].map((a) => {
+      const r = a.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return a.contains(hit) ? '' : `${a.textContent} under ${hit?.id || hit?.className}`;
+    }).filter(Boolean);
+  });
+  if (credit === null) notes.push('0 the map credit had gone before it was looked at (a slow start): not checked');
+  else if (credit.length) fails.push(`0 the map credit's links covered: ${credit.join(', ')}`);
+  else notes.push('0 the map credit: every link can be tapped');
+
   // ---- 1. The empty search with the keyboard up ----
   await page.evaluate(() => { try { localStorage.removeItem('favourites'); } catch { /* none */ } });
   await openSearch(page);
