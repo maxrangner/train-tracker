@@ -48,7 +48,7 @@ import { createRide } from './ride.js';
 import { createPeek } from './peek.js';
 import { createShopWindow } from './shop-window.js';
 import { shareTrain, sharedNumber, dropShared } from './share.js';
-import { whyStanding, STAND_MS as STOOD_MS } from './why-standing.js';
+import { whyStanding, whyLate, LATE_MIN, STAND_MS as STOOD_MS } from './why-standing.js';
 import { createDayView, DAY_CSS } from './day-view.js';
 import { sunAt, altitude, HORIZON } from './sun.js';
 
@@ -495,18 +495,22 @@ function stoodFor(id, at) {
   }
   return at - since;
 }
-// The reason a train stands (src/why-standing.js), or null while it moves, has stood under STOOD_MS, or its route isn't in.
+// The reason a train stands (src/why-standing.js) once it has stood STOOD_MS; else, LATE_MIN or more late, the reason
+// it is late (Max, 2026-11-23: he saw no reason on 445 at +29 min, moving); else null (its route not in: null too).
 function whyFor(id) {
   const x = frameById.get(id), route = panel.openId === id ? panel.route : null;
-  if (!x || x.stale || !route || (x.v ?? 0) >= STAND_MS || stoodFor(id, now()) < STOOD_MS) return null;
-  return whyStanding({ train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
-    lines: d => disruptions.stretchesOf(d), now: now() });
+  if (!x || x.stale || !route) return null;
+  const known = { train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
+    lines: d => disruptions.stretchesOf(d), now: now() };
+  if ((x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS) return { ...whyStanding(known), title: 'whyTitle' };
+  if ((lateOf(id) ?? 0) >= LATE_MIN) return { ...whyLate(known), title: 'whyLateTitle' };
+  return null;
 }
 function whyHtml(w) {
   if (!w || w.kind === 'stop') return '';
   const text = w.kind === 'disruption' ? t('whyDisruption', w.header) : w.kind === 'note' ? t('whyNote', w.text)
     : w.kind === 'waiting' ? t('whyWaiting', w.station, hhmm(w.planned)) : t('whyNone');
-  const inner = `<small>${esc(t('whyTitle'))}</small><span>${esc(text)}</span>`;
+  const inner = `<small>${esc(t(w.title ?? 'whyTitle'))}</small><span>${esc(text)}</span>`;
   return w.kind === 'disruption' ? `<button type="button" class="why dis" data-go="dis:${esc(w.id)}">${icon('warning', 17)}<span class="why-t">${inner}</span>${icon('chevron', 16)}</button>`
     : `<div class="why ${w.kind}">${icon(w.kind === 'none' ? 'info' : 'warning', 17)}<span class="why-t">${inner}</span></div>`;
 }
