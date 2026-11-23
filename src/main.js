@@ -37,6 +37,7 @@ import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
 import { roll, arrive } from './motion.js';
+import { startCount } from './count.js';
 
 // #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
 // the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
@@ -122,6 +123,9 @@ const propsFor = (r, sim) => ({
 // nothing; the plugin brings it, and works on iPhones too); on the web page navigator.vibrate (Android browsers only).
 const native = Boolean(window.Capacitor?.isNativePlatform?.());
 const haptics = native ? import('@capacitor/haptics').catch(() => null) : null;
+// The viewer count (Max, 2026-11-23; src/count.js): only builds made to count (VITE_COUNT_URL), app or site; Settings →
+// Debug → "Don't count me" stops it here.
+startCount({ url: import.meta.env.VITE_COUNT_URL, kind: native ? 'a' : 's', off: () => settings.noCount });
 const buzz = () => {
   if (haptics) { haptics.then(h => h?.Haptics.impact({ style: h.ImpactStyle.Light })).catch(() => { /* not here */ }); return; }
   try { navigator.vibrate?.(8); } catch { /* not allowed here */ }

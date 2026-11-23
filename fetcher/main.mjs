@@ -90,6 +90,12 @@ if (args.includes('--upload')) {
   const { createUploader } = await import('./upload.mjs');
   uploader = createUploader(cfg, log, { keep: name => Boolean(shelf.get(name)) });
 }
+// The viewer count (2026-11-23; fetcher/viewers.mjs): count/i.php's day files read over the same connection.
+let viewers = null;
+if (uploader) {
+  const { createViewers } = await import('./viewers.mjs');
+  viewers = createViewers({ read: (name, from) => uploader.readCount(name, from), list: () => uploader.listCount(), log });
+}
 const feeds = { positions: { mode: 'starting', since: Date.now() }, passings: { mode: 'starting', since: Date.now() }, lastRecordAt: null,
   newestReport: null };   // the newest position report's own time
 const startedAt = Date.now();
@@ -100,7 +106,7 @@ const sizes = () => Object.fromEntries(Object.entries(shelf.names()).map(([kind,
 }));
 const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: process.pid, startedAt, feeds, state: state.sizes(),
   load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), sizes: sizes(), upload: uploader?.stats() ?? null,
-  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null });
+  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null, viewers: viewers?.status() ?? null });
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
 // --status 8091: only the status, only on this computer (127.0.0.1), for the monitor (monitor/main.mjs).
@@ -169,6 +175,7 @@ every('passings-add file', MIN, 75000, () => {
 // Planned routes for the trains on the map: fetcher/ask-routes.mjs.
 let plannedBaseAt = null, plannedBaseIds = null;
 const askRoutes = () => askRoutesOnce(state, fetchPlannedRoutes);
+if (viewers) every('viewers', 10 * MIN, 30000, () => viewers.round());
 if (!replayName) every('planned routes', 30000, 10000, askRoutes);   // a replay brings its own
 const shownIds = t => state.trains(t).map(r => r.id);
 every('planned file', 10 * MIN, 40000, () => {

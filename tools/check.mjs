@@ -152,7 +152,10 @@ add(check('upload-check', depsOf('tools/upload-check.mjs'), plain(['tools/upload
 // Taps from files (plan step 4): a saved day's timetable through the files' format and back, offline. A second.
 add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { short: true })));
 // The monitor's mail rules on made-up timelines (offline, under a second; in the check since 2026-11-22).
-add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// monitor-check also runs monitor/main.mjs itself for a few seconds (2026-11-23).
+add(check('monitor-check', depsOf('tools/monitor-check.mjs', 'monitor/main.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// The viewer count (2026-11-23): the page's sending, the fetcher's counting, count/i.php on the portable PHP (data/php).
+add(check('viewers-check', [...depsOf('tools/viewers-check.mjs'), 'count/i.php', '.env'], plain(['tools/viewers-check.mjs'], { short: true })));
 // An odd row stops no feed (positions, passings, a reader that throws; offline, under a second; 2026-11-22).
 add(check('stream-guard-check', depsOf('tools/stream-guard-check.mjs'), plain(['tools/stream-guard-check.mjs'], { short: true })));
 // The fetcher's planned-route questions when one fails: the rest still asked (offline, under a second; 2026-11-22).

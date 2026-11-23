@@ -124,6 +124,10 @@ function tiles() {
   t.push(['Fetcher memory / CPU', ...(f?.up ? [`${r.memMB ?? '–'} MB`, (r.memMB ?? 0) > 400 ? 'warn' : 'ok', `CPU ${r.cpuPct ?? '–'} %`] : down)]);
   t.push(['Mail', D.mail ? `${D.mail.sent} sent` : 'off', !D.mail ? 'off' : D.mail.waiting ? 'warn' : 'ok',
     D.mail ? `to ${esc(D.mailTo)}; ${D.mail.waiting} waiting${D.mail.lastError && D.mail.waiting ? `; last error: ${esc(D.mail.lastError)}` : ''}` : 'no MAIL_ settings']);
+  const P = D.ping;
+  t.push(['Outside warning', !P ? 'off' : P.lastError ? 'calls failing' : P.lastOkAt ? 'calling' : 'starting', !P ? 'off' : P.lastError ? 'warn' : 'ok',
+    !P ? 'no MONITOR_PING_URL' : `${P.ok} calls answered, ${P.failed} failed${P.lastError ? `; last error: ${esc(P.lastError)}` : ''}`]);
+  t.push(['Version', D.version ?? '–', 'ok', `monitor started ${new Date(D.startedAt).toLocaleString('sv-SE')}`]);
   $('tiles').innerHTML = t.map(([k, v, s, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${esc(v)}</div>${state(s)}<div class="n">${n}</div></div>`).join('');
 }
 

@@ -5,6 +5,7 @@
 import nodemailer from 'nodemailer';
 
 const WAITS = [60000, 120000, 300000, 600000];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function makeTransport(cfg) {
   const port = Number(cfg.MAIL_PORT ?? 465);
@@ -19,7 +20,8 @@ function makeTransport(cfg) {
 // Logs in to the mail server and leaves, sending nothing (the self-check, monitor/self-check.mjs).
 export const mailCheck = cfg => makeTransport(cfg).verify();
 
-export function createMailer(cfg, log, { offline = () => false } = {}) {
+// version: the line every mail ends with ("Spårat 0.8.0 (commit abc1234)"; Max, 2026-11-23).
+export function createMailer(cfg, log, { offline = () => false, version = null } = {}) {
   const need = ['MAIL_HOST', 'MAIL_USER', 'MAIL_PASS', 'MAIL_TO'];
   if (need.every(k => !cfg[k])) return null;                      // no mail settings: no mails (page and terminal only)
   for (const k of need) if (!cfg[k]) throw new Error(`mail needs ${k} in the settings file (or none of the MAIL_ lines)`);
@@ -37,10 +39,15 @@ export function createMailer(cfg, log, { offline = () => false } = {}) {
         if (offline()) throw new Error('test: no internet');
         const late = Date.now() - m.t > 2 * 60000;
         const written = new Date(m.t).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' });
+        const foot = [late ? `Written ${written}, sent late (no connection until now).` : null,
+          `Spårat's monitor on the Linux PC (page: http://127.0.0.1:8092/ on that PC)${version ? `; ${version}` : ''}.`].filter(Boolean);
         await transport.sendMail({
           from: cfg.MAIL_FROM || `Spårat monitor <${cfg.MAIL_USER}>`, to: cfg.MAIL_TO,
           subject: `Spårat: ${m.subject}`,
-          text: `${m.text}\n\n--\n${late ? `Written ${written}, sent late (no connection until now).\n` : ''}Spårat's monitor on the Linux PC (page: http://127.0.0.1:8092/ on that PC).`,
+          text: `${m.text}\n\n--\n${foot.join('\n')}`,
+          // The daily summary also as a page with graphs (monitor/summary-mail.mjs); the text stays for mail programs
+          // that show only text.
+          ...(m.html ? { html: m.html.replace('<!--foot-->', foot.map(esc).join('<br>')) } : {}),
           date: new Date(m.t),
         });
         queue.shift(); stats.sent++; stats.lastSentAt = Date.now(); tries = 0;

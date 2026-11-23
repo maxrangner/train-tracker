@@ -1,6 +1,12 @@
 // Checks the monitor's mail rules (monitor/rules.mjs) on made-up timelines: each must give exactly the expected mails
 // and no others. No internet, no key. Run: node tools/monitor-check.mjs [--show] (--show prints every mail made).
-import { createRules, isOffline } from '../monitor/rules.mjs';
+import { createRules, isOffline, summary } from '../monitor/rules.mjs';
+import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { swedishParts } from '../src/clock.js';
 
 const MIN = 60000;
@@ -17,17 +23,21 @@ function normal(t, over = {}) {
     reportAge: 4, trains: 120, one: { status: 200, age: 5, clockOff: 0 }, sizes: { live: 4200, passings: 40000 },
     memMB: 90, cpuPct: 0.1, ...over };
 }
-// A timeline: `minutes` rows from `start`; change(i, row) may alter row i (minutes from the start).
-function run(start, minutes, change = () => {}, opts) {
-  const rules = createRules(opts);
-  const mails = [];
+// A timeline: `minutes` rows from `start`; change(i, row) may alter row i (minutes from the start). restartAt: the
+// monitor restarts before that minute (2026-11-23: its rows and the rules' memory come back from its files, here a
+// snapshot through JSON as main.mjs writes it).
+function run(start, minutes, change = () => {}, opts, restartAt = null) {
+  let rules = createRules(opts);
+  const mails = [], rows = [];
   let upFor = 6 * 3600;
   for (let i = 0; i < minutes; i++) {
+    if (i === restartAt) { const snap = JSON.parse(JSON.stringify(rules.snapshot())); rules = createRules(opts); rules.restore(JSON.parse(JSON.stringify(rows)), snap); }
     const row = normal(at(start) + i * MIN, { upFor });
     change(i, row);
     row.offline = isOffline(row);   // as monitor/main.mjs does
     upFor = row.restarts ? 30 : row.up ? row.upFor + 60 : 0;
     row.upFor = row.up ? (row.restarts ? 30 : row.upFor) : 0;
+    rows.push(row);
     for (const m of rules.step(row)) mails.push({ i, ...m });
   }
   return mails;
@@ -99,6 +109,17 @@ const cases = [
   ['the daily summary at 07:00, a quiet night', run('2026-11-17T05:00', 125), ['summary summary']],
   ['the daily summary after a problem', run('2026-11-17T05:00', 125, (i, r) => { if (i === 30) r.refused = 1; }),
     ['problem trv-refused', 'ok trv-refused', 'summary summary']],
+  // Over a restart (2026-11-23): nothing mailed again, nothing lost.
+  ['a restart after a problem: no mail again, the summary lists it', run('2026-11-17T05:00', 125, (i, r) => { if (i === 30) r.refused = 1; }, undefined, 60),
+    ['problem trv-refused', 'ok trv-refused', 'summary summary']],
+  ['a restart after the summary: not sent twice', run('2026-11-17T06:00', 120, () => {}, undefined, 90), ['summary summary']],
+  ['a restart while the fetcher is down: its OK comes after', run('2026-11-17T10:00', 60, (i, r) => {
+    if (i >= 30 && i < 40) Object.assign(r, { up: false, upAgo: null });
+    if (i === 40) r.restarts = 1;
+  }, undefined, 35), ['problem fetcher-down', 'ok fetcher-down']],
+  ['a restart while the internet is out: one mail when back', run('2026-11-17T10:00', 60, (i, r) => {
+    if (i >= 30 && i < 37) Object.assign(r, { upOk: 0, upAgo: (i - 29) * 60, trvFailed: 2, feeds: 'poll/poll', one: { status: 'error', age: null } });
+  }, undefined, 33), ['offline offline']],
 ];
 
 let bad = 0;
@@ -112,5 +133,96 @@ for (const [name, mails, want] of cases) {
 // The summary's wording on the quiet night.
 const s = cases.find(c => c[0].startsWith('the daily summary after'))[1].find(m => m.kind === 'summary');
 if (!/1 problem/.test(s.subject)) { bad++; console.log(`FAIL summary subject: ${s.subject}`); }
+const sr = cases.find(c => c[0].startsWith('a restart after a problem'))[1].find(m => m.kind === 'summary');
+if (!/1 problem/.test(sr.subject) || !/trafikverket answers "too many requests"/i.test(sr.text)) { bad++; console.log(`FAIL the summary after a restart: ${sr.subject}`); }
+else console.log('ok   the summary after a restart lists the problem mailed before it');
+// The version in the summary (2026-11-23): each row says its version; an update within the 24 hours is named.
+{
+  const t0 = at('2026-11-17T06:00');
+  const rows = Array.from({ length: 60 }, (_, i) => normal(t0 + i * MIN, { ver: i < 20 ? '0.7.0' : '0.8.0' }));
+  const a = summary(rows, [], [], { versionText: 'Spårat 0.8.0 (commit abc1234)' }).text;
+  const b = summary(rows.slice(30), [], [], { versionText: 'Spårat 0.8.0 (commit abc1234)' }).text;
+  const ok = /Version: Spårat 0\.8\.0 \(commit abc1234\); updated to 0\.8\.0 at 17 nov\.? 06:20 \(from 0\.7\.0\)/.test(a) && /Version: Spårat 0\.8\.0 \(commit abc1234\), the whole time/.test(b);
+  if (!ok) bad++;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} the version in the summary${ok ? '' : `\n${a}\n${b}`}`);
+}
+// The summary as a page with graphs (2026-11-23; monitor/summary-mail.mjs): a whole made-up day with an outage, the
+// days before and the viewers; every number in it, short enough for Gmail (it cuts a mail past 102 kB).
+{
+  const t0 = at('2026-11-23T07:01');
+  const rows = Array.from({ length: 1440 }, (_, i) => {
+    const r = normal(t0 + i * MIN, { trains: 100 + (i % 300), memMB: 300 + (i % 140), cpuPct: 2, ver: '0.8.0', bytesIn: 900000, bytesOut: 230000 });
+    if (i >= 360 && i < 401) Object.assign(r, { trvFailed: 2, feeds: 'poll/poll', one: { status: 'error', age: null } });
+    r.offline = isOffline(r);
+    return r;
+  });
+  const days = [{ day: '2026-11-21', minutes: 1440, trainsMax: 265, bytesIn: 945e6, bytesOut: 247e6, memMax: 365, problems: 0 },
+    { day: '2026-11-22', minutes: 1440, trainsMax: 365, bytesIn: 1041e6, bytesOut: 268e6, memMax: 427, problems: 0 },
+    { day: '2026-11-22', minutes: 300, partial: true, trainsMax: 1, problems: 0 }];
+  const viewers = { at: t0, error: null, days: [{ day: '2026-11-23', people: 412, app: 96, site: 316, peak: 23, peakAt: at('2026-11-23T17:35') }],
+    hours: [{ t: at('2026-11-23T17:00'), people: 38, peak: 21 }] };
+  const ctx = { versionText: 'Spårat 0.8.0 (commit abc1234)', days, viewers };
+  const mails = [{ t: at('2026-11-23T13:42'), kind: 'offline', key: 'offline', subject: 'the internet was out 13:00–13:41 (41 min)' }];
+  const s = summary(rows, mails, [], ctx);
+  const kb = Buffer.byteLength(s.html) / 1000;
+  const want = ['Spårat 0.8.0 (commit abc1234)', '>412<', 'app 96 · site 316', '>23<', 'at 17:35', '>399<', 'the internet was out 13:00–13:41', 'internet out 41 min',
+    'Sun 22', 'Sat 21', '>1 041<', '>427<', 'People at once', 'most 21 at 17:00', 'Trains on the map', 'Running', 'Fetcher CPU', '<!--foot-->', 'watched 24 h of 24'];
+  const missing = want.filter(w => !s.html.includes(w));
+  check(`the summary page: ${kb.toFixed(1)} kB, every number in it, the days before (the whole day's line, not the part one)`,
+    kb < 90 && !missing.length && !s.html.includes('>1<') && /Viewers: 2026-11-23 412 people \(app 96, site 316\), most at once 23 at 17:35/.test(s.text),
+    `missing: ${missing.join(' | ')}`);
+  const none = summary(rows.slice(0, 600), [], [], { versionText: 'Spårat 0.7.0' });
+  check('the summary page without the viewer count (before the release): says so, no viewer graphs, no empty week',
+    none.html.includes('counted from the next release') && !none.html.includes('People at once') && none.html.includes('No days kept yet') && none.html.includes('watched 10 h of 24'));
+}
+function check(name, ok, more = '') { if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n     ${more}`}`); }
+await live();
 console.log(bad ? `monitor check FAILED (${bad})` : 'monitor check ok');
 process.exit(bad ? 1 : 0);
+
+// The monitor itself for a few seconds (--test-minute-ms 1000: a "minute" is a second), against a pretend fetcher and
+// a pretend outside-warning address (2026-11-23): one call a "minute"; the rows kept in its folder and read back after
+// a restart; a dead address neither stops the rows nor mails.
+async function live() {
+  const ROOT = fileURLToPath(new URL('..', import.meta.url));
+  const serve = handler => new Promise(res => { const s = createServer(handler).listen(0, '127.0.0.1', () => res(s)); });
+  const fetcher = await serve((req, res) => {
+    const now = Date.now();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ now, up: 600, pid: 1, startedAt: now - 600000, memoryMB: 90,
+      feeds: { positions: { mode: 'stream' }, passings: { mode: 'stream' }, newestReport: now - 3000 }, state: { trains: 100 },
+      load: { asks: 1, askBytes: 1, streamBytes: 1 }, sizes: {}, cpu: { user: 0, system: 0 },
+      viewers: { at: now, error: null, days: [{ day: swedishParts(now).day, people: 5, app: 2, site: 3, peak: 4, peakAt: now }, { day: '<b>x', people: 9 }],
+        hours: [{ t: now - (now % 3600000), people: 5, peak: 4 }] } }));
+  });
+  let pings = 0;
+  const pinger = await serve((req, res) => { pings++; res.writeHead(200); res.end('OK'); });
+  const dir = mkdtempSync(join(tmpdir(), 'monitor-check-'));
+  const runMonitor = (pingUrl, seconds) => new Promise(res => {
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(MAIL_|MONITOR_|STATE_DIRECTORY$)/.test(k)));
+    Object.assign(env, { MONITOR_FETCHER: `http://127.0.0.1:${fetcher.address().port}/status`, MONITOR_PORT: '0', MONITOR_DAY_DIR: dir, MONITOR_PING_URL: pingUrl });
+    const p = spawn(process.execPath, ['monitor/main.mjs', '--env', join(dir, 'none.env'), '--test-minute-ms', '1000', '--minutes', String(seconds)], { cwd: ROOT, env });
+    let out = '';
+    p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
+    p.on('exit', code => res({ code, out }));
+  });
+  const lines = () => readFileSync(join(dir, 'rows.jsonl'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  const check = (name, ok, more = '') => { if (!ok) bad++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n${more}`}`); };
+  try {
+    const a = await runMonitor(`http://127.0.0.1:${pinger.address().port}/ping`, 8);
+    const r1 = lines();
+    check(`the monitor live: ${r1.length} rows kept, ${pings} calls to the warning address, version "${r1[0]?.ver}"`,
+      a.code === 0 && r1.length >= 5 && Math.abs(pings - r1.length) <= 1 && r1.every(r => r.ver === 'dev' && r.up) && /started \(Spårat dev;/.test(a.out), a.out);
+    const dayLine = JSON.parse(readFileSync(join(dir, 'days.jsonl'), 'utf8').trim().split('\n').at(-1));
+    check(`the day file keeps the viewer count (${JSON.stringify(dayLine.viewers)}), an odd day name from the fetcher dropped`,
+      dayLine.viewers?.people === 5 && dayLine.viewers.app === 2 && dayLine.viewers.peak === 4 && !readFileSync(join(dir, 'days.jsonl'), 'utf8').includes('<b>'));
+    const b = await runMonitor('http://127.0.0.1:1/ping', 6);
+    const r2 = lines();
+    check(`after a restart: ${r1.length} rows read back, ${r2.length - r1.length} more; a dead warning address logged once, no mail`,
+      b.code === 0 && new RegExp(`kept from before: ${r1.length} minutes`).test(b.out) && r2.length >= r1.length + 3
+        && (b.out.match(/outside warning: call failed/g) ?? []).length === 1 && !/problem|offline:/.test(b.out), b.out);
+  } finally {
+    fetcher.close(); pinger.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
