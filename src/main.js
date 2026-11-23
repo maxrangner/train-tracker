@@ -1086,6 +1086,7 @@ onSettingChange((key) => {
   }
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
+  if (key === 'homeLegend') homeDef.redraw();   // Debug → Lateness colours on Home
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
