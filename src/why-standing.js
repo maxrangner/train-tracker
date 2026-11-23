@@ -35,6 +35,32 @@ function kmToPiece(p, a, b) {
 // planned, estimated, actual, canceled, problems }] }); station(sig) -> { name, lon, lat }; disruptions: their list
 // (src/disruptions.js), each { id, header, sections }; lines(d) -> its drawn stretches (coordinate lists), optional;
 // now: ms. Returns { kind, ... }.
+// A disruption in force on the train's stretch: its stations include the last passed or next stop, or its drawn line
+// passes within NEAR_KM of the train.
+function onStretch(train, around, disruptions, lines) {
+  for (const d of disruptions) {
+    const bySig = d.sections?.some(sec => sec.some(sig => around.includes(sig)));
+    const byLine = !bySig && lines(d).some(c => c.some((pt, i) => i > 0 && kmToPiece(train, c[i - 1], pt) < NEAR_KM));
+    if (bySig || byLine) return { kind: 'disruption', id: d.id, header: d.header };
+  }
+  return null;
+}
+
+// "Why late?" (Max, 2026-11-23: "Also don't see the reason for the delay"): a train LATE_MIN or more late, moving or
+// not, from the same honest sources: a disruption on its stretch, else Trafikverket's cause note on any of its stops
+// (passed or ahead: the note stays on the stop where it happened), else 'none' ("No reason reported").
+export const LATE_MIN = 5;
+export function whyLate({ train, route, disruptions = [], lines = () => [], now }) {
+  const stops = route?.stops ?? [];
+  let last = -1;
+  stops.forEach((s, i) => { if (s.actual && s.actual <= now) last = i; });
+  const next = stops.findIndex((s, i) => i > last && !s.canceled);
+  const dis = onStretch(train, [stops[last]?.station, stops[next]?.station].filter(Boolean), disruptions, lines);
+  if (dis) return dis;
+  const note = stops.flatMap(s => s.problems ?? []).find(isCause);
+  return note ? { kind: 'note', text: note } : { kind: 'none' };
+}
+
 export function whyStanding({ train, route, station, disruptions = [], lines = () => [], now }) {
   const stops = route?.stops ?? [];
   // The last stop passed (an actual time) and the next one (none yet), by their rows.
@@ -44,11 +70,8 @@ export function whyStanding({ train, route, station, disruptions = [], lines = (
   const around = [stops[last]?.station, stops[next]?.station].filter(Boolean);
 
   // 1. A disruption on its stretch.
-  for (const d of disruptions) {
-    const bySig = d.sections?.some(sec => sec.some(sig => around.includes(sig)));
-    const byLine = !bySig && lines(d).some(c => c.some((pt, i) => i > 0 && kmToPiece(train, c[i - 1], pt) < NEAR_KM));
-    if (bySig || byLine) return { kind: 'disruption', id: d.id, header: d.header };
-  }
+  const dis = onStretch(train, around, disruptions, lines);
+  if (dis) return dis;
   // Where it stands: at a station of its route?
   const at = stops.findIndex(s => { const st = station(s.station); return st && st.lon != null && km(train, st) < AT_KM; });
   const atSig = at >= 0 ? stops[at].station : null;

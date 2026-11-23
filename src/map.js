@@ -649,20 +649,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: { 'icon-image': ['get', 'flag'], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
         'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 10, 1] } });
 
-    // On the night side of the sun's line (Settings → Day and night) a train's dot has a faint warm glow round it, its
-    // lit windows seen from far (src/main.js marks those trains night: 1). Under the dots; none where models show.
-    map.addLayer({
-      id: 'train-glow',
-      type: 'circle',
-      source: 'trains',
-      filter: ['==', ['get', 'night'], 1],
-      paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 11, 7, 15, 10, 22, 13, 26],
-        'circle-color': dark ? '#ffd27a' : '#ffc94d',
-        'circle-blur': 0.9,
-        'circle-opacity': modelsAt(map.getZoom()) ? 0 : ['case', ['get', 'stale'], 0.15, dark ? 0.5 : 0.6],
-      },
-    });
+    // (At night only the 3D trains' windows glow (src/train-kit.js); the dots' warm glow went, Max 2026-11-23: "Night
+    // time should only glow the windows, not the drop".)
     map.addLayer({
       id: 'train-dots',
       type: 'circle',

@@ -183,6 +183,21 @@ try {
   const why = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/Växelfel/.test(why), `531: "${why}"`);
   await shot(page, '06-why-531');
+  // at night only the 3D trains' windows glow, not the dots (Max, 2026-11-23)
+  ok(!(await page.evaluate(() => Boolean(window.__map.getLayer('train-glow')))), 'no glow round the dots at night (only the 3D windows)');
+  // a moving train 8+ minutes late says why it is late (Max, 2026-11-23: "don't see the reason for the delay")
+  const lateOne = await page.evaluate(() => {
+    const c = (window.__last3d ?? []).find(x => (x.v ?? 0) > 5 && !x.stale && (window.__lateness.get(x.id)?.minutes ?? 0) >= 8);
+    return c ? window.__trains.get(c.id)?.number ?? null : null;
+  });
+  if (!lateOne) ok(false, 'a moving train 8+ min late in the replay to test "Why late?" on');
+  else {
+    await openTrainByNumber(page, lateOne);
+    ok(await until(page, () => /why late\?/i.test(document.querySelector('.tr-extras .why')?.innerText ?? ''), 8000),
+      `${lateOne}, moving and late, says why: "${await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '')}"`);
+    await shot(page, '06b-why-late');
+    await openTrainByNumber(page, 531);   // (Share below is 531's)
+  }
 
   // ---- 3. Share (the copied-link way) ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
