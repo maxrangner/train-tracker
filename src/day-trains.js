@@ -75,6 +75,7 @@ export function createDayTrains({ net = null } = {}) {
 
   // route: false for a train far outside the view (src/day-view.js): straight between its points unless its way along
   // the rails is known already (working out every train's way in a fast play cost a frame each time).
+  let deadline = Infinity;   // (at(): the time this call may spend working out ways)
   function placeOf(tr, T, route = true) {
     const k = lastAtOrBefore(tr.spans, T, 'from');
     if (k < 0 || T > tr.spans[k].until) return null;
@@ -89,7 +90,8 @@ export function createDayTrains({ net = null } = {}) {
     }
     const f = (T - a.time) / (b.time - a.time), d = metres(a, b);
     const v = d / ((b.time - a.time) / 1000);
-    const poly = route || tr.way.has(i) ? wayOf(tr, i, a, b) : null;
+    // (a way not worked out yet waits for a later frame when this one has spent its time: straight meanwhile)
+    const poly = tr.way.has(i) ? tr.way.get(i) : route && performance.now() < deadline ? wayOf(tr, i, a, b) : null;
     if (poly) {
       const p = polyAt(poly, f * poly.cum.at(-1));
       return { ...base, lon: p.lon, lat: p.lat, bearing: p.heading ?? a.bearing ?? 0, v: poly.cum.at(-1) / ((b.time - a.time) / 1000) };
@@ -109,8 +111,11 @@ export function createDayTrains({ net = null } = {}) {
     // Every train on the map at T: { id, lon, lat, bearing, syncing: false, stale: false, v (m/s), extra: 0 } as
     // src/trains.js placedAt, and number, brand (company), speed (km/h, its report's), late (minutes), time (its
     // report's time). near(lon, lat): only the trains it says yes to are routed along the rails (the others straight,
-    // until they come near).
-    at(T, { near = null } = {}) {
+    // until they come near). budgetMs: at most this long working out new ways along the rails (a fast play reaches a
+    // new point of every train in view at once, each minute: 45 ms in one frame at x600); the rest are straight until
+    // a later call has the time.
+    at(T, { near = null, budgetMs = Infinity } = {}) {
+      deadline = performance.now() + budgetMs;
       const out = [];
       for (const tr of trains.values()) {
         const p = placeOf(tr, T, !near || nearAt(tr, T, near));

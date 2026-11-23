@@ -232,8 +232,9 @@
     .m-ontime { background: var(--c-ontime); } .m-some { background: var(--c-some); } .m-late { background: var(--c-late); } .m-unknown { background: var(--c-unknown); }
     .src { margin: 8px 2px 0; color: var(--muted); font-size: 12.5px; }
     .set-sub { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
-    #map .map-note { bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); }
-    @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } #map .map-note { bottom: 20px; } }
+    /* A note on the map: at the top, under the live mark (2026-11-23: the scale slider took the bottom right). */
+    #map .map-note { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
+    @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } }
         .panel-star[aria-pressed="true"] { color: var(--c-some); }
     .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .menu-text { margin: 0; color: var(--ink); }

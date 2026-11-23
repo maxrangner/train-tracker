@@ -644,9 +644,11 @@ const NARROW = matchMedia('(max-width: 439px)');
 let sheetPad = 0;
 // The map's free part: above the sheet, and above the ribbon while it is open (the slider and the buttons ride on it).
 function padMap() {
-  const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0;
-  document.documentElement.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
+  const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0, root = document.documentElement;
+  root.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
   map.setSheet(sheetPad + h);
+  // The scale slider (74 px over the sheet and the ribbon, 190 tall) goes when it would reach the live mark at the top.
+  root.classList.toggle('scale-squeezed', innerHeight - (NARROW.matches ? sheetPad + h : 0) - 74 - 190 < 52);
 }
 addEventListener('resize', () => { if (dayView?.isOpen) { padMap(); dayView.draw(); } });
 hooks.onDay = () => {

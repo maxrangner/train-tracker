@@ -294,9 +294,10 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
   for (const type of ['pointerdown', 'wheel', 'touchstart']) el.addEventListener(type, e => e.stopPropagation(), { passive: true });
 
   // ---------- the bubble over a tapped train ----------
-  let bubbleIds = null;
+  let bubbleIds = null, bubbleAll = null, bubbleFor = null, bubbleW = null;
   function bubble(ids) {
     if (!day || T === null || !ids?.length) { hideBubble(); return; }
+    bubbleAll = ids;
     bubbleIds = ids.slice(0, 4);
     const rows = bubbleIds.map(id => day.placeOf(id, T)).filter(Boolean);
     if (!rows.length) { hideBubble(); return; }
@@ -305,17 +306,22 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
       (ids.length > bubbleIds.length ? `<div class="db-more">+${ids.length - bubbleIds.length}</div>` : '') +
       `<small>${esc(t('dayThen', hhmm(T)))}</small>`;
     bubbleEl.hidden = false;
+    bubbleFor = Math.floor(T / 60000);
+    bubbleW = null;   // (measured again where it is placed)
   }
   function hideBubble() { bubbleIds = null; bubbleEl.hidden = true; }
-  // Each frame: over its (first) train's place now, its words as of the moment.
-  let bubbleFor = null;
+  // Each frame: over its (first) train's place now, its words as of the moment; kept on the screen, its point over the
+  // train.
   function placeBubble(project) {
     if (!bubbleIds || T === null) return;
     const p = day.placeOf(bubbleIds[0], T);
     if (!p) { hideBubble(); return; }
-    if (bubbleFor !== Math.floor(T / 60000)) { bubbleFor = Math.floor(T / 60000); bubble(bubbleIds); }
+    if (bubbleFor !== Math.floor(T / 60000)) bubble(bubbleAll);
     const at = project(p.lon, p.lat);
-    bubbleEl.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px) translate(-50%, calc(-100% - 14px))`;
+    bubbleW ??= bubbleEl.offsetWidth;
+    const left = Math.max(8, Math.min(innerWidth - bubbleW - 8, at.x - bubbleW / 2));
+    bubbleEl.style.transform = `translate(${Math.round(left)}px, ${Math.round(at.y)}px) translateY(calc(-100% - 14px))`;
+    bubbleEl.style.setProperty('--ax', `${Math.round(Math.max(14, Math.min(bubbleW - 14, at.x - left)))}px`);
   }
 
   // ---------- open and close ----------
@@ -342,7 +348,7 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
 
   return {
     el, open, close, live, seek, play, tick, relabel, draw, bubble, hideBubble, placeBubble,
-    at: (at, near) => (day ? day.at(at, { near }) : []),
+    at: (at, near) => (day ? day.at(at, { near, budgetMs: 6 }) : []),   // (6 ms a frame for new ways along the rails)
     get isOpen() { return shown; },
     get past() { return T !== null; },
     get moment() { return T; },
@@ -398,7 +404,7 @@ export const DAY_CSS = `
 .sheet-high #day-clock { opacity: 0; }
 #day-bubble { position: fixed; z-index: 4; left: 0; top: 0; pointer-events: none; padding: 6px 10px 6px; border-radius: 12px; background: var(--card); color: var(--ink);
   box-shadow: var(--shadow-s), 0 0 0 2px var(--accent); font: 600 12.5px/1.25 var(--font); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: center; }
-#day-bubble::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 10px; height: 10px; margin-left: -5px; background: var(--card); transform: rotate(45deg);
+#day-bubble::after { content: ''; position: absolute; left: var(--ax, 50%); bottom: -5px; width: 10px; height: 10px; margin-left: -5px; background: var(--card); transform: rotate(45deg);
   box-shadow: 2px 2px 0 0 var(--accent); border-radius: 0 0 2px 0; }
 #day-bubble .db-row { display: flex; align-items: baseline; justify-content: center; gap: 6px; }
 #day-bubble .co { color: var(--muted); font-size: 11.5px; }
