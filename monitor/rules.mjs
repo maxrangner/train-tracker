@@ -88,7 +88,8 @@ const PROBLEMS = {
 };
 
 // The rules' memory. step(row) takes the next minute and gives the mails to send now.
-export function createRules({ summaryAt = '07:00' } = {}) {
+// context() (optional) gives what the summary needs beyond the rows: { version, versionText, days } (monitor/main.mjs).
+export function createRules({ summaryAt = '07:00', context = () => ({}) } = {}) {
   const history = [];
   const open = new Map();        // key -> { since, mailed }
   const lastMail = new Map();    // key -> when its problem mail went
@@ -148,13 +149,32 @@ export function createRules({ summaryAt = '07:00' } = {}) {
     const [sh, sm] = summaryAt.split(':').map(Number), m = row.hour * 60 + row.minute, due = sh * 60 + sm;
     if (m >= due && m < due + 120 && summaryDay !== row.day) {
       summaryDay = row.day;
-      const s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject));
-      mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text });
+      const s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject), context());
+      mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text, html: s.html });
     }
     return out;
   }
 
-  return { step, open: () => [...open].map(([key, o]) => ({ key, subject: PROBLEMS[key].subject, since: o.since })), sent: () => [...sent] };
+  // Over a restart (2026-11-23; monitor/main.mjs keeps the rows and this snapshot in its folder): the history comes back
+  // without judging it (no mails for minutes already judged), and the memory of what was mailed, so the day's summary
+  // lists them, a problem still open gets its "OK again", and the summary isn't sent twice.
+  function snapshot() {
+    return { summaryDay, offlineSince, offlineLast, open: [...open], lastMail: [...lastMail], sent: sent.map(({ html, text, ...m }) => m) };
+  }
+  function restore(rows, snap) {
+    history.length = 0;
+    history.push(...rows.slice(-1440));
+    if (!snap || typeof snap !== 'object') return;
+    const t0 = (rows.at(-1)?.t ?? Date.now()) - 25 * 3600000;
+    if (typeof snap.summaryDay === 'string') summaryDay = snap.summaryDay;
+    for (const [k, o] of Array.isArray(snap.open) ? snap.open : []) if (PROBLEMS[k] && typeof o?.since === 'number') open.set(k, { since: o.since, mailed: o.mailed === true });
+    for (const [k, t] of Array.isArray(snap.lastMail) ? snap.lastMail : []) if (typeof k === 'string' && typeof t === 'number') lastMail.set(k, t);
+    for (const m of Array.isArray(snap.sent) ? snap.sent : []) if (m && typeof m.t === 'number' && m.t > t0 && typeof m.subject === 'string') sent.push(m);
+    // An internet loss going on at the stop: its mail comes when it is back (the minutes in between count as out).
+    if (typeof snap.offlineSince === 'number' && rows.length && rows.at(-1).offline) { offlineSince = snap.offlineSince; offlineLast = snap.offlineLast ?? snap.offlineSince; }
+  }
+
+  return { step, open: () => [...open].map(([key, o]) => ({ key, subject: PROBLEMS[key].subject, since: o.since })), sent: () => [...sent], snapshot, restore };
 }
 
 function detail(key, r) {
@@ -199,13 +219,29 @@ export function dayNumbers(rows) {
   };
 }
 
-export function summary(rows, mails, openKeys) {
+// The versions run in the rows (each row says its version since 2026-11-23): [{ ver, from }], oldest first.
+export function versionsRun(rows) {
+  const out = [];
+  for (const r of rows) if (r.ver && out.at(-1)?.ver !== r.ver) out.push({ ver: r.ver, from: r.t });
+  return out;
+}
+const dayTime = t => new Date(t).toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' });
+export function versionLine(rows, ctx = {}) {
+  const runs = versionsRun(rows);
+  const now = ctx.versionText ?? (runs.at(-1) ? `Spårat ${runs.at(-1).ver}` : null);
+  if (!now) return null;
+  if (runs.length > 1) return `Version: ${now}; updated ${runs.slice(1).map(r => `to ${r.ver} at ${dayTime(r.from)}`).join(', ')} (from ${runs[0].ver}).`;
+  return `Version: ${now}${runs.length ? `, the whole time watched` : ''}.`;
+}
+
+export function summary(rows, mails, openKeys, ctx = {}) {
   const d = dayNumbers(rows);
   const problems = mails.filter(m => m.kind === 'problem' || m.kind === 'offline');
   const fine = !problems.length && !openKeys.length;
   const day = rows.length ? new Date(rows.at(-1).t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : '';
   const lines = [
     rows.length < 1380 ? `(The monitor has watched for ${Math.round(rows.length / 60 * 10) / 10} h of the last 24.)` : 'The last 24 hours:',
+    versionLine(rows, ctx),
     '',
     `Fetcher: running ${d.upPct} % of the time, ${d.restarts} restart(s)${d.offlineMin ? `; internet out ${d.offlineMin} min in all` : ''}.`,
     `Trafikverket: ${d.asks} questions (${(d.asks / Math.max(1, d.minutes)).toFixed(1)} a minute, most ${d.asksMax} in one minute), ${d.streamsOpened} stream(s) opened, ${d.refused} "too many requests", ${MB(d.bytesIn)} received.`,

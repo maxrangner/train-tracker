@@ -8,18 +8,20 @@
 // Test options: --minutes N (stop after N minutes), --test-offline A,AxL (from minute A pretend no internet for 1 or L
 // minutes: the read of one.com and mails fail), --summary-at HH:MM (instead of 07:00).
 //
-// What it keeps: a row a minute for 24 hours in memory; one line per day in days.jsonl (in the service's own folder,
-// STATE_DIRECTORY, or DAY_DIR). Nothing else is written.
+// What it keeps, in the service's own folder (STATE_DIRECTORY, or DAY_DIR): a row a minute for 25 hours in rows.jsonl
+// and the mail rules' memory in state.json (since 2026-11-23: an update or a restart kept nothing, and the next summary
+// covered only the hours since), and one line per day in days.jsonl. Nothing else is written.
 import { createServer, get as httpGet } from 'node:http';
-import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, appendFileSync, mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { createRules, dayNumbers, isOffline } from './rules.mjs';
 import { swedishParts } from '../src/clock.js';
 import { createMailer } from './mail.mjs';
 
-const MIN = 60000;
 const args = process.argv.slice(2);
 const arg = (name, dflt = null) => { const i = args.indexOf(name); return i < 0 ? dflt : args[i + 1]; };
+// --test-minute-ms N: a "minute" of N ms, all timers scaled (tools/monitor-check.mjs runs the monitor for real in seconds).
+const MIN = Number(arg('--test-minute-ms', 60000));
 const envPath = arg('--env', process.env.SPARAT_MONITOR_ENV ?? 'monitor.env');
 function readEnv(path) {
   if (!existsSync(path)) return {};
@@ -36,7 +38,21 @@ const DATA_URL = cfg.MONITOR_DATA_URL ? cfg.MONITOR_DATA_URL.replace(/\/?$/, '/'
 const PAGE_PORT = Number(cfg.MONITOR_PORT ?? 8092);
 const DAY_DIR = process.env.STATE_DIRECTORY ?? cfg.MONITOR_DAY_DIR ?? 'monitor-days';
 const summaryAt = arg('--summary-at', cfg.MONITOR_SUMMARY_AT ?? '07:00');
+// The outside warning while home is dark (deploy.md section 10; Max, 2026-11-23): an address called once a minute
+// (healthchecks.io); it mails Max when the calls stop. Empty: off.
+const PING_URL = /^https?:\/\/[^\s]+$/.test(cfg.MONITOR_PING_URL ?? '') ? cfg.MONITOR_PING_URL : '';
 const log = (...a) => console.log(new Date(Date.now()).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }), ...a);
+// The version running (Max, 2026-11-23: the mails didn't tell; it had to be worked out from the restarts): the
+// package's MANIFEST.json (tools/pack-linux.mjs) beside monitor/; none when run from the project folder ("dev").
+const VERSION = (() => {
+  try {
+    const m = JSON.parse(readFileSync(new URL('../MANIFEST.json', import.meta.url), 'utf8'));
+    const v = typeof m.version === 'string' && /^[\w.+-]{1,30}$/.test(m.version) ? m.version : null;
+    const c = typeof m.commit === 'string' && /^[\w+]{1,20}$/.test(m.commit) ? m.commit : null;
+    return v ? { version: v, commit: c } : { version: 'dev', commit: null };
+  } catch { return { version: 'dev', commit: null }; }
+})();
+const versionText = `Spårat ${VERSION.version}${VERSION.commit ? ` (commit ${VERSION.commit})` : ''}`;
 
 // The fetcher's status: over HTTP (MONITOR_FETCHER=http://127.0.0.1:8091/status, Windows and tests), or from its local
 // socket file (MONITOR_FETCHER=unix:/run/sparat/status.sock, the Linux service: no network address, plan step 2).
@@ -66,8 +82,8 @@ const offlineSpans = (arg('--test-offline') ?? '').split(',').filter(Boolean).ma
 const startT = Date.now();
 const testOffline = () => offlineSpans.some(([a, b]) => Date.now() - startT >= a && Date.now() - startT < b);
 
-const rules = createRules({ summaryAt });
-const mailer = createMailer(cfg, log, { offline: testOffline });
+const rules = createRules({ summaryAt, context: () => summaryContext() });
+const mailer = createMailer(cfg, log, { offline: testOffline, version: versionText });
 
 // ---------- watching the fetcher (every 15 s) ----------
 let cur = null;               // the newest status from the fetcher
@@ -137,7 +153,7 @@ function localParts(t) {
 async function minuteRow() {
   const one = await readOne();
   const t = Date.now();
-  const fresh = cur && t - cur.seenAt < 30000 ? cur : null;
+  const fresh = cur && t - cur.seenAt < MIN / 2 ? cur : null;
   const up = minuteUp > 0 && fresh !== null;
   // Counts since the last row; after a restart the new process counts from zero.
   const b = fresh && base && base.pid === fresh.pid ? base : null;
@@ -158,6 +174,7 @@ async function minuteRow() {
     one,
     sizes: fresh ? Object.fromEntries(Object.entries(fresh.sizes ?? {}).map(([k, s]) => [k, s.gz])) : {},
     memMB: fresh?.memoryMB ?? null, cpuPct: elapsed > 0 ? Math.round(1000 * cpuMs / elapsed) / 10 : null,
+    ver: VERSION.version,
   };
   row.offline = isOffline(row);
   if (fresh) base = fresh;
@@ -168,9 +185,11 @@ async function minuteRow() {
 // ---------- the day file ----------
 function writeDay(dayRows, partial = false) {
   if (!dayRows.length) return;
+  const day = dayRows[0].day;
+  const problems = rules.sent().filter(m => (m.kind === 'problem' || m.kind === 'offline') && swedishParts(m.t).day === day).length;
   try {
     mkdirSync(DAY_DIR, { recursive: true });
-    appendFileSync(join(DAY_DIR, 'days.jsonl'), JSON.stringify({ day: dayRows[0].day, partial: partial || dayRows.length < 1380, ...dayNumbers(dayRows) }) + '\n');
+    appendFileSync(join(DAY_DIR, 'days.jsonl'), JSON.stringify({ day, partial: partial || dayRows.length < 1380, ...dayNumbers(dayRows), problems, ver: dayRows.at(-1).ver ?? null }) + '\n');
   } catch (e) { log(`day file: ${e.message}`); }
 }
 function readDays() {
@@ -178,31 +197,86 @@ function readDays() {
     return readFileSync(join(DAY_DIR, 'days.jsonl'), 'utf8').trim().split('\n').filter(Boolean).slice(-90).map(l => JSON.parse(l));
   } catch { return []; }
 }
+// What the summary needs beyond the rows (monitor/rules.mjs): the version, the days before, the viewers.
+function summaryContext() {
+  return { version: VERSION.version, versionText, days: readDays() };
+}
+
+// ---------- the minutes and the rules' memory over a restart (2026-11-23) ----------
+const ROWS_FILE = join(DAY_DIR, 'rows.jsonl'), STATE_FILE = join(DAY_DIR, 'state.json');
+const KEEP_MS = 25 * 3600000;
+function writeAtomic(path, text) {
+  mkdirSync(DAY_DIR, { recursive: true });
+  writeFileSync(path + '.new', text); renameSync(path + '.new', path);
+}
+function restore() {
+  let kept = [];
+  try {
+    const cut = Date.now() - KEEP_MS;
+    kept = readFileSync(ROWS_FILE, 'utf8').split('\n').filter(Boolean)
+      .map(l => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(r => r && typeof r.t === 'number' && r.t > cut && r.t < Date.now() + 60000)
+      .sort((a, b) => a.t - b.t);
+    writeAtomic(ROWS_FILE, kept.map(r => JSON.stringify(r) + '\n').join(''));
+  } catch (e) { if (e.code !== 'ENOENT') log(`rows file: ${e.message}`); }
+  let state = null;
+  try { state = JSON.parse(readFileSync(STATE_FILE, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') log(`state file: ${e.message}`); }
+  rows.push(...kept.slice(-1500));
+  rules.restore(kept, state);
+  if (kept.length) log(`kept from before: ${kept.length} minutes (from ${new Date(kept[0].t).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' })})`);
+}
+let rowsSinceTrim = 0;
+function keepRow(row) {
+  try {
+    mkdirSync(DAY_DIR, { recursive: true });
+    if (++rowsSinceTrim >= 60) {   // once an hour the file is cut back to 25 hours
+      rowsSinceTrim = 0;
+      writeAtomic(ROWS_FILE, rows.filter(r => r.t > Date.now() - KEEP_MS).map(r => JSON.stringify(r) + '\n').join(''));
+    } else appendFileSync(ROWS_FILE, JSON.stringify(row) + '\n');
+  } catch (e) { log(`rows file: ${e.message}`); }
+}
+function keepState() {
+  try { writeAtomic(STATE_FILE, JSON.stringify(rules.snapshot())); } catch (e) { log(`state file: ${e.message}`); }
+}
+
+// ---------- the outside warning: a call a minute ----------
+const ping = { ok: 0, failed: 0, lastOkAt: null, lastError: null };
+function sendPing() {
+  if (!PING_URL || testOffline()) return;
+  fetch(PING_URL, { signal: AbortSignal.timeout(10000) })
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); if (ping.lastError) log('outside warning: calls answered again'); ping.ok++; ping.lastOkAt = Date.now(); ping.lastError = null; })
+    .catch(e => { if (!ping.lastError) log(`outside warning: call failed (${e.cause?.code ?? e.message})`); ping.failed++; ping.lastError = String(e.cause?.code ?? e.message).slice(0, 200); });
+}
 
 // ---------- each minute ----------
 const mails = [];             // the mails made (for the page), newest last
 async function tick() {
   // The first row only after at least 50 s of watching (a row made seconds after the start would say "not running"
   // for a fetcher that was just slower to start).
-  if (Date.now() - startT < 50000) { minuteUp = 0; minuteRestarts = 0; minutePolls = 0; return; }
+  if (Date.now() - startT < MIN * 5 / 6) { minuteUp = 0; minuteRestarts = 0; minutePolls = 0; return; }
   let row;
   try { row = await minuteRow(); } catch (e) { log(`row: ${e.message}`); return; }
   const prev = rows.at(-1);
   if (prev && prev.day !== row.day) writeDay(rows.filter(x => x.day === prev.day));
   rows.push(row);
   while (rows.length > 1500) rows.shift();   // 25 hours: the day the clock goes back has 1,500 minutes (1,440 lost its first hour)
+  keepRow(row);
+  sendPing();
   if (prev?.offline && !row.offline) mailer?.nudge();
-  for (const m of rules.step(row)) {
+  const made = rules.step(row);
+  for (const m of made) {
     log(`${m.kind}: ${m.subject}`);
     mails.push(m); if (mails.length > 200) mails.shift();
     mailer?.send(m);
   }
+  if (made.length || row.minute % 10 === 0) keepState();
 }
 
 // ---------- the page and the data (this computer only) ----------
 const PAGE = new URL('./page.html', import.meta.url);
 const data = () => ({
   now: Date.now(), startedAt: startT, summaryAt, dataUrl: DATA_URL, mailTo: cfg.MAIL_TO ?? null, mail: mailer?.stats() ?? null,
+  version: versionText, ping: PING_URL ? { ...ping } : null,
   fetcher: cur ? { up: Date.now() - cur.seenAt < 30000, pid: cur.pid, startedAt: cur.startedAt, feeds: cur.feeds, state: cur.state,
     upload: cur.upload, sizes: cur.sizes, memoryMB: cur.memoryMB, seenAt: cur.seenAt } : null,
   open: rules.open(), mails: mails.slice(-50), rows, days: readDays(),
@@ -219,10 +293,11 @@ server.on('error', e => log(`page: ${e.code === 'EADDRINUSE' ? `port ${PAGE_PORT
 server.listen(PAGE_PORT, '127.0.0.1');
 
 // ---------- timers ----------
+restore();
 poll();
-const pollTimer = setInterval(poll, 15000);
+const pollTimer = setInterval(poll, MIN / 4);
 let minuteTimer = null;
-function nextMinute() { minuteTimer = setTimeout(async () => { await tick(); nextMinute(); }, MIN - (Date.now() % MIN) + 1000); }
+function nextMinute() { minuteTimer = setTimeout(async () => { await tick(); nextMinute(); }, MIN - (Date.now() % MIN) + MIN / 60); }
 nextMinute();
 
 function stop(why) {
@@ -230,6 +305,7 @@ function stop(why) {
   clearInterval(pollTimer); clearTimeout(minuteTimer);
   const last = rows.at(-1);
   if (last) writeDay(rows.filter(x => x.day === last.day), true);
+  keepState();
   server.close(); mailer?.close();
   setTimeout(() => process.exit(0), 200);
 }
@@ -237,4 +313,4 @@ process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));
 const minutes = arg('--minutes') ? Number(arg('--minutes')) : null;
 if (minutes) setTimeout(() => stop(`${minutes} minutes`), minutes * MIN);
-log(`started (${envPath}; fetcher ${FETCHER}; one.com ${DATA_URL || 'not set'}; mail ${mailer ? `to ${cfg.MAIL_TO}` : 'off'}; page http://127.0.0.1:${PAGE_PORT}/; days in ${DAY_DIR}; Node ${process.version})`);
+log(`started (${versionText}; ${envPath}; outside warning ${PING_URL ? 'on' : 'off'}; fetcher ${FETCHER}; one.com ${DATA_URL || 'not set'}; mail ${mailer ? `to ${cfg.MAIL_TO}` : 'off'}; page http://127.0.0.1:${PAGE_PORT}/; days in ${DAY_DIR}; Node ${process.version})`);
