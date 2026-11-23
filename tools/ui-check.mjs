@@ -84,8 +84,9 @@ try {
       const company = await page.evaluate(h => { const b = document.querySelector(`${h} [data-filter="brand"]`); b.click(); return b.dataset.v; }, home);
       await sleep(900);
       const open = await drawn();
-      await page.evaluate(() => document.querySelector('#sheet .show-only')?.click());
-      await sleep(300);
+      // (a company picked on Home is a filter at once, its "Show only" already on: Max, 2026-11-23)
+      const pressed = await page.evaluate(() => document.querySelector('#sheet .show-only')?.getAttribute('aria-pressed'));
+      expect(pressed === 'true', `a company picked on Home is a filter at once: its "Show only" pressed (${pressed})`);
       await back(page);
       await sleep(500);
       const only = await drawn();
