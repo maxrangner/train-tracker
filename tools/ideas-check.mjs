@@ -138,7 +138,12 @@ try {
   });
   ok(onMap.sigs.join(',') === 'Lu,Hm,Hb', `the trip's stations named on the map: ${onMap.sigs.join(', ')}`);
   ok(onMap.drawn.drawn < onMap.drawn.all, `only its next trains lit: ${onMap.drawn.drawn} of ${onMap.drawn.all} drawn`);
-  ok(onMap.inView, 'its stations all in view');
+  // (the camera may still be gliding there: once the trip's trains are in, it fits again)
+  const inView = onMap.inView || await until(page, () => {
+    const b = window.__map.getBounds();
+    return ['Lu', 'Hm', 'Hb'].every(s => { const st = window.__stationAt(s); return st && b.contains([st.lon, st.lat]); });
+  }, 4000);
+  ok(inView, `its stations all in view${onMap.inView ? '' : ' (after the camera settled)'}`);
   // its change taken away again in Edit (Max, 2026-11-23: an added stop couldn't be removed): the × on the change field
   await page.evaluate(() => window.__stack.open('edittrip:Lu>Hm>Hb'));
   ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x'))), 'Edit of a trip with a change: its change field has a ×');
