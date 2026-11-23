@@ -32,7 +32,7 @@ try {
     const r = el.getBoundingClientRect();
     return { x: r.x + 20, y: r.y + r.height / 2 };
   });
-  await mouseDrag(at.x, at.y, 600, -380);
+  await mouseDrag(at.x, at.y, 600, 380);   // (down: on a computer the sheet hangs from the top, 2026-11-23)
   ok(await page.evaluate(() => window.__stack.level) > 1, 'a mouse pull by Home\'s text raises the sheet');
   const left = await selected();
   ok(!left.trim(), `no text selected after the pull${left.trim() ? ` (selected: "${left.trim().slice(0, 40)}")` : ''}`);
