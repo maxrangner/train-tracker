@@ -113,6 +113,7 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
   for (const k of ['SFTP_HOST', 'SFTP_USER', 'SFTP_PASS', 'SFTP_DIR', 'SFTP_HOSTKEY'])
     if (!cfg[k]) throw new Error(`--upload needs ${k} in the settings file`);
   const dir = checkDir(cfg.SFTP_DIR);
+  const COUNT_DIR = `${dir.slice(0, dir.lastIndexOf('/'))}/count/days`, COUNT_NAME = /^\d{4}-\d\d-\d\d\.txt$/;
   const queue = [];         // [{ op: 'put' | 'rm', name, f }]
   const stats = { ok: 0, failed: 0, removed: 0, reconnects: 0, lastOkAt: null, lastMs: null, connected: false, swept: 0,
     bytes: 0, lastError: null, lastErrorAt: null, refused: null, skipped: 0, forgotten: 0 };
@@ -295,6 +296,23 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     // kind -> the newest file of that kind on one.com, for the live file (fetcher/main.mjs liveTick).
     names: () => Object.fromEntries([...onSite].map(([kind, l]) => [kind, l[l.length - 1].name])),
     sweep,
+    // The viewer count's day files (count/i.php writes them; fetcher/viewers.mjs counts; 2026-11-23): only reading,
+    // only that folder beside Spårat's data folder (<site>/count/days), only names like 2026-11-23.txt.
+    async listCount() {
+      if (!sftp) throw new Error('not connected to one.com');
+      try { return (await call('readdir', COUNT_DIR)).map(e => e.filename).filter(n => COUNT_NAME.test(n)); } catch (e) { if (e.code === 2) return []; throw e; }
+    },
+    readCount(name, offset = 0) {
+      if (!COUNT_NAME.test(name)) return Promise.reject(new Error(`not a count file: ${name}`));
+      if (!sftp) return Promise.reject(new Error('not connected to one.com'));
+      return new Promise((res, rej) => {
+        const parts = [];
+        const s = sftp.createReadStream(`${COUNT_DIR}/${name}`, { start: offset });
+        s.on('data', c => parts.push(c));
+        s.on('end', () => res(Buffer.concat(parts).toString('utf8')));
+        s.on('error', e => (e.code === 2 ? res('') : rej(e)));
+      });
+    },
     // The live test (main.mjs --test-breaks): drop the connection and refuse to connect for ms, like a lost internet.
     breakFor(ms) { blockedUntil = Date.now() + ms; if (client) broken(new Error('test break')); },
     close() {

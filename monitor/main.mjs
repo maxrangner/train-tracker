@@ -106,6 +106,17 @@ function cleanStatus(s) {
     sizes: Object.fromEntries(Object.entries(obj(s.sizes)).filter(([k]) => /^[a-z-]{1,20}$/.test(k))
       .map(([k, v]) => [k, { name: /^[a-z0-9.-]{1,60}$/.test(obj(v).name ?? '') ? v.name : null, bytes: num(obj(v).bytes), gz: num(obj(v).gz) }])),
     cpu: pick(obj(s.cpu), ['user', 'system']),
+    viewers: cleanViewers(s.viewers),
+  };
+}
+// The viewer count (fetcher/viewers.mjs; 2026-11-23): days and hours, numbers only.
+function cleanViewers(v) {
+  if (!v || typeof v !== 'object') return null;
+  const list = (a, n) => (Array.isArray(a) ? a.slice(-n) : []);
+  return {
+    at: num(v.at), error: text(v.error),
+    days: list(v.days, 10).filter(d => /^\d{4}-\d\d-\d\d$/.test(obj(d).day ?? '')).map(d => ({ day: d.day, ...pick(d, ['people', 'app', 'site', 'peak', 'peakAt']) })),
+    hours: list(v.hours, 30).map(h => pick(obj(h), ['t', 'people', 'peak'])).filter(h => h.t !== null),
   };
 }
 let lastPid = null, minutePolls = 0, minuteUp = 0, minuteRestarts = 0;
@@ -189,7 +200,9 @@ function writeDay(dayRows, partial = false) {
   const problems = rules.sent().filter(m => (m.kind === 'problem' || m.kind === 'offline') && swedishParts(m.t).day === day).length;
   try {
     mkdirSync(DAY_DIR, { recursive: true });
-    appendFileSync(join(DAY_DIR, 'days.jsonl'), JSON.stringify({ day, partial: partial || dayRows.length < 1380, ...dayNumbers(dayRows), problems, ver: dayRows.at(-1).ver ?? null }) + '\n');
+    const v = cur?.viewers?.days?.find(d => d.day === day) ?? null;
+    appendFileSync(join(DAY_DIR, 'days.jsonl'), JSON.stringify({ day, partial: partial || dayRows.length < 1380, ...dayNumbers(dayRows), problems, ver: dayRows.at(-1).ver ?? null,
+      viewers: v && { people: v.people, app: v.app, site: v.site, peak: v.peak } }) + '\n');
   } catch (e) { log(`day file: ${e.message}`); }
 }
 function readDays() {
@@ -199,7 +212,7 @@ function readDays() {
 }
 // What the summary needs beyond the rows (monitor/rules.mjs): the version, the days before, the viewers.
 function summaryContext() {
-  return { version: VERSION.version, versionText, days: readDays() };
+  return { version: VERSION.version, versionText, days: readDays(), viewers: cur?.viewers ?? null };
 }
 
 // ---------- the minutes and the rules' memory over a restart (2026-11-23) ----------
