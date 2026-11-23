@@ -70,6 +70,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     if (!station) return;
     station = null;
     finding = false; dayRows = null;
+    hold(false);
     el.classList.remove('finding');
     msgs = [];
     clearInterval(timer);
@@ -165,17 +166,23 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   // ---- The search: the station's whole day ----
   // Opened: the station's messages fold (the field stays above the phone's keyboard; Max, 2026-11-21), the card goes
   // full in one glide, the board's rows stay (dimmed) until the day is in: nothing empties to "Laddar…" on the way.
+  // While the day comes, the card keeps at least the height it had (2026-11-23, sheet-moves-check: with its messages
+  // open the card went 1004 → 938 px as they folded, then 11528 px with the day: a dip, then up). Let go once the day is
+  // drawn (or failed, or the search closed).
+  const hold = (on) => { el.style.minHeight = on ? `${Math.round(el.getBoundingClientRect().height)}px` : ''; };
   function startFind() {
     if (!forced()) ownFull = el.classList.contains('full');
     finding = true; query = ''; closingFind = null;
     const old = el.querySelector('.bd-head') ? `<div class="busy">${el.querySelector('.bd-head').outerHTML}${el.querySelector('.panel-table')?.outerHTML ?? ''}</div>` : '';
     msgsOpen = false;
+    hold(true);
     glide(el, () => { el.classList.add('full', 'finding'); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind(); });
     el.querySelector('.board-q')?.focus();
     findRefresh({ toNow: true });
   }
   // Closed: the day stays (dimmed) until the board's rows are in, then one glide back (refresh's paint).
   function stopFind() {
+    hold(false);
     closingFind = { full: backTo() };
     finding = false; dayRows = null;
     el.querySelector('.board-qrow')?.remove();
@@ -199,12 +206,13 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       if (n !== asked || !finding || station?.sig !== sig || act !== activity) return;
       dayRows = rows; dayFor = `${sig}|${act}`; dayAt = Date.now();
     } catch (e) {
-      if (n === asked && finding) { const f = el.querySelector('.board-found'); if (f) f.innerHTML = stateHtml('error', t('boardFailed', e.message)); }
+      if (n === asked && finding) { hold(false); const f = el.querySelector('.board-found'); if (f) f.innerHTML = stateHtml('error', t('boardFailed', e.message)); }
       return;
     }
     if (!el.querySelector('.board-q')) { frame(findHtml('')); wireFind(); }
     el.querySelector('.board-found')?.classList.remove('busy');
     drawFound({ toNow });
+    hold(false);
   }
   // A train number (its start) or a destination's name (any part; arrivals: where it comes from).
   function drawFound({ toNow = false } = {}) {
@@ -251,7 +259,10 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   function open(st) {
     station = { sig: st.sig, name: st.name };
     finding = false; query = ''; dayRows = null; closingFind = null; ownFull = false;
-    el.classList.remove('finding');
+    hold(false);
+    // (opened anew it is compact: a 'full' left from the last station's search raised the sheet to full on the way back
+    // from a train, and again on any later change of the card's classes, also during a pull down: 2026-11-23)
+    el.classList.remove('finding', 'full');
     activity = 'Avgang';
     rowsSeen = new Set();
     msgs = [];

@@ -3,7 +3,8 @@
 //   (time, expected time, track, lateness, cancelled ones crossed out), "If it fails: next is 17:08", or "No direct
 //   train today"; with a via the pairs with the minutes to change and both tracks, tight in yellow, lost in red.
 // - "+ New trip" (Home's Mine) and "Save a trip from here" (a board): the page 'newtrip' / 'newtrip:<from>' picks the
-//   stations with a station search.
+//   stations with a station search. A saved trip's page has Edit ('edittrip:<key>': the same form, filled in) and
+//   Delete (two taps).
 // - "Add my change" (a train's page): 'addchange:<train id>' picks a later stop of the train, then a train leaving
 //   there; the pair is pinned as 'change:<key>' (today only).
 // - The line above the bar ('trip', priority 20): the next train of the saved trip (or pinned change) whose next train
@@ -197,15 +198,42 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     : `<div class="trip-chg ${changeClass(ch)}">${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
       (ch?.lost && rescue ? `<div class="trip-chg rescue">${icon('change', 16)}<span>${esc(t('changeRescue', hhmm(when(rescue.second.dep)), rescue.second.number, rescue.change.tracks[1]))}</span></div>` : ''));
 
+  // A saved trip's Edit and Delete (Max, 2026-11-23: saved trips "can't be edited or deleted"). Delete takes two taps:
+  // the first turns it red, "Tap again to delete", for DELETE_ARMED_MS; a second tap sooner than DELETE_GAP_MS (a
+  // double tap, a finger bouncing) doesn't count.
+  const DELETE_ARMED_MS = 4000, DELETE_GAP_MS = 450;
   function tripPage(key) {
     const trip = tripOf(key);
     if (!trip) return null;
-    let el = null;
+    let el = null, armedAt = 0, disarm = 0;
+    const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
+    function act(e) {
+      const b = e.target.closest('[data-trip]');
+      if (!b) return;
+      if (b.dataset.trip === 'edit') { stack.open(`edittrip:${trip.key}`); return; }
+      const since = performance.now() - armedAt;
+      if (since < DELETE_GAP_MS) return;
+      if (since < DELETE_ARMED_MS) {
+        clearTimeout(disarm);
+        favourites.removeTrip(trip.key);
+        results.delete(trip.key);
+        drawLine();
+        redrawHome();
+        stack.close(`trip:${trip.key}`);
+        return;
+      }
+      armedAt = performance.now();
+      draw();
+      clearTimeout(disarm);
+      disarm = setTimeout(draw, DELETE_ARMED_MS + 50);
+    }
     function draw() {
       if (!el) return;
       const r = results.get(trip.key), n = nextOf(trip);
+      const acts = favourites.trip(trip.key) ? `<div class="trip-acts"><button type="button" class="chip" data-trip="edit">${icon('edit', 16)}<span>${esc(t('tripEdit'))}</span></button>` +
+        `<button type="button" class="chip trip-del${armed() ? ' armed' : ''}" data-trip="del">${icon('trash', 16)}<span>${esc(t(armed() ? 'tripDeleteAgain' : 'tripDelete'))}</span></button></div>` : '';
       const head = `<div class="g-head"><span class="r-ic trip">${icon('trip', 18)}</span><b class="ttl">${esc(tripName(trip))}</b></div>` +
-        `<p class="sub">${esc(trip.via ? t('tripVia', stationName(trip.via)) : t('tripToday'))}</p>`;
+        `<p class="sub">${esc(trip.via ? t('tripVia', stationName(trip.via)) : t('tripToday'))}</p>${acts}`;
       let body;
       if (!r) body = stateHtml('loading', t('loading'));
       else if (r.error) body = stateHtml('error', t('tripNoAnswer'));
@@ -229,11 +257,12 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     }
     return {
       name: () => tripName(trip), kind: 'trip',
-      mount(page) { el = page; openRow(el); },
-      show() { draw(); load(trip).then(() => { draw(); drawLine(); }); },
+      mount(page) { el = page; openRow(el); el.addEventListener('click', act); },
+      show() { armedAt = 0; draw(); load(trip).then(() => { draw(); drawLine(); }); },
       every() { if (due(trip)) load(trip).then(draw); else draw(); },
+      unmount() { clearTimeout(disarm); },
       star: { on: () => Boolean(favourites.trip(trip.key)),
-        toggle: () => { if (favourites.trip(trip.key)) favourites.removeTrip(trip.key); else favourites.addTrip(trip.from, trip.to, trip.via); drawLine(); redrawHome(); } },
+        toggle: () => { if (favourites.trip(trip.key)) favourites.removeTrip(trip.key); else favourites.addTrip(trip.from, trip.to, trip.via); drawLine(); redrawHome(); draw(); } },
       redraw: () => { if (el) el._h = ''; draw(); },
     };
   }
@@ -275,34 +304,67 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   }
 
   // ---------- a new trip: From, To and an optional Via, each picked with a station search ----------
-  function newTripPage(key) {
-    const from0 = key.includes(':') ? key.slice(key.indexOf(':') + 1) : null;
-    const st = { from: from0, to: null, via: null, editing: from0 ? 'to' : 'from', wantVia: false };
+  // edit: a saved trip ('edittrip:<key>', its page's Edit): the form filled in; saving puts the new stations in its place.
+  function newTripPage(key, edit = null) {
+    const from0 = !edit && key.includes(':') ? key.slice(key.indexOf(':') + 1) : null;
+    const st = edit ? { from: edit.from, to: edit.to, via: edit.via ?? null, editing: null, wantVia: Boolean(edit.via) }
+      : { from: from0, to: null, via: null, editing: from0 ? 'to' : 'from', wantVia: false };
     let el = null;
+    // The station search sits right under the field it fills (Max's phone, 2026-11-23: under all the fields it was a
+    // tall pill, and the keyboard covered its results).
+    const search = `<input class="nt-q board-q" type="search" placeholder="${esc(t('stationPh'))}" autocomplete="off" spellcheck="false" enterkeyhint="search"><div class="rows nt-res"></div>`;
     const field = (f, label) => `<button type="button" class="nt-field${st.editing === f ? ' on' : ''}" data-nt="${f}"><small>${esc(label)}</small>` +
-      `<b>${esc(st[f] ? stationName(st[f]) : t('chooseStation'))}</b></button>`;
+      `<b>${esc(st[f] ? stationName(st[f]) : t('chooseStation'))}</b></button>${st.editing === f ? search : ''}`;
     function found(q) {
       const list = q ? findStations(q).slice(0, 8) : [];
       return list.map(s => `<button type="button" class="row" data-pick="${esc(s.sig)}"><span class="r-ic"><i class="ring"></i></span><span class="r-main"><b>${esc(s.name)}</b></span></button>`).join('')
         || (q ? `<p class="empty">${esc(t('noStationFound'))}</p>` : '');
     }
+    // While typing, the field being filled goes to the top of the sheet (at full) and its results right under it, above
+    // the keyboard (the keyboard shrinks the page: interactive-widget=resizes-content; visualViewport for a phone that
+    // lays it over the page). The room under the results lets the page scroll that far (.nt-room).
+    const toTop = () => {
+      const f = el?.querySelector('.nt-field.on');
+      if (!f || stack.level < 2 || stack.top() !== key) return;
+      el.scrollTop += f.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
+    };
+    const typing = () => { const q = el?.querySelector('.nt-q'); return Boolean(q && document.activeElement === q); };
+    const onResize = () => { if (typing()) { toTop(); setTimeout(toTop, 250); } };
     function draw() {
       const can = st.from && st.to && st.from !== st.to;
-      el.innerHTML = `<b class="ttl">${esc(t('newTrip'))}</b><p class="sub">${esc(t('newTripLong'))}</p><div class="nt-fields">` +
+      el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p><div class="nt-fields">` +
         field('from', t('tripFrom')) + field('to', t('tripTo')) +
         (st.wantVia || st.via ? field('via', t('tripViaLabel')) : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
-        (st.editing ? `<input class="nt-q board-q" type="search" placeholder="${esc(t('stationPh'))}" autocomplete="off" spellcheck="false" enterkeyhint="search"><div class="rows nt-res"></div>` : '') +
-        `<button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button>`;
-      const q = el.querySelector('.nt-q');
+        `<button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
+      const q = el.querySelector('.nt-q'), room = el.querySelector('.nt-room');
       if (q) {
         q.oninput = () => { el.querySelector('.nt-res').innerHTML = found(q.value.trim()); };
-        q.onfocus = () => { if (stack.level < 2) stack.setLevel(2); };
+        q.onfocus = () => {
+          room.hidden = false;
+          if (stack.level < 2) stack.setLevel(2);
+          toTop();
+          requestAnimationFrame(toTop);
+        };
+        // (kept while it holds text: a tap on a result blurs the field first, and the room going then would move the
+        // result from under the finger)
+        q.onblur = () => { if (!q.value) room.hidden = true; };
       }
     }
+    function save() {
+      if (!(st.from && st.to && st.from !== st.to)) return;
+      const via = st.via && st.via !== st.from && st.via !== st.to ? st.via : null;
+      const k = edit ? favourites.replaceTrip(edit.key, st.from, st.to, via) : favourites.addTrip(st.from, st.to, via);
+      if (edit && k !== edit.key) { results.delete(edit.key); stack.close(`trip:${edit.key}`); }
+      refreshAll();
+      if (stack.has(`trip:${k}`)) stack.open(`trip:${k}`);   // (edited: back to its page, drawn again)
+      else stack.replace(`trip:${k}`);
+    }
     return {
-      name: () => t('newTrip'), kind: 'newtrip',
+      name: () => t(edit ? 'editTrip' : 'newTrip'), kind: 'newtrip',
       mount(page) {
         el = page;
+        addEventListener('resize', onResize);
+        visualViewport?.addEventListener('resize', onResize);
         el.addEventListener('click', (e) => {
           const pick = e.target.closest('[data-pick]'), b = e.target.closest('[data-nt]');
           if (pick) {
@@ -313,19 +375,14 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           }
           if (!b) return;
           const f = b.dataset.nt;
-          if (f === 'save') {
-            if (!(st.from && st.to && st.from !== st.to)) return;
-            const k = favourites.addTrip(st.from, st.to, st.via && st.via !== st.from && st.via !== st.to ? st.via : null);
-            refreshAll();
-            stack.replace(`trip:${k}`);
-            return;
-          }
+          if (f === 'save') { save(); return; }
           if (f === 'addvia') { st.wantVia = true; st.editing = 'via'; } else st.editing = st.editing === f ? null : f;
           draw();
           if (st.editing) el.querySelector('.nt-q')?.focus({ preventScroll: true });
         });
       },
       show() { draw(); },
+      unmount() { removeEventListener('resize', onResize); visualViewport?.removeEventListener('resize', onResize); },
       redraw: () => draw(),
     };
   }
@@ -393,6 +450,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (type === 'trip') return tripPage(key.slice(5));
     if (type === 'change') return changePage(key.slice(7));
     if (type === 'newtrip') return newTripPage(key);
+    if (type === 'edittrip') { const trip = favourites.trip(key.slice(9)); return trip ? newTripPage(key, { ...trip }) : null; }
     if (type === 'addchange') return addChangePage(key);
     return undefined;
   }
