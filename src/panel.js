@@ -342,9 +342,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const trip = `<div class="cd-trip"><div class="cd-bar"><span class="cd-done" style="width:${pct(here)}"></span>` +
       `<i class="cd-first"></i>${!isEnd && goal.i !== nextIdx ? `<i class="cd-goal" style="left:${pct(frac((goal.s.arr ?? goal.s.dep).planned))}"></i>` : ''}` +
       `<i class="cd-train" style="left:${pct(here)}"></i><i class="cd-end${isEnd ? ' goal' : ''}"></i></div>` +
-      `<div class="cd-names"><span>${esc(stationName(stops[0].station))}</span>` +
-      `<b class="${goal.i === nextIdx ? 'goal' : ''}">${esc(nextName)}</b>` +
-      `<span class="${isEnd ? 'goal' : ''}">${esc(stationName(stops.at(-1).station))}</span></div></div>`;
+      `<div class="cd-names"><span class="cd-from"><em>${esc(stationName(stops[0].station))}</em></span>` +
+      `<b class="cd-at${goal.i === nextIdx ? ' goal' : ''}" style="--at:${pct(here)}">${esc(nextName)}</b>` +
+      `<span class="cd-to${isEnd ? ' goal' : ''}"><em>${esc(stationName(stops.at(-1).station))}</em></span></div></div>`;
     // The timeline's line where the train is: "In 4 min" to the next stop; standing there, "Leaves in 2 min".
     const nx = row({ s: next, i: nextIdx }), soon = nx.w.at - tNow < 30000;
     const nowLine = soon ? t(nx.here ? 'leavesNow' : 'arrivesNow')
@@ -393,7 +393,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const late = lateNow(stops);
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
-    const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}${g.trip}`;
+    // the trip line first, then the tiles (Max's card pick 3, 2026-11-23)
+    const html = `${g.trip}<div class="cd-tiles">${g.tiles}</div>${g.list}`;
     el.classList.toggle('picking', Boolean(g.list));   // the card grows while the stops ahead are listed
     if (html === glanceSeen) return;   // each second: only when something on it changed
     glanceSeen = html;
