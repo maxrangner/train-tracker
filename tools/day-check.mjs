@@ -232,24 +232,30 @@ try {
   const thumb = await page.evaluate(() => ({ f: Number(getComputedStyle(document.querySelector('.scale')).getPropertyValue('--f')), z: window.__map.getZoom(), min: window.__map.getMinZoom() }));
   const want = (thumb.z - thumb.min) / (11 - thumb.min) * 0.5;
   expect(Math.abs(thumb.f - want) < 0.02, `the thumb didn't follow a zoom by other means (${thumb.f}, wanted ${want.toFixed(3)})`);
-  // a followed train stays where it is held while the slider zooms
-  const fol = await page.evaluate(() => window.__trains.reports().filter(r => !r.gone).map(r => r.id));
-  let held = null;
-  for (const id of fol.slice(0, 40)) {
-    const ok = await page.evaluate(id => window.__stack.open(`train:${id}`), id);
-    await sleep(1500);
-    if (ok && await page.evaluate(() => window.__map && document.querySelector('#sheet .sh-follow[aria-pressed="true"]'))) { held = id; break; }
-  }
-  if (expect(held, 'no train could be followed for the slider')) {
-    const where = () => page.evaluate((id) => { const x = (window.__last3d ?? []).find(t => t.id === id); return x ? window.__map.project([x.lon, x.lat]) : null; }, held);
-    await sleep(800);
-    const a = await where();
+  // a followed train stays where it is held while the slider zooms (on its focus: src/map.js window.__followFocus)
+  const fol = await page.evaluate(() => window.__trains.reports().filter(r => !r.gone && (r.speed ?? 0) > 20).map(r => r.id));
+  const offFocus = id => page.evaluate((id) => {
+    const x = (window.__last3d ?? []).find(t => t.id === id), f = window.__followFocus?.();
+    if (!x || !f) return null;
+    const p = window.__map.project([x.lon, x.lat]);
+    return Math.hypot(p.x - f.x, p.y - f.y);
+  }, id);
+  let held = null, moved = null;
+  for (const id of fol.slice(0, 20)) {
+    if (!await page.evaluate(id => window.__stack.open(`train:${id}`), id)) continue;
+    await sleep(2000);
+    if (!await page.evaluate(() => document.querySelector('#sheet .sh-follow[aria-pressed="true"]'))) continue;
+    const a = await offFocus(id);
+    if (a === null || a > 3) continue;   // (not locked on yet, or gone)
     const tr = await page.evaluate(() => { const r = document.querySelector('.scale-track').getBoundingClientRect(); return { x: r.left + r.width / 2, y0: r.top + r.height * 0.55, y1: r.top + r.height * 0.3 }; });
     await page.mouse.move(tr.x, tr.y0); await page.mouse.down(); await page.mouse.move(tr.x, tr.y1, { steps: 8 }); await page.mouse.up();
     await sleep(700);
-    const b = await where();
-    expect(a && b && Math.hypot(a.x - b.x, a.y - b.y) < 4, `the followed train moved ${a && b ? Math.round(Math.hypot(a.x - b.x, a.y - b.y)) : '?'} px on the screen while the slider zoomed`);
+    const b = await offFocus(id);
+    if (b === null) continue;
+    held = id; moved = b;
+    break;
   }
+  if (expect(held, 'no train could be followed for the slider')) expect(moved < 4, `the followed train is ${Math.round(moved)} px off where it is held after the slider zoomed`);
   expect(!page.errors.length, `errors on the page: ${page.errors.join(' | ')}`);
   await page.close();
 
