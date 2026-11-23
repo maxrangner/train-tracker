@@ -14,6 +14,8 @@ import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
 import { lateSet, tagSet, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
 import stationSizes from './big-stations.json';
+import { createScaleSlider, SCALE_CSS } from './scale-slider.js';
+import { createSun } from './sun.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 
@@ -234,13 +236,16 @@ const startView = () => {
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 // Our layers on top of the base map, bottom to top. A settings change (toys, zoom, language) takes them away and
 // adds them again; light/dark swaps the base map and then adds them again (Max, 2026-11-12: no reloading).
-const OUR_LAYERS = ['sweden-mask', 'rail-edge', 'rail-trv', 'path-edge', 'path-slide-edge', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-dots', 'train-triangles',
+const OUR_LAYERS = ['sun', 'sweden-mask', 'rail-edge', 'rail-trv', 'path-edge', 'path-slide-edge', 'path-casing', 'path-slide-casing', 'path-line', 'path-slide-line', 'path-abroad', 'disruption-edge', 'disruption-lines', 'disruption-works', 'disruption-rings', 'disruption-icons','station-dots', 'path-stops', 'path-slide-stops', 'path-abroad-end', 'train-glow', 'train-dots', 'train-triangles',
   'trains-3d', 'train-labels', 'station-names', 'route-names'];
 
 // getTrains3d() -> the trains to draw as 3D models (see trains-3d.js).
 // railData: { [rail source id]: () => Promise<GeoJSON> } for rail lines that don't come from a url.
 // onStationTap(sig): a station was tapped (and no train). onGroupTap([{ id, label, company }]): a "3 trains" label.
-export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onDisruptionTap, onMapTap, getTrains3d, alongTrack = null, railData = {} } = {}) {
+// sunTime(): the moment the sun's line shows (src/sun.js); nightOf(lon, lat): is it night there at the moment shown
+// (the 3D trains' lit windows).
+export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onDisruptionTap, onMapTap, getTrains3d, alongTrack = null, railData = {},
+  sunTime = () => Date.now() } = {}) {
   let dark = isDark();   // the base map now showing
   let selected = null;   // the tapped train's id
   let layer3d = null;    // the 3D trains layer now on the map (its models' outlines, for taps)
@@ -356,34 +361,24 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       return { url: url.replace(m[1], encodeURIComponent(stack.endsWith('Bold') ? 'Noto Sans Bold' : 'Noto Sans Regular')) };
     },
   });
-  // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
-  map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
-  // + and − only with a mouse (index.html, the Soft look 2026-11-15). The compass button is always there (Max,
-  // 2026-11-20: "when view is at default position it should say "3d" and tilt the camera so the 3d trains show"):
-  // flat and north up it says "3D" and a tap tilts the view to TILT_3D (zoom and place kept; "just tilt"); turned or
-  // tilted it is the compass (a tap: flat, north up). Until then it showed only while the map was turned or tilted.
-  const TILT_3D = 60;
+  // The compass (2026-11-23, the scale slider): only while the map is turned or tilted; a tap turns north up and the
+  // view flat again; it leans with the tilt. The scale slider (below) took over + / − and the 3D button (Max, 2026-11-20
+  // to 22: "3D" on the compass while flat; idea 10 replaces it: the slider's top third tilts the view).
+  map.addControl(new NavigationControl({ showZoom: false, visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
   const mouse = typeof matchMedia === 'function' ? matchMedia('(hover: hover) and (pointer: fine)') : null;
   const showPointer = () => map.getContainer().classList.toggle('touch', !mouse?.matches);
   showPointer();
   mouse?.addEventListener('change', showPointer);
   const compass = map.getContainer().querySelector('.maplibregl-ctrl-compass');
-  compass?.append(Object.assign(document.createElement('span'), { className: 'ctrl-3d', textContent: '3D', ariaHidden: 'true' }));
   const isTurned = () => Math.abs(map.getBearing()) > 0.5 || map.getPitch() > 0.5;
   const nameCompass = () => {
-    const name = t(isTurned() ? 'viewFlat' : 'view3d');
+    const name = t('viewFlat');
     if (compass && compass.title !== name) { compass.title = name; compass.setAttribute('aria-label', name); }
   };
   const showTurned = () => {
     const turned = isTurned();
-    if (turned !== map.getContainer().classList.contains('turned')) { map.getContainer().classList.toggle('turned', turned); nameCompass(); }
+    if (turned !== map.getContainer().classList.contains('turned')) map.getContainer().classList.toggle('turned', turned);
   };
-  // Flat: our tap (tilt), before MapLibre's own (which would only make it flat and north up again).
-  compass?.addEventListener('click', (e) => {
-    if (isTurned()) return;
-    e.stopImmediatePropagation();
-    map.easeTo({ pitch: TILT_3D, duration: 700 });
-  }, true);
   showTurned();
   nameCompass();
   map.on('rotate', showTurned);
@@ -435,6 +430,22 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // (The zoom slider was removed 2026-11-15, Max: "Remove the zoom bar".)
   map.on('resize', setZoomLimits);
   setZoomLimits();
+
+  // The scale slider (Max's idea 10, 2026-11-22: "the whole bar with the thumb drag"; src/scale-slider.js): on the
+  // right edge above the sheet, Sweden – Town – Trackside; it zooms round the middle of the free map above the sheet
+  // (a followed train is held there by the camera hook below, so it stays in place); its top third tilts the view.
+  if (!document.getElementById('scale-css')) document.head.append(Object.assign(document.createElement('style'), { id: 'scale-css', textContent: SCALE_CSS }));
+  const slider = createScaleSlider(map, {
+    around: () => { const f = following?.focus ?? defaultFocus(); return [f.x, f.y]; },
+    label: key => t(`scale_${key}`),
+    reduce: reduceMotion,
+  });
+  map.getContainer().appendChild(slider.el);
+
+  // The sun's line (Max's idea 6; src/sun.js): night as a soft shade over Sweden, under the cover outside Sweden (so
+  // the sea and the neighbours stay plain, as everything outside Sweden does) and the rails. sunTime(): the moment
+  // shown (the page's clock, or The day's moment).
+  const sun = createSun(map, { time: () => sunTime(), on: () => settings.dayNight, dark: () => dark });
 
   if (import.meta.env.DEV) window.__map = map;   // lets tools/shot.mjs find and tap a train; not in a build
 
@@ -502,6 +513,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const firstName = base[base.findLastIndex(l => l.type !== 'symbol') + 1]?.id;
     map.addLayer({ id: 'sweden-mask', type: 'fill', source: 'sweden-mask', filter: ['==', ['get', 'kind'], 'mask'],
       paint: { 'fill-color': sea, 'fill-antialias': false } }, firstName);
+    sun.add('sweden-mask');   // (the night's shade: under the cover, so only Sweden darkens)
     namesOnlyInSweden();
     // Rail lines first, so they sit under the trains. In the light look a white edge under them (the Paper look).
     if (C.railEdge) {
@@ -623,6 +635,20 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       layout: { 'icon-image': ['get', 'flag'], 'icon-allow-overlap': true, 'icon-ignore-placement': true,
         'icon-size': ['interpolate', ['linear'], ['zoom'], 4, 0.7, 10, 1] } });
 
+    // On the night side of the sun's line (Settings → Day and night) a train's dot has a faint warm glow round it, its
+    // lit windows seen from far (src/main.js marks those trains night: 1). Under the dots; none where models show.
+    map.addLayer({
+      id: 'train-glow',
+      type: 'circle',
+      source: 'trains',
+      filter: ['==', ['get', 'night'], 1],
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 11, 7, 15, 10, 22, 13, 26],
+        'circle-color': dark ? '#ffd27a' : '#ffc94d',
+        'circle-blur': 0.9,
+        'circle-opacity': modelsAt(map.getZoom()) ? 0 : ['case', ['get', 'stale'], 0.15, dark ? 0.5 : 0.6],
+      },
+    });
     map.addLayer({
       id: 'train-dots',
       type: 'circle',
@@ -826,6 +852,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     map.setPaintProperty('train-dots', 'circle-opacity', dots);
     map.setPaintProperty('train-dots', 'circle-stroke-opacity', dots);
     map.setPaintProperty('train-triangles', 'icon-opacity', dotOpacity(id, models));
+    if (map.getLayer('train-glow')) map.setPaintProperty('train-glow', 'circle-opacity', models ? 0 : ['case', ['get', 'stale'], 0.15, dark ? 0.5 : 0.6]);
     map.setFilter('train-labels', ['!=', ['get', 'id'], id]);
   }
 
@@ -944,7 +971,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // menu. Caught before the map's own key handling, which would move the map and end the following.
     document.addEventListener('keydown', (e) => {
       if (!e.key.startsWith('Arrow') || e.altKey || e.ctrlKey || e.metaKey) return;
-      if (e.target?.closest?.('input, textarea, select, #help, #settings-page, #menu')) return;
+      if (e.target?.closest?.('input, textarea, select, #help, #settings-page, #menu, .scale, #day')) return;   // (the scale slider and The day's ribbon use their own)
       const vertical = e.key === 'ArrowUp' || e.key === 'ArrowDown';
       if (!vertical && !following) return;
       e.preventDefault();
@@ -1998,8 +2025,17 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     async relabel() {
       await ready;
       relabelControls();
+      nameCompass();
+      slider.relabel();
       map.triggerRepaint();
     },
+    // The sun's line: drawn again when its moment has moved a minute (force: now); shown or hidden (Settings → Day and
+    // night).
+    sunUpdate(force = false) { if (isReady && settings.dayNight) sun.update(force); },
+    sunShow() { if (isReady) sun.show(); },
+    // A place on the screen ({ x, y } in the page), e.g. for The day's bubble over a train.
+    project(lon, lat) { const p = map.project([lon, lat]); return { x: p.x, y: p.y }; },   // (#map fills the window from its top left)
+    get slider() { return slider; },
     // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map
     // first. Nothing is reloaded; the trains, stations, path and rail lines are put back from what they showed.
     async applySettings() {

@@ -33,6 +33,8 @@ const PATHS = {
   change: '<path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   share: '<path d="M12 14.5V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-6.5"/>',
+  play: '<path d="M8 5.5v13l10-6.5z" fill="currentColor"/>',   // The day's play buttons (2026-11-23)
+  pause: '<path d="M8.5 5.5v13M15.5 5.5v13"/>',
 };
 export const icon = (name, size = 20, stroke = 2) =>
   `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] ?? ''}</svg>`;

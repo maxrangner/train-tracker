@@ -232,8 +232,9 @@
     .m-ontime { background: var(--c-ontime); } .m-some { background: var(--c-some); } .m-late { background: var(--c-late); } .m-unknown { background: var(--c-unknown); }
     .src { margin: 8px 2px 0; color: var(--muted); font-size: 12.5px; }
     .set-sub { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
-    #map .map-note { bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); }
-    @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } #map .map-note { bottom: 20px; } }
+    /* A note on the map: at the top, under the live mark (2026-11-23: the scale slider took the bottom right). */
+    #map .map-note { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
+    @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } }
         .panel-star[aria-pressed="true"] { color: var(--c-some); }
     .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .menu-text { margin: 0; color: var(--ink); }
@@ -397,9 +398,17 @@
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15);
        src/map.js sets .touch and .turned on the map. */
-    .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
+    .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
       transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
+    /* Under the scale slider (src/scale-slider.js, 2026-11-23): My location at the right, the compass (only while the
+       map is turned or tilted) beside it, so both stay clear of the slider above them. */
+    .maplibregl-map .maplibregl-ctrl-bottom-right { display: flex; flex-direction: row-reverse; align-items: flex-end; }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl { float: none; clear: none; }
+    .maplibregl-ctrl-bottom-right .maplibregl-ctrl + .maplibregl-ctrl { margin-right: 8px; }
+    .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { border-radius: 50%; }
+    .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) button { width: 48px; height: 48px; }
+    .maplibregl-map:not(.turned) .maplibregl-ctrl-group:has(.maplibregl-ctrl-compass) { display: none; }
     .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
     .sheet-jump .maplibregl-ctrl-bottom-right { transition: none; }   /* (out from behind a tall sheet: in place at once; src/sheet.js) */
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
@@ -409,11 +418,6 @@
     .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { border-radius: 50%; }
     .maplibregl-ctrl.maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) button { width: 48px; height: 48px; }
     .maplibregl-map.touch .maplibregl-ctrl-zoom-in, .maplibregl-map.touch .maplibregl-ctrl-zoom-out { display: none; }
-    /* The compass: "3D" while the map is flat and north up (a tap tilts it), the needle while turned or tilted (src/map.js;
-       Max, 2026-11-20). */
-    .maplibregl-ctrl-compass .ctrl-3d { font: 700 14px/1 var(--font); letter-spacing: .02em; color: var(--ink); }
-    .maplibregl-map:not(.turned) .maplibregl-ctrl-compass .maplibregl-ctrl-icon { display: none; }
-    .maplibregl-map.turned .maplibregl-ctrl-compass .ctrl-3d { display: none; }
 
     /* A short note on the map (src/map.js: why My location isn't there), under the buttons at the top right. */
     .map-note { position: absolute; z-index: 3; bottom: calc(var(--sheet-h, 0px) + 12px + env(safe-area-inset-bottom, 0px)); right: calc(72px + env(safe-area-inset-right, 0px));
@@ -1139,6 +1143,8 @@
         <div class="seg" data-key="allPlaces" role="group" aria-label="All places" data-t-aria="allPlaces"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span><span data-t="shopWindow">Shop window</span><small class="set-sub" data-t="shopWindowSub">on its side, untouched for 30 s: the map tours by itself</small></span>
         <div class="seg" data-key="shopWindow" role="group" aria-label="Shop window" data-t-aria="shopWindow"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
+      <div class="set-row"><span><span data-t="dayNight">Day and night</span><small class="set-sub" data-t="dayNightSub">night as a shade on the map, lit windows</small></span>
+        <div class="seg" data-key="dayNight" role="group" aria-label="Day and night" data-t-aria="dayNight"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="set-row"><span data-t="language">Language</span>
         <div class="seg" data-key="language" role="group" aria-label="Language" data-t-aria="language"><button type="button" data-v="sv">Svenska</button><button type="button" data-v="en">English</button></div></div>
       <div class="debug-only set-section menu-label" data-t="debug">Debug</div>

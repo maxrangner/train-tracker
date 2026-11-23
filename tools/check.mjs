@@ -323,6 +323,10 @@ if (!pageUp) {
   if (process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them'); failed++; }
 } else {
   for (const [name, file, order, alone] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order, alone }));
+  // The day's ribbon on a recording's history files and a replaying fetcher of its own, the scale slider and the sun's
+  // line (build plan parts 2, 4, 5; 2026-11-23).
+  screenJobs.push(check('the day', [...PAGE_FILES, ...FETCHER_FILES, ...depsOf('tools/day-check.mjs', 'tools/history-files.mjs')],
+    plain(['tools/day-check.mjs']), { order: 60 }));
   // The same screens on the page reading the fetcher's files (public-plan step 3) on a fetcher of their own, 75 s
   // into its replay, as the old check had it: later in that replay the test can fail by itself (2026-11-21: at about
   // 7 min a tap on 2513 opens Stockholm C's board; TODO B), so the moment is kept fixed. Its wait holds one of the two.
