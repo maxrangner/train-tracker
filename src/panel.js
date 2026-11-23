@@ -88,8 +88,9 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
 // places(id, route, stops): the places passed without stopping between the card's stops (src/places-ahead.js tripPlaces).
 // In the one sheet (2026-11-22, src/stack.js): onCloseTap(id) is what its × does (the page goes; the × is hidden and
 // stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
-// sets .full); onStop(sig): a stop in the timeline tapped (its station's page).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, extra = null }) {
+// sets .full); onStop(sig): a stop in the timeline tapped (its station's page); onFold(open, box): its messages opened
+// or shut (box: their part).
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -562,7 +563,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
-    if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); };
+    // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
+    if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); };
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();
@@ -641,6 +643,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // and shown again; it stays up to date meanwhile.
   const hide = () => { el.hidden = true; };
   const show = () => { if (openId) el.hidden = false; };
+  // The "to …" chooser shut at once, with no glide (a map tap: the tap rules, src/stack.js).
+  function closePick() {
+    if (!picking && !closing) return;
+    picking = false; closing = false; holdGlance = 0;
+    showGlance();
+  }
   const toggleFollow = () => { if (!openId || !canFollow) return; setFollowing(!following); onFollow?.(openId, following); };
-  return { open, close, hide, show, setFollowing, toggleFollow, get following() { return following && canFollow; }, get canFollow() { return Boolean(openId) && canFollow; }, get number() { return number; }, get route() { return shown?.train?.id === openId ? shown.route ?? null : null; }, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
+  return { open, close, hide, show, setFollowing, toggleFollow, closePick, get following() { return following && canFollow; }, get canFollow() { return Boolean(openId) && canFollow; }, get number() { return number; }, get route() { return shown?.train?.id === openId ? shown.route ?? null : null; }, setStatus, relabel, wake, reroute, placesReady, get openId() { return openId; }, get hidden() { return el.hidden; } };
 }

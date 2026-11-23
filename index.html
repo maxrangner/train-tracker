@@ -79,6 +79,16 @@
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
+    /* A computer: the dash is a small arrow (src/stack.js; Max, 2026-11-23: the dash is a phone thing): ⌃ at rest (a
+       tap raises the sheet), ⌄ raised (a tap lowers it). */
+    .sh-arrow { display: none; }
+    @media (min-width: 440px) {
+      .sh-grab { cursor: pointer; }
+      .sh-grab i { display: none; }
+      .sh-arrow { display: grid; place-items: center; width: 36px; height: 18px; border-radius: 9px; color: var(--muted); transition: transform .26s var(--ez), background .15s; }
+      .sh-grab:hover .sh-arrow { background: var(--hover); }
+      #sheet:not([data-h="0"]) .sh-arrow { transform: rotate(180deg); }
+    }
     /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
        tall; the head's empty parts count as the handle too. A phone only. */
@@ -199,6 +209,19 @@
     .row { display: flex; align-items: center; gap: 10px; min-height: 54px; width: 100%; padding: 0; border: 0; border-top: 1px solid var(--line); background: none;
       color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
     .rows > .row:first-child { border-top: 0; }
+    /* Hover, focus and press follow the rounded shapes (Max, 2026-11-23: a square highlight inside Home's rounded parts) */
+    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more, .menu-link) { border-radius: 12px; }
+    /* (their lines between them drawn apart, straight: a border on a rounded box curls at its ends) */
+    :is(.row, .pick-list button, .bd-row, .dis-fold) { position: relative; }
+    html :is(.row, .dis-fold) { border-top-color: transparent; }
+    html :is(.pick-list button, .bd-row) { border-bottom-color: transparent; }
+    :is(.row, .dis-fold)::before, :is(.pick-list button, .bd-row)::after { content: ''; position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+    :is(.row, .dis-fold)::before { top: -1px; border-top: 1px solid var(--line); }
+    :is(.pick-list button, .bd-row)::after { bottom: -1px; border-bottom: 1px solid var(--line); }
+    .rows > .row:first-child::before, .bd-row:last-child::after, .trip-pair .bd-row::after { border: 0; }
+    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more, .menu-link):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    /* (a tap on a row's arrow is a tap on its row: Max, 2026-11-23, the card's messages "tapping the arrow did nothing") */
+    :is(.tv-toggle, .dis-fold, .panel-more, .row, .cd-stop) .icon { pointer-events: none; }
     .row > .icon { flex: none; color: var(--muted); }
     .r-num { font-size: 18px; font-weight: 800; min-width: 52px; flex: none; font-variant-numeric: tabular-nums; }
     .r-main { flex: 1; min-width: 0; display: grid; }
@@ -240,6 +263,8 @@
     .lg[data-on] .lg-p:not(.on) { opacity: .32; }
     .lg-p.on { box-shadow: inset 0 0 0 2.5px currentColor; }
     .lg-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* only with Home raised to full (Max, 2026-11-23: at rest the ⌄ at the bottom edge says there is more) */
+    #sheet:not([data-h="2"]) .lg-hint { display: none; }
     .lg-hint b { color: var(--ink); }
     .home-stats.stats-body { padding: 0; gap: 12px; }
     .home-stats > .big { margin: 6px 0 0; }

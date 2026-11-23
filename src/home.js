@@ -38,7 +38,8 @@ export function groupRow({ key, name, sub, colour = null }) {
   return `<button type="button" class="row" data-go="${esc(key)}"><span class="r-ic">${colour ? dot(colour) : '<i class="ring sq"></i>'}</span>` +
     `<span class="r-main"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>${icon('chevron', 18)}</button>`;
 }
-export const chip = (key, html, n) => `<button type="button" class="chip" data-go="${esc(key)}">${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
+// attrs: more attributes for the button (trusted HTML: escape what goes in them)
+export const chip = (key, html, n, attrs = '') => `<button type="button" class="chip" data-go="${esc(key)}"${attrs}>${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
 
 // A small helper for a page made of parts: each part is a div drawn again only when its words changed.
 export function parts(el) {
