@@ -137,6 +137,9 @@ try {
   await page.evaluate(() => { window.__map.stop(); window.__map.jumpTo({ center: [13.187, 55.69], zoom: 12.5 }); });
   // (until the map has settled: a busy computer still draws it a while)
   await until(page, () => !window.__map.isMoving() && [...document.querySelectorAll('.station-name')].some(e => e.textContent === 'Lund C'), 8000);
+  // (Share's "Link copied" note stays 5 s over the map and takes a tap where it sits: 2026-11-23 it sat on Lund C in a
+  // whole run, so the plain tap below hit the note, not the map)
+  await until(page, () => [...document.querySelectorAll('.map-note')].every(n => n.hidden), 8000);
   await sleep(1200);
   const at = await page.evaluate(() => {
     // its name close in (a tap there opens the board, also with trains standing on its dot), else its dot
