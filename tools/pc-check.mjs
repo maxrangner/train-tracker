@@ -2,7 +2,8 @@
 // 16:00 (CARD_HOUR):
 // - the map always drags: pulling the sheet up with the mouse by Home's text leaves no text selected; a selection left
 //   on the page is cleared by a press on the map, which then moves; the browser's own drag of a picture never starts
-//   on the map (a press on selected content dragged a ghost picture instead of the map, and "live" showed highlighted).
+//   on the map (a press on selected content dragged a ghost picture instead of the map, and "live" showed highlighted);
+// - with Home raised (half, full) the map's buttons and the live mark stay shown.
 // Not checkable here: the browser's own drag-and-drop of a selection (this test browser makes none), a real mouse.
 // Run: PAGE=http://localhost:5181/ node tools/pc-check.mjs
 import { launch, CARD_HOUR, sleep } from './lib/browser.mjs';
@@ -50,6 +51,19 @@ try {
     return e.defaultPrevented;
   });
   ok(stopped, 'a picture drag starting on the map is stopped');
+
+  // 4. Home raised: the map's buttons and the live mark stay (the sheet floats at the left and covers neither)
+  for (const level of [1, 2]) {
+    await setLevel(page, level);
+    await sleep(300);
+    // (the buttons' corner box takes no presses by design, its buttons do; the live mark is fixed: no offsetParent)
+    const seen = await page.evaluate(() => Object.fromEntries([['the map buttons', '.maplibregl-ctrl-bottom-right'], ['the live mark', '#status']].map(([name, sel]) => {
+      const el = document.querySelector(sel), cs = el && getComputedStyle(el);
+      const press = el && getComputedStyle(el.querySelector('.maplibregl-ctrl') ?? el).pointerEvents;
+      return [name, Boolean(el && el.getClientRects().length && cs.opacity === '1' && cs.visibility !== 'hidden' && press !== 'none')];
+    })));
+    for (const [name, shown] of Object.entries(seen)) ok(shown, `${name} shown with Home at ${level === 2 ? 'full' : 'half'}`);
+  }
 } finally {
   await browser.close();
 }
