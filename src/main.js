@@ -406,6 +406,7 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
+  let myEl = null;   // this train's page (show): the card goes back to the holder only from here
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
   let fitted = false;              // its whole card measured once (its first fit: stack.refit's settle)
   const number = () => String(meta()?.number ?? m0.number);
@@ -434,6 +435,7 @@ function trainPage(id) {
   return {
     name: number, kind: 'train',
     show(el, { prev, dir, go = false, again = false }) {
+      myEl = el;
       el.append(panelEl);
       const m = meta() ?? m0;
       const fresh = panel.openId !== id;
@@ -454,8 +456,10 @@ function trainPage(id) {
       if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
     },
     // (its card goes back to the holder: an element taken off the page with its page couldn't be found by its id)
-    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
-    unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
+    // (the card leaves only this page: going back to a train opened earlier, another train's page closing between it
+    // and the top took the card from that train's page, which then showed empty; Max's PC and phone, 2026-11-23)
+    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
+    unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
     // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
     // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
