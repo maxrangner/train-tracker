@@ -36,9 +36,10 @@ export function createMenu({ input, list, findTrains, findStations, searchTimeta
 
   function empty() {
     const g = groups(), lately = recent().map(rowOf).filter(Boolean), star = starred();
-    const scopes = [chip('late', esc(t('lateNow6')), g.late), chip('still', esc(t('standingStill')), g.still),
-      ...g.kinds.filter(([k]) => k !== 'unknown' && k !== 'other').map(([k, n]) => chip(`kind:${k}`, esc(t(`kind_${k}`)), n)),
-      ...g.brands.filter(([b]) => b).map(([b, n]) => chip(`co:${b}`, `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}`, n))];
+    // (no counts on them: Max, 2026-11-23, 'Not clear what the numbers represent.. Maybe just remove')
+    const scopes = [chip('late', esc(t('lateNow6'))), chip('still', esc(t('standingStill'))),
+      ...g.kinds.filter(([k]) => k !== 'unknown' && k !== 'other').map(([k]) => chip(`kind:${k}`, esc(t(`kind_${k}`)))),
+      ...g.brands.filter(([b]) => b).map(([b]) => chip(`co:${b}`, `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}`))];
     return (lately.length ? `${lab(t('recent'))}<div class="rows">${lately.join('')}</div>` : '') +
       (star ? `${lab(t('favourites'))}<div class="rows">${star}</div>` : `<p class="empty">${esc(t('favouritesHint'))}</p>`) +
       `${lab(t('showOnly'))}<div class="scopes">${scopes.join('')}</div>`;
