@@ -171,7 +171,7 @@ try {
   if (!tapped || head?.startsWith(tapped)) break;
   }
   expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'} (3 tries)`);
-  // The back chip names the page under it.
+  // The back chip says Home (since 2026-11-23: it always goes home).
   const chip = await page.evaluate(() => document.querySelector('#sheet .sh-back span')?.textContent);
   expect(!head || chip === 'Home', `a train's page over Home: the back chip says "${chip}"`);
 
