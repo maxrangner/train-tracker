@@ -393,7 +393,15 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
-let lastCardHalf = 0;   // the last train card's half, measured (px from its page's top): a new card's until its own is in
+let lastCardHalf = 0;
+// The open card's height: its first fit once it is in exactly (the sheet then moves once, up or down: no bounce); after
+// that only taller as parts come in, or either way within 1.5 s of the person touching the card (the chooser shut).
+function refitCard() {
+  const def = stack.pageDef(stack.top());
+  const done = Boolean(panelEl.querySelector('.panel-more, .state.empty, .state.error'));
+  if (done && def?.fitted?.() === false) { stack.refit(); return; }
+  stack.refit({ grow: performance.now() - cardTouched > 1500 });
+}   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
 function trainPage(id) {
@@ -416,15 +424,18 @@ function trainPage(id) {
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
-    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
-      if (wantHalf || lastCardHalf) return wantHalf || lastCardHalf;
-      return stack.shown > stack.heights[1] ? 0 : Math.max(1, Math.round(stack.shown - 72));
-    }
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
+    // Still coming in (the last card's parts may still be in it): the sheet waits where it is; once the card is in, it
+    // moves once to fit it exactly, up or down (refitCard). Until 2026-11-23 it took the last card's height and, only
+    // ever growing, kept that empty space under a shorter card (Max's phone: "too much empty space down").
+    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
+      return Math.max(1, Math.round(stack.shown - (innerWidth >= 440 ? 82 : 72)));   // (the head's height, as src/stack.js counts it)
+    }
     if (!whole) {
-      const b = Math.max(below(panelEl.querySelector('.panel-head')), below(panelEl.querySelector('.panel-alert')));
-      if (b > 0) wantLow = Math.ceil(b + 14);   // (14: the tiles start 18 px under that line, and must not peek in)
+      // collapsed: the head line alone (number, operator, destination; the rest is hidden at low: index.html)
+      const b = below(panelEl.querySelector('.panel-head'));
+      if (b > 0) wantLow = Math.ceil(b + 12);
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
@@ -469,7 +480,7 @@ function trainPage(id) {
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
-    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
+    every() { if (panel.openId === id) { drawExtras(id); refitCard(); } },
     fitted: () => fitted,
     // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
     dismiss() { if (panel.openId === id) panel.closePick(); },
@@ -1640,7 +1651,7 @@ let cardTouched = 0;
 panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
 panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
 if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500, settle: stack.pageDef(stack.top())?.fitted?.() === false }); }).observe(panelEl);
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) refitCard(); }).observe(panelEl);
 }
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {

@@ -392,6 +392,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
     const late = lateNow(stops);
+    // "→ Destination" in the head line, shown only when the card rests collapsed on a phone (Max, 2026-11-23: "only
+    // number, operator and destination"; index.html)
+    const title = el.querySelector('.panel-title'), dest = `→ ${stationName(stops.at(-1).station)}`;
+    let to = title?.querySelector('.ph-to');
+    if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); title.append(to); }
+    if (to && to.textContent !== dest) to.textContent = dest;
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
     // the trip line first, then the tiles (Max's card pick 3, 2026-11-23)

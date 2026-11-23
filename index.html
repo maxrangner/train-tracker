@@ -782,6 +782,16 @@
     #panel .panel-title { align-items: baseline; gap: 8px; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed
+       train card should not hide content below"; "Collapsed still peeks at the content below"). The rest fades back in
+       as soon as it is pulled up. */
+    .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    @media (max-width: 439px) {
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
+      /* (.cd is display: contents: its own parts are faded, the trip line, tiles and list) */
+      #panel > :not(.panel-head), #panel .cd > * { transition: opacity .2s; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) :is(#panel > :not(.panel-head):not(.cd), #panel .cd > *) { opacity: 0; pointer-events: none; }
+    }
     #panel:not(.full) .panel-star, #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
     /* "i" (src/train-info.js; Max, 2026-11-20): on the full card, the train's own numbers instead of the notes and stops. */
