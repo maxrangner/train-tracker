@@ -30,7 +30,8 @@ const LIST_MAX = 14;            // trains on a trip's page
 //   number }), trainInfo(id) -> { number, operational, date, route } | null, redrawHome() }
 // showStation(sig): the map shows that station above the sheet (a change tapped: Max, 2026-11-23, "the map should show
 // where it is").
-export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome, showStation = () => {} }) {
+// showTrip({ sigs, trains }): a trip's page shown: the map on its stations (in order), its next train(s) by their ids.
+export function createMyTrains({ stack, line, stationName, findStations, openTrain, trainInfo, redrawHome, showStation = () => {}, showTrip = () => {} }) {
   // ---------- the stations' days, kept a minute ----------
   const cache = new Map();   // 'sig|act' -> { at, rows, p }
   function day(sig, act) {
@@ -212,6 +213,10 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (!trip) return null;
     let el = null, armedAt = 0, disarm = 0;
     const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
+    const onMap = () => {
+      const n = nextOf(trip);
+      showTrip({ sigs: [trip.from, trip.via, trip.to].filter(Boolean), trains: [n.next?.dep?.key, n.pair?.second?.dep?.key].filter(Boolean) });
+    };
     function act(e) {
       const b = e.target.closest('[data-trip]');
       if (!b) return;
@@ -263,7 +268,12 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return {
       name: () => tripName(trip), kind: 'trip',
       mount(page) { el = page; openRow(el); el.addEventListener('click', act); },
-      show() { armedAt = 0; draw(); load(trip).then(() => { draw(); drawLine(); }); },
+      // On the map too (Max, 2026-11-23: "Clicking a saved trip should show it on the map"): its stations at once, its
+      // next train once today's trains are in (still its page on top then).
+      show() {
+        armedAt = 0; draw(); onMap();
+        load(trip).then(() => { draw(); drawLine(); if (stack.top() === `trip:${trip.key}`) onMap(); });
+      },
       every() { if (due(trip)) load(trip).then(draw); else draw(); },
       unmount() { clearTimeout(disarm); },
       star: { on: () => Boolean(favourites.trip(trip.key)),

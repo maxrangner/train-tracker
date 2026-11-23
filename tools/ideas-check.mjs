@@ -130,6 +130,15 @@ try {
   ok(pairs.length > 0, `its changes: ${pairs.slice(0, 3).join('; ')}`);
   await setLevel(page, 2);
   await shot(page, '04-trip-change');
+  // a trip's page shows it on the map (Max, 2026-11-23): its stations' names, all in view, its next train lit
+  const onMap = await page.evaluate(() => {
+    const sigs = window.__routeSigs() ?? [], drawn = window.__drawn(), b = window.__map.getBounds();
+    const inView = ['Lu', 'Hm', 'Hb'].every(s => { const st = window.__stationAt(s); return st && b.contains([st.lon, st.lat]); });
+    return { sigs, drawn, inView };
+  });
+  ok(onMap.sigs.join(',') === 'Lu,Hm,Hb', `the trip's stations named on the map: ${onMap.sigs.join(', ')}`);
+  ok(onMap.drawn.drawn < onMap.drawn.all, `only its next trains lit: ${onMap.drawn.drawn} of ${onMap.drawn.all} drawn`);
+  ok(onMap.inView, 'its stations all in view');
   // its change taken away again in Edit (Max, 2026-11-23: an added stop couldn't be removed): the × on the change field
   await page.evaluate(() => window.__stack.open('edittrip:Lu>Hm>Hb'));
   ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x'))), 'Edit of a trip with a change: its change field has a ×');

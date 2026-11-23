@@ -1581,9 +1581,11 @@ stack = createStack({
   onChange(pg) {
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(legend ? legendTest(legend) : null);
-    else if (pg.def.kind !== 'group') light(null);
-    // a train's line stays only under its own page and a station's (where the camera may still ride it)
-    if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
+    else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
+    // a train's line stays only under its own page and a station's (where the camera may still ride it); a trip's
+    // page keeps its own stations' names (showTrip below) but no train's line
+    if (pg.def.kind === 'trip' && !panel.openId) { map.setPath(null); map.setAbroad(null); }
+    else if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
   },
 });
 stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
@@ -1611,7 +1613,24 @@ const followOnly = id => map.follow(() => placeNow(id), () => {});
 // My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
 myTrains = createMyTrains({ stack, line, stationName, findStations: text => menuStations(text), openTrain: openTrainRow, trainInfo,
   showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(shownAt(st), Math.max(12, map.camera().z)); },
-  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); } });
+  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); },
+  // A saved trip on the map (Max, 2026-11-23): all its stations in view with their names, only its next train(s) lit
+  // while one is on the map (none yet: every train stays).
+  showTrip({ sigs, trains: ids }) {
+    const pts = sigs.map(s => stations.get(s)).filter(Boolean).map(shownAt).filter(p => Number.isFinite(p.lon));
+    if (pts.length > 1) {
+      map.unfollow();
+      const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
+      map.fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
+    }
+    map.setRouteStations(sigs);
+    const on = new Set(ids.filter(id => frameById.has(id)));
+    light(on.size ? x => on.has(x.id) : null);
+  } });
+if (import.meta.env.DEV) {   // (tools/ideas-check.mjs)
+  window.__routeSigs = () => map.routeStationsNow;
+  window.__stationAt = (sig) => { const st = stations.get(sig); return st ? shownAt(st) : null; };
+}
 // "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
 ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frameAll, info: id => trainInfo(id), stationName, lateOf,
   follow: followOnly, unfollow: () => map.unfollow() });
