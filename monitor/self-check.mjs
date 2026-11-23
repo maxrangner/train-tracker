@@ -35,6 +35,12 @@ export async function selfCheck(where, cfg, { args, readStatus, dataUrl }) {
     try { one = `answers (HTTP ${(await fetch(dataUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000), redirect: 'error' })).status})`; } catch (e) { one = e.cause?.code ?? e.message; }
     row(`one.com (${dataUrl})`, one, one.startsWith('answers'));
   } else console.log('self-check      one.com: skipped (no MONITOR_DATA_URL readable here)');
+  // The outside warning (2026-11-23): its address answers (a call here counts as one of the minute's calls).
+  if (cfg.MONITOR_PING_URL) {
+    let p;
+    try { const r = await fetch(cfg.MONITOR_PING_URL, { signal: AbortSignal.timeout(10000) }); p = r.ok ? `answers (HTTP ${r.status})` : `HTTP ${r.status}`; } catch (e) { p = e.cause?.code ?? e.message; }
+    row('the outside warning (MONITOR_PING_URL)', p, p.startsWith('answers'));
+  } else console.log('self-check      outside warning: skipped (no MONITOR_PING_URL)');
   if (cfg.MAIL_HOST) {
     let mail;
     try { await mailCheck(cfg); mail = 'logged in (nothing sent)'; } catch (e) { mail = e.code ?? e.message; }
