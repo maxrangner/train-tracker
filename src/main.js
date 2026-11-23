@@ -474,6 +474,9 @@ function trainPage(id) {
     // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
     dismiss() { if (panel.openId === id) panel.closePick(); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
+    // Share beside the star (Max, 2026-11-23)
+    acts: () => [{ id: 'share', icon: 'share', label: t('share') }],
+    act: (what) => { if (what === 'share') shareOpen(); },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -529,19 +532,21 @@ function shareNoteHtml(id) {
 function drawExtras(id) {
   const route = panel.openId === id ? panel.route : null;
   const ahead = (route?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
-  const html = whyHtml(whyFor(id)) + `<div class="tr-acts"><button type="button" class="chip" data-x="share">${icon('share', 17)}${esc(t('share'))}</button>` +
+  // (Share is beside the star in the head; "Add a change" only on the expanded card: Max, 2026-11-23)
+  const html = whyHtml(whyFor(id)) + '<div class="tr-acts">' +
     (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>' + shareNoteHtml(id);
   if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }
 }
 function trainExtras(id) { drawExtras(id); return extrasEl; }
-extrasEl.addEventListener('click', (e) => {
-  if (!e.target.closest('[data-x="share"]') || !panel.openId) return;
+// Share, from its button beside the star (the train page's acts)
+function shareOpen() {
+  if (!panel.openId) return;
   const n = panel.number ?? trains.get(panel.openId)?.number;
   if (!n) return;
   const id = panel.openId;
   shareTrain({ number: n, title: t('shareTitle', n), text: t('shareText', n),
     note: (how, url) => { shareNote = { id, how, url, at: Date.now() }; drawExtras(id); } });
-});
+}
 // What a page of the sheet's ideas needs to know about a train: its numbers (and its route, while its card has it).
 function trainInfo(id) {
   const r = trains.get(id), m = trainMeta.get(id), x = r ?? m;

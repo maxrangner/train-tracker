@@ -274,17 +274,25 @@ try {
   }
 
   // ---- 3. Share (the copied-link way) ----
-  await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
+  // (Share beside the star in the sheet's head since 2026-11-23)
+  ok(await page.evaluate(() => Boolean(document.querySelector('#sheet .sh-acts [data-act-id="share"]'))), 'Share is beside the star');
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
   await until(page, () => Boolean(document.querySelector('.tr-extras .share-note')), 3000);
   const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('.tr-extras .share-note')?.innerText.replace(/\n/g, ' ') ?? '',
     onMap: Boolean(document.querySelector('#map .map-note:not([hidden])')) }));
   ok(shared.url === 'https://sparat.rangner.com/#train=531' && ['copied', 'shown'].includes(shared.how) && shared.note.includes(shared.url), `Share without a share sheet: ${shared.how}, "${shared.note}"`);
   // (Max's phone, 2026-11-23: the note over the map was hard to see beside the slider: now under Share, in the card)
-  ok(!shared.onMap, 'the note is in the card, under Share, not over the map');
+  ok(!shared.onMap, 'the note is in the card, not over the map');
   await shot(page, '07-share');
 
   // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Saved, its page a trip's ----
+  // ("Add a change" only on the expanded card since 2026-11-23: not at half, there at full)
+  await setLevel(page, 1);
+  const atHalf = await page.evaluate(() => Boolean(document.querySelector('.tr-extras [data-go^="addchange:"]')?.offsetParent));
+  await setLevel(page, 2);
+  const atFull = await page.evaluate(() => Boolean(document.querySelector('.tr-extras [data-go^="addchange:"]')?.offsetParent));
+  ok(!atHalf && atFull, `"Add a change" only on the expanded card (at half ${atHalf}, at full ${atFull})`);
   await page.evaluate(() => document.querySelector('.tr-extras [data-go^="addchange:"]')?.click());
   ok(await until(page, () => window.__stack.top().startsWith('addchange:')), 'Add my change opens its page');
   await until(page, () => Boolean(document.querySelector('#sheet [data-stop]')));
