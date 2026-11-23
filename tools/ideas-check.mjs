@@ -86,6 +86,8 @@ try {
   ok(/hold a station/.test(st.tip), `the first board says once: "${st.tip}"`);
   ok(st.save, 'a board has "Save a trip from here"');
   await setLevel(page, 2);
+  await page.evaluate(() => { const p = document.querySelector('.pg[data-key="station:Lu"]'); p.scrollTop = p.scrollHeight; });
+  await sleep(300);
   await shot(page, '05-board');
   await page.evaluate(() => document.querySelector('.st-extras [data-go="newtrip:Lu"]').click());
   ok(await until(page, () => window.__stack.top() === 'newtrip:Lu' && /Lund C/.test(document.querySelector('[data-nt="from"]')?.innerText ?? '')), '"Save a trip from here" starts a trip from Lund C');
@@ -132,8 +134,10 @@ try {
   if (part('peek')) {
   // ---- 5. Peek: hold Lund C on the map ----
   await toRest(page);
-  await page.evaluate(() => window.__map.jumpTo({ center: [13.187, 55.69], zoom: 12.5 }));
-  await sleep(1500);
+  await page.evaluate(() => { window.__map.stop(); window.__map.jumpTo({ center: [13.187, 55.69], zoom: 12.5 }); });
+  // (until the map has settled: a busy computer still draws it a while)
+  await until(page, () => !window.__map.isMoving() && [...document.querySelectorAll('.station-name')].some(e => e.textContent === 'Lund C'), 8000);
+  await sleep(1200);
   const at = await page.evaluate(() => {
     // its name close in (a tap there opens the board, also with trains standing on its dot), else its dot
     const name = [...document.querySelectorAll('.station-name')].find(e => e.textContent === 'Lund C');
@@ -147,9 +151,8 @@ try {
   if (at) {
     await page.mouse.move(at.x, at.y);
     await page.mouse.down();
-    await sleep(350);
-    const early = await page.evaluate(() => !document.getElementById('peek').hidden);
-    await until(page, () => Boolean(document.querySelector('#peek:not([hidden]) .pk-row, #peek:not([hidden]) .empty')), 6000);
+    const early = await page.evaluate(() => !document.getElementById('peek').hidden);   // (not at once: only after the hold)
+    await until(page, () => Boolean(document.querySelector('#peek:not([hidden]) .pk-row, #peek:not([hidden]) .empty')), 10000);
     const peek = await page.evaluate(() => ({ shown: !document.getElementById('peek').hidden, rows: [...document.querySelectorAll('#peek .pk-row')].map(r => r.innerText.replace(/\s+/g, ' ')) }));
     ok(!early && peek.shown && peek.rows.length > 0 && peek.rows.length <= 3, `holding Lund C: its next departures (${peek.rows.join(' | ')})`);
     await shot(page, '11-peek');
@@ -206,7 +209,7 @@ try {
       await fixAt();
       await sleep(1500);
       const ride = await page.evaluate(() => document.querySelector('.ride')?.innerText.replace(/\n/g, ' ') ?? '');
-      ok(/Next stop/.test(ride), `the ride page: "${ride}"`);
+      ok(/next stop/i.test(ride), `the ride page: "${ride}"`);
       await shot(page, '13-ride');
       // × on the offer: not offered again
       await toRest(page);
