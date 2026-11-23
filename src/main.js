@@ -424,7 +424,7 @@ function trainPage(id) {
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
     if (!whole) {
       const b = Math.max(below(panelEl.querySelector('.panel-head')), below(panelEl.querySelector('.panel-alert')));
-      if (b > 0) wantLow = Math.ceil(b + CARD_GAP);
+      if (b > 0) wantLow = Math.ceil(b + 14);   // (14: the tiles start 18 px under that line, and must not peek in)
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
