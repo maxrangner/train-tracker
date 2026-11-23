@@ -575,12 +575,18 @@ function showPicker(list) {
   pickLists.set(key, [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label))));
   stack.open(key);
 }
+if (import.meta.env.DEV) window.__picker = showPicker;   // (tools/back-check.mjs: one picker over another, then back)
 function pickPage(key) {
   const rows = pickLists.get(key);
   if (!rows) return null;
+  // One #picker for every "N trains here" page: a page lets go of it only while it holds it (back from a second
+  // picker to the first: the first takes it in show, then the second's unmount must not hide it; Max 2026-11-23).
+  let mine = null;
+  const letGo = () => { if (mine?.contains(pickerEl)) { pickerEl.hidden = true; holder.append(pickerEl); } };
   return {
     name: () => t('trainsHere', rows.length), kind: 'pick',
     show(el) {
+      mine = el;
       pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
         `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
         rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
@@ -589,8 +595,8 @@ function pickPage(key) {
       pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
       for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
     },
-    hide() { pickerEl.hidden = true; holder.append(pickerEl); },
-    unmount() { pickerEl.hidden = true; pickLists.delete(key); if (!stack.top()?.startsWith('pick:')) holder.append(pickerEl); },
+    hide: letGo,
+    unmount() { letGo(); pickLists.delete(key); },
   };
 }
 
