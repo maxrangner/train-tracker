@@ -786,6 +786,22 @@
     .cd-names > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cd-names b { text-align: center; color: var(--ink); font-weight: 700; } .cd-names span:last-child { text-align: right; }
     .cd-names .goal { color: var(--ink); font-weight: 800; }
+    /* The trip line on top (Max's card pick 3, 2026-11-23): the start and the end as pills above the line, each with an
+       arrow joined to it pointing at its circle (the bar's end circles sit 8 px in from each side), the end big in the
+       accent colour; where the train is, under its own dot. */
+    .cd-trip { position: relative; margin: 2px 0 14px; padding-top: 46px; padding-bottom: 22px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
+    .cd-names { display: block; position: static; height: 0; margin: 0; }
+    .cd-names > * { position: absolute; overflow: visible; }
+    .cd-from, .cd-to { display: flex; align-items: center; border-radius: 999px; box-sizing: border-box; }
+    .cd-from { left: 0; top: 10px; max-width: 40%; padding: 3px 10px; background: var(--pill); color: var(--muted); font-size: 13px; font-weight: 700; line-height: 16px; }
+    .cd-to { right: 0; top: 0; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
+    .cd-names .cd-to.goal { color: var(--accent-ink); }
+    .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 1px); border: 7px solid transparent; border-bottom: 0; }
+    .cd-from::after { left: 1px; border-top-color: var(--pill); }
+    .cd-to::after { right: 1px; border-top-color: var(--accent); }
+    .cd-names .cd-at { top: 68px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); }
     .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
