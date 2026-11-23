@@ -455,6 +455,8 @@
       background: color-mix(in srgb, var(--bg) 60%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .6s; }
     #credit a { color: inherit; text-decoration: none; }
     #credit.gone { opacity: 0; pointer-events: none; }
+    /* (a phone: above the sheet's grab strip, #sheet-grip, 24 px over the sheet's top; under it its links took no tap) */
+    @media (max-width: 439px) { #credit { bottom: calc(var(--sheet-h, 0px) + 30px + env(safe-area-inset-bottom, 0px)); } }
     @keyframes note-in { from { opacity: 0; transform: translateX(8px); } }
     .geo-off .maplibregl-ctrl-geolocate { pointer-events: none; }   /* the tap reaches the box, which shows the note */
     .geo-off .maplibregl-ctrl-geolocate .maplibregl-ctrl-icon { opacity: 0.35;
