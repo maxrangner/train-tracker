@@ -90,7 +90,7 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
 // stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
 // sets .full); onStop(sig): a stop in the timeline tapped (its station's page); onFold(open, box): its messages opened
 // or shut (box: their part).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null }) {
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null, onHead }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -104,7 +104,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
   const head = (train, company) =>
-    `<div class="panel-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
+    `<div class="panel-head pg-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
     (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span><span class="panel-buttons">` +
     (info ? `<button class="panel-info" type="button" aria-pressed="${infoOn}" aria-label="${t('tiButton')}">${icon('about')}</button>` : '') +
     (number && isStarred ? star(isStarred(number)) : '') +
@@ -118,6 +118,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (s) s.onclick = () => { const on = onStar(number); s.outerHTML = star(on); wireHead(); };
     const i = el.querySelector('.panel-info');
     if (i) i.onclick = () => setInfo(!infoOn);
+    onHead?.(el.querySelector('.panel-head'));   // (a new head line: the sheet puts the page's buttons in it again)
   }
   function setInfo(on) {
     infoOn = on;
@@ -340,11 +341,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const nextName = standing(next) ? t('cdAt', stationName(next.station)) : stationName(next.station);
     const isEnd = goal === ahead.at(-1);
     const pct = f => `${(f * 100).toFixed(1)}%`;
-    const trip = `<div class="cd-trip"><div class="cd-bar"><span class="cd-done" style="width:${pct(here)}"></span>` +
+    const atEnd = nextIdx === stops.length - 1;   // (its name is in the end's pill: no line under the bar for it)
+    const trip = `<div class="cd-trip${atEnd ? ' no-at' : ''}"><div class="cd-bar"><span class="cd-done" style="width:${pct(here)}"></span>` +
       `<i class="cd-first"></i>${!isEnd && goal.i !== nextIdx ? `<i class="cd-goal" style="left:${pct(frac((goal.s.arr ?? goal.s.dep).planned))}"></i>` : ''}` +
       `<i class="cd-train" style="left:${pct(here)}"></i><i class="cd-end${isEnd ? ' goal' : ''}"></i></div>` +
       `<div class="cd-names"><span class="cd-from"><em>${esc(stationName(stops[0].station))}</em></span>` +
-      `<b class="cd-at${goal.i === nextIdx ? ' goal' : ''}" style="--at:${pct(here)}">${esc(nextName)}</b>` +
+      (atEnd ? '' : `<b class="cd-at${goal.i === nextIdx ? ' goal' : ''}" style="--at:${pct(here)}">${esc(nextName)}</b>`) +
       `<span class="cd-to${isEnd ? ' goal' : ''}"><em>${esc(stationName(stops.at(-1).station))}</em></span></div></div>`;
     // The timeline's line where the train is: "In 4 min" to the next stop; standing there, "Leaves in 2 min".
     const nx = row({ s: next, i: nextIdx }), soon = nx.w.at - tNow < 30000;
@@ -400,8 +402,11 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (to && to.textContent !== dest) to.textContent = dest;
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
-    // the trip line first, then the tiles (Max's card pick 3, 2026-11-23)
-    const html = `${g.trip}<div class="cd-tiles">${g.tiles}</div>${g.list}`;
+    // the tiles (lateness, the time to the stop, its chooser), then the page's parts (why it stands), then the trip line
+    // (Max, 2026-11-23: "lateness and arrival time and disruption reason comes before the progress bar")
+    const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}`;
+    const tb = el.querySelector('.cd-tb');
+    if (tb && tb._h !== g.trip) { tb.innerHTML = g.trip; tb._h = g.trip; }
     el.classList.toggle('picking', Boolean(g.list));   // the card grows while the stops ahead are listed
     if (html === glanceSeen) return;   // each second: only when something on it changed
     glanceSeen = html;
@@ -557,7 +562,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
       (route.asOf && now() - route.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(route.asOf))}</p>` : '') +
       (stops.length
-        ? `<div class="cd"></div>` +
+        ? `<div class="cd"></div><div class="cd cd-tb"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
           `<div class="panel-table tl"><div class="tl-head">` +
@@ -568,7 +573,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     wireHead();
     // The page's own parts under the tiles (src/main.js: why it stands, Share, Add my change; 2026-11-23)
     const x = stops.length ? extra?.(openId) : null;
-    if (x) { const at = el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
+    if (x) { const at = el.querySelector('.cd-tb') ?? el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');

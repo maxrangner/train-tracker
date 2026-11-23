@@ -197,11 +197,12 @@ try {
       await wander(PHONE.width / 2, c.top - 14);
       c = await sheet();
       if (c.level !== 1) fails.push(`4 a wandering tap on the grip above the sheet at low: height ${c.level}, wanted 1`);
-      // a tap on the head's empty part (between the back chip and the bar's buttons): half → low
+      // a tap on the head's empty part (the card's top line, between its name and its buttons; no bar since
+      // 2026-11-23): half → low
       const gap = await page.evaluate(() => {
-        const back = document.querySelector('#sheet .sh-back').getBoundingClientRect();
-        const next = [...document.querySelectorAll('#sheet .sh-bar button')].filter(b => !b.hidden && b.getBoundingClientRect().left > back.right).map(b => b.getBoundingClientRect().left);
-        return { x: (back.right + Math.min(innerWidth - 12, ...next)) / 2, y: back.top + back.height / 2 };
+        const title = document.querySelector('#panel .panel-title').getBoundingClientRect();
+        const next = [...document.querySelectorAll('#panel .panel-head button')].filter(b => b.offsetParent && b.getBoundingClientRect().left > title.right).map(b => b.getBoundingClientRect().left);
+        return { x: (title.right + Math.min(innerWidth - 12, ...next)) / 2, y: title.top + title.height / 2 };
       });
       await page.touchscreen.tap(gap.x, gap.y);
       await sleep(600);

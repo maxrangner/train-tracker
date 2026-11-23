@@ -16,7 +16,7 @@ const SIZES = [['phone', { ...PHONE, height: 560 }], ['computer', { width: 1280,
 
 // Every element in the sheet (and ☰'s menu, the trail) that scrolls now: its name, its right padding, our own bar or not.
 function measure() {
-  const open = [...document.querySelectorAll('#sheet, #nav, #trail')].filter(s => !s.hidden && getComputedStyle(s).visibility !== 'hidden');
+  const open = [...document.querySelectorAll('#sheet, #nav')].filter(s => !s.hidden && getComputedStyle(s).visibility !== 'hidden');
   const out = [];
   for (const s of open) for (const el of [s, ...s.querySelectorAll('*')]) {
     const cs = getComputedStyle(el);

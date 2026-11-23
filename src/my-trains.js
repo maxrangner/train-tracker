@@ -478,6 +478,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     const noSheetPull = (e) => { if (e.target.closest('[data-grip]')) e.stopPropagation(); };
     return {
       name: () => t(edit ? 'editTrip' : 'newTrip'), kind: 'newtrip',
+      startLevel: 2,   // (opens full: its fields in view, not cut off at half; Max's phone, 2026-11-23)
       mount(page) {
         el = page;
         addEventListener('resize', onResize);
@@ -559,6 +560,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     }
     return {
       name: () => t(edit ? 'editTrip' : 'addChange'), kind: 'addchange',
+      startLevel: 2,   // (opens full, as a new trip does)
       mount(page) {
         el = page;
         el.addEventListener('click', (e) => {

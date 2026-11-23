@@ -177,6 +177,8 @@ const panel = createPanel(panelEl, {
   onStop: sig => openStation(sig),
   // under its tiles: why it stands, Share, Add my change (trainExtras, below)
   extra: id => trainExtras(id),
+  // the card's head line drawn again: its share, star and Follow back in it (the train page's barIn)
+  onHead: () => stack?.refreshBar(),
   // the line on how its place is known (also each second, below), for a card just opened
   statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
@@ -420,7 +422,7 @@ function trainPage(id) {
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
   // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
   // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
-  const CARD_GAP = 20;
+  const CARD_GAP = 10;   // (under "More": 20 was too much on Max's phone, 2026-11-23)
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
@@ -488,6 +490,9 @@ function trainPage(id) {
     // Share beside the star (Max, 2026-11-23)
     acts: () => [{ id: 'share', icon: 'share', label: t('share') }],
     act: (what) => { if (what === 'share') shareOpen(); },
+    // share, star and Follow in the card's top line beside the number, as before the sheet (Max, 2026-11-23); the sheet
+    // has no bar over a train
+    barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -672,7 +677,8 @@ function pickPage(key) {
     half() {
       const list = mine?.contains(pickerEl) ? pickerEl.querySelector('.pick-list') : null;
       if (!list) return 0;
-      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.42));
+      // (the sheet about half the screen at most: its handle 20 px over the page, no bar since 2026-11-23)
+      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.5) - 24);
     },
     hide: letGo,
     unmount() { letGo(); pickLists.delete(key); },
@@ -1205,7 +1211,7 @@ function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
   if (!filter.active) { line.clear('filter'); return; }
   const list = filter.list(), first = list[0];
-  line.set('filter', { priority: 10, html: `<span>${esc(t('filterShowing', list.map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')))}</span>`,
+  line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')))}</span>`,
     onTap: () => stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`),
     onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); }, closeLabel: t('filterClear') });
 }
@@ -1659,6 +1665,11 @@ document.getElementById('sheet').addEventListener('click', (e) => {
   if (!b) return;
   // a company under the search's "Show only": its filter on (the line above the bar, with its ×), and its page (R3)
   if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
+  // any row opening a company's or a kind's page (the search's results, Recent, Saved) filters too, as Home's do (Max,
+  // 2026-11-23: "Filtering still doesn't show as a pill, and clicking the map eventually clears it. Should stick."):
+  // a row that only lit its trains lost them at the next map tap
+  const grp = /^(co|kind):(.*)$/.exec(b.dataset.go ?? '');
+  if (grp) { const type = grp[1] === 'kind' ? 'kind' : 'brand'; if (!filter.has(type, grp[2])) filter.toggle(type, grp[2]); }
   if (b.dataset.go) stack.open(b.dataset.go, { go: true });
   else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
   // A company or kind picked on Home is a filter with its pill above the search bar (its × the only way out): a map

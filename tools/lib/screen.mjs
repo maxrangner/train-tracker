@@ -123,20 +123,13 @@ export async function openConnection(page) {
   await sleep(400);
 }
 
-// One step back, as Esc and Android's back do (the back chip goes home since 2026-11-23: chipHome): returns the page
+// One step back, as Esc and Android's back do: returns the page
 // key after it.
 export async function back(page) {
   await page.keyboard.press('Escape');
   await sleep(450);
   return pageKey(page);
 }
-// The back chip ("‹ Home"): every page gone, Home. Returns the page key after it.
-export async function chipHome(page) {
-  await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
-  await sleep(450);
-  return pageKey(page);
-}
-
-// What the sheet shows now, for a check's message: { key, keys, level, names, back (the chip's word) }.
+// What the sheet shows now, for a check's message: { key, keys, level, names }.
 export const sheetState = page => page.evaluate(() => ({ key: window.__stack.top(), keys: window.__stack.keys(), level: window.__stack.level,
-  names: window.__stack.names(), back: document.querySelector('#sheet .sh-back span')?.textContent ?? '' }));
+  names: window.__stack.names() }));

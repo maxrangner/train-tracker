@@ -275,7 +275,7 @@ try {
 
   // ---- 3. Share (the copied-link way) ----
   // (Share beside the star in the sheet's head since 2026-11-23)
-  ok(await page.evaluate(() => Boolean(document.querySelector('#sheet .sh-acts [data-act-id="share"]'))), 'Share is beside the star');
+  ok(await page.evaluate(() => Boolean(document.querySelector('#panel .panel-head .sh-acts [data-act-id="share"]'))), 'Share is beside the star, in the card top line');
   await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
   await until(page, () => Boolean(document.querySelector('.tr-extras .share-note')), 3000);
