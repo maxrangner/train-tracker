@@ -317,16 +317,16 @@ const SCREENS = [
   ['disruptions', 'tools/disruption-check.mjs', 14],     // problems vs rail work, list and map (live data)
   ['scrollbars', 'tools/scroll-check.mjs', 55],          // room for the scrollbar in every scrolling area
   ['live pill', 'tools/pill-check.mjs', 13],             // every state one short line, both languages
-  ['screens 1120', 'tools/screens-check.mjs', 65],       // Max's notes of 2026-11-20
+  ['screens 1120', 'tools/screens-check.mjs', 65, true], // Max's notes of 2026-11-20 (alone: it measures moves mid-glide; with four at a time they missed, 2026-11-23)
   ['splash', 'tools/splash-check.mjs', 30, true],        // the start screen's logo on its own thread (alone: frame times; 2026-11-21 beside another check its longest pause hit the 80 ms limit)
-  ['animations', 'tools/ui-motion-check.mjs', 53],       // buttons, numbers, rows, signs, the menu
+  ['animations', 'tools/ui-motion-check.mjs', 53, true],  // buttons, numbers, rows, signs, the menu (alone: animations mid-flight)
   ['stats and board', 'tools/stats-board-check.mjs', 40], // Max's notes of 2026-11-21: Statistik's loading, dimming, company pages, the board's search (live)
-  ['card moves', 'tools/sheet-moves-check.mjs', 35],     // every card moves in one go, no bounce (Max, 2026-11-21)
+  ['card moves', 'tools/sheet-moves-check.mjs', 35, true], // every card moves in one go, no bounce (Max, 2026-11-21; alone: frame by frame)
   ['ideas', 'tools/ideas-check.mjs', 90],                 // My trains, the change, why standing, share, peek, you seem to be on, a #train= link, the shop window (2026-11-23)
   ['pc', 'tools/pc-check.mjs', 20],                      // a computer's screen and mouse: the map always drags (Max's PC notes, 2026-11-23)
   ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
   ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
-  ['page motion', 'tools/page-motion-check.mjs', 40],     // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24)
+  ['page motion', 'tools/page-motion-check.mjs', 40, true], // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24; alone: it reads pages mid-slide)
   ['ui sweep', 'tools/ui-sweep.mjs', 600, true],         // every sheet transition frame by frame: nothing stray, no jump, a growing card keeps what it shows (Max, 2026-11-25)
 ];
 const screenJobs = [];
