@@ -2,11 +2,13 @@
 // - A saved trip from -> to (and an optional "via", a change on the way): its page 'trip:<key>' lists today's trains
 //   (time, expected time, track, lateness, cancelled ones crossed out), "If it fails: next is 17:08", or "No direct
 //   train today"; with a via the pairs with the minutes to change and both tracks, tight in yellow, lost in red.
-// - "+ New trip" (Home's Mine) and "Save a trip from here" (a board): the page 'newtrip' / 'newtrip:<from>' picks the
-//   stations with a station search. A saved trip's page has Edit ('edittrip:<key>': the same form, filled in) and
-//   Delete (two taps).
+// - "+ New trip" (Home's Saved, under Trips) and "Save a trip from here" (a board): the page 'newtrip' /
+//   'newtrip:<from>' shows the trip as a route (Max's pick A, 2026-11-23): its stations on a line, each a pill (From,
+//   a Change, To), dragged up or down by their dots; a tap on a pill makes it the station search, in place. A saved
+//   trip's page has Edit ('edittrip:<key>': the same form, filled in) and Delete (two taps), no star.
 // - "Add my change" (a train's page): 'addchange:<train id>' picks a later stop of the train, then a train leaving
-//   there; the pair is pinned as 'change:<key>' (today only).
+//   there; the pair is pinned as 'change:<key>' (today only). Its page is a trip's ("My trip"; Max, 2026-11-23) with
+//   Edit ('editchange:<key>': the same two steps again, from train 1) and Delete.
 // - The line above the bar ('trip', priority 20): the next train of the saved trip (or pinned change) whose next train
 //   leaves soonest, "16:52 → Stockholm C · track 4 · +3"; a tap opens it.
 // The rows: src/trafikverket.js fetchStationDay (whole-day boards, the files' day kind), each kept a minute; the trains
@@ -14,7 +16,7 @@
 // hidden.
 import { direct, nextTwo, withChange, change, when, lateAt } from './trips.js';
 import { favourites, tripKey } from './favourites.js';
-import { fetchStationDay, boardGone } from './trafikverket.js';
+import { fetchStationDay, fetchRoute, boardGone } from './trafikverket.js';
 import { now, hhmm, swedishDay } from './clock.js';
 import { t } from './i18n.js';
 import { esc } from './html.js';
@@ -109,7 +111,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   const changeClass = ch => (!ch ? '' : ch.lost ? 'lost' : ch.tight ? 'tight' : 'ok');
   const changeWords = ch => (ch.lost ? t('changeLost') : t('changeMin', ch.minutes)) +
     (ch.tracks[0] || ch.tracks[1] ? ` · ${t('trackShort')} ${ch.tracks[0] ?? '–'} → ${ch.tracks[1] ?? '–'}` : '');
-  // A short line for Mine and the line above the bar.
+  // A short line for Saved and the line above the bar.
   function summary(trip) {
     const n = nextOf(trip);
     if (n.loading) return { text: t('loading'), at: null };
@@ -128,7 +130,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return { at: when(r.dep), ch, dep: r.dep, text: [t('changeAt', stationName(c.at)), ch ? changeWords(ch) : trackText(r.dep.track)].filter(Boolean).join(' · ') };
   }
 
-  // ---------- Mine (src/home.js): the trips, the pinned changes, "+ New trip" ----------
+  // ---------- Saved (src/home.js), under Trips: the trips, the pinned changes, "+ New trip" ----------
   function mineHtml() {
     const trips = favourites.trips.map((trip) => {
       const s = summary(trip);
@@ -204,38 +206,49 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     : `<div class="trip-chg ${changeClass(ch)}"${chgAt(at)}>${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
       (ch?.lost && rescue ? `<div class="trip-chg rescue">${icon('change', 16)}<span>${esc(t('changeRescue', hhmm(when(rescue.second.dep)), rescue.second.number, rescue.change.tracks[1]))}</span></div>` : ''));
 
-  // A saved trip's Edit and Delete (Max, 2026-11-23: saved trips "can't be edited or deleted"). Delete takes two taps:
-  // the first turns it red, "Tap again to delete", for DELETE_ARMED_MS; a second tap sooner than DELETE_GAP_MS (a
-  // double tap, a finger bouncing) doesn't count.
+  // Edit and Delete of a saved trip or a pinned change (Max, 2026-11-23: saved trips "can't be edited or deleted"; the
+  // star "is not relevant here, it's either edit or delete"): a pencil and a bin in the sheet's head (def.acts/act,
+  // src/stack.js). Delete takes two taps: the first turns it red, "Tap again to delete", for DELETE_ARMED_MS; a second
+  // tap sooner than DELETE_GAP_MS (a double tap, a finger bouncing) doesn't count.
+  // pageKey: the page they sit on; editKey: the page the pencil opens; remove(): forgets the trip or change.
   const DELETE_ARMED_MS = 4000, DELETE_GAP_MS = 450;
+  function editDelete(pageKey, editKey, remove) {
+    let armedAt = 0, disarm = 0;
+    const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
+    return {
+      acts: () => [{ id: 'edit', icon: 'edit', label: t('tripEdit') },
+        { id: 'del', icon: 'trash', label: t(armed() ? 'tripDeleteAgain' : 'tripDelete'), armed: armed() }],
+      act(what) {
+        if (what === 'edit') { stack.open(editKey); return; }
+        const since = performance.now() - armedAt;
+        if (since < DELETE_GAP_MS) return;
+        if (since < DELETE_ARMED_MS) {
+          clearTimeout(disarm);
+          remove();
+          drawLine();
+          redrawHome();
+          stack.close(pageKey);
+          return;
+        }
+        armedAt = performance.now();
+        stack.refreshBar();
+        clearTimeout(disarm);
+        disarm = setTimeout(() => { if (stack.top() === pageKey) stack.refreshBar(); }, DELETE_ARMED_MS + 50);
+      },
+      reset() { armedAt = 0; },
+      stop() { clearTimeout(disarm); },
+    };
+  }
+
   function tripPage(key) {
     const trip = tripOf(key);
     if (!trip) return null;
-    let el = null, armedAt = 0, disarm = 0;
-    const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
+    let el = null;
+    const ed = editDelete(`trip:${trip.key}`, `edittrip:${trip.key}`, () => { favourites.removeTrip(trip.key); results.delete(trip.key); });
     const onMap = () => {
       const n = nextOf(trip);
       showTrip({ sigs: [trip.from, trip.via, trip.to].filter(Boolean), trains: [n.next?.dep?.key, n.pair?.second?.dep?.key].filter(Boolean) });
     };
-    // Edit and Delete: a pencil and a bin beside the star (Max, 2026-11-23; def.acts below)
-    function act(what) {
-      if (what === 'edit') { stack.open(`edittrip:${trip.key}`); return; }
-      const since = performance.now() - armedAt;
-      if (since < DELETE_GAP_MS) return;
-      if (since < DELETE_ARMED_MS) {
-        clearTimeout(disarm);
-        favourites.removeTrip(trip.key);
-        results.delete(trip.key);
-        drawLine();
-        redrawHome();
-        stack.close(`trip:${trip.key}`);
-        return;
-      }
-      armedAt = performance.now();
-      stack.refreshBar();
-      clearTimeout(disarm);
-      disarm = setTimeout(() => { if (stack.top() === `trip:${trip.key}`) stack.refreshBar(); }, DELETE_ARMED_MS + 50);
-    }
     function draw() {
       if (!el) return;
       const r = results.get(trip.key), n = nextOf(trip);
@@ -265,32 +278,35 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return {
       name: () => tripName(trip), kind: 'trip',
       mount(page) { el = page; openRow(el); },
-      acts: () => (favourites.trip(trip.key) ? [{ id: 'edit', icon: 'edit', label: t('tripEdit') },
-        { id: 'del', icon: 'trash', label: t(armed() ? 'tripDeleteAgain' : 'tripDelete'), armed: armed() }] : []),
-      act,
+      acts: () => (favourites.trip(trip.key) ? ed.acts() : []),
+      act: ed.act,
       // On the map too (Max, 2026-11-23: "Clicking a saved trip should show it on the map"): its stations at once, its
       // next train once today's trains are in (still its page on top then).
       show() {
-        armedAt = 0; draw(); onMap();
+        ed.reset(); draw(); onMap();
         load(trip).then(() => { draw(); drawLine(); if (stack.top() === `trip:${trip.key}`) onMap(); });
       },
       every() { if (due(trip)) load(trip).then(draw); else draw(); },
-      unmount() { clearTimeout(disarm); },
-      star: { on: () => Boolean(favourites.trip(trip.key)),
-        toggle: () => { if (favourites.trip(trip.key)) favourites.removeTrip(trip.key); else favourites.addTrip(trip.from, trip.to, trip.via); drawLine(); redrawHome(); draw(); } },
+      unmount() { ed.stop(); },
       redraw: () => { if (el) el._h = ''; draw(); },
     };
   }
 
+  // A pinned change is a trip (Max, 2026-11-23: "Shouldn't this be 'My trip' instead of 'mitt byte'? And all info and
+  // options of that"): a trip's page, "My trip", with the pencil (the change picked again, from train 1) and the bin,
+  // and on the map (its station named, its two trains lit). It tells only what the change knows: train 1, the station,
+  // train 2; not where you got on or where you are going.
   function changePage(key) {
     const c = favourites.change(key);
     if (!c) return null;
     let el = null;
+    const ed = editDelete(`change:${c.key}`, `editchange:${c.key}`, () => { favourites.removeChange(c.key); changeRows.delete(c.key); });
+    const onMap = () => { const r = changeRows.get(c.key); showTrip({ sigs: [c.at], trains: [r?.arr?.key, r?.dep?.key].filter(Boolean) }); };
     function draw() {
       if (!el) return;
       const r = changeRows.get(c.key);
-      const head = `<div class="g-head"><span class="r-ic trip">${icon('change', 18)}</span><b class="ttl">${esc(t('myChange'))}</b></div>` +
-        `<p class="sub">${esc(t('changeAt', stationName(c.at)))}</p>`;
+      const head = `<div class="g-head"><span class="r-ic trip">${icon('trip', 18)}</span><b class="ttl">${esc(t('myTrip'))}</b></div>` +
+        `<p class="sub">${esc(t('changeTripSub', c.a.number, c.b.number, stationName(c.at)))}</p>`;
       let body;
       if (!r) body = stateHtml('loading', t('loading'));
       else if (!r.arr || !r.dep) body = stateHtml('empty', t('tripNoAnswer'));
@@ -302,89 +318,181 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         body = `<div class="trip-next ${changeClass(ch)}"><small>${esc(t('toChange'))}</small><b>${ch.lost ? esc(t('changeLost')) : esc(t('minutesN', ch.minutes))}</b>` +
           `<span>${esc(`${t('trackShort')} ${ch.tracks[0] ?? '–'} → ${ch.tracks[1] ?? '–'}`)}</span></div>` +
           (ch.tight && !ch.lost ? `<p class="trip-fails">${esc(t('changeTight'))}</p>` : '') +
+          `<h4 class="lab">${esc(t('todaysTrains'))}</h4>` +
           `<div class="bd trip-list trip-pair">${row(r.arr, t('arrivesAt', stationName(c.at)))}${chgBox(ch, r.dep, null, c.at)}${row(r.dep, t('leavesFrom', stationName(c.at), r.dep.to ? stationName(r.dep.to) : ''))}</div>`;
       }
       const html = head + body;
       if (el._h !== html) { el.innerHTML = html; el._h = html; }
     }
     return {
-      name: () => `${c.a.number} → ${c.b.number}`, kind: 'trip',
+      name: () => t('myTrip'), kind: 'trip',
       mount(page) { el = page; openRow(el); },
-      show(_, { dir } = {}) { if (dir !== 0) showStation(c.at); draw(); loadChange(c).then(() => { draw(); drawLine(); }); },
+      acts: () => (favourites.change(c.key) ? ed.acts() : []),
+      act: ed.act,
+      show(_, { dir } = {}) {
+        ed.reset();
+        if (dir !== 0) showStation(c.at);
+        draw(); onMap();
+        loadChange(c).then(() => { draw(); drawLine(); if (stack.top() === `change:${c.key}`) onMap(); });
+      },
       every() { if (stale(c.at)) loadChange(c).then(draw); else draw(); },
-      star: { on: () => Boolean(favourites.change(c.key)),
-        toggle: () => { if (favourites.change(c.key)) favourites.removeChange(c.key); else favourites.addChange(c); drawLine(); redrawHome(); } },
+      unmount() { ed.stop(); },
       redraw: () => { if (el) el._h = ''; draw(); },
     };
   }
 
-  // ---------- a new trip: From, To and an optional Via, each picked with a station search ----------
-  // edit: a saved trip ('edittrip:<key>', its page's Edit): the form filled in; saving puts the new stations in its place.
+  // ---------- a new trip as a route (Max's pick A, 2026-11-23) ----------
+  // Its stations in order on a line, each a pill: the first is where you start (From, a grey dot), the last where you go
+  // (To: big, in the accent colour, a filled dot), one between a change (Change: a yellow dot and a × to take it away).
+  // At most one change for now (Max: several is a later, bigger build). Each pill is dragged up or down by its six dots
+  // (pointer events: a finger or a mouse; the pill lifts, its new place dashed); after a drag the first is From, the last
+  // To, the middle the Change. A tap on a pill makes that pill the station search, in place, its results right under it
+  // (Max's note 11: "many fields that look the same appear and reappear").
+  // edit: a saved trip ('edittrip:<key>', its page's Edit): the stations filled in; saving puts them in its place.
   function newTripPage(key, edit = null) {
     const from0 = !edit && key.includes(':') ? key.slice(key.indexOf(':') + 1) : null;
-    const st = edit ? { from: edit.from, to: edit.to, via: edit.via ?? null, editing: null, wantVia: Boolean(edit.via) }
-      : { from: from0, to: null, via: null, editing: from0 ? 'to' : 'from', wantVia: false };
-    let el = null;
-    // The station search sits right under the field it fills (Max's phone, 2026-11-23: under all the fields it was a
-    // tall pill, and the keyboard covered its results).
-    const search = `<input class="nt-q board-q" type="search" placeholder="${esc(t('stationPh'))}" autocomplete="off" spellcheck="false" enterkeyhint="search"><div class="rows nt-res"></div>`;
-    const field = (f, label) => `<button type="button" class="nt-field${st.editing === f ? ' on' : ''}" data-nt="${f}"><small>${esc(label)}</small>` +
-      `<b>${esc(st[f] ? stationName(st[f]) : t('chooseStation'))}</b></button>${st.editing === f ? search : ''}`;
+    // stops: the station signatures in order (null: not picked yet); editing: the pill that is the search now (-1: none)
+    const st = { stops: edit ? [edit.from, edit.via, edit.to].filter(Boolean) : [from0, null], editing: edit ? -1 : from0 ? 1 : 0 };
+    let el = null, drag = null;
+    const role = i => (i === 0 ? 'from' : i === st.stops.length - 1 ? 'to' : 'via');
+    const label = i => t({ from: 'tripFrom', to: 'tripTo', via: 'tripViaLabel' }[role(i)]);
+    function pillHtml(i) {
+      const sig = st.stops[i], name = sig ? stationName(sig) : t('chooseStation');
+      return st.editing === i
+        ? `<label class="nt-pill on"><small>${esc(label(i))}</small><input class="nt-q" type="search" placeholder="${esc(name)}" autocomplete="off" spellcheck="false" enterkeyhint="search"></label>`
+        : `<button type="button" class="nt-pill${sig ? '' : ' none'}" data-nt="stop" data-i="${i}"><small>${esc(label(i))}</small><b>${esc(name)}</b></button>`;
+    }
+    const stopHtml = i => `<div class="nt-stop ${role(i)}${st.editing === i ? ' editing' : ''}" data-i="${i}"><i class="nt-dot"></i>${pillHtml(i)}` +
+      (role(i) === 'via' ? `<button type="button" class="nt-x" data-nt="novia" aria-label="${esc(t('removeVia'))}">${icon('close', 18)}</button>` : '<span></span>') +
+      `<span class="nt-grip" data-grip="${i}" title="${esc(t('dragStop'))}">${icon('grip', 24)}</span></div>` +
+      (st.editing === i ? '<div class="rows nt-res"></div>' : '');
     function found(q) {
       const list = q ? findStations(q).slice(0, 8) : [];
       return list.map(s => `<button type="button" class="row" data-pick="${esc(s.sig)}"><span class="r-ic"><i class="ring"></i></span><span class="r-main"><b>${esc(s.name)}</b></span></button>`).join('')
         || (q ? `<p class="empty">${esc(t('noStationFound'))}</p>` : '');
     }
-    // While typing, the field being filled goes to the top of the sheet (at full) and its results right under it, above
+    // The line through the dots, from the first to the last (results under a pill push the ones below it down).
+    function line() {
+      const route = el?.querySelector('.nt-route'), dots = route?.querySelectorAll('.nt-dot');
+      if (!dots || dots.length < 2) return;
+      const top = route.getBoundingClientRect().top, mid = d => { const b = d.getBoundingClientRect(); return b.top + b.height / 2 - top; };
+      route.style.setProperty('--l0', `${mid(dots[0])}px`);
+      route.style.setProperty('--l1', `${mid(dots[dots.length - 1])}px`);
+    }
+    // While typing, the pill being filled goes to the top of the sheet (at full) and its results right under it, above
     // the keyboard (the keyboard shrinks the page: interactive-widget=resizes-content; visualViewport for a phone that
     // lays it over the page). The room under the results lets the page scroll that far (.nt-room).
     const toTop = () => {
-      const f = el?.querySelector('.nt-field.on');
+      const f = el?.querySelector('.nt-stop.editing');
       if (!f || stack.level < 2 || stack.top() !== key) return;
       el.scrollTop += f.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
     };
     const typing = () => { const q = el?.querySelector('.nt-q'); return Boolean(q && document.activeElement === q); };
-    const onResize = () => { if (typing()) { toTop(); setTimeout(toTop, 250); } };
+    const onResize = () => { line(); if (typing()) { toTop(); setTimeout(toTop, 250); } };
     function draw() {
-      const can = st.from && st.to && st.from !== st.to;
-      el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p><div class="nt-fields">` +
-        field('from', t('tripFrom')) + field('to', t('tripTo')) +
-        (st.wantVia || st.via ? `<div class="nt-via">${field('via', t('tripViaLabel'))}<button type="button" class="nt-x" data-nt="novia" aria-label="${esc(t('removeVia'))}">${icon('close', 18)}</button></div>` : `<button type="button" class="chip nt-addvia" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>`) + '</div>' +
-        `<button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
+      const n = st.stops.length, from = st.stops[0], to = st.stops[n - 1];
+      const can = from && to && from !== to;
+      el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p>` +
+        `<p class="sub nt-hint">${esc(t('tripDragHint'))}</p><div class="nt-route">` +
+        st.stops.map((_, i) => stopHtml(i) + (i === 0 && n === 2 ? `<button type="button" class="nt-add" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>` : '')).join('') +
+        `</div><button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
+      line();
       const q = el.querySelector('.nt-q'), room = el.querySelector('.nt-room');
       if (q) {
-        q.oninput = () => { el.querySelector('.nt-res').innerHTML = found(q.value.trim()); };
+        q.oninput = () => { el.querySelector('.nt-res').innerHTML = found(q.value.trim()); line(); };
         q.onfocus = () => {
           room.hidden = false;
           if (stack.level < 2) stack.setLevel(2);
           toTop();
           requestAnimationFrame(toTop);
         };
-        // (kept while it holds text: a tap on a result blurs the field first, and the room going then would move the
-        // result from under the finger)
-        q.onblur = () => { if (!q.value) room.hidden = true; };
+        // Left empty (a tap elsewhere): the pill again, only it (a tap on another pill or its × keeps its target).
+        // (Kept while it holds text: a tap on a result blurs the field first, and the room going then would move the
+        // result from under the finger.)
+        q.onblur = () => {
+          if (q.value) return;
+          room.hidden = true;
+          const i = st.editing;
+          setTimeout(() => {
+            if (st.editing !== i || !q.isConnected || document.activeElement === q || q.value) return;
+            st.editing = -1;
+            const s = el.querySelector(`.nt-stop[data-i="${i}"]`);
+            s.classList.remove('editing');
+            s.querySelector('.nt-pill').outerHTML = pillHtml(i);
+            s.nextElementSibling?.classList.contains('nt-res') && s.nextElementSibling.remove();
+            line();
+          }, 0);
+        };
       }
     }
     function save() {
-      if (!(st.from && st.to && st.from !== st.to)) return;
-      const via = st.via && st.via !== st.from && st.via !== st.to ? st.via : null;
-      const k = edit ? favourites.replaceTrip(edit.key, st.from, st.to, via) : favourites.addTrip(st.from, st.to, via);
+      const n = st.stops.length, from = st.stops[0], to = st.stops[n - 1], mid = n === 3 ? st.stops[1] : null;
+      if (!(from && to && from !== to)) return;
+      const via = mid && mid !== from && mid !== to ? mid : null;
+      const k = edit ? favourites.replaceTrip(edit.key, from, to, via) : favourites.addTrip(from, to, via);
       if (edit && k !== edit.key) { results.delete(edit.key); stack.close(`trip:${edit.key}`); }
       refreshAll();
       if (stack.has(`trip:${k}`)) stack.open(`trip:${k}`);   // (edited: back to its page, drawn again)
       else stack.replace(`trip:${k}`);
     }
+    // ---- a pill dragged by its dots: it follows the finger, the others make room (the dashed place) ----
+    function dragStart(e) {
+      const g = e.target.closest('[data-grip]');
+      if (!g || drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      e.preventDefault();
+      e.stopPropagation();   // (not the sheet's own pull: src/stack.js)
+      const i = Number(g.dataset.grip);
+      if (st.editing >= 0) { st.editing = -1; draw(); }
+      const route = el.querySelector('.nt-route'), s = route.querySelector(`.nt-stop[data-i="${i}"]`);
+      route.classList.add('dragging');   // ("Add a change" steps aside meanwhile)
+      const rr = route.getBoundingClientRect(), r0 = s.getBoundingClientRect();
+      const gap = Object.assign(document.createElement('div'), { className: 'nt-gap' });
+      gap.style.height = `${r0.height}px`;
+      s.before(gap);
+      s.classList.add('lifted');
+      Object.assign(s.style, { position: 'absolute', left: '0', right: '0', top: `${r0.top - rr.top}px` });
+      drag = { i, s, gap, route, id: e.pointerId, y0: e.clientY, top0: r0.top - rr.top, to: i };
+    }
+    function dragMove(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (e.cancelable) e.preventDefault();
+      const { s, gap, route } = drag;
+      const room = route.clientHeight - s.offsetHeight;
+      s.style.top = `${Math.max(-24, Math.min(room + 24, drag.top0 + e.clientY - drag.y0))}px`;
+      const b = s.getBoundingClientRect(), mid = b.top + b.height / 2;
+      const others = [...route.querySelectorAll('.nt-stop')].filter(x => x !== s);
+      let to = others.findIndex((x) => { const r = x.getBoundingClientRect(); return mid < r.top + r.height / 2; });
+      if (to < 0) to = others.length;
+      if (to !== drag.to) {
+        drag.to = to;
+        if (to < others.length) others[to].before(gap); else others[others.length - 1].after(gap);
+      }
+    }
+    function dragEnd(e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      const { i, to } = drag;
+      drag = null;
+      if (e.type === 'pointerup' && to !== i) { const [x] = st.stops.splice(i, 1); st.stops.splice(to, 0, x); }
+      draw();
+    }
+    const noSheetPull = (e) => { if (e.target.closest('[data-grip]')) e.stopPropagation(); };
     return {
       name: () => t(edit ? 'editTrip' : 'newTrip'), kind: 'newtrip',
       mount(page) {
         el = page;
         addEventListener('resize', onResize);
         visualViewport?.addEventListener('resize', onResize);
+        el.addEventListener('pointerdown', dragStart);
+        el.addEventListener('touchstart', noSheetPull, { passive: true });
+        addEventListener('pointermove', dragMove, { passive: false });
+        addEventListener('pointerup', dragEnd);
+        addEventListener('pointercancel', dragEnd);
         el.addEventListener('click', (e) => {
           const pick = e.target.closest('[data-pick]'), b = e.target.closest('[data-nt]');
           if (pick) {
-            st[st.editing] = pick.dataset.pick;
-            st.editing = !st.from ? 'from' : !st.to ? 'to' : null;
+            if (st.editing < 0) return;
+            st.stops[st.editing] = pick.dataset.pick;
+            st.editing = st.stops.findIndex(s => !s);
             draw();
             return;
           }
@@ -392,30 +500,37 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           const f = b.dataset.nt;
           if (f === 'save') { save(); return; }
           // (an added change can be taken away again: Max, 2026-11-23)
-          if (f === 'novia') { st.via = null; st.wantVia = false; st.editing = null; draw(); return; }
-          if (f === 'addvia') { st.wantVia = true; st.editing = 'via'; } else st.editing = st.editing === f ? null : f;
+          if (f === 'novia') { st.stops.splice(Number(b.closest('.nt-stop').dataset.i), 1); st.editing = -1; draw(); return; }
+          if (f === 'addvia') { if (st.stops.length < 3) st.stops.splice(1, 0, null); st.editing = 1; } else st.editing = Number(b.dataset.i);
           draw();
-          if (st.editing) el.querySelector('.nt-q')?.focus({ preventScroll: true });
+          if (st.editing >= 0) el.querySelector('.nt-q')?.focus({ preventScroll: true });
         });
       },
       show() { draw(); },
-      unmount() { removeEventListener('resize', onResize); visualViewport?.removeEventListener('resize', onResize); },
+      unmount() {
+        removeEventListener('resize', onResize); visualViewport?.removeEventListener('resize', onResize);
+        removeEventListener('pointermove', dragMove); removeEventListener('pointerup', dragEnd); removeEventListener('pointercancel', dragEnd);
+      },
       redraw: () => draw(),
     };
   }
 
   // ---------- "Add my change": a later stop of the train, then a train leaving there ----------
-  function addChangePage(key) {
-    const id = key.slice(key.indexOf(':') + 1), info = trainInfo(id);
-    if (!info?.route) return null;
-    let el = null, at = null, deps = null;
+  // edit: a pinned change ('editchange:<key>', its page's pencil): the same two steps from its first train (its stops
+  // asked for here: the train's own page need not be open); the new pair takes the old one's place.
+  function addChangePage(key, edit = null) {
+    let info = edit ? { number: String(edit.a.number), operational: edit.a.operational, date: edit.a.date, route: null } : trainInfo(key.slice(key.indexOf(':') + 1));
+    if (!edit && !info?.route) return null;
+    let el = null, at = null, deps = null, failed = false;
     // The stops still ahead where the train arrives (not its first, not cancelled).
-    const stops = info.route.stops.filter((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
-    const arrAt = sig => { const s = stops.find(x => x.station === sig); return s ? { ...s, number: info.number } : null; };
+    const stops = () => (info.route?.stops ?? []).filter((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
+    const arrAt = sig => { const s = stops().find(x => x.station === sig); return s ? { ...s, number: info.number } : null; };
     function draw() {
+      if (!el) return;
       let body;
-      if (!at) {
-        body = `<h4 class="lab">${esc(t('changeWhere'))}</h4><div class="bd">` + (stops.map(s => `<button type="button" class="bd-row" data-stop="${esc(s.station)}"><span class="bd-time">${timeHtml(s)}</span>` +
+      if (!info.route) body = stateHtml(failed ? 'error' : 'loading', t(failed ? 'tripNoAnswer' : 'loading'));
+      else if (!at) {
+        body = `<h4 class="lab">${esc(t('changeWhere'))}</h4><div class="bd">` + (stops().map(s => `<button type="button" class="bd-row" data-stop="${esc(s.station)}"><span class="bd-time">${timeHtml(s)}</span>` +
           `<span class="bd-name"><b>${esc(stationName(s.station))}</b><small>${esc(t('arrives'))}</small></span><span class="bd-tag"></span><span class="tl-trk">${esc(s.track || '')}</span></button>`).join('')
           || `<p class="empty">${esc(t('noStopsAhead'))}</p>`) + '</div>';
       } else {
@@ -429,11 +544,21 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
           }).join('') || `<p class="empty">${esc(t('noDepartures'))}</p>`;
         body = `<p class="sub">${esc(t('arrivesAtTime', stationName(at), hhmm(when(a)), a.track || '–'))}</p><h4 class="lab">${esc(t('changeTo'))}</h4><div class="bd">${list}</div>`;
       }
-      el.innerHTML = `<div class="g-head"><span class="r-ic trip">${icon('change', 18)}</span><b class="ttl">${esc(t('addChange'))}</b></div>` +
+      el.innerHTML = `<div class="g-head"><span class="r-ic trip">${icon('change', 18)}</span><b class="ttl">${esc(t(edit ? 'editTrip' : 'addChange'))}</b></div>` +
         `<p class="sub">${esc(t('addChangeSub', info.number))}</p>` + body;
     }
+    function pinned(item) {
+      changeRows.delete(item.key);
+      if (!edit) { favourites.addChange(item); refreshAll(); stack.replace(`change:${item.key}`); return; }
+      const k = favourites.replaceChange(edit.key, item);
+      changeRows.delete(edit.key);
+      if (k !== edit.key) stack.close(`change:${edit.key}`);
+      refreshAll();
+      if (stack.has(`change:${k}`)) stack.open(`change:${k}`);   // (the same pair again: back to its page)
+      else stack.replace(`change:${k}`);
+    }
     return {
-      name: () => t('addChange'), kind: 'addchange',
+      name: () => t(edit ? 'editTrip' : 'addChange'), kind: 'addchange',
       mount(page) {
         el = page;
         el.addEventListener('click', (e) => {
@@ -448,16 +573,17 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
             const row = deps.find(x => x.key === d.dataset.dep);
             if (!row) return;
             const dayNow = swedishDay(now());
-            const item = { key: `${info.number}@${at}>${row.number}/${dayNow}`, day: dayNow, at,
-              a: { number: String(info.number), operational: info.operational, date: info.date }, b: { number: String(row.number), operational: row.operational, date: row.date } };
-            favourites.addChange(item);
-            changeRows.delete(item.key);
-            refreshAll();
-            stack.replace(`change:${item.key}`);
+            pinned({ key: `${info.number}@${at}>${row.number}/${dayNow}`, day: dayNow, at,
+              a: { number: String(info.number), operational: info.operational, date: info.date }, b: { number: String(row.number), operational: row.operational, date: row.date } });
           }
         });
       },
-      show() { draw(); },
+      show() {
+        draw();
+        if (!info.route && !failed) {
+          fetchRoute(info.operational, info.date, info.number).then((route) => { info = { ...info, route }; draw(); }, (e) => { console.warn('my change:', e.message); failed = true; draw(); });
+        }
+      },
       redraw: () => draw(),
     };
   }
@@ -470,6 +596,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (type === 'newtrip') return newTripPage(key);
     if (type === 'edittrip') { const trip = favourites.trip(key.slice(9)); return trip ? newTripPage(key, { ...trip }) : null; }
     if (type === 'addchange') return addChangePage(key);
+    if (type === 'editchange') { const c = favourites.change(key.slice(11)); return c ? addChangePage(key, { ...c }) : null; }
     return undefined;
   }
   return { define, mineHtml, refresh: refreshAll, drawLine, tripKey };

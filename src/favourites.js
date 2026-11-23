@@ -64,5 +64,15 @@ export const favourites = {
     if (!fav.changes.some(x => x.key === item.key)) { fav.changes.push(item); save(); }
     return item.key;
   },
+  // A pinned change edited (Max, 2026-11-23: a change is a trip, "either edit or delete"): the new one takes the old
+  // one's place in the list. The same change already pinned elsewhere: kept once, there. Returns the new key.
+  replaceChange(oldKey, item) {
+    const i = fav.changes.findIndex(x => x.key === oldKey);
+    if (i < 0) return this.addChange(item);
+    if (item.key !== oldKey && fav.changes.some(x => x.key === item.key)) fav.changes.splice(i, 1);
+    else fav.changes[i] = item;
+    save();
+    return item.key;
+  },
   removeChange(key) { const n = fav.changes.length; fav.changes = fav.changes.filter(x => x.key !== key); if (fav.changes.length !== n) save(); },
 };
