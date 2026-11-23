@@ -723,7 +723,9 @@ function closeNav() {
   navButton.setAttribute('aria-expanded', 'false');
 }
 onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
-document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target)) closeNav(); }, true);
+// (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
+// map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
+document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target) && !mapEl.contains(e.target)) closeNav(); }, true);
 // The day (build plan part 4, src/day-view.js): the ribbon above the search bar, the sheet down to rest. Only the page
 // reading the server's files has the day's history; the dev page with the key (or a replay) says so. Again: closes it.
 document.head.append(Object.assign(document.createElement('style'), { textContent: DAY_CSS }));
