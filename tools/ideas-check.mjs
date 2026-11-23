@@ -106,8 +106,11 @@ try {
   // ---- 3. Share (the copied-link way) ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
-  const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('#map .map-note:not([hidden])')?.innerText ?? '' }));
+  const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('#map .map-note:not([hidden])')?.innerText ?? '',
+    noteH: Math.round(document.querySelector('#map .map-note:not([hidden])')?.getBoundingClientRect().height ?? 0) }));
   ok(shared.url === 'https://sparat.rangner.com/#train=531' && ['copied', 'shown'].includes(shared.how) && shared.note.includes(shared.url), `Share without a share sheet: ${shared.how}, "${shared.note}"`);
+  // (with the line above the bar showing, the note stretched over the whole map: 2026-11-23, 620 px)
+  ok(shared.noteH > 0 && shared.noteH < 120, `the note is a small box (${shared.noteH} px high)`);
   await shot(page, '07-share');
 
   // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Mine ----
@@ -243,6 +246,9 @@ try {
     await p.evaluate(() => window.__ideas.shop.pretendIdle());
     ok(await until(p, () => window.__ideas.shop.running && document.documentElement.classList.contains('shop'), 6000), 'on its side and untouched: the shop window starts, the buttons fade');
     await sleep(4500);
+    // (the scale slider stayed on 2026-11-23)
+    const shown = await p.evaluate(() => ['#sheet', '.scale', '#status', '.maplibregl-ctrl-bottom-right'].filter(s => { const e = document.querySelector(s); return e && Number(getComputedStyle(e).opacity) > 0.05; }));
+    ok(shown.length === 0, `everything pressable faded, the scale slider too${shown.length ? ` (still showing: ${shown.join(', ')})` : ''}`);
     const words = await p.evaluate(() => window.__ideas.shop.line);
     ok(/Fastest|Most late|Disruption|meet|live/.test(words), `its line: "${words}"`);
     await shot(p, '14-shop-window');
