@@ -193,8 +193,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       `<span class="bd-name"><b>${esc(`→ ${stationName(toSig)} ${hhmm(when(a))}`)}</b><small>${esc(`${d.number} ${d.product ?? ''}`)}</small></span>` +
       `<span class="bd-tag">${lateTag(gone ? { canceled: true } : d)}</span><span class="tl-trk">${esc(d.track || '')}</span></button>`;
   }
-  const chgBox = (ch, second) => (!second ? `<div class="trip-chg lost">${icon('change', 16)}<span>${esc(t('noOnward'))}</span></div>`
-    : `<div class="trip-chg ${changeClass(ch)}">${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>`);
+  const chgBox = (ch, second, rescue = null) => (!second ? `<div class="trip-chg lost">${icon('change', 16)}<span>${esc(t('noOnward'))}</span></div>`
+    : `<div class="trip-chg ${changeClass(ch)}">${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
+      (ch?.lost && rescue ? `<div class="trip-chg rescue">${icon('change', 16)}<span>${esc(t('changeRescue', hhmm(when(rescue.second.dep)), rescue.second.number, rescue.change.tracks[1]))}</span></div>` : ''));
 
   function tripPage(key) {
     const trip = tripOf(key);
@@ -218,7 +219,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         if (r.trains) {
           list = r.trains.filter(notGone).slice(0, LIST_MAX).map(x => legRow(x, trip.to)).join('');
         } else {
-          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second)}` +
+          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue)}` +
             `${p.second ? legRow(p.second, trip.to) : ''}</div>`).join('');
         }
         body = big + `<h4 class="lab">${esc(t('todaysTrains'))}</h4><div class="bd trip-list">${list}</div>`;

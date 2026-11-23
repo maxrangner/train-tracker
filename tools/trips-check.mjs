@@ -44,6 +44,18 @@ ok(paired.length > 10, `Uppsala C → Malmö C via Stockholm C: ${paired.length}
 ok(paired.every(p => p.second.dep.planned >= p.first.arr.planned + MIN_CHANGE_MIN * 60000), `every planned change is at least ${MIN_CHANGE_MIN} minutes`);
 const ex = paired.find(p => p.first.dep.planned > NOW) ?? paired[0];
 console.log(`     e.g. ${ex.first.number} ${hhmm(ex.first.dep.planned)} → Cst ${hhmm(ex.first.arr.planned)} (track ${ex.change.tracks[0]}), then ${ex.second.number} ${hhmm(ex.second.dep.planned)} (track ${ex.change.tracks[1]}): ${ex.change.minutes} min`);
+// A lost change names the later train that works (by expected times), never the lost one, and only when lost.
+ok(pairs.every(p => !p.rescue || (p.change.lost && p.rescue.second !== p.second && !p.rescue.change.lost && !p.rescue.change.tight)),
+  'a lost change offers a later train that works; a kept one offers none');
+ok(pairs.every(p => p.rescue === null || p.rescue === undefined || p.change?.lost), 'no rescue without a lost change');
+{
+  const mk = (n, at, plannedMin, lateMin, act) => ({ number: n, date: '2026-11-17', planned: at + plannedMin * 60000, estimated: lateMin ? at + (plannedMin + lateMin) * 60000 : null,
+    actual: null, track: String(n).slice(-1), canceled: false, act });
+  const T0 = Date.parse('2026-11-17T12:00:00+01:00');
+  // First train A 12:00 → C 12:30, 20 min late; second trains C → B at 12:40 (lost) and 12:55 (works).
+  const r = withChange([mk('1', T0, 0, 20)], [mk('1', T0, 30, 20)], [mk('2', T0, 40, 0), mk('3', T0, 55, 0)], [mk('2', T0, 70, 0), mk('3', T0, 85, 0)]);
+  ok(r[0].change.lost && r[0].rescue?.second.number === '3' && r[0].rescue.change.minutes === 5, `20 min late: the 12:40 is lost, take 3 at 12:55 instead (${r[0].rescue?.change.minutes} min)`);
+}
 
 // Changes on made-up rows.
 const T = Date.parse('2026-11-17T10:00:00+01:00'), m = 60000;

@@ -50,13 +50,18 @@ export function change(arrC, depC) {
 
 // A trip with a change at C: each first train A → C paired with the first second train C → B leaving at least
 // MIN_CHANGE_MIN minutes after the first's expected arrival at C (planned times, so a late first train shows its
-// change as tight or lost instead of quietly pairing with a later train). Each { first, second, change } where first
-// and second are direct()'s rows; second is null when no train C → B leaves after it today.
+// change as tight or lost instead of quietly pairing with a later train). Each { first, second, change, rescue } where
+// first and second are direct()'s rows; second is null when no train C → B leaves after it today; rescue, when the
+// change is lost: { second, change } with the first later train that works by expected times, or null.
 export function withChange(depA, arrC, depC, arrB) {
   const legs1 = direct(depA, arrC), legs2 = direct(depC, arrB);
   return legs1.map(first => {
     const second = legs2.find(x => !x.canceled && x.dep.planned >= first.arr.planned + MIN_CHANGE_MIN * 60000) ?? null;
-    return { first, second, change: second ? change(first.arr, second.dep) : null };
+    const ch = second ? change(first.arr, second.dep) : null;
+    // Lost: the first second train that still works by expected times (on 17 Nov's switch fault every change at
+    // Hässleholm was lost; the trip page then says which later train to take).
+    const rescue = ch?.lost ? legs2.find(x => !x.canceled && x !== second && when(x.dep) >= when(first.arr) + MIN_CHANGE_MIN * 60000) ?? null : null;
+    return { first, second, change: ch, rescue: rescue && { second: rescue, change: change(first.arr, rescue.dep) } };
   });
 }
 
