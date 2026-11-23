@@ -554,7 +554,9 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         ? `<div class="cd"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
-          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>` +
+          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span>` +
+          // ("All places" back on the card, left of "Track": Max, 2026-11-23; the same setting as Settings → All places)
+          `<span class="tl-all"><button type="button" class="tl-places" data-act="allplaces" aria-pressed="${Boolean(settings.allPlaces)}">${icon(settings.allPlaces ? 'check' : 'plus', 14)}${esc(t('allPlaces'))}</button></span><span>${t('track')}</span></div>${tlRows}</div>` +
           (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
     wireHead();

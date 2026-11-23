@@ -1647,6 +1647,7 @@ document.getElementById('sheet').addEventListener('click', (e) => {
   else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
   else if (b.dataset.act === 'favtrain') pickFavouriteTrain(b.dataset.n);
   else if (b.dataset.act === 'showonly') stack.pageDef(stack.top())?.toggleShowOnly?.();
+  else if (b.dataset.act === 'allplaces') setSetting('allPlaces', !settings.allPlaces);
   else if (b.dataset.id && b.classList.contains('dis-row')) stack.open(`dis:${b.dataset.id}`);
 });
 // For the tools (tools/lib/screen.mjs): the stack's keys, its top, the sheet's height; opening and going back.

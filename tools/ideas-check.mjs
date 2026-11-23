@@ -244,6 +244,19 @@ try {
   const why = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/Växelfel/.test(why), `531: "${why}"`);
   await shot(page, '06-why-531');
+  // "All places" on the card, left of "Track" (Max, 2026-11-23): on, the places between stops; off again, gone
+  await setLevel(page, 2);
+  await sleep(1200);
+  const tlRows = () => page.evaluate(() => document.querySelectorAll('#panel .tl-row').length);
+  const before = await tlRows();
+  await page.evaluate(() => document.querySelector('#panel .tl-places')?.click());
+  await until(page, () => document.querySelector('#panel .tl-places')?.getAttribute('aria-pressed') === 'true', 4000);
+  await sleep(800);
+  const withAll = await tlRows();
+  await page.evaluate(() => document.querySelector('#panel .tl-places')?.click());
+  await sleep(800);
+  ok(withAll > before && (await tlRows()) === before, `"All places" on the card: ${before} rows → ${withAll} → ${await tlRows()} off again`);
+  await setLevel(page, 1);
   // at night only the 3D trains' windows glow, not the dots (Max, 2026-11-23)
   ok(!(await page.evaluate(() => Boolean(window.__map.getLayer('train-glow')))), 'no glow round the dots at night (only the 3D windows)');
   // a moving train 8+ minutes late says why it is late (Max, 2026-11-23: "don't see the reason for the delay")
