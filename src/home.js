@@ -10,6 +10,7 @@
 // open; "Show only" keeps that after it closes, through src/filter.js) and the rows every page and the search share.
 // Every row is a door: data-go carries the stack key it opens (src/stack.js); src/main.js listens for them.
 import { t } from './i18n.js';
+import { settings } from './settings.js';
 import { esc } from './html.js';
 import { icon } from './icons.js';
 import { tagHtml } from './tag.js';
@@ -118,7 +119,7 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    put('legend', legendHtml(counts(frame)), 'legend');
+    put('legend', settings.homeLegend ? legendHtml(counts(frame)) : '', 'legend');   // (Debug: off, Max 2026-11-23)
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
