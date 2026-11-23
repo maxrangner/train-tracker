@@ -53,6 +53,9 @@ const DEFAULTS = {
   pillSide: 'auto',
   // Lateness colours colour-blind people can tell apart (Max, 2026-11-21; src/colours.js LATE_SAFE), off.
   colourBlind: false,
+  // Not counted as a viewer on this phone or browser (Debug, Max 2026-11-23: his own pages and phone stay out of the
+  // numbers; src/count.js).
+  noCount: false,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -77,6 +80,7 @@ const KEYS = {
   nameSide: { param: 'nameside' },
   pillSide: { param: 'pillside' },
   colourBlind: { param: 'cb' },
+  noCount: { param: 'nocount' },
 };
 const STORE = 'settings';
 
@@ -107,6 +111,7 @@ const valid = {
   nameSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  noCount: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>

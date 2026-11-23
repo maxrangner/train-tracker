@@ -29,7 +29,8 @@ writeFileSync('android/local.properties', `sdk.dir=${SDK.replaceAll('\\', '/')}\
 const mapName = readdirSync('data/map').filter(n => /^sweden-.*\.pmtiles$/.test(n)).sort().at(-1);
 if (PUBLIC && !mapName) throw new Error('no data/map/sweden-<date>.pmtiles (the map file on the site)');
 const env = { ...process.env, JAVA_HOME, ANDROID_HOME: SDK,
-  ...(PUBLIC ? { VITE_TRV_KEY: '', VITE_DATA_URL: `${SITE}/data/`, VITE_MAP_URL: `${SITE}/tiles/${mapName}` } : {}) };
+  // The public app counts its viewers (2026-11-23, src/count.js); a dev APK doesn't.
+  ...(PUBLIC ? { VITE_TRV_KEY: '', VITE_DATA_URL: `${SITE}/data/`, VITE_MAP_URL: `${SITE}/tiles/${mapName}`, VITE_COUNT_URL: `${SITE}/count/i.php` } : { VITE_COUNT_URL: '' }) };
 const run = (cmd, cwd = '.') => execSync(cmd, { cwd, env, stdio: 'inherit' });
 run('npx vite build');
 if (PUBLIC) {
