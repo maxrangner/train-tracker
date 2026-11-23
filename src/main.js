@@ -405,8 +405,25 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
-  let wantHalf = 0;   // the card's half, last measured while compact (half() below)
+  let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
   const number = () => String(meta()?.number ?? m0.number);
+  // How far down the card goes (px from the page's top edge): whole, to "More" (or what it shows yet), or condensed
+  // (its head and the line under it).
+  const CARD_GAP = 20;
+  function cardTo(whole) {
+    const pg = panelEl.parentElement;
+    if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
+    const top = pg.getBoundingClientRect().top - pg.scrollTop;
+    const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
+    if (!whole) {
+      const b = Math.max(below(panelEl.querySelector('.panel-head')), below(panelEl.querySelector('.panel-alert')));
+      if (b > 0) wantLow = Math.ceil(b + CARD_GAP);
+      return wantLow;
+    }
+    const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
+    if (b > 0) wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4;
+    return wantHalf;
+  }
   return {
     name: number, kind: 'train',
     show(el, { prev, dir, go = false, again = false }) {
@@ -433,18 +450,15 @@ function trainPage(id) {
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
-    // Half: down to the card's "More" with room under it (Max's phone, 2026-11-23: "More" lay under Android's own bar at
-    // the bottom of a short screen); never shorter than the usual half (halfGrows). Measured only while the card is
-    // compact and the sheet not at full (with all stops open "More" is elsewhere: the last measure is kept), in steps
-    // of 8 px, read again each second (the why-line or Share's note coming in). No "More" yet: the usual half.
-    halfGrows: true,
-    half() {
-      const more = panel.openId === id ? panelEl.querySelector('.panel-more') : null, pg = panelEl.parentElement;
-      if (!more || !pg || !more.offsetParent) return wantHalf;
-      if (stack.level === 2 || panelEl.classList.contains('full')) return wantHalf;
-      wantHalf = Math.ceil((more.getBoundingClientRect().bottom - pg.getBoundingClientRect().top + pg.scrollTop + 24) / 8) * 8;
-      return wantHalf;
-    },
+    // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
+    // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
+    // only while the card is compact and the sheet not at full (with all stops open "More" is elsewhere: the last
+    // measure is kept). No "More" yet (its stops still coming): down to what the card shows, so it only grows.
+    half: () => cardTo(true),
+    // Low: on a computer the whole card down to "More" (Max, 2026-11-23: "the most compact view should be including all
+    // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
+    // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
+    low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
     every() { if (panel.openId === id) { drawExtras(id); stack.refit(); } },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
@@ -709,7 +723,8 @@ versionEl.addEventListener('click', () => {
   clearTimeout(sayTimer);
   sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
 });
-// Esc steps back one page, as the back chip (2026-11-22): a menu or the search first; at Home the sheet goes down.
+// Esc steps back one page, as Android's back (2026-11-22; the back chip goes home since 2026-11-23): a menu or the
+// search first; at Home the sheet goes down.
 // The day's bubble goes first; its ribbon closes when there is nothing else to step back from.
 const dayBack = () => {
   if (dayView?.bubbleShown) { dayView.hideBubble(); return true; }
@@ -1587,6 +1602,11 @@ stack = createStack({
   },
 });
 stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
+// A train's card that changed its size (the "to Kallhäll" chooser opened or shut, its stops come in, Share's note):
+// the sheet follows at once, not at the next second's tick (Max, 2026-11-23: "the card expands after way too long").
+if (typeof ResizeObserver === 'function') {
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit(); }).observe(panelEl);
+}
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
