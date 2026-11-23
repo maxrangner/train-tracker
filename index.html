@@ -63,6 +63,8 @@
     #status:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .sheet-high #status { opacity: 0; pointer-events: none; }
     #status { transition: opacity .18s; }
+    /* (no text selection on the map's marks and the sheet's head: a mouse pull selected text over the map; src/stack.js) */
+    #status, #line, #sheet-grip, .sh-head, .maplibregl-ctrl { -webkit-user-select: none; user-select: none; }
 
     #sheet { --ez: cubic-bezier(.2, .85, .25, 1); position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden; touch-action: none; will-change: transform;
