@@ -48,7 +48,7 @@ import { createRide } from './ride.js';
 import { createPeek } from './peek.js';
 import { createShopWindow } from './shop-window.js';
 import { shareTrain, sharedNumber, dropShared } from './share.js';
-import { whyStanding, STAND_MS as STOOD_MS } from './why-standing.js';
+import { whyStanding, whyLate, LATE_MIN, STAND_MS as STOOD_MS } from './why-standing.js';
 import { createDayView, DAY_CSS } from './day-view.js';
 import { sunAt, altitude, HORIZON } from './sun.js';
 
@@ -172,6 +172,8 @@ const panel = createPanel(panelEl, {
   // In the sheet: its × takes its page away, "All stops" raises the sheet, a stop opens its station's page.
   onCloseTap: id => stack.close(`train:${id}`),
   onMore: full => stack.setLevel(full ? 2 : 1),
+  // its messages opened (shown at once: the sheet rises or the page scrolls to them; Max, 2026-11-23) or shut
+  onFold: (open, box) => (open ? stack.reveal(box) : stack.unreveal()),
   onStop: sig => openStation(sig),
   // under its tiles: why it stands, Share, Add my change (trainExtras, below)
   extra: id => trainExtras(id),
@@ -271,12 +273,12 @@ const panel = createPanel(panelEl, {
   },
 });
 const map = createMap('map', {
-  // A plain tap on the map (not a drag): with the menu open it only closes the menu.
+  // A plain tap on the map (not a drag): ☰'s menu closes in the same tap, and the tap goes on to what is under it (the
+  // tap rules R1, R2: src/stack.js; until 2026-11-23 a tap with the menu open only closed the menu).
   onMapTap() {
     if (peek?.ate()) return true;   // (the finger lifted after a peek: src/peek.js)
-    if (navEl.hidden) return false;
     closeNav();
-    return true;
+    return false;
   },
   railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
   // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
@@ -286,16 +288,13 @@ const map = createMap('map', {
   alongTrack: (id, d) => (dayView?.past ? null : trains.along(id, d)),
   // The sun's line shows the moment drawn: the live map's, or The day's.
   sunTime: () => (dayView?.past ? dayView.moment : now() - DRAW_DELAY_MS),
-  // Tapping a train opens its page and the camera follows it. A tap on nothing (A's sheet, 2026-11-22): the search
-  // closes; else the sheet goes down to rest; resting, the page on top closes (as a tap beside a train's card closed
-  // it before: Max, 2026-11-13 evening, "single click while following should deselect train").
+  // Tapping a train opens its page and the camera follows it, whatever is open (R2). A tap on nothing: the tap rules'
+  // R1 (src/stack.js mapTap): the sheet down to the page's lowest height, or, already there, every page closes.
   // At an earlier moment (The day): a small bubble over the train instead (number, company, lateness then).
   onTrainTap(id) {
     if (dayView?.past && (id || dayView.bubbleShown)) { if (id) dayView.bubble([id]); else dayView.hideBubble(); return; }
     if (openTrain(id)) return;
-    if (stack.searching) { stack.back(); return; }
-    if (stack.level > 0) stack.setLevel(0);
-    else if (stack.keys().length > 1) stack.back();
+    stack.mapTap();
   },
   onStationTap(sig) { openStation(sig); },
   onDisruptionTap(id) { openDisruption(id); },
@@ -406,6 +405,7 @@ function trainPage(id) {
   };
   const m0 = meta();
   if (!m0) return null;
+  let myEl = null;   // this train's page (show): the card goes back to the holder only from here
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
   let fitted = false;              // its whole card measured once (its first fit: stack.refit's settle)
   const number = () => String(meta()?.number ?? m0.number);
@@ -434,6 +434,7 @@ function trainPage(id) {
   return {
     name: number, kind: 'train',
     show(el, { prev, dir, go = false, again = false }) {
+      myEl = el;
       el.append(panelEl);
       const m = meta() ?? m0;
       const fresh = panel.openId !== id;
@@ -454,8 +455,10 @@ function trainPage(id) {
       if ((go || dir < 0) && p) following.then(() => map.goTo(p, go ? 13 : map.camera().z, true));
     },
     // (its card goes back to the holder: an element taken off the page with its page couldn't be found by its id)
-    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } holder.append(panelEl); },
-    unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement !== holder && !stack.top()?.startsWith('train:')) holder.append(panelEl); },
+    // (the card leaves only this page: going back to a train opened earlier, another train's page closing between it
+    // and the top took the card from that train's page, which then showed empty; Max's PC and phone, 2026-11-23)
+    hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
+    unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
     // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
     // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
@@ -468,6 +471,8 @@ function trainPage(id) {
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
     every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
     fitted: () => fitted,
+    // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
+    dismiss() { if (panel.openId === id) panel.closePick(); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -491,18 +496,22 @@ function stoodFor(id, at) {
   }
   return at - since;
 }
-// The reason a train stands (src/why-standing.js), or null while it moves, has stood under STOOD_MS, or its route isn't in.
+// The reason a train stands (src/why-standing.js) once it has stood STOOD_MS; else, LATE_MIN or more late, the reason
+// it is late (Max, 2026-11-23: he saw no reason on 445 at +29 min, moving); else null (its route not in: null too).
 function whyFor(id) {
   const x = frameById.get(id), route = panel.openId === id ? panel.route : null;
-  if (!x || x.stale || !route || (x.v ?? 0) >= STAND_MS || stoodFor(id, now()) < STOOD_MS) return null;
-  return whyStanding({ train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
-    lines: d => disruptions.stretchesOf(d), now: now() });
+  if (!x || x.stale || !route) return null;
+  const known = { train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
+    lines: d => disruptions.stretchesOf(d), now: now() };
+  if ((x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS) return { ...whyStanding(known), title: 'whyTitle' };
+  if ((lateOf(id) ?? 0) >= LATE_MIN) return { ...whyLate(known), title: 'whyLateTitle' };
+  return null;
 }
 function whyHtml(w) {
   if (!w || w.kind === 'stop') return '';
   const text = w.kind === 'disruption' ? t('whyDisruption', w.header) : w.kind === 'note' ? t('whyNote', w.text)
     : w.kind === 'waiting' ? t('whyWaiting', w.station, hhmm(w.planned)) : t('whyNone');
-  const inner = `<small>${esc(t('whyTitle'))}</small><span>${esc(text)}</span>`;
+  const inner = `<small>${esc(t(w.title ?? 'whyTitle'))}</small><span>${esc(text)}</span>`;
   return w.kind === 'disruption' ? `<button type="button" class="why dis" data-go="dis:${esc(w.id)}">${icon('warning', 17)}<span class="why-t">${inner}</span>${icon('chevron', 16)}</button>`
     : `<div class="why ${w.kind}">${icon(w.kind === 'none' ? 'info' : 'warning', 17)}<span class="why-t">${inner}</span></div>`;
 }
@@ -1229,6 +1238,10 @@ function disListPage() {
       box.classList.toggle('open', worksOpen);
       box.inert = !worksOpen;
       if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
+      // the sheet shows the opened list at once (Max, 2026-11-23): its end is where the glide will take it
+      const inner = box.firstElementChild;
+      if (worksOpen) stack.reveal(fold, fold.getBoundingClientRect().bottom + 6 + (inner?.scrollHeight ?? 0));
+      else stack.unreveal();
     };
   }
   return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
@@ -1627,6 +1640,8 @@ if (typeof ResizeObserver === 'function') {
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
   if (!b) return;
+  // a company under the search's "Show only": its filter on (the line above the bar, with its ×), and its page (R3)
+  if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
   if (b.dataset.go) stack.open(b.dataset.go, { go: true });
   else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
   else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);

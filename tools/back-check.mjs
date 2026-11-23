@@ -182,6 +182,22 @@ try {
     else notes.push(`back from one group to another: its ${backToStill.drawn} trains lit again`);
     if (!barOn || !near(backHome.drawn, lit0.drawn) || near(backHome.drawn, backHome.all)) fails.push(`back to Home with "On time" on (bar shows it: ${barOn}): ${backHome.drawn} of ${backHome.all} drawn (want about ${lit0.drawn})`);
     else notes.push(`back to Home: the bar's "On time" and its ${backHome.drawn} trains lit again`);
+
+    // ---- back to a train opened earlier, another train's page between (Max, 2026-11-23: empty cards "multiple times
+    // in this version"): A, C, a station, B, then A again: A's card is in A's page, filled ----
+    await toRest(page);
+    const tids = await page.evaluate(() => (window.__last3d ?? []).filter(x => !x.stale).slice(0, 3).map(x => x.id));
+    const cardIn = () => page.evaluate(() => {
+      const top = window.__stack.top(), pg = [...document.querySelectorAll('#sheet .pg')].find(p => p.dataset.key === top), panel = document.getElementById('panel');
+      return { top, ok: Boolean(pg && pg.contains(panel) && (panel.innerText || '').trim().length > 20) };
+    });
+    for (const k of [`train:${tids[0]}`, `train:${tids[1]}`, 'station:Cst', `train:${tids[2]}`, `train:${tids[0]}`]) {
+      await page.evaluate(key => window.__stack.open(key), k);
+      await sleep(1200);
+    }
+    const again = await cardIn();
+    if (!again.ok) fails.push(`back to a train opened earlier (A, C, a station, B, A): ${again.top}'s card is empty`);
+    else notes.push('back to a train opened earlier: its card is there');
   }
   if (errors.length) fails.push('page errors: ' + errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }

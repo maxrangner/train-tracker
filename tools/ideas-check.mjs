@@ -1,7 +1,8 @@
 // The sheet's ideas (build plan parts 3 and 6, 2026-11-23) on the phone-size page, on the replay of 17 Nov 16:00-18:00
 // (CARD_HOUR, its routes saved: the boards and cards come from them): My trains (a trip made with the station picker,
 // its page with the next train, "If it fails" and a cancelled train crossed out; the line above the bar and its tap; a
-// trip with a change; "Save a trip from here" and the Peek tip on the first board), "Why are we standing?" on 531
+// trip with a change; Home's Saved and its headings; New/Edit trip as a route (a pill is the search, dragged by its
+// dots with a mouse and a finger, at most one change); a trip's and a change's page: pencil and bin, no star; "Save a trip from here" and the Peek tip on the first board), "Why are we standing?" on 531
 // (Växelfel), Share (the copied-link way: the browser's share sheet taken away), "Add my change" pinned, Peek (a held
 // station, then a plain tap still opens its board), "You seem to be on" (a fake location riding a recorded train:
 // offered, the ride page), a #train=531 link (opens it, leaves the address), the shop window in landscape (starts when
@@ -41,12 +42,41 @@ try {
   await toRest(page);
   await setLevel(page, 1);
   await until(page, () => Boolean(document.querySelector('[data-go="newtrip"]')));
+  // Home's "Saved" ("Mine" until 2026-11-23): small headings for what it holds, a heading only when it has something;
+  // "New trip" under Trips
+  const saved = () => page.evaluate(() => {
+    const home = document.querySelector('.pg[data-key="home"]');
+    return { lab: [...home.querySelectorAll('h4.lab')].map(h => h.textContent).find(x => /saved|mine/i.test(x)) ?? null,
+      heads: [...home.querySelectorAll('[data-saved]')].map(h => h.dataset.saved),
+      newTrip: Boolean(home.querySelector('[data-saved="trips"] + .rows [data-go="newtrip"]')) };
+  });
+  const s0 = await saved();
+  ok(s0.lab === 'Saved' && s0.newTrip && !s0.heads.includes('trains') && !s0.heads.includes('stations'), `Home's "${s0.lab}": headings ${s0.heads.join(', ')}; "New trip" under Trips: ${s0.newTrip}`);
+  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); window.__stack.home(1); });
+  await until(page, () => document.querySelectorAll('.pg[data-key="home"] [data-saved]').length === 3, 4000);
+  const s1 = await saved();
+  ok(s1.heads.join(',') === 'trips,trains,stations', `a starred train and station: headings ${s1.heads.join(', ')}`);
+  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); window.__stack.home(1); });
   await page.evaluate(() => document.querySelector('[data-go="newtrip"]').click());
   await until(page, () => window.__stack.top() === 'newtrip');
-  // The station search (Max's phone, 2026-11-23: a tall pill, and the keyboard covered its results): one line high,
+  // A new trip as a route (Max's pick A, 2026-11-23): From and To pills on a line; the station field is the pill itself,
+  // one text field on the page (Max's note 11: "Välj station" plus a second field "Station" was confusing)
+  const NT = '.pg[data-kind="newtrip"]';
+  const route = () => page.evaluate(nt => ({
+    stops: [...document.querySelectorAll(`${nt} .nt-stop`)].map(s => `${[...s.classList].find(c => ['from', 'via', 'to'].includes(c))}:${s.querySelector('.nt-pill b')?.textContent ?? `[${s.querySelector('.nt-q')?.placeholder}]`}`),
+    inputs: document.querySelectorAll(`${nt} input`).length, add: Boolean(document.querySelector(`${nt} [data-nt="addvia"]`)),
+    editing: [...document.querySelectorAll(`${nt} .nt-stop`)].findIndex(s => Boolean(s.querySelector('.nt-pill .nt-q'))) }), NT);
+  const r0 = await route();
+  ok(r0.stops.length === 2 && /^from:/.test(r0.stops[0]) && /^to:/.test(r0.stops[1]) && r0.inputs === 1 && r0.editing === 0 && r0.add,
+    `New trip: ${r0.stops.join(' | ')}; one text field, in the From pill (${r0.inputs} fields, in pill ${r0.editing}); "Add a change" between`);
+  await page.evaluate(nt => document.querySelector(`${nt} .nt-stop.to [data-nt="stop"]`)?.click(), NT);
+  const r1 = await route();
+  ok(r1.inputs === 1 && r1.editing === 1, `a tap on To makes that pill the search, in place (${r1.inputs} field, in pill ${r1.editing})`);
+  await page.evaluate(nt => document.querySelector(`${nt} .nt-stop.from [data-nt="stop"]`)?.click(), NT);
+  // The station search (Max's phone, 2026-11-23: a tall pill, and the keyboard covered its results): a pill's height,
   // and while typing with the keyboard up (the page 430 px shorter) the field and its first results are above it.
-  const qh = await page.evaluate(() => Math.round(document.querySelector('.nt-q').getBoundingClientRect().height));
-  ok(qh >= 36 && qh <= 56, `the station search field is one line high (${qh} px)`);
+  const qh = await page.evaluate(() => Math.round(document.querySelector('.nt-pill.on')?.getBoundingClientRect().height ?? 0));
+  ok(qh >= 40 && qh <= 80, `the station search is a pill's height (${qh} px)`);
   await page.evaluate(() => document.querySelector('.nt-q').focus());
   await page.setViewport({ ...PHONE, height: PHONE.height - 430 });
   await sleep(800);
@@ -92,14 +122,15 @@ try {
   // ---- a saved trip's Edit and Delete (Max's phone, 2026-11-23: "can't be edited or deleted") ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Cst', 'U'); });   // (a second trip: the edited one keeps its place before it)
   const tripKeys = () => page.evaluate(() => window.__ideas.favourites.trips.map(x => x.key));
-  // Edit and Delete: a pencil and a bin beside the star in the sheet's head (Max, 2026-11-23)
-  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc' && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="edit"]')) && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="del"]'))),
-    'a saved trip has a pencil and a bin beside the star');
+  // Edit and Delete: a pencil and a bin in the sheet's head, no star (Max, 2026-11-23: "star is not relevant here, it's
+  // either edit or delete")
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc' && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="edit"]')) &&
+    Boolean(document.querySelector('#sheet .sh-acts [data-act-id="del"]')) && document.querySelector('#sheet .sh-star').hidden), 'a saved trip has a pencil and a bin, no star');
   await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="edit"]').click());
-  ok(await until(page, () => window.__stack.top() === 'edittrip:Lu>Mc' && /Lund C/.test(document.querySelector('[data-nt="from"]')?.innerText ?? '') && /Malmö C/.test(document.querySelector('[data-nt="to"]')?.innerText ?? '')),
+  ok(await until(page, () => window.__stack.top() === 'edittrip:Lu>Mc' && /Lund C/.test(document.querySelector('.nt-stop.from .nt-pill')?.innerText ?? '') && /Malmö C/.test(document.querySelector('.nt-stop.to .nt-pill')?.innerText ?? '')),
     'Edit opens the form filled in (Lund C → Malmö C)');
-  await page.evaluate(() => document.querySelector('[data-nt="to"]').click());
-  await until(page, () => Boolean(document.querySelector('.nt-q')));
+  await page.evaluate(() => document.querySelector('.nt-stop.to [data-nt="stop"]')?.click());
+  await until(page, () => Boolean(document.querySelector('.nt-stop.to .nt-q')));
   await pick('Hässleholm', 'Hm');
   await shot(page, '02a-edit-trip');
   await page.evaluate(() => document.querySelector('[data-nt="save"]').click());
@@ -122,7 +153,7 @@ try {
   ok(await until(page, () => !window.__ideas.favourites.trip('Lu>Hm') && window.__stack.top() !== 'trip:Lu>Hm'), `a second tap deletes it and closes its page (now ${await top(page)})`);
   await page.evaluate(() => window.__stack.home(1));
   await sleep(600);
-  ok(!(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go="trip:Lu>Hm"]')))), 'Mine no longer lists it');
+  ok(!(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go="trip:Lu>Hm"]')))), 'Saved no longer lists it');
   await page.evaluate(() => window.__ideas.favourites.removeTrip('Cst>U'));
 
   // ---- a trip with a change ----
@@ -150,11 +181,41 @@ try {
   const labels = () => page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-labels'] }).length);
   const labelled = await until(page, () => window.__map.queryRenderedFeatures({ layers: ['train-labels'] }).length <= window.__drawn().drawn + 1, 5000);
   ok(labelled, `the map's labels only for the lit trains (${await labels()} labels drawn)`);
-  // its change taken away again in Edit (Max, 2026-11-23: an added stop couldn't be removed): the × on the change field
+  // Edit of a trip with a change, as a route (Max's pick A, 2026-11-23): From, the Change with its ×, To; at most one
+  // change for now, so no "Add a change" while it has one
   await page.evaluate(() => window.__stack.open('edittrip:Lu>Hm>Hb'));
-  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x'))), 'Edit of a trip with a change: its change field has a ×');
-  await page.evaluate(() => document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x').click());
-  const noVia = await page.evaluate(() => ({ field: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="via"]')), add: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="addvia"]')) }));
+  await setLevel(page, 2);
+  ok(await until(page, () => Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-stop.via .nt-x'))), 'Edit of a trip with a change: the Change pill has a ×');
+  const e0 = await route();
+  ok(e0.stops.join(' | ') === 'from:Lund C | via:Hässleholm | to:Helsingborg C' && !e0.add, `the route: ${e0.stops.join(' | ')} (no "Add a change" with one already: ${!e0.add})`);
+  // A pill dragged by its dots, with the mouse: the Change above From; it lifts, its new place dashed; after it the first
+  // is From, the last To, the middle the Change
+  const gripAt = i => page.evaluate((nt, i) => { const b = document.querySelector(`${nt} [data-grip="${i}"]`)?.getBoundingClientRect() ?? { x: 0, y: 0, width: 0, height: 0 }; return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; }, NT, i);
+  const stopH = await page.evaluate(nt => document.querySelector(`${nt} .nt-stop.from`)?.getBoundingClientRect().height ?? 60, NT);
+  let g = await gripAt(1);
+  await page.mouse.move(g.x, g.y);
+  await page.mouse.down();
+  for (let k = 1; k <= 10; k++) { await page.mouse.move(g.x, g.y - k * stopH / 8); await sleep(20); }
+  const lifted = await page.evaluate(nt => ({ lifted: Boolean(document.querySelector(`${nt} .nt-stop.lifted`)), gap: Boolean(document.querySelector(`${nt} .nt-gap`)) }), NT);
+  await shot(page, '04a-edit-drag');
+  await page.mouse.up();
+  await sleep(200);
+  const e1 = await route();
+  ok(lifted.lifted && lifted.gap && e1.stops.join(' | ') === 'from:Hässleholm | via:Lund C | to:Helsingborg C',
+    `dragged with the mouse (lifted: ${lifted.lifted}, new place dashed: ${lifted.gap}): ${e1.stops.join(' | ')}`);
+  ok(await page.evaluate(() => window.__ideas.favourites.trips.map(x => x.key).join(',')) === 'Lu>Hm>Hb' && await top(page) === 'edittrip:Lu>Hm>Hb', 'the page stayed, nothing saved before "Save trip"');
+  // ... and with a finger: From back below the Change
+  g = await gripAt(0);
+  const finger = await page.touchscreen.touchStart(g.x, g.y);
+  for (let k = 1; k <= 10; k++) { await finger.move(g.x, g.y + k * stopH / 8); await sleep(20); }
+  await finger.end();
+  await sleep(200);
+  const e2 = await route();
+  ok(e2.stops.join(' | ') === 'from:Lund C | via:Hässleholm | to:Helsingborg C' && await page.evaluate(() => window.__stack.level) === 2,
+    `dragged with a finger: ${e2.stops.join(' | ')} (the sheet stayed at full)`);
+  // its change taken away again (Max, 2026-11-23: an added stop couldn't be removed): the × on the Change
+  await page.evaluate(() => document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-x')?.click());
+  const noVia = await page.evaluate(() => ({ field: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] .nt-stop.via')), add: Boolean(document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="addvia"]')) }));
   ok(!noVia.field && noVia.add, `the × takes the change away ("Add a change" back: ${noVia.add})`);
   await page.evaluate(() => document.querySelector('.pg[data-key="edittrip:Lu>Hm>Hb"] [data-nt="save"]').click());
   ok(await until(page, () => window.__stack.top() === 'trip:Lu>Hb' && Boolean(window.__ideas.favourites.trip('Lu>Hb')) && !window.__ideas.favourites.trip('Lu>Hm>Hb')),
@@ -171,7 +232,7 @@ try {
   await sleep(300);
   await shot(page, '05-board');
   await page.evaluate(() => document.querySelector('.st-extras [data-go="newtrip:Lu"]').click());
-  ok(await until(page, () => window.__stack.top() === 'newtrip:Lu' && /Lund C/.test(document.querySelector('[data-nt="from"]')?.innerText ?? '')), '"Save a trip from here" starts a trip from Lund C');
+  ok(await until(page, () => window.__stack.top() === 'newtrip:Lu' && /Lund C/.test(document.querySelector('.nt-stop.from .nt-pill')?.innerText ?? '')), '"Save a trip from here" starts a trip from Lund C');
   await openStationByName(page, 'Malmö C');
   ok(!(await page.evaluate(() => Boolean(document.querySelector('.st-extras .tip')))), 'the tip is not said again on the next board');
 
@@ -183,6 +244,21 @@ try {
   const why = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/Växelfel/.test(why), `531: "${why}"`);
   await shot(page, '06-why-531');
+  // at night only the 3D trains' windows glow, not the dots (Max, 2026-11-23)
+  ok(!(await page.evaluate(() => Boolean(window.__map.getLayer('train-glow')))), 'no glow round the dots at night (only the 3D windows)');
+  // a moving train 8+ minutes late says why it is late (Max, 2026-11-23: "don't see the reason for the delay")
+  const lateOne = await page.evaluate(() => {
+    const c = (window.__last3d ?? []).find(x => (x.v ?? 0) > 5 && !x.stale && (window.__lateness.get(x.id)?.minutes ?? 0) >= 8);
+    return c ? window.__trains.get(c.id)?.number ?? null : null;
+  });
+  if (!lateOne) ok(false, 'a moving train 8+ min late in the replay to test "Why late?" on');
+  else {
+    await openTrainByNumber(page, lateOne);
+    ok(await until(page, () => /why late\?/i.test(document.querySelector('.tr-extras .why')?.innerText ?? ''), 8000),
+      `${lateOne}, moving and late, says why: "${await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '')}"`);
+    await shot(page, '06b-why-late');
+    await openTrainByNumber(page, 531);   // (Share below is 531's)
+  }
 
   // ---- 3. Share (the copied-link way) ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
@@ -195,7 +271,7 @@ try {
   ok(!shared.onMap, 'the note is in the card, under Share, not over the map');
   await shot(page, '07-share');
 
-  // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Mine ----
+  // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Saved, its page a trip's ----
   await page.evaluate(() => document.querySelector('.tr-extras [data-go^="addchange:"]')?.click());
   ok(await until(page, () => window.__stack.top().startsWith('addchange:')), 'Add my change opens its page');
   await until(page, () => Boolean(document.querySelector('#sheet [data-stop]')));
@@ -215,14 +291,38 @@ try {
   ok(await until(page, () => window.__stack.top().startsWith('change:') && Boolean(document.querySelector('.trip-next')), 10000), 'a train picked: the change is pinned and shown');
   const chg = await page.evaluate(() => document.querySelector('.pg[data-kind="trip"] .trip-next')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/min|lost/.test(chg), `the pinned change: "${chg}"`);
+  // A pinned change is a trip (Max, 2026-11-23: "Shouldn't this be 'My trip' instead of 'mitt byte'? And all info and
+  // options of that"; "it's either edit or delete"): "My trip", a pencil and a bin, no star
+  const chgKey = (await top(page)).slice(7);
+  const chgPage = await page.evaluate(k => ({ ttl: document.querySelector(`.pg[data-key="change:${k}"] .ttl`)?.textContent ?? '',
+    acts: [...document.querySelectorAll('#sheet .sh-acts [data-act-id]')].map(b => b.dataset.actId).join(','), star: !document.querySelector('#sheet .sh-star').hidden }), chgKey);
+  ok(chgPage.ttl === 'My trip' && chgPage.acts === 'edit,del' && !chgPage.star, `the change's page: "${chgPage.ttl}", buttons ${chgPage.acts || 'none'}, star: ${chgPage.star}`);
   await setLevel(page, 2);
   await shot(page, '09-pinned-change');
   await page.evaluate(() => window.__stack.home(1));
   await sleep(800);
-  ok(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go^="change:"]'))), 'Mine lists the pinned change');
+  ok(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go^="change:"]'))), 'Saved lists the pinned change');
   await page.evaluate(() => document.querySelector('.pg[data-key="home"] .rows [data-go^="trip:"]')?.scrollIntoView({ block: 'center' }));
   await sleep(300);
   await shot(page, '10-mine');
+  // Its pencil: the same two steps again from its first train; the new pair takes its place
+  await page.evaluate(k => window.__stack.open(`change:${k}`), chgKey);
+  await until(page, k => window.__stack.top() === `change:${k}` && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="edit"]')), 5000, chgKey);
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="edit"]')?.click());
+  ok(await until(page, () => window.__stack.top().startsWith('editchange:') && Boolean(document.querySelector('#sheet [data-stop]')), 15000), `its pencil opens the change's steps again (${await top(page)})`);
+  await page.evaluate(sig => document.querySelector(`#sheet [data-stop="${sig}"]`)?.click(), stopSig);
+  await until(page, () => Boolean(document.querySelector('#sheet [data-dep]')), 10000);
+  await page.evaluate(() => { const d = document.querySelectorAll('#sheet [data-dep]'); (d[1] ?? d[0])?.click(); });
+  ok(await until(page, () => window.__stack.top().startsWith('change:') && Boolean(document.querySelector('.trip-next')), 10000), "a train picked again: back on the change's page");
+  const edited = await page.evaluate(old => ({ top: window.__stack.top(), keys: window.__stack.keys(), old: Boolean(window.__ideas.favourites.change(old)),
+    now: Boolean(window.__ideas.favourites.change(window.__stack.top().slice(7))) }), chgKey);
+  ok(edited.now && (edited.top === `change:${chgKey}` || !edited.old) && !edited.keys.some(k => k.startsWith('editchange:')) && edited.keys.filter(k => k.startsWith('change:')).length === 1,
+    `the edited change took the old one's place (${edited.top}; pages ${edited.keys.join(' > ')})`);
+  // Its bin: two taps
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
+  await sleep(600);
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
+  ok(await until(page, k => !window.__ideas.favourites.change(k) && !window.__stack.top().startsWith('change:'), 5000, edited.top.slice(7)), `its bin, tapped twice, takes it away (now ${await top(page)})`);
 
   }
   if (part('peek')) {

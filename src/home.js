@@ -1,6 +1,6 @@
 // Home, the sheet's bottom page (Max's pick A, 2026-11-22, without the chips): pulled up, one scroll of
 //   1. the lateness bar: a tap on a colour lights only those trains (the others leave the map until tapped again),
-//   2. Mine: the starred trains and stations,
+//   2. Saved (Mine until 2026-11-23): the saved trips and changes, the starred trains and stations,
 //   3. Near you: only while My location is on,
 //   4. Disruptions (the problems; all of them, rail work too, one tap further),
 //   5. Sweden right now: Statistik's Sweden, its tiles and today's graph (src/stats-page.js),
@@ -38,7 +38,8 @@ export function groupRow({ key, name, sub, colour = null }) {
   return `<button type="button" class="row" data-go="${esc(key)}"><span class="r-ic">${colour ? dot(colour) : '<i class="ring sq"></i>'}</span>` +
     `<span class="r-main"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>${icon('chevron', 18)}</button>`;
 }
-export const chip = (key, html, n) => `<button type="button" class="chip" data-go="${esc(key)}">${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
+// attrs: more attributes for the button (trusted HTML: escape what goes in them)
+export const chip = (key, html, n, attrs = '') => `<button type="button" class="chip" data-go="${esc(key)}"${attrs}>${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
 
 // A small helper for a page made of parts: each part is a div drawn again only when its words changed.
 export function parts(el) {
@@ -69,18 +70,22 @@ export function homePage(d) {
       `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>` +
       `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(t({ ontime: 'stLegOnTime', some: 'stLegSome', late: 'stLegLate', unknown: 'stLegUnknown' }[on]))) : t('lgHint')}</p>`;
   }
+  // Saved ("Mina" until 2026-11-23, Max: "Sparade", with small headings for what it holds): Trips (the saved trips and
+  // pinned changes, src/my-trains.js, then "+ New trip"), Trains (starred), Stations (starred); a heading only when it
+  // has something.
   function mineHtml(frame) {
     const byNumber = new Map(frame.map(x => [String(d.numberOf(x.id)), x]));
-    const rows = d.favourites.trains.map((n) => {
+    const trains = d.favourites.trains.map((n) => {
       const x = byNumber.get(n);
       return x ? trainRow({ id: x.id, number: n, brand: x.brand, minutes: d.lateOf(x.id), sub: t('onMap') })
         : `<button type="button" class="row" data-act="favtrain" data-n="${esc(n)}"><b class="r-num">${esc(n)}</b><span class="r-main"><b>${esc(t('train'))}</b><small>${esc(t('notOnMapNow'))}</small></span></button>`;
-    }).concat(d.favourites.stations.map(sig => d.stations().get(sig)).filter(Boolean)
-      .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' })));
-    // My trains (src/my-trains.js, 2026-11-23): the saved trips and pinned changes first, "+ New trip" last.
+    });
+    const stations = d.favourites.stations.map(sig => d.stations().get(sig)).filter(Boolean)
+      .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' }));
     const mt = d.myTrains?.() ?? { rows: [], add: '' };
-    const all = [...mt.rows, ...rows];
-    return `<h4 class="lab">${t('mine')}</h4><div class="rows">${all.join('') || `<p class="empty">${t('favouritesHint')}</p>`}${mt.add}</div>`;
+    const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
+    return `<h4 class="lab">${t('mine')}</h4>${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}` +
+      (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`);
   }
   function nearHtml() {
     const here = d.location();
