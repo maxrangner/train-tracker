@@ -38,7 +38,9 @@
 //     snap: false (optional): no fitting without half(): the usual half (a station's board: its rows come after it
 //       opens, and a half fitted before them moved again once they came: a bounce, sheet-moves-check).
 //   stack.refit({ grow: true }): only taller (content that came in by itself: a sheet that went down and up again for
-//   it is a bounce); without it (the person changed the page: opened the chooser, shut it) also shorter.
+//   it is a bounce); without it (the person changed the page: opened the chooser, shut it) also shorter. settle: true
+//   with grow: also shorter when the sheet last glided down (the page's first fit after opening from above: it goes on
+//   down, no turn).
 // The back chip says "Home" and goes home (Max, 2026-11-23: the chip naming the page under it "feels confusing";
 // holding it still shows the trail); Esc and Android's back step back one page. A soft fade at the sheet's bottom edge
 // says there is more of the page below (Max, 2026-11-23: Home "has no indication that there is more content").
@@ -120,11 +122,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     root.classList.toggle('sheet-tall', !wide() && h > innerHeight - 260);
     root.classList.toggle('sheet-high', h > H[1] + 70);
     sheet.style.setProperty('--sheet-off', wide() ? '0px' : `${Math.round(H[2] - h)}px`);
+    if (glide && Math.abs(h - shownTo) > 2) lastDir = Math.sign(h - shownTo);
     shownTo = h;
     if (glide) syncFade();
   }
   // The fade at the bottom edge: the page has more below what is shown (not at low: the head and a line).
-  let shownTo = 0;
+  let shownTo = 0, lastDir = 0;   // the shown height, and which way the sheet last glided (1 up, -1 down)
   function syncFade() {
     const pg = searching ? results : top()?.el;
     if (!pg) return;
@@ -431,10 +434,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 220); }
   }
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
-  function refit({ grow = false } = {}) {
+  function refit({ grow = false, settle = false } = {}) {
     if (searching) return;
     let h0 = lowOf(top()), h1 = halfOf(top());
-    if (grow) { h0 = Math.max(h0, H[0]); h1 = Math.max(h1, H[1]); }
+    if (grow && !(settle && lastDir < 0)) { h0 = Math.max(h0, H[0]); h1 = Math.max(h1, H[1]); }
     if (h0 === H[0] && h1 === H[1]) { syncFade(); return; }
     H[0] = h0; H[1] = h1;
     if (idx < 2 && !drag) { place(H[idx]); pad(); }
@@ -554,6 +557,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     has: key => stack.some(p => p.key === key),
     setLevel: i => setIndex(i),
     get level() { return idx; },
+    get shown() { return shownTo; },
     get heights() { return [...H]; },
     get searching() { return searching; },
     get busy() { return busy(); },

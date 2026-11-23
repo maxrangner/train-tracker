@@ -407,6 +407,7 @@ function trainPage(id) {
   const m0 = meta();
   if (!m0) return null;
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
+  let fitted = false;              // its whole card measured once (its first fit: stack.refit's settle)
   const number = () => String(meta()?.number ?? m0.number);
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
   // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
@@ -415,7 +416,10 @@ function trainPage(id) {
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
-    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) return wantHalf || lastCardHalf;
+    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
+      if (wantHalf || lastCardHalf) return wantHalf || lastCardHalf;
+      return stack.shown > stack.heights[1] ? 0 : Math.max(1, Math.round(stack.shown - 72));
+    }
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
     if (!whole) {
@@ -424,7 +428,7 @@ function trainPage(id) {
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
-    if (b > 0) lastCardHalf = wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4;
+    if (b > 0) { lastCardHalf = wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4; fitted = true; }
     return wantHalf;
   }
   return {
@@ -462,7 +466,8 @@ function trainPage(id) {
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
-    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true }); } },
+    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
+    fitted: () => fitted,
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
@@ -1613,7 +1618,7 @@ let cardTouched = 0;
 panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
 panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
 if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500 }); }).observe(panelEl);
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500, settle: stack.pageDef(stack.top())?.fitted?.() === false }); }).observe(panelEl);
 }
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
