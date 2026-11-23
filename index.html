@@ -214,6 +214,7 @@
     .ring { display: block; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--muted); box-sizing: border-box; }
     .ring.sq { border-radius: 4px; }
     .lab { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+    .lab2 { margin: 10px 0 0; font-size: 14px; font-weight: 700; color: var(--ink); }   /* Saved's small headings: Trips, Trains, Stations */
     .big { margin: 14px 0 0; font-size: 22px; font-weight: 800; }
     .empty { margin: 4px 0; color: var(--muted); font-size: 14px; }
     .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 13px; border: 0; border-radius: 20px; background: var(--hover); color: var(--ink);
@@ -286,7 +287,7 @@
     .why-t span { color: var(--ink); font-size: 15px; font-weight: 650; }
     .tip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 9px 12px; border-radius: 12px; background: var(--hover); color: var(--muted); font-size: 13.5px; }
     .tip .icon { color: var(--accent); }
-    /* My trains: Mine's rows, a trip's page, a change, a new trip. */
+    /* My trains: Saved's rows, a trip's page, a change, a new trip. */
     .r-ic.trip { color: var(--accent); }
     .r-ic.trip.tight { background: var(--t-some-bg); color: var(--t-some); }
     .r-ic.trip.lost { background: var(--t-late-bg); color: var(--t-late); }
@@ -312,23 +313,48 @@
     :is(.trip-chg, .chg-min).tight { background: var(--t-some-bg); color: var(--t-some); }
     :is(.trip-chg, .chg-min).lost { background: var(--t-late-bg); color: var(--t-late); }
     .trip-chg.rescue { background: var(--t-ontime-bg); color: var(--t-ontime); margin-top: 4px; }   /* a lost change: the later train that works */
-    .nt-fields { display: grid; gap: 8px; }
-    .nt-field { display: grid; gap: 1px; width: 100%; padding: 10px 14px; border: 0; border-radius: 14px; background: var(--hover); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-    .nt-field small { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-    .nt-field b { font-size: 16.5px; font-weight: 700; }
-    .nt-field.on { box-shadow: inset 0 0 0 2px var(--accent); }
-    .nt-addvia { justify-self: start; }
-    /* the station search under the field it fills: one line high (it was .board-q's flex: 1, a tall pill in the page's column) */
-    .nt-q { width: 100%; box-sizing: border-box; height: 46px; flex: none; }
+    /* A new trip as a route (Max's pick A, 2026-11-23): the stations on a line with dots, each a pill (From grey, a
+       Change yellow with its ×, To big in the accent colour), six dots to drag it; a tapped pill is the search. */
+    .nt-hint { margin-top: -6px; font-size: 13.5px; }
+    .nt-route { position: relative; display: grid; gap: 0; }
+    .nt-route::before { content: ''; position: absolute; left: 15.5px; width: 3px; border-radius: 2px; background: var(--line);
+      top: var(--l0, 30px); height: calc(var(--l1, 90px) - var(--l0, 30px)); }
+    .nt-stop { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 5px 0; z-index: 1; }
+    .nt-dot { justify-self: center; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--muted); background: var(--bg); box-sizing: border-box; }
+    .nt-stop.via .nt-dot { border-color: var(--c-some); }
+    .nt-stop.to .nt-dot { width: 20px; height: 20px; border-color: var(--accent); background: var(--accent); }
+    .nt-pill { display: grid; gap: 1px; min-width: 0; width: 100%; box-sizing: border-box; min-height: 58px; padding: 8px 14px; border: 0; border-radius: 14px;
+      background: var(--hover); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+    .nt-pill small { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+    .nt-pill b { font-size: 17px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .nt-pill.none b { color: var(--muted); font-weight: 600; }
+    .nt-stop.via .nt-pill small { color: var(--t-some); }
+    .nt-stop.to .nt-pill { background: color-mix(in srgb, var(--accent) 18%, var(--hover)); min-height: 64px; }
+    .nt-stop.to .nt-pill small { color: var(--accent); }
+    .nt-stop.to .nt-pill b { font-size: 20px; }
+    .nt-pill.on { box-shadow: inset 0 0 0 2px var(--accent); cursor: text; }
+    /* the pill being filled is the station search itself (Max's note 11: no second field) */
+    .nt-q { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 0; border: 0; outline: none; background: none; color: var(--ink);
+      font: 800 17px var(--font); -webkit-appearance: none; appearance: none; }
+    .nt-stop.to .nt-q { font-size: 20px; }
+    .nt-q::placeholder { color: var(--muted); font-weight: 600; opacity: 1; }
+    .nt-q::-webkit-search-cancel-button { display: none; }
+    .nt-res { margin-left: 40px; }
     .nt-res:empty { display: none; }
     .nt-room { display: block; height: 75vh; }
     .nt-room[hidden] { display: none; }
-    /* the change's field with its × (Max, 2026-11-23: an added stop couldn't be removed) */
-    .nt-via { position: relative; display: grid; gap: inherit; }
-    .nt-via .nt-field { padding-right: 56px; }
-    .nt-x { position: absolute; top: 9px; right: 9px; width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
+    .nt-x { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
     .nt-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .nt-save { justify-self: start; align-self: flex-start; }   /* (as wide as its words: in the page's column it stretched across) */
+    .nt-grip { width: 38px; height: 46px; display: grid; place-items: center; color: var(--ink); opacity: .7; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .nt-add { justify-self: start; display: inline-flex; align-items: center; gap: 6px; margin: 3px 0 3px 40px; min-height: 36px; padding: 0 14px; border: 1.5px dashed var(--muted);
+      border-radius: 999px; background: none; color: var(--ink); font: 700 14px var(--font); cursor: pointer; }
+    .nt-route.dragging { user-select: none; -webkit-user-select: none; }
+    .nt-route.dragging .nt-add { display: none; }
+    .nt-stop.lifted { z-index: 3; cursor: grabbing; }
+    .nt-stop.lifted .nt-grip { cursor: grabbing; }
+    .nt-stop.lifted .nt-pill { box-shadow: 0 10px 28px rgba(0, 0, 0, .35), inset 0 0 0 2px var(--accent); transform: rotate(-1deg); }
+    .nt-gap { margin-left: 40px; border: 2px dashed var(--accent); border-radius: 14px; opacity: .7; box-sizing: border-box; }
+    .nt-save { justify-self: start; align-self: flex-start; background: var(--accent); color: var(--accent-ink); }   /* (as wide as its words) */
     /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
     .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
     .trip-acts .chip { min-height: 38px; font-size: 14px; }
@@ -1261,8 +1287,8 @@
       <p class="about-soon" data-t="comingSoon">Both buttons work soon.</p>
       <h3 data-t="helpTips">Good to know</h3>
       <ul class="help-tips" data-lang="en">
-        <li><b>My trains.</b> Home → Mine → New trip, or "Save a trip from here" on a station's board: today's trains between two stations, with a change if you like. The next one shows just above the search bar; a tap opens the trip.</li>
-        <li><b>Add my change.</b> On a train's page: pick where you change and the train you change to. Mine then shows the minutes you have, both tracks, yellow when tight, red when lost.</li>
+        <li><b>My trains.</b> Home → Saved → New trip, or "Save a trip from here" on a station's board: today's trains between two stations, with a change if you like. The next one shows just above the search bar; a tap opens the trip.</li>
+        <li><b>Add my change.</b> On a train's page: pick where you change and the train you change to. Saved then shows it as a trip: the minutes you have, both tracks, yellow when tight, red when lost.</li>
         <li><b>Peek.</b> Hold a finger on a station on the map: its next three departures, until you let go. With a mouse, hold the button.</li>
         <li><b>You seem to be on…</b> With My location on, the app notices the train you ride on and offers to ride along: next stop, minutes, track. Your place stays on the phone; it is never saved or sent.</li>
         <li><b>Why are we standing?</b> A train that has stood still for a minute says why, when Trafikverket says it: a disruption on the line, its own note, or how late it is leaving.</li>
@@ -1270,8 +1296,8 @@
         <li><b>Shop window.</b> Lay the phone on its side and leave it for 30 s: the buttons fade and the map tours Sweden (the fastest train, the most late, a disruption, two trains meeting). A touch brings everything back. Off in Settings.</li>
       </ul>
       <ul class="help-tips" data-lang="sv" hidden>
-        <li><b>Mina tåg.</b> Hem → Mina → Ny resa, eller "Spara en resa härifrån" på en stations tavla: dagens tåg mellan två stationer, med ett byte om du vill. Nästa tåg syns precis ovanför sökfältet; ett tryck öppnar resan.</li>
-        <li><b>Lägg till mitt byte.</b> På ett tågs sida: välj var du byter och tåget du byter till. Under Mina syns då minuterna du har och båda spåren, gult när det är snålt, rött när bytet missas.</li>
+        <li><b>Mina tåg.</b> Hem → Sparade → Ny resa, eller "Spara en resa härifrån" på en stations tavla: dagens tåg mellan två stationer, med ett byte om du vill. Nästa tåg syns precis ovanför sökfältet; ett tryck öppnar resan.</li>
+        <li><b>Lägg till mitt byte.</b> På ett tågs sida: välj var du byter och tåget du byter till. Under Sparade syns det då som en resa: minuterna du har och båda spåren, gult när det är snålt, rött när bytet missas.</li>
         <li><b>Snabbtitt.</b> Håll fingret på en station på kartan: dess tre nästa avgångar, tills du släpper. Med mus: håll knappen nere.</li>
         <li><b>Du verkar sitta på…</b> Med Min plats på märker appen tåget du åker med och erbjuder att åka med: nästa stopp, minuter, spår. Din plats stannar i telefonen; den sparas eller skickas aldrig.</li>
         <li><b>Varför står vi?</b> Ett tåg som har stått still en minut säger varför, när Trafikverket säger det: en störning på linjen, deras egen anteckning, eller hur sent det går.</li>
