@@ -118,7 +118,10 @@ try {
     `the next train's box: "${nextBox.text}", not again under "${nextBox.heading}" (${nextBox.again ? 'listed again' : 'once'})`);
   await page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Mc"] button.trip-next').click());
   ok(await until(page, n => window.__stack.top().startsWith('train:') && document.querySelector('#panel .panel-head')?.textContent.includes(n), 8000, nextBox.n), `a tap on it opens train ${nextBox.n}`);
-  await page.evaluate(() => window.__stack.back());
+  // its card's ‹ (first on its top line) goes back to the trip (Max, 2026-11-24: "When viewing my trip and clicking a
+  // train showing it's card. THAT card should have a back button")
+  const up = await page.evaluate(() => { const b = document.querySelector('#panel .panel-head > .sh-up'); if (!b || !b.offsetParent) return false; b.click(); return true; });
+  ok(up && await until(page, () => window.__stack.top() === 'trip:Lu>Mc', 4000), `the card's ‹ ${up ? 'tapped' : 'MISSING'}: back on ${await page.evaluate(() => window.__stack.top())}`);
   await until(page, () => window.__stack.top() === 'trip:Lu>Mc');
   // The "more below" sign names the one part hidden below ("More departures"), "More" when more than that is hidden
   // or the list is cut (Max, 2026-11-24: "C, but main should say 'mer'")

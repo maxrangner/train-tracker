@@ -496,7 +496,8 @@ function trainPage(id) {
     // share, star and Follow in the card's top line beside the number, as before the sheet (Max, 2026-11-23); the sheet
     // has no bar over a train
     barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
-    noUp: true,   // (no ‹ over a train: its card's top line is the head; a map tap, a pull or the phone's back)
+    // (‹ first on the card's top line, as on a station's and a trip's page: Max, 2026-11-24 "Stations have back button,
+    // but trains dont"; "When viewing my trip and clicking a train showing it's card. THAT card should have a back button")
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
