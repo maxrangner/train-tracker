@@ -301,8 +301,11 @@
     .scopes { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }
     /* Home's filter card: the companies under the lateness bar (src/home.js companiesHtml; Max, 2026-11-24), a picked one
        ringed, "N more ⌄" in the accent colour */
-    .co-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .co-filter .chip { min-height: 36px; font-size: 14px; }
+    /* (tight: Max, 2026-11-24 "Way too much padding between the filters"; a dark card's buttons a step lighter than it,
+       the usual button colour is the card's own there) */
+    .co-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .co-filter .chip { min-height: 30px; font-size: 14px; }
+    :root[data-theme="dark"] .co-filter .chip:not(.on) { background: color-mix(in srgb, var(--ink) 12%, var(--bg)); }
     .co-filter .chip.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--hover)); }
     .co-filter .co-more { color: var(--accent); font-weight: 700; gap: 2px; padding-right: 9px; }
     .dis-list { display: grid; gap: 6px; margin-top: 6px; }
