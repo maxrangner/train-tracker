@@ -393,6 +393,7 @@
     :is(.trip-chg, .chg-min).ok { background: var(--t-ontime-bg); color: var(--t-ontime); }
     :is(.trip-chg, .chg-min).tight { background: var(--t-some-bg); color: var(--t-some); }
     :is(.trip-chg, .chg-min).lost { background: var(--t-late-bg); color: var(--t-late); }
+    .trip-chg.unknown { background: var(--hover); color: var(--muted); }   /* the onward train not loaded yet (only part of the day known) */
     .trip-chg.rescue { background: var(--t-ontime-bg); color: var(--t-ontime); margin-top: 4px; }   /* a lost change: the later train that works */
     /* A new trip as a route (Max's pick A, 2026-11-23): the stations on a line with dots, each a pill (From grey, a
        Change yellow with its ×, To big in the accent colour), six dots to drag it; a tapped pill is the search. */
