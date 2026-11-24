@@ -3,7 +3,7 @@
 // Each case sets up the web space, runs the uploader briefly, and checks what it wrote, renamed, deleted or refused.
 // Run: node tools/upload-check.mjs     exit code 0: all hold; 1: one failed
 import { EventEmitter } from 'node:events';
-import { createUploader, checkDir, MARK, order } from '../fetcher/upload.mjs';
+import { createUploader, checkDir, MARK, order, uploadStuck, STUCK_MS } from '../fetcher/upload.mjs';
 import { createShelf, KINDS } from '../fetcher/files.mjs';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -28,7 +28,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
   const at = p => { const r = resolve(parent(p)); return r && `${r === '/' ? '' : r}/${p.slice(p.lastIndexOf('/') + 1)}`; };
   const st = e => ({ isDirectory: () => e.type === 'dir', isFile: () => e.type === 'file', isSymbolicLink: () => e.type === 'link' });
   const later = (cb, e, v) => setImmediate(() => cb(e, v));
-  let failNext = null, failWrites = 0, closeLate = 0;
+  let failNext = null, failWrites = 0, closeLate = 0, slowWrite = 0, refuseLogins = 0;
   const silent = {};   // op -> how many calls get no answer at all (one.com going quiet, 2026-11-24)
   const quiet = op => { if (silent[op] > 0) { silent[op]--; return true; } return false; };
   const sftp = {
@@ -41,6 +41,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
     writeFile: (p, data, o, cb) => {
       if (typeof o === 'function') { cb = o; o = {}; }
       if (quiet('writeFile')) return;
+      if (slowWrite) { const ms = slowWrite; slowWrite = 0; return setTimeout(() => sftp.writeFile(p, data, o, cb), ms); }   // answered late
       const q = at(p);
       if (!q) return later(cb, err(2, 'no such folder'));
       if (o?.flag === 'wx' && fs.has(q)) return later(cb, err(4, 'exists'));
@@ -67,12 +68,16 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
     mkdir: (p, cb) => { ops.push(['mkdir', p]); fs.set(p, { type: 'dir' }); later(cb, null); },
   };
   class Client extends EventEmitter {
-    connect() { setImmediate(() => this.emit('ready')); }
-    sftp(cb) { setImmediate(() => cb(null, sftp)); }
+    connect() {
+      if (refuseLogins > 0) { refuseLogins--; return setImmediate(() => this.emit('error', Object.assign(new Error('All configured authentication methods failed'), { level: 'client-authentication' }))); }
+      setImmediate(() => this.emit('ready'));
+    }
+    sftp(cb) { if (quiet('sftp')) return; setImmediate(() => cb(null, sftp)); }
     end() { const late = closeLate; setTimeout(() => this.emit('close'), late); }
   }
   return { fs, ops, Client, failLstat: path => { failNext = { op: 'lstat', path }; }, failWrites: n => { failWrites = n; },
-    silence: (op, n = 1) => { silent[op] = n; }, closeLate: ms => { closeLate = ms; } };
+    silence: (op, n = 1) => { silent[op] = n; }, closeLate: ms => { closeLate = ms; }, slowWrite: ms => { slowWrite = ms; },
+    refuseLogins: n => { refuseLogins = n; } };
 }
 
 const cfg = dir => ({ SFTP_HOST: 'x', SFTP_USER: 'x', SFTP_PASS: 'x', SFTP_DIR: dir, SFTP_HOSTKEY: 'x' });
@@ -331,6 +336,59 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   up.add('live-202.json', live); await wait(1300);
   check('a sweep with no answer: a new connection, uploads go on', up.stats().reconnects === 3 && s.fs.has(`${DIR}/live-202.json`), JSON.stringify(up.stats()));
   await up.close();
+}
+
+// 10. The hang review (2026-11-24): one.com letting us in and never opening the file channel (finding 1); a write
+// answered only after the connection was replaced (finding 2: the old loop went on beside the new one); a refused
+// login tried every 10 minutes, said plainly (finding 8); the fetcher's last resort (finding 3).
+{
+  const s = space(marked());
+  const logs = [];
+  s.silence('sftp');
+  const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, callMs: 200 });
+  up.add('live-300.json', live);
+  await wait(1500);   // 200 ms limit, 1 s before connecting again
+  check('no file channel after the login: a new connection, the file arrives', s.fs.has(`${DIR}/live-300.json`) && up.stats().reconnects === 1 && up.stats().connected, JSON.stringify(up.stats()) + ' | ' + logs.join(' | '));
+  await up.close();
+}
+{
+  const s = space(marked());
+  const logs = [];
+  const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, callMs: 3000 });   // the answer comes within the limit
+  await wait(30);
+  const before = up.stats();
+  s.slowWrite(1600);                 // this write is answered after the connection was replaced
+  up.add('live-301.json', live);
+  await wait(50);
+  up.breakFor(10);                   // the line drops while the write waits; back 1 s later
+  await wait(2500);
+  const st = up.stats();
+  check('a late answer after a reconnect: the file sent once, nothing given up or retried', s.fs.has(`${DIR}/live-301.json`) && st.ok - before.ok === 1 && st.waiting === 0 &&
+    !logs.some(l => /trying again|given up/.test(l)), JSON.stringify(st) + ' | ' + logs.join(' | '));
+  up.add('live-302.json', live); await wait(50);
+  check('and the uploads go on', s.fs.has(`${DIR}/live-302.json`), JSON.stringify(up.stats()));
+  await up.close();
+}
+{
+  const s = space(marked());
+  const logs = [];
+  s.refuseLogins(1);
+  const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, callMs: 200 });
+  await wait(2500);
+  const st = up.stats();
+  check('a refused login: not tried again within seconds', st.reconnects === 1 && !st.connected && st.loginRefused, JSON.stringify(st));
+  check('a refused login: said plainly', /refused the login/.test(st.lastError ?? '') && logs.some(l => /refused the login.*600 s/.test(l)), logs.join(' | '));
+  await up.close();
+}
+{
+  const now = 1e12, since = now - 60 * 60000, fresh = now - 10000;
+  const st = (o = {}) => ({ refused: null, loginRefused: false, lastOkAt: now - STUCK_MS - 1000, ...o });
+  check('last resort: no upload for 10 min while Trafikverket answers: restart', uploadStuck(st(), { now, since, lastRecordAt: fresh }));
+  check('last resort: an upload 9 min ago: no', !uploadStuck(st({ lastOkAt: now - 9 * 60000 }), { now, since, lastRecordAt: fresh }));
+  check('last resort: just started, nothing yet: not before 10 min', !uploadStuck(st({ lastOkAt: null }), { now, since: now - 5 * 60000, lastRecordAt: fresh }) &&
+    uploadStuck(st({ lastOkAt: null }), { now, since: now - 11 * 60000, lastRecordAt: fresh }));
+  check('last resort: the internet out (no positions for 3 min): no', !uploadStuck(st(), { now, since, lastRecordAt: now - 3 * 60000 }) && !uploadStuck(st(), { now, since, lastRecordAt: null }));
+  check('last resort: the folder or the login refused: no (a restart can\'t help)', !uploadStuck(st({ refused: 'x' }), { now, since, lastRecordAt: fresh }) && !uploadStuck(st({ loginRefused: true }), { now, since, lastRecordAt: fresh }));
 }
 
 console.log(failed ? `${failed} failed` : 'upload-check: all hold');
