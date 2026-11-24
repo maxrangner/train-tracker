@@ -829,6 +829,25 @@ onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once a
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
 // map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
 document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target) && !mapEl.contains(e.target)) closeNav(); }, true);
+// A mouse pressed on a button keeps it while it stays where the button was: a pressed button shrinks (button:active,
+// scale .94; a row .98), and a press held near a wide row's edge was let go outside it, so the click went to what was
+// beside it and nothing opened (Max, 2026-11-24: the › on a saved trip "Still doesn't do anything"; quick clicks
+// worked, they ended before the shrink). A finger has this by itself. Moved off the button: let go as before.
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return;
+  const b = e.target.closest?.('button');
+  if (!b || b.disabled) return;
+  const r = b.getBoundingClientRect();
+  try { b.setPointerCapture(e.pointerId); } catch { return; }
+  const off = (m) => {
+    if (m.pointerId !== e.pointerId) return;
+    if (m.clientX >= r.left && m.clientX <= r.right && m.clientY >= r.top && m.clientY <= r.bottom) return;
+    try { b.releasePointerCapture(e.pointerId); } catch { /* let go already */ }
+    b.removeEventListener('pointermove', off);
+  };
+  b.addEventListener('pointermove', off);
+  b.addEventListener('lostpointercapture', () => b.removeEventListener('pointermove', off), { once: true });
+}, true);
 // The day (build plan part 4, src/day-view.js): the ribbon above the search bar, the sheet down to rest. Only the page
 // reading the server's files has the day's history; the dev page with the key (or a replay) says so. Again: closes it.
 document.head.append(Object.assign(document.createElement('style'), { textContent: DAY_CSS }));
