@@ -28,7 +28,9 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
   const at = p => { const r = resolve(parent(p)); return r && `${r === '/' ? '' : r}/${p.slice(p.lastIndexOf('/') + 1)}`; };
   const st = e => ({ isDirectory: () => e.type === 'dir', isFile: () => e.type === 'file', isSymbolicLink: () => e.type === 'link' });
   const later = (cb, e, v) => setImmediate(() => cb(e, v));
-  let failNext = null, failWrites = 0;
+  let failNext = null, failWrites = 0, closeLate = 0;
+  const silent = {};   // op -> how many calls get no answer at all (one.com going quiet, 2026-11-24)
+  const quiet = op => { if (silent[op] > 0) { silent[op]--; return true; } return false; };
   const sftp = {
     realpath: (p, cb) => { const r = resolve(p); later(cb, r ? null : err(2, 'no such file'), r && (r === '/' ? top || '/' : top + r)); },
     lstat: (p, cb) => {
@@ -38,6 +40,7 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
     readFile: (p, o, cb) => { cb ??= o; const r = resolve(p); later(cb, r ? null : err(2, 'no such file'), r && fs.get(r).data); },
     writeFile: (p, data, o, cb) => {
       if (typeof o === 'function') { cb = o; o = {}; }
+      if (quiet('writeFile')) return;
       const q = at(p);
       if (!q) return later(cb, err(2, 'no such folder'));
       if (o?.flag === 'wx' && fs.has(q)) return later(cb, err(4, 'exists'));
@@ -54,15 +57,22 @@ function space(entries, top = '') {   // top: the prefix the server adds to real
       fs.set(qb, fs.get(qa)); fs.delete(qa); ops.push(['rename', qa, qb]); later(cb, null);
     },
     unlink: (p, cb) => { const q = at(p); if (!q || !fs.has(q)) return later(cb, err(2, 'no such file')); fs.delete(q); ops.push(['delete', q]); later(cb, null); },
-    readdir: (p, cb) => { const r = resolve(p); later(cb, null, [...fs.keys()].filter(k => parent(k) === r && k !== r).map(k => ({ filename: k.slice(r.length + 1) }))); },
+    createReadStream: (p, o = {}) => {
+      const s = new EventEmitter(); s.destroy = () => {};
+      if (quiet('read')) return s;
+      setImmediate(() => { const r = resolve(p); if (!r) return s.emit('error', err(2, 'no such file')); s.emit('data', fs.get(r).data.subarray(o.start ?? 0)); s.emit('end'); });
+      return s;
+    },
+    readdir: (p, cb) => { if (quiet('readdir')) return; const r = resolve(p); later(cb, null, [...fs.keys()].filter(k => parent(k) === r && k !== r).map(k => ({ filename: k.slice(r.length + 1) }))); },
     mkdir: (p, cb) => { ops.push(['mkdir', p]); fs.set(p, { type: 'dir' }); later(cb, null); },
   };
   class Client extends EventEmitter {
     connect() { setImmediate(() => this.emit('ready')); }
     sftp(cb) { setImmediate(() => cb(null, sftp)); }
-    end() { setImmediate(() => this.emit('close')); }
+    end() { const late = closeLate; setTimeout(() => this.emit('close'), late); }
   }
-  return { fs, ops, Client, failLstat: path => { failNext = { op: 'lstat', path }; }, failWrites: n => { failWrites = n; } };
+  return { fs, ops, Client, failLstat: path => { failNext = { op: 'lstat', path }; }, failWrites: n => { failWrites = n; },
+    silence: (op, n = 1) => { silent[op] = n; }, closeLate: ms => { closeLate = ms; } };
 }
 
 const cfg = dir => ({ SFTP_HOST: 'x', SFTP_USER: 'x', SFTP_PASS: 'x', SFTP_DIR: dir, SFTP_HOSTKEY: 'x' });
@@ -283,6 +293,43 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   await wait(100);
   const st = up.stats();
   check('a file let go of is never named', up.names().stats === d && !s.fs.has(`${DIR}/${c}`) && st.waiting === 0, JSON.stringify(up.names()) + JSON.stringify(st));
+  await up.close();
+}
+
+// 9. one.com stops answering on a connection that still looks open (2026-11-24, TODO 69: one write never answered,
+// the uploads held 06:27-08:01 with no error and no reconnect): past the time limit a new connection is opened and the
+// file goes on it; an old connection closing late doesn't break the new one; a read that stops answering does the same.
+{
+  const s = space(marked());
+  const logs = [];
+  const up = createUploader(cfg(DIR), m => logs.push(m), { Client: s.Client, callMs: 200 });
+  await wait(30);
+  s.silence('writeFile'); s.closeLate(1500);   // the old connection's "closed" comes after the new one is open
+  up.add('live-200.json', live);
+  await wait(100);
+  check('silent write: still waiting before the limit', !s.fs.has(`${DIR}/live-200.json`) && up.stats().reconnects === 0, JSON.stringify(up.stats()));
+  await wait(1400);   // 200 ms limit, 1 s before connecting again
+  const st = up.stats();
+  check('silent write: a new connection after the limit, the file arrives', s.fs.has(`${DIR}/live-200.json`) && st.reconnects === 1 && st.connected && st.waiting === 0, JSON.stringify(st));
+  check('silent write: told in the log', logs.some(l => /no answer to writeFile/.test(l)), logs.join(' | '));
+  await wait(800);   // the old connection's late close
+  check('an old connection closing late leaves the new one alone', up.stats().reconnects === 1 && up.stats().connected, JSON.stringify(up.stats()));
+  up.add('live-201.json', live); await wait(50);
+  check('and the next file goes at once', s.fs.has(`${DIR}/live-201.json`));
+  s.closeLate(0);
+  s.fs.set('/web/sparat/count', { type: 'dir' }); s.fs.set('/web/sparat/count/days', { type: 'dir' });
+  s.fs.set('/web/sparat/count/days/2026-11-24.txt', file('1 abcdefghijkl s\n'));
+  check('a count file is read', await up.readCount('2026-11-24.txt') === '1 abcdefghijkl s\n');
+  s.silence('read');
+  let why = '';
+  try { await up.readCount('2026-11-24.txt'); } catch (e) { why = e.message; }
+  check('a read with no answer: given up after the limit', /no answer to read/.test(why), why);
+  await wait(1300);
+  check('a read with no answer: a new connection', up.stats().reconnects === 2 && up.stats().connected, JSON.stringify(up.stats()));
+  s.silence('readdir');
+  up.sweep(); await wait(300);
+  up.add('live-202.json', live); await wait(1300);
+  check('a sweep with no answer: a new connection, uploads go on', up.stats().reconnects === 3 && s.fs.has(`${DIR}/live-202.json`), JSON.stringify(up.stats()));
   await up.close();
 }
 
