@@ -217,7 +217,7 @@ try {
     await sleep(1600);   // (its half is read again each second)
     const more = await page.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(); return b ? { bottom: Math.round(b.bottom), h: innerHeight } : null; });
     // (and no empty space under it: Max's phone, 2026-11-23, second and third rounds)
-    check(!more || (more.bottom <= more.h - 8 && more.bottom >= more.h - 24), `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 8 to 24)`);
+    check(!more || (more.bottom <= more.h - 2 && more.bottom >= more.h - 16), `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 2 to 16)`);
     // the chooser ("to Kallhäll"): the sheet follows the card at once (Max, 2026-11-23: "the card expands after way too long")
     const h0 = await settle();
     await click('#panel .cd-stop');
@@ -285,7 +285,7 @@ try {
       await sleep(700);
       const m = await pc.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); return b ? Math.round(s.bottom - b.bottom) : null; });
       // (the sheet hangs from the top on a computer since 2026-11-23: its arrow's 20 px row is under "More")
-      check(m !== null && m >= 8 + 20 && m <= 24 + 20, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its arrow's row included (want 28 to 44)`);
+      check(m !== null && m >= 2 + 20 && m <= 16 + 20, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its arrow's row included (want 22 to 36)`);
       await pc.evaluate(() => window.__stack.home(0));
       await sleep(600);
       const pfg = await fieldGap(pc);

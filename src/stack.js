@@ -82,7 +82,8 @@ const TOP_ROOM_PX = 52;        // full height leaves this much at the top (the l
 const TAP_PX = 14;             // a tap on the handle: the finger moved less than this (a real finger wanders)...
 const TAP_MS = 450;            // ...and lifted within this
 const PULL_PX = 48;            // a pull down from the head this long lowers the sheet at least one height
-const FLICK_V = 1.5;           // a flick down this fast (px/ms) closes the page at once (Max, 2026-11-23: closing a full card took three swipes)
+const FLICK_V = 2.2;           // a flick down this fast (px/ms) closes the page at once (a swipe of 1.5 px/ms, the test
+                               // browser's and a plain quick swipe, still steps one height) (Max, 2026-11-23: closing a full card took three swipes)
 const STEP_PX = 40;            // a map tap lowers the sheet only when that moves it at least this far (R1); else it closes
 const NOT_GRAB = 'button, a, input, select, textarea, label, [role="button"]';   // the head's parts that aren't the handle
 // the head: the sheet's own, or on a page without a bar its first line where it says so (a train's card: number and
@@ -94,7 +95,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const pagesEl = sheet.querySelector('.sh-pages');
   const input = sheet.querySelector('#search');
   const results = sheet.querySelector('#search-results');
-  const barEl = sheet.querySelector('.sh-bar'), btnsEl = sheet.querySelector('.sh-btns');
+  const barEl = sheet.querySelector('.sh-bar'), btnsEl = sheet.querySelector('.sh-btns'), upBtn = sheet.querySelector('.sh-up');
   const starBtn = sheet.querySelector('.sh-star'), folBtn = sheet.querySelector('.sh-follow'), actsEl = sheet.querySelector('.sh-acts');
   // the handle's grip over the map, just above the sheet (index.html #sheet-grip; a phone only)
   const grip = Object.assign(document.createElement('div'), { id: 'sheet-grip' });
@@ -247,6 +248,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     place(H[idx]);
     if (!still) pad();
     if (!searching) pg?.def.level?.(idx);
+    guard();
   }
   const scroller = () => (searching ? results : top()?.el);
 
@@ -295,9 +297,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       to = v > 0 ? H.findIndex(x => x > h + 6) : H.length - 1 - [...H].reverse().findIndex(x => x < h - 6);
       if (to < 0 || to > 2) to = v > 0 ? 2 : 0;
     } else { to = 0; H.forEach((x, i) => { if (Math.abs(x - h) < Math.abs(H[to] - h)) to = i; }); }
-    // pulled down from the head, never up first: at least one height lower (2026-11-23: a pull of 150 px from full
-    // came back up to full, the nearest height)
-    if (!wide() && d.head && d.i0 > 0 && to >= d.i0 && h < d.h0 - PULL_PX && d.ys - d.top < 10) to = d.i0 - 1;
+    // pulled down, never up first: at least one height lower (2026-11-23: a pull of 150 px from full came back up to
+    // full, the nearest height; on a train's page too, 225 px from full and 230 from its half)
+    if (!wide() && d.i0 > 0 && to >= d.i0 && h < d.h0 - PULL_PX && d.ys - d.top < 10) to = d.i0 - 1;
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head, .pg-head') && !el.closest(NOT_GRAB));
@@ -307,7 +309,11 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // Home's field: a finger's pull moves the sheet, its tap still searches (not while searching; not a mouse: its
     // press focuses the field at once)
     const field = e.target.closest('label.sh-field');
-    if (field ? e.pointerType !== 'touch' || searching : e.target.closest('input, select, textarea')) return;
+    // (a finger on a text field not being typed in moves the sheet like the rest, its tap still types: Max, 2026-11-23,
+    // "Swiping down on a text entry field should also swipe the card"; Home's search field the same since before)
+    const typing = el => el.matches('select') || el === document.activeElement || e.pointerType !== 'touch';
+    const input = e.target.closest('input, select, textarea');
+    if (field ? e.pointerType !== 'touch' || searching : input && typing(input)) return;
     const head = e.target === grip || e.target.closest(HEAD), full = idx === 2;
     if (!head && full && e.pointerType !== 'mouse') return;   // at full a finger scrolls the page; touchmove below takes a pull down from its top
     dragBegin(e.clientY, e.pointerId);
@@ -374,7 +380,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     touching = false; if (tch?.on) dragEnd(); tch = null;
   }
   sheet.addEventListener('touchstart', (e) => {
-    tch = idx === 2 && e.touches.length === 1 && !e.target.closest(`${HEAD}, input`)
+    tch = idx === 2 && e.touches.length === 1 && !e.target.closest(HEAD) && !(e.target.closest('input, textarea') && e.target === document.activeElement)
       ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false } : null;
     touching = true;
     e.target.addEventListener('touchmove', touchMove, { passive: false });
@@ -440,7 +446,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const own = pg.def.barIn ? pg.def.barIn() : null, home = own ?? barEl;
     if (btnsEl.parentElement !== home) home.append(btnsEl);
     const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
-    sheet.classList.toggle('no-bar', Boolean(pg.def.barIn) || !any);
+    // ‹ one page back on every page but those that say noUp (a train's)
+    const up = !pg.def.noUp;
+    if (upBtn.hidden === up) upBtn.hidden = !up;
+    const word = t('stepBack');
+    if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);
+    sheet.classList.toggle('no-bar', !up && (Boolean(pg.def.barIn) || !any));
   }
   function show(pg, prev, dir, opts = {}) {
     if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
@@ -466,6 +477,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
     syncBar();
     onChange(pg);
+    guard();
   }
   // Open the page with this key (a page already on the stack: back to it).
   function open(key, opts = {}) {
@@ -477,7 +489,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       syncBar();
       return true;
     }
-    if (at >= 0) { backTo(at, opts.level); return true; }
+    // (opened again by a tap: at its start height, not the one it was left at; Max, 2026-11-23: a train card left
+    // collapsed came back collapsed. Esc and the phone's back keep the height: back())
+    if (at >= 0) { backTo(at, opts.level ?? Math.max(1, stack[at].def.startLevel ?? 1)); return true; }
     const def = define(key);
     if (!def) return false;
     const prev = top(), pg = make(key, def);
@@ -601,6 +615,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (searching || top()?.key !== 'home') return;
     preSearch = idx;
     searching = true;
+    guard();
     sheet.dataset.search = '';
     results.hidden = false;
     pagesEl.append(results);
@@ -623,6 +638,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   sheet.querySelector('.sh-cancel').addEventListener('click', () => { closeSearch(); setIndex(preSearch); });
 
   // ---------- the bar ----------
+  upBtn.addEventListener('click', () => back());
   starBtn.addEventListener('click', () => { top()?.def.star?.toggle(); syncBar(); });
   actsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-act-id]'); if (b) { top()?.def.act?.(b.dataset.actId); syncBar(); } });
   folBtn.addEventListener('click', () => { top()?.def.follow?.toggle(); syncBar(); });
@@ -631,6 +647,23 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // ---------- each second: the page on top (not while a finger is on it or it scrolls) ----------
   const busy = () => touching || drag || performance.now() - lastScroll < 500;
   setInterval(() => { const pg = top(); if (!pg || searching) return; if (!busy()) { pg.def.every?.(idx); syncFade(); } syncBar(); }, 1000);
+
+  // ---------- the phone's own back in a browser (Max, 2026-11-23: "swipe back again closes the page, not swipe back")
+  // The browser's back (Android's gesture, the back button) left the site. While there is something to step back from
+  // (a page, the search, the sheet raised) one history entry of our own stands in front: back takes it and steps one
+  // thing back, as Android's back in the app does (src/main.js, Capacitor); with nothing left it leaves. Not in the app.
+  const NATIVE = Boolean(window.Capacitor?.isNativePlatform?.());
+  let guarded = false;
+  function guard() {
+    if (!ready || NATIVE || guarded) return;
+    if (stack.length > 1 || idx > 0 || searching) { try { history.pushState({ sparat: 1 }, ''); guarded = true; } catch { /* (a sandboxed frame) */ } }
+  }
+  addEventListener('popstate', () => {
+    if (NATIVE) return;
+    guarded = false;
+    if (back()) guard();
+    else history.back();   // (nothing left to step back from: the user meant to leave)
+  });
 
   // ---------- start: Home ----------
   const homeDef = define('home');

@@ -130,7 +130,16 @@
     #sheet.no-bar .sh-bar { visibility: hidden; }
     /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
     #sheet .pg-head { touch-action: none; }
+    /* (at full the card's top line stays at the top while its stops scroll under it: its Share, star and Follow in reach) */
+    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg); padding-block: 6px; margin-block: -6px 0; }
     .sh-btns { display: flex; align-items: center; gap: 8px; flex: none; }
+    /* ‹: one page back (Max, 2026-11-23: "With home gone, some screens need a back button like disruptions"); every page
+       but a train's (its card's top line is its head: a map tap or a pull closes it) */
+    .sh-up { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
+    .sh-up:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* a trip's pencil and bin beside its name (its page's .g-head, def.barIn) */
+    .g-head .sh-btns { margin-left: auto; padding-left: 10px; gap: 6px; }
+    .g-head .sh-act { min-width: 40px; height: 40px; padding: 0 9px; }
     .panel-buttons .sh-btns { gap: 6px; }
     .sh-grow { flex: 1; }
     .sh-star { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
@@ -905,7 +914,7 @@
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
     #panel.full .panel-more { margin: 6px 0 2px; }
-    #panel:not(.full) .panel-more { margin-top: 4px; }
+    #panel:not(.full) .panel-more { margin-top: 0; padding: 2px 4px; }
     /* The arrow shows where the card goes: on a phone it grows up (Mer ⌃), on a wider screen down (Mer ⌄) (Max, 2026-11-16). */
     @media (min-width: 440px) { .panel-more svg { transform: rotate(180deg); } }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
@@ -1298,7 +1307,8 @@
         <button class="sh-cancel" type="button" data-t="cancel">Cancel</button>
       </div>
       <div class="sh-bar">
-                <i class="sh-grow"></i>
+        <button class="sh-up" type="button" hidden><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
+        <i class="sh-grow"></i>
         <span class="sh-btns"><span class="sh-acts" hidden></span>
         <button class="sh-star" type="button" hidden></button>
         <button class="sh-follow" type="button" aria-pressed="false" hidden><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 19 20l-7-3.8L5 20z"/></svg><span></span></button></span>

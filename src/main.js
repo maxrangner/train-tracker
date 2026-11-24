@@ -422,7 +422,7 @@ function trainPage(id) {
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
   // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
   // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
-  const CARD_GAP = 10;   // (under "More": 20 was too much on Max's phone, 2026-11-23)
+  const CARD_GAP = 4;   // (under "More": 20, then 10 were too much on Max's phone, 2026-11-23)
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
@@ -493,6 +493,7 @@ function trainPage(id) {
     // share, star and Follow in the card's top line beside the number, as before the sheet (Max, 2026-11-23); the sheet
     // has no bar over a train
     barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
+    noUp: true,   // (no ‹ over a train: its card's top line is the head; a map tap, a pull or the phone's back)
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -522,9 +523,11 @@ function whyFor(id) {
   if (!x || x.stale || !route) return null;
   const known = { train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
     lines: d => disruptions.stretchesOf(d), now: now() };
-  if ((x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS) return { ...whyStanding(known), title: 'whyTitle' };
-  if ((lateOf(id) ?? 0) >= LATE_MIN) return { ...whyLate(known), title: 'whyLateTitle' };
-  return null;
+  // only a late train, and only with an answer (Max, 2026-11-23: it showed with no issue, even early; 'No reason
+  // reported' said nothing)
+  if ((lateOf(id) ?? 0) < LATE_MIN) return null;
+  const w = (x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS ? { ...whyStanding(known), title: 'whyTitle' } : { ...whyLate(known), title: 'whyLateTitle' };
+  return w.kind === 'none' || w.kind === 'stop' ? null : w;
 }
 function whyHtml(w) {
   if (!w || w.kind === 'stop') return '';
