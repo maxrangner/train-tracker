@@ -109,7 +109,7 @@ try {
       return q.y > 60 && q.y < innerHeight - window.__stack.heights[window.__stack.level] - 20 && q.x > 20 && q.x < innerWidth - 70; });
       const big = all.filter(x => window.__trains.get(x.properties.id)?.number > 1000), fs = big.length ? big : all;
       if (!fs.length) return null; const q = window.__map.project(fs[n % fs.length].geometry.coordinates); return { x: q.x, y: q.y }; }, k);
-    if (!p) throw new Error('no train in view');
+    if (!p) throw new Error('no train in view (' + await page.evaluate(() => `dots ${window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).length}, line ${document.getElementById('line').dataset.id || '-'}, top ${window.__stack.top()} at ${window.__stack.level}, sheet ${window.__stack.heights.join('/')}, zoom ${window.__map.getZoom().toFixed(1)}`) + ')');
     const before = await top();
     await page.touchscreen.tap(p.x, p.y);
     // (the map follows the open train, so a tap can miss: the next train then)
@@ -177,6 +177,8 @@ try {
   await act('Home: pulled up', ev(() => window.__stack.setLevel(2)), 1800);
   await act('Home: a company', ev(() => document.querySelector('#sheet .pg[data-key="home"] [data-filter="brand"]:not([data-v=""])')?.click()), 1800);
   await act('the company: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
+  // (a company tapped on Home filters the map until the × on the line since 2026-11-23: let go, or later steps find no train)
+  await act('the company: its filter off (×)', ev(() => document.querySelector('#line .line-x')?.click()), 1000);
   await act('Home: a long pull down', drag(700), 1500);
   state((await level()) === 0, `Home: a long pull down left it at ${await level()}`);
   await act('Settings: open', ev(() => { document.getElementById('nav-button').click(); document.getElementById('open-settings').click(); }), 1500);
@@ -270,9 +272,9 @@ try {
   await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 10 }));
   await sleep(1500);
   // (live at night few trains run near Stockholm: further out then)
-  for (const z of [9, 8, 7]) {
-    if (await page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).length >= 2)) break;
-    await page.evaluate(zz => window.__map.jumpTo({ center: [16.5, 59.3], zoom: zz }), z);
+  for (const z of [9, 8, 7, 6, 5]) {
+    if (await page.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).length >= 4)) break;
+    await page.evaluate(zz => window.__map.jumpTo({ center: zz > 6 ? [16.5, 59.3] : [16, 61], zoom: zz }), z);   // (deep at night: all of Sweden)
     await sleep(1500);
   }
   await act('a station over a train: a train', () => tapTrain(1), 3000);
