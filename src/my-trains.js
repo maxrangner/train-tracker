@@ -369,18 +369,21 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     // While typing, the pill being filled goes to the top of the sheet (at full) and its results right under it, above
     // the keyboard (the keyboard shrinks the page: interactive-widget=resizes-content; visualViewport for a phone that
     // lays it over the page). The room under the results lets the page scroll that far (.nt-room).
+    // (only when the pill sits low: one high up stays where it is, the title and its line in view; Max, 2026-11-23:
+    // "clicking the search field just removes the long explanatory text")
     const toTop = () => {
       const f = el?.querySelector('.nt-stop.editing');
       if (!f || stack.level < 2 || stack.top() !== key) return;
-      el.scrollTop += f.getBoundingClientRect().top - el.getBoundingClientRect().top - 6;
+      const at = f.getBoundingClientRect().top - el.getBoundingClientRect().top;
+      if (at > el.clientHeight * 0.4) el.scrollTop += at - el.clientHeight * 0.25;
     };
     const typing = () => { const q = el?.querySelector('.nt-q'); return Boolean(q && document.activeElement === q); };
     const onResize = () => { line(); if (typing()) { toTop(); setTimeout(toTop, 250); } };
     function draw() {
       const n = st.stops.length, from = st.stops[0], to = st.stops[n - 1];
       const can = from && to && from !== to;
-      el.innerHTML = `<b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p>` +
-        `<p class="sub nt-hint">${esc(t('tripDragHint'))}</p><div class="nt-route">` +
+      el.innerHTML = `<div class="g-head"><b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b></div><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p>` +
+        `<div class="nt-route">` +
         st.stops.map((_, i) => stopHtml(i) + (i === 0 && n === 2 ? `<button type="button" class="nt-add" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>` : '')).join('') +
         `</div><button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
       line();

@@ -111,7 +111,8 @@ try {
     await sleep(600);
   }
   // until the sheet's height stops changing (a glide ends)
-  const settle = async () => { let a = await sheet(); for (let i = 0; i < 20; i++) { await sleep(120); const b = await sheet(); if (b.h === a.h) return b; a = b; } return a; };
+  // (two quiet readings in a row: a page busy drawing a card held a glide 140 ms before it began, 2026-11-23)
+  const settle = async () => { let a = await sheet(), same = 0; for (let i = 0; i < 30; i++) { await sleep(120); const b = await sheet(); same = b.h === a.h ? same + 1 : 0; if (same >= 2) return b; a = b; } return a; };
 
   const key = await openCard();
   if (!key) fails.push('setup: no train page with its stops opened');

@@ -425,14 +425,16 @@ function trainPage(id) {
   const CARD_GAP = 4;   // (under "More": 20, then 10 were too much on Max's phone, 2026-11-23)
   function cardTo(whole) {
     const pg = panelEl.parentElement;
-    if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
+    if (panel.openId !== id || !pg?.classList.contains('pg') || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
     // Still coming in (the last card's parts may still be in it): the sheet waits where it is; once the card is in, it
     // moves once to fit it exactly, up or down (refitCard). Until 2026-11-23 it took the last card's height and, only
     // ever growing, kept that empty space under a shorter card (Max's phone: "too much empty space down").
     if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
-      return Math.max(1, Math.round(stack.shown - (innerWidth >= 440 ? 82 : 72)));   // (the head's height, as src/stack.js counts it)
+      // (at most half the screen: from Home at full a loading card covered it all until its stops came; the handle is
+      // its head since the bar went, 20 px, 30 on a computer, as src/stack.js counts it)
+      return Math.max(1, Math.round(Math.min(stack.shown, innerHeight * 0.5) - (innerWidth >= 440 ? 30 : 20)));
     }
     if (!whole) {
       // collapsed: the head line alone (number, operator, destination; the rest is hidden at low: index.html)
@@ -453,7 +455,9 @@ function trainPage(id) {
       const fresh = panel.openId !== id;
       if (fresh) panel.open(m, { follow: m.onMap });
       else if (panel.hidden) panel.show();
-      panelEl.classList.toggle('full', stack.level === 2);
+      // (a train just opened starts compact, whatever height the sheet had: from the search at full it took that height
+      // and measured itself full, then dropped, 2026-11-23)
+      panelEl.classList.toggle('full', dir <= 0 && stack.level === 2);
       if (!m.onMap) { map.unfollow(); return; }
       buzz();
       panel.setFollowing(true);

@@ -239,6 +239,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
     idx = Math.max(0, Math.min(2, i));
     sheet.dataset.h = String(idx);
+    // which way a tap on the handle moves it (a computer's arrow, index.html): a page with no low goes half ↔ full
+    // (Max, 2026-11-23: a station at half showed the arrow the wrong way)
+    sheet.dataset.next = (keepsLow(top()) && !searching && H[1] - H[0] >= 30 ? idx === 0 : idx < 2) ? 'more' : 'less';
     sheet.classList.remove('closing');
     if (idx < 2 && searching) closeSearch();
     const pg = top();
@@ -264,6 +267,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (a computer: the sheet hangs from the top, so a pull down makes it taller)
     const grow = wide() ? -1 : 1;
     let h = drag.h0 + (drag.y0 - y) * grow;
+    const raw = h;   // (where the finger is, before the sheet gives way or stops at Home's rest)
     if (h > H[2]) h = H[2] + (h - H[2]) * 0.2;
     // (below its lowest a page that rests low gives way a little; one that closes there follows the finger all the way:
     // let go, it is where Home rests, no glide after, 2026-11-23)
@@ -275,7 +279,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (dt > 4) { drag.v = 0.65 * ((drag.ly - y) * grow / dt) + 0.35 * drag.v; drag.ly = y; drag.lt = now; }
     drag.h = h;
     place(h, false);
-    const closing = stack.length > 1 && h < H[0] - 30;
+    // (the finger 30 px under the page's lowest height: a train's collapsed card, 80 px, sits under Home's rest, so the
+    // sheet's own height can't get there)
+    const closing = stack.length > 1 && raw < H[0] - 30;
     if (closing !== sheet.classList.contains('closing')) sheet.classList.toggle('closing', closing);
     return true;
   }
@@ -436,6 +442,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     def.mount?.(el, pg);
     return pg;
   }
+  // A page's title line: its .g-head or .panel-head at its top (one level in at most)
+  const headOf = pg => pg.el.querySelector(':scope > .g-head, :scope > .panel-head, :scope > :first-child > .g-head, :scope > :first-child > .panel-head');
   // The bar over a page: ☆, Follow and the page's own buttons when it has them; none (or taken into the page): no bar.
   function syncBar() {
     const pg = top();
@@ -462,16 +470,20 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       folBtn.setAttribute('aria-pressed', String(following));
       folBtn.lastElementChild.textContent = t(following ? 'following' : 'follow');
     }
-    // where the buttons sit: the page's own place for them (def.barIn), else the bar
-    const own = pg.def.barIn ? pg.def.barIn() : null, home = own ?? barEl;
-    if (btnsEl.parentElement !== home) home.append(btnsEl);
-    const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
     // ‹ one page back on every page but those that say noUp (a train's)
     const up = !pg.def.noUp;
     if (upBtn.hidden === up) upBtn.hidden = !up;
     const word = t('stepBack');
     if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);
-    sheet.classList.toggle('no-bar', !up && (Boolean(pg.def.barIn) || !any));
+    // ‹ and the buttons on the page's own title line, never a row of their own (Max, 2026-11-23: "The back arrow takes
+    // up a full row all by itself. Wasted space"): ‹ first, the buttons at its end (def.barIn: the page's own place)
+    const head = up ? headOf(pg) : null;
+    if (head && head.firstElementChild !== upBtn) head.prepend(upBtn);
+    else if (!head && upBtn.parentElement !== barEl) barEl.prepend(upBtn);
+    const own = (pg.def.barIn ? pg.def.barIn() : null) ?? head, place = own ?? barEl;
+    if (btnsEl.parentElement !== place) place.append(btnsEl);
+    const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
+    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(pg.def.barIn) || !any)));
   }
   function show(pg, prev, dir, opts = {}) {
     if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
@@ -492,6 +504,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     H[0] = lowOf(pg);
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
     pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, ...opts });
+    syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     [H[0], H[1]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
     pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
@@ -659,6 +672,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- the bar ----------
   upBtn.addEventListener('click', () => back());
+  // A page drawing its title line again drops ‹ and the buttons from it: put back at once, not at the next second (a
+  // board's tab or its search closed made its line 8 px shorter for a moment: sheet-moves-check)
+  // (before the frame is drawn: the observer runs before paint)
+  new MutationObserver(() => { if (!upBtn.isConnected || !btnsEl.isConnected) syncBar(); }).observe(pagesEl, { childList: true, subtree: true });
   starBtn.addEventListener('click', () => { top()?.def.star?.toggle(); syncBar(); });
   actsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-act-id]'); if (b) { top()?.def.act?.(b.dataset.actId); syncBar(); } });
   folBtn.addEventListener('click', () => { top()?.def.follow?.toggle(); syncBar(); });

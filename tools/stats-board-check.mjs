@@ -56,7 +56,8 @@ try {
   const kindV = await page.evaluate(h => { const r = [...document.querySelectorAll(`${h} .st-brow[data-filter="kind"]`)].find(x => x.style.order === '0'); r.click(); return r.dataset.v; }, HOME);
   await until(page, k => window.__stack.top() === `kind:${k}`, 3000, kindV);
   await sleep(500);
-  await page.evaluate(() => document.querySelector('#sheet .show-only')?.click());
+  // (a row tapped on Home filters already since 2026-11-23: 'Visa bara' then shows it on; tapped only when off)
+  await page.evaluate(() => { const b = document.querySelector('#sheet .show-only'); if (b && b.getAttribute('aria-pressed') !== 'true') b.click(); });
   await sleep(300);
   await back(page);
   await setLevel(page, 2);
