@@ -713,16 +713,20 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // (a page, the search, the sheet raised) one history entry of our own stands in front: back takes it and steps one
   // thing back, as Android's back in the app does (src/main.js, Capacitor); with nothing left it leaves. Not in the app.
   const NATIVE = Boolean(window.Capacitor?.isNativePlatform?.());
-  let guarded = false;
+  // (only a step back off our own entry counts: an address followed forward, a #train= link or a changed setting in the
+  // address, also brings a popstate, and was taken for a back press that undid it; debug-check, 2026-11-24. A back keeps
+  // the history's length; a new entry changes it or replaces ours.)
+  let guarded = false, guardLen = 0;
   function guard() {
     if (!ready || NATIVE || guarded) return;
-    if (stack.length > 1 || idx > 0 || searching) { try { history.pushState({ sparat: 1 }, ''); guarded = true; } catch { /* (a sandboxed frame) */ } }
+    if (stack.length > 1 || idx > 0 || searching) { try { history.pushState({ sparat: 1 }, ''); guarded = true; guardLen = history.length; } catch { /* (a sandboxed frame) */ } }
   }
-  addEventListener('popstate', () => {
-    if (NATIVE) return;
+  addEventListener('popstate', (e) => {
+    if (NATIVE || !guarded) return;
     guarded = false;
+    if (e.state?.sparat || history.length !== guardLen) return;   // (not a step back off our entry)
     if (back()) guard();
-    else history.back();   // (nothing left to step back from: the user meant to leave)
+    else history.back();   // (nothing left to step back from, the pages closed in the app meanwhile: the user meant to leave)
   });
 
   // ---------- start: Home ----------
