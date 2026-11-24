@@ -47,6 +47,23 @@ for (const motion of ['side', 'rise', 'strip']) {
     await page.close();
   }
 }
+// Debug → Animation speed (Max, 2026-11-24: "Use current speed as fast, and add a slower at 75%"): a page change and the
+// sheet's glide take 4/3 as long with 'calm'
+for (const speed of ['fast', 'calm']) {
+  const page = await S.waitForMap(browser, { replay: CARD_HOUR, theme: 'dark', lang: 'sv', mspeed: speed });
+  await sleep(2000);
+  const id = await page.evaluate(() => window.__trains.reports().map(r => r.id)[3]);
+  const ms = await page.evaluate(async (id) => {
+    window.__stack.open(`train:${id}`, { go: true });
+    await new Promise(r => requestAnimationFrame(r));
+    const a = document.querySelector('#sheet .pg.in-r')?.getAnimations()[0];
+    const glide = parseFloat(getComputedStyle(document.getElementById('sheet')).transitionDuration) * 1000;
+    return { page: a ? Math.round(a.effect.getTiming().duration) : null, glide: Math.round(glide) };
+  }, id);
+  const want = speed === 'calm' ? { page: 373, glide: 480 } : { page: 280, glide: 360 };
+  ok(Math.abs(ms.page - want.page) <= 3 && Math.abs(ms.glide - want.glide) <= 3, `speed ${speed}: a page change ${ms.page} ms (want ${want.page}), the sheet's glide ${ms.glide} ms (want ${want.glide})`);
+  await page.close();
+}
 await browser.close();
 console.log(fails.length ? `page-motion-check: ${fails.length} failed` : 'page-motion-check ok: each way moves along its axis, nothing fades');
 process.exit(fails.length ? 1 : 0);

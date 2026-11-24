@@ -90,9 +90,10 @@ try {
   //    hamburger instead"; until then under the whole box)
   await page.evaluate(() => window.__stack.home(0)); await sleep(1200);
   await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(500);
-  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), b = document.getElementById('nav-button').getBoundingClientRect(); if (!n || n.hidden) return null;
-    const r = n.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), btnRight: Math.round(b.right), btnTop: Math.round(b.top) }; });
-  ok(menu && menu.left >= menu.btnRight + 4 && Math.abs(menu.top - menu.btnTop) <= 2, `☰: the menu at ${menu?.left},${menu?.top}, the button's right ${menu?.btnRight}, its top ${menu?.btnTop}`);
+  // (outside the sheet's box with room between, level with the search bar: Max, 2026-11-24 "Menu clips the search pill")
+  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(), f = document.querySelector('#sheet .sh-field').getBoundingClientRect(); if (!n || n.hidden) return null;
+    const r = n.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), boxRight: Math.round(s.right), barTop: Math.round(f.top) }; });
+  ok(menu && menu.left >= menu.boxRight + 8 && Math.abs(menu.top - menu.barTop) <= 2, `☰: the menu at ${menu?.left},${menu?.top}; the sheet's box ends at ${menu?.boxRight}, the search bar's top ${menu?.barTop}`);
   await page.keyboard.press('Escape'); await sleep(300);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")

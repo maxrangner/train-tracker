@@ -74,7 +74,8 @@ if (sharedAt) dropShared();
 const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;
-document.documentElement.dataset.motion = settings.pageMotion;   // how a page comes in (index.html :root[data-motion]; Debug)   // index.html reports it on screen if this line is never reached
+document.documentElement.dataset.motion = settings.pageMotion;   // how a page comes in (index.html :root[data-motion]; Debug)
+document.documentElement.dataset.mspeed = settings.motionSpeed;   // and how fast (Debug)   // index.html reports it on screen if this line is never reached
 translatePage();           // the page's own words in the chosen language (Settings → Language)
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
 // has loaded (or failed: then trains move in straight lines between reports).
@@ -826,11 +827,13 @@ function openNav() {
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
-  // A computer: to the right of ☰, its top level with the button (Max, 2026-11-24: "move menu to the right of the
-  // hamburger instead"); it floats beside the sheet, over the map.
-  if (innerWidth >= 440 && a.right + 10 + w <= innerWidth - 10) {
-    navEl.style.left = `${a.right + 10}px`;
-    navEl.style.top = `${Math.max(10, Math.min(innerHeight - h - 10, a.top))}px`;
+  // A computer: to the right of ☰, outside the sheet's box with room between, its top level with the search bar (Max,
+  // 2026-11-24: "move menu to the right of the hamburger instead"; then "Menu clips the search pill. Have it align with
+  // the search bar vertically and add padding"); it floats beside the sheet, over the map.
+  const sbox = document.getElementById('sheet').getBoundingClientRect(), bar = document.querySelector('#sheet .sh-field')?.getBoundingClientRect() ?? a;
+  if (innerWidth >= 440 && sbox.right + 12 + w <= innerWidth - 10) {
+    navEl.style.left = `${sbox.right + 12}px`;
+    navEl.style.top = `${Math.max(10, Math.min(innerHeight - h - 10, bar.top))}px`;
     navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
     return;
   }
@@ -1167,6 +1170,7 @@ onSettingChange((key) => {
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); homeDef.redraw(); }   // Debug → Lateness colours on Home
   if (key === 'pageMotion') document.documentElement.dataset.motion = settings.pageMotion;   // Debug → Page change
+  if (key === 'motionSpeed') document.documentElement.dataset.mspeed = settings.motionSpeed;   // Debug → Animation speed
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
