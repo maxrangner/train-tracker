@@ -31,11 +31,11 @@ const OWN_MAP = (import.meta.env.DEV && new URLSearchParams(location.hash.slice(
 export const ownMap = Boolean(OWN_MAP);   // (the map credit: OpenFreeMap named only when its tiles are used)
 const here = p => new URL(p, location.href).href;
 if (OWN_MAP) addProtocol('pmtiles', new Protocol().tile);
-const styleUrl = dark => (OWN_MAP ? here(`/map/${dark ? 'dark' : 'light'}.json`) : `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`);
+const styleUrl = dark => (OWN_MAP ? here(`map/${dark ? 'dark' : 'light'}.json`) : `https://tiles.openfreemap.org/styles/${dark ? 'dark' : 'positron'}`);
 // Our style files leave the map file, lettering and icons open (MAP_FILE, GLYPHS, SPRITE); filled in here.
 const ownStyle = s => {
   if (!OWN_MAP || !s?.sources?.openmaptiles) return s;
-  return { ...s, glyphs: here('/map/fonts') + '/{fontstack}/{range}.pbf', sprite: here('/map/sprites/ofm'),
+  return { ...s, glyphs: here('map/fonts') + '/{fontstack}/{range}.pbf', sprite: here('map/sprites/ofm'),
     sources: { ...s.sources, openmaptiles: { ...s.sources.openmaptiles, url: `pmtiles://${here(OWN_MAP)}` } } };
 };
 // Our own colours on the map, light and dark. In dark, labels are white with a dark border (Max, 2026-11-12).
@@ -124,7 +124,7 @@ function drawDisIcon(kind, colour, fill) {
   g.restore();
   return g.getImageData(0, 0, size, size);
 }
-const MASK_URL = '/sweden-mask.json';
+const MASK_URL = new URL('sweden-mask.json', location.href).href;   // (beside the page: / here, /dev/ on the test site)
 // The ranges of Outfit letters in public/glyphs/ (tools/glyphs.mjs GLYPH_RANGES).
 const GLYPH_RANGES = new Set(['0-255', '8192-8447', '8704-8959']);
 // The zoom's limits (Max, 2026-11-13: the zoom slider shows the absolute minimum and maximum): furthest out, all of
@@ -368,7 +368,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const m = /\/fonts\/([^/]+)\/(\d+-\d+)\.pbf/.exec(url);
       const stack = m && decodeURIComponent(m[1]);
       if (!stack?.startsWith('Outfit')) return undefined;
-      if (GLYPH_RANGES.has(m[2])) return { url: new URL(`/glyphs/${stack.replace(/ /g, '-')}/${m[2]}.pbf`, location.href).href };
+      if (GLYPH_RANGES.has(m[2])) return { url: new URL(`glyphs/${stack.replace(/ /g, '-')}/${m[2]}.pbf`, location.href).href };
       return { url: url.replace(m[1], encodeURIComponent(stack.endsWith('Bold') ? 'Noto Sans Bold' : 'Noto Sans Regular')) };
     },
   });

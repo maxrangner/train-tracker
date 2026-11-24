@@ -77,7 +77,7 @@ window.__started = true;   // index.html reports it on screen if this line is ne
 translatePage();           // the page's own words in the chosen language (Settings → Language)
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
 // has loaded (or failed: then trains move in straight lines between reports).
-const netReady = loadNet('/rail-net.json').catch((e) => {
+const netReady = loadNet(new URL('rail-net.json', location.href).href).catch((e) => {
   console.warn(`rail network: ${e.message} (run node tools/rail-net.mjs)`);
   return null;
 });
@@ -88,7 +88,7 @@ let net = null;
 // 300 ms on the PC, over a second on a 4 times slower processor. Started once the page's own network is there (the
 // worker loads the same file again, then from the browser's cache).
 let searchPath = null;
-netReady.then((n) => { net = n; if (n) searchPath = createPathSearch('/rail-net.json', () => net); });
+netReady.then((n) => { net = n; if (n) searchPath = createPathSearch(new URL('rail-net.json', location.href).href, () => net); });
 let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
 // The open train's line as last drawn ({ id, coords, sigs: its stations }): kept after its page is covered, so the camera
 // can ride it to a station on it and back (src/map.js ride). holdPath: a train's page is being covered; its line stays.
@@ -121,7 +121,7 @@ const stationName = sig => stations.get(sig)?.name ?? sig;
 // 2026-11-14, point 5 B): a train seen only at fixed places waits there for its stop, and the dwell rule looks there at
 // the stations where it is over 200 m from the point. Everything else keeps Trafikverket's point.
 let stopPlaces = {};
-const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; routes.setStopPlaces(stopPlaces); })
+const stopPlacesReady = fetch('stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; routes.setStopPlaces(stopPlaces); })
   .catch(e => console.warn('stop places:', e.message));
 const shownAt = (st) => { const p = stopPlaces[st.sig]; return p ? { ...st, lon: p[0], lat: p[1] } : st; };
 
