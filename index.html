@@ -1027,6 +1027,13 @@
     .tv-box.open { position: relative; }
     .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
     .tv-fold { position: absolute; top: -4px; right: -8px; width: 44px; height: 38px; padding: 0; justify-content: center; }   /* (a bigger target to fold them: 44 × 38) */
+    /* (the station's look since 2026-11-24, src/panel.js notesBox: its yellow line, open or folded, the messages under it
+       in the page's own scroll) */
+    #panel .tv-box.board-msgs { margin: 4px 0 2px; }
+    #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
+      background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
+    #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding-right: 0; margin: 0; max-height: none; overflow: visible; }
     /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
     .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
       background: var(--hover); border-radius: 14px; font-weight: 650; }
