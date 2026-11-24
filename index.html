@@ -795,10 +795,13 @@
     .board-msgs-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 14px; cursor: pointer;
       background: var(--t-some-bg); color: var(--t-some); font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
     .board-msgs-toggle span { flex: 1; color: var(--ink); }
-    .board-msg-list { display: grid; gap: 6px; max-height: 30vh; overflow: auto; touch-action: pan-y; }
+    /* (the messages in one yellow card, a thin line between them, the title line a card of its own; a station's and a
+       train's alike: Max, 2026-11-24 "Can the messages themselves be in one yellow card instead of individual?") */
+    .board-msg-list { display: grid; gap: 0; max-height: 30vh; overflow: auto; touch-action: pan-y; padding: 2px 12px; border-radius: 14px; background: var(--t-some-bg); }
     .board-msg-list[hidden] { display: none; }
     #board .busy { opacity: 0.45; transition: opacity .15s; }
-    .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 12px; border-radius: 14px; background: var(--t-some-bg); color: var(--ink); }
+    .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 0; color: var(--ink); }
+    .board-msg + .board-msg { border-top: 1px solid color-mix(in srgb, var(--t-some) 28%, transparent); }
 
     #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
     /* Motion (Max, 2026-11-20: "feels a bit static and stiff"; his picks on https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe;
@@ -1042,7 +1045,7 @@
     #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
       background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
     #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding-right: 0; margin: 0; max-height: none; overflow: visible; }
+    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding: 2px 12px; margin: 0; gap: 0; max-height: none; overflow: visible; }
     /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
     .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
       background: var(--hover); border-radius: 14px; font-weight: 650; }
