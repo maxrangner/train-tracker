@@ -77,6 +77,9 @@ const HEAD_PX = 72;            // the handle and the head (search or a page's ba
 const GRAB_PX = 20;            // the handle alone (a page without a bar)
 const HOME_LOW_PX = HEAD_PX + 10;   // Home at rest: the search bar 12 px from the sheet edge below, as at its sides (Max, 2026-11-23)
 const FIT_GAP_PX = 28;         // under the last part shown at half (the fade and its chevron sit in it)
+// (a phone: room for the "More" pill under it, not over the part's lower edge; Max, 2026-11-24: "Dålig padding på 'mer'
+// pillret"; the pill 24 px tall, 4 px over the bottom bar)
+const FIT_GAP_PHONE_PX = 40;
 const PAGE_LOW_PX = 140;       // a page resting low: its bar and its first line
 const TOP_ROOM_PX = 52;        // full height leaves this much at the top (the live mark)
 const TAP_PX = 14;             // a tap on the handle: the finger moved less than this (a real finger wanders)...
@@ -252,15 +255,15 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     }
     if (!boxes.length) return usualHalf;
     // (up to a fifth taller than the usual half when that shows a whole part, never closer than 40 px to full)
-    const hi = Math.min(limit * 1.2, H[2] - base - 40), lo = limit * 0.5;
+    const hi = Math.min(limit * 1.2, H[2] - base - 40), lo = limit * 0.5, gap = wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX;
     const end = Math.max(...boxes.map(x => x.b));
-    if (end + FIT_GAP_PX <= hi) return Math.round(Math.max(low + 60, base + end + FIT_GAP_PX));
+    if (end + gap <= hi) return Math.round(Math.max(low + 60, base + end + gap));
     const clean = y => !boxes.some(x => x.h < 220 && x.t < y - 1 && x.b > y + 1);
     // the clean edges' distance from the usual half (above it counts half again: rather a little less than more)
     const off = c => (c <= limit ? limit - c : (c - limit) * 1.5);
     let best = null, bestPart = null, below = 0;
     for (const x of boxes) {
-      const c = x.b + FIT_GAP_PX;
+      const c = x.b + gap;
       if (x.b < 40 || c > hi || !clean(x.b + 1)) continue;
       if (c <= limit) below = Math.max(below, c);
       if (c < lo) continue;

@@ -79,7 +79,7 @@
       #sheet .sh-grab { order: 99; }
       /* (the search field 12 px from the top edge, as from its sides; the arrow's row below it) */
       #sheet .sh-head { margin-top: 10px; }
-      #sheet .sh-fade { bottom: 20px; }
+      #sheet .sh-fade { bottom: 20px; height: 32px; }
       #sheet .sh-more { display: none; }
     }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
@@ -181,13 +181,16 @@
     /* More of the page below what is shown (src/stack.js syncFade; Max, 2026-11-23: Home "has no indication that
        there is more content lower down"): a soft fade at the sheet's shown bottom edge. --sheet-off: how far the
        sheet's own bottom is below the screen's (a phone: it slides down). */
-    .sh-fade { position: absolute; left: 0; right: 0; bottom: var(--sheet-off, 0px); height: 32px; z-index: 3; pointer-events: none;
-      background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 40%); opacity: 0; transition: opacity .2s; }
+    .sh-fade { position: absolute; left: 0; right: 0; bottom: var(--sheet-off, 0px); height: calc(40px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none;
+      background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 12px); opacity: 0; transition: opacity .2s; }
+    /* (a phone: solid 12 px down, where the next part's top edge starts: nothing shows behind the "More" pill; Max,
+       2026-11-24. A computer keeps the longer soft fade.) */
+    @media (min-width: 440px) { #sheet .sh-fade { background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 40%); } }
     #sheet.more-below .sh-fade { opacity: 1; }
     #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
     /* (its word beside the arrow, src/stack.js moreWord: Max, 2026-11-24 "C, but main should say 'mer'") */
     .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); height: 24px; max-width: calc(100% - 32px); transform: translateX(-50%);
-      padding: 0 8px 0 12px; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; background: var(--hover); color: var(--accent); cursor: pointer;
+      padding: 0 10px 0 14px; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; background: var(--hover); color: var(--accent); cursor: pointer;
       font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
     .sh-more svg { flex: none; }
     .sh-word { overflow: hidden; text-overflow: ellipsis; }
