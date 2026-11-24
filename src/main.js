@@ -1221,14 +1221,24 @@ const line = createLine(document.getElementById('line'));
 window.__line = line;   // (for the parts to come and the tools: set(id, { html, onTap, onClose, priority }), clear(id))
 function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
-  if (!filter.active) { line.clear('filter'); return; }
-  const list = filter.list(), first = list[0];
-  const word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : type === 'late' ? t('filtLate')[v]
-    : v || t('stNoCompany'));
-  line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(word).join(', ')))}</span>`,
-    // (a tap: the first one's page; a lateness alone: Home with its bar)
-    onTap: () => (first.type === 'late' ? stack.home(1) : stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`)),
-    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); homeDef.redraw(); }, closeLabel: t('filterClear') });
+  // Two filters, two pills (Max, 2026-11-24: "separate pills for separate filters. Allow more than one."): the
+  // companies' and kinds' ("Showing only SJ Snabbtåg, Commuter"), and the lateness' ("Showing only late 6+ min"); both
+  // hold together (SJ Snabbtåg's late trains); each × lets go of its own.
+  const list = filter.list(), co = list.filter(x => x.type !== 'late'), late = filter.late;
+  const redraw = () => { stack.pageDef(stack.top())?.redraw?.(); homeDef.redraw(); };
+  if (!co.length) line.clear('filter');
+  else {
+    const first = co[0], word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'));
+    line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', co.map(word).join(', ')))}</span>`,
+      onTap: () => stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`),   // (a tap: the first one's page)
+      onClose: () => { filter.clearCo(); redraw(); }, closeLabel: t('filterClear') });
+  }
+  if (!late) line.clear('filter-late');
+  else {
+    line.set('filter-late', { priority: 9, always: true, html: `<span>${esc(t('filterShowing', t('filtLate')[late]))}</span>`,
+      onTap: () => stack.home(1),   // (Home with its lateness bar)
+      onClose: () => { filter.setLate(null); redraw(); }, closeLabel: t('filterClear') });
+  }
 }
 filter.onChange(showFilter);
 

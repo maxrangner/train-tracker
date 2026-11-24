@@ -323,6 +323,7 @@ const SCREENS = [
   ['ideas', 'tools/ideas-check.mjs', 90],                 // My trains, the change, why standing, share, peek, you seem to be on, a #train= link, the shop window (2026-11-23)
   ['pc', 'tools/pc-check.mjs', 20],                      // a computer's screen and mouse: the map always drags (Max's PC notes, 2026-11-23)
   ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
+  ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
 ];
 const screenJobs = [];
 if (!pageUp) {
