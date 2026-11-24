@@ -556,8 +556,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       folBtn.setAttribute('aria-pressed', String(following));
       folBtn.lastElementChild.textContent = t(following ? 'following' : 'follow');
     }
-    // ‹ one page back on every page but those that say noUp (a train's)
-    const up = !pg.def.noUp;
+    // ‹ one page back on every page but those that say noUp (true, or a function: a train's, over Home)
+    const up = !(typeof pg.def.noUp === 'function' ? pg.def.noUp() : pg.def.noUp);
     if (upBtn.hidden === up) upBtn.hidden = !up;
     const word = t('stepBack');
     if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);
