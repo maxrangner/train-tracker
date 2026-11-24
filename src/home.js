@@ -144,7 +144,7 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    put('legend', filterHtml(frame), 'legend');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
+    put('legend', filterHtml(frame), 'filter-card');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
@@ -158,7 +158,9 @@ export function homePage(d) {
     mount(page) {
       el = page;
       put = parts(el);
-      for (const k of ['legend', 'mine', 'near', 'dis']) put(k, '');
+      // (the filter card's class at once: index.html .sec.filter-card; a part's class is given when it is made)
+      put('legend', '', 'filter-card');
+      for (const k of ['mine', 'near', 'dis']) put(k, '');
       const box = document.createElement('div');
       box.className = 'sec home-stats';
       el.append(box);

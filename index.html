@@ -303,8 +303,16 @@
        ringed, "N more ⌄" in the accent colour */
     /* (tight: Max, 2026-11-24 "Way too much padding between the filters"; a dark card's buttons a step lighter than it,
        the usual button colour is the card's own there) */
+    /* (much tighter, Max's pick A, 2026-11-24 "Needs MUCH more tight": small buttons, the lateness bar 34 px, the card's
+       padding and heading smaller) */
     .co-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-    .co-filter .chip { min-height: 30px; font-size: 14px; }
+    .co-filter .chip { min-height: 26px; font-size: 13px; padding: 0 9px; gap: 5px; }
+    .co-filter .chip .dot { width: 8px; height: 8px; }
+    #sheet .pg[data-key="home"] > .sec.filter-card:not([hidden]) { padding: 10px 12px 12px; }
+    #sheet .pg[data-key="home"] > .sec.filter-card > h4.lab { margin: 0 0 6px; font-size: 15px; }
+    .filter-card .lg { height: 34px; }
+    .filter-card .lg-p { font-size: 14px; }
+    .filter-card .lg-p span { font-size: 13px; }
     :root[data-theme="dark"] .co-filter .chip:not(.on) { background: color-mix(in srgb, var(--ink) 12%, var(--bg)); }
     .co-filter .chip.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--hover)); }
     .co-filter .co-more { color: var(--accent); font-weight: 700; gap: 2px; padding-right: 9px; }
