@@ -883,6 +883,8 @@
       /* (collapsed: Follow only, as its arrow, so the number, the company and the destination fit; share and ☆ come back
          raised; a long company name gives way before the destination) */
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
+      /* (and its ‹ comes back raised too: collapsed it is the strip with the number and where it goes, 2026-11-24) */
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
       /* (at full "i" joins them: Follow its arrow alone there too, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24) */
