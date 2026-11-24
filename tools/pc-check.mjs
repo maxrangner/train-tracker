@@ -111,6 +111,10 @@ try {
       return { above: Math.round(a.top - g.top), below: Math.round(s.bottom - a.bottom) }; });
     ok(Math.abs(m.above - m.below) <= 2 && m.below >= 5, `Home at ${lvl ? 'half' : 'rest'}: the arrow ${m.above} px under its band's top, ${m.below} px over the sheet's bottom`);
   }
+  // 9. "Mer" and its arrow side by side in one pill, nothing over the word (Max, 2026-11-24: "v-pill background blocks 'mer'")
+  const pill = await page.evaluate(() => { const w = document.querySelector('#sheet .sh-grab .sh-word'), a = document.querySelector('#sheet .sh-arrow');
+    if (!w?.offsetWidth) return null; const wr = w.getBoundingClientRect(), ar = a.getBoundingClientRect(); return { gap: Math.round(ar.left - wr.right), one: Boolean(w.closest('.sh-pill')?.contains(a)) }; });
+  ok(!pill || (pill.gap >= 0 && pill.one), `"Mer" and its arrow: ${pill ? `${pill.gap} px apart, one pill ${pill.one}` : 'no word shown now'}`);
 } finally {
   await browser.close();
 }
