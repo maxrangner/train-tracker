@@ -61,10 +61,10 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     try {
       if (!trip.via) {
         const [a, b] = await Promise.all([day(trip.from, 'Avgang'), day(trip.to, 'Ankomst')]);
-        results.set(trip.key, { trains: direct(a, b) });
+        results.set(trip.key, { trains: direct(a, b), partial: [a, b].some(x => x.partial) });
       } else {
         const [a, c1, c2, b] = await Promise.all([day(trip.from, 'Avgang'), day(trip.via, 'Ankomst'), day(trip.via, 'Avgang'), day(trip.to, 'Ankomst')]);
-        results.set(trip.key, { pairs: withChange(a, c1, c2, b) });
+        results.set(trip.key, { pairs: withChange(a, c1, c2, b), partial: [a, c1, c2, b].some(x => x.partial) });
       }
     } catch (e) {
       console.warn('my trains:', e.message);
@@ -81,11 +81,11 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     if (r.trains) {
       // (by when they leave: a train 69 min late is not the next one when another leaves in 6 minutes)
       const { next, after } = nextTwo(r.trains.filter(notGone).sort(byLeaving), now());
-      return { next, after, none: !r.trains.length };
+      return { next, after, none: !r.trains.length, partial: r.partial };
     }
     const pairs = r.pairs.filter(p => notGone(p.first));
     const { next, after } = nextTwo(pairs.map(p => p.first).sort(byLeaving), now());
-    return { next, after, pair: pairs.find(p => p.first === next) ?? null, none: !r.pairs.length };
+    return { next, after, pair: pairs.find(p => p.first === next) ?? null, none: !r.pairs.length, partial: r.partial };
   }
 
   // ---------- a pinned change ----------
@@ -111,12 +111,17 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   const changeClass = ch => (!ch ? '' : ch.lost ? 'lost' : ch.tight ? 'tight' : 'ok');
   const changeWords = ch => (ch.lost ? t('changeLost') : t('changeMin', ch.minutes)) +
     (ch.tracks[0] || ch.tracks[1] ? ` · ${t('trackShort')} ${ch.tracks[0] ?? '–'} → ${ch.tracks[1] ?? '–'}` : '');
+  // What to say when no train is found. Only part of the day known (the site's files held only the stations' next
+  // hours: a server without day files, its first minute after a start, a day file that didn't come): later trains not
+  // known yet, never "no train today" (Max, 2026-11-24: Stockholm C → Malmö C via Göteborg C said "No train onward
+  // today" all morning; "more descriptive error messages").
+  const noTrainWords = (trip, n) => t(n.partial ? 'tripLaterUnknown' : n.none ? (trip.via ? 'noTripToday' : 'noDirectToday') : 'noMoreToday');
   // A short line for Saved and the line above the bar.
   function summary(trip) {
     const n = nextOf(trip);
     if (n.loading) return { text: t('loading'), at: null };
     if (n.error) return { text: t('tripNoAnswer'), at: null };
-    if (!n.next) return { text: t(n.none ? (trip.via ? 'noTripToday' : 'noDirectToday') : 'noMoreToday'), at: null };
+    if (!n.next) return { text: noTrainWords(trip, n), at: null };
     const d = n.next.dep;
     return { at: when(d), dep: d, number: n.next.number, track: d.track || null, late: late(d), pair: n.pair,
       text: [`${hhmm(d.planned)} ${n.next.number}`, trackText(d.track), n.pair?.change ? changeWords(n.pair.change) : ''].filter(Boolean).join(' · ') };
@@ -186,7 +191,8 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       `<span class="bd-tag">${lateTag(gone ? { canceled: true } : d)}</span><span class="tl-trk">${esc(d.track || '')}</span></button>`;
   }
   const chgAt = at => (at ? ` data-at="${esc(at)}" role="button" tabindex="0"` : '');
-  const chgBox = (ch, second, rescue = null, at = null) => (!second ? `<div class="trip-chg lost"${chgAt(at)}>${icon('change', 16)}<span>${esc(t('noOnward'))}</span></div>`
+  // (partial: only part of the day known, the onward train may come later: said so, not "none today")
+  const chgBox = (ch, second, rescue = null, at = null, partial = false) => (!second ? `<div class="trip-chg ${partial ? 'unknown' : 'lost'}"${chgAt(at)}>${icon('change', 16)}<span>${esc(t(partial ? 'onwardUnknown' : 'noOnward'))}</span></div>`
     : `<div class="trip-chg ${changeClass(ch)}"${chgAt(at)}>${icon('change', 16)}<span>${esc(changeWords(ch))}</span></div>` +
       (ch?.lost && rescue ? `<div class="trip-chg rescue">${icon('change', 16)}<span>${esc(t('changeRescue', hhmm(when(rescue.second.dep)), rescue.second.number, rescue.change.tracks[1]))}</span></div>` : ''));
 
@@ -241,7 +247,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       let body;
       if (!r) body = stateHtml('loading', t('loading'));
       else if (r.error) body = stateHtml('error', t('tripNoAnswer'));
-      else if (!n.next) body = stateHtml('empty', t(n.none ? (trip.via ? 'noTripToday' : 'noDirectToday') : 'noMoreToday'));
+      else if (!n.next) body = stateHtml('empty', noTrainWords(trip, n));
       else {
         const d = n.next.dep;
         const big = `<div class="trip-next"><small>${esc(t('nextTrain'))}</small><b>${hhmm(d.planned)}${late(d) > 0 ? ` <span class="m ${late(d) >= 6 ? 'late' : 'some'}">${hhmm(when(d))}</span>` : ''}</b>` +
@@ -251,7 +257,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         if (r.trains) {
           list = r.trains.filter(notGone).slice(0, LIST_MAX).map(x => legRow(x, trip.to)).join('');
         } else {
-          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue, trip.via)}` +
+          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue, trip.via, r.partial)}` +
             `${p.second ? legRow(p.second, trip.to) : ''}</div>`).join('');
         }
         body = big + `<h4 class="lab">${esc(t('todaysTrains'))}</h4><div class="bd trip-list">${list}</div>`;
