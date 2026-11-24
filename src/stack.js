@@ -347,6 +347,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (a page that doesn't rest low: half; closing it is home(), not a height)
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
     idx = Math.max(0, Math.min(2, i));
+    // (full measured now, the page as it is: it may have grown since its heights were read)
+    if (idx === 2 && !searching) H[2] = Math.max(H[2], fullOf(top(), H[1]));
     sheet.dataset.h = String(idx);
     sheet.classList.remove('closing');
     if (idx < 2 && searching) closeSearch();
@@ -817,7 +819,21 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A page drawing its title line again drops ‹ and the buttons from it: put back at once, not at the next second (a
   // board's tab or its search closed made its line 8 px shorter for a moment: sheet-moves-check)
   // (before the frame is drawn: the observer runs before paint)
-  new MutationObserver(() => { if (!upBtn.isConnected || !btnsEl.isConnected) syncBar(); }).observe(pagesEl, { childList: true, subtree: true });
+  new MutationObserver(() => { if (!upBtn.isConnected || !btnsEl.isConnected) syncBar(); growFull(); }).observe(pagesEl, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+  // At full, the page's content grown (a board turned to its whole day, rows came in): full grows with it at once, not at
+  // the next tick (the board's search stayed at half height for a second: stats-board-check, 2026-11-24); shrinking
+  // waits for the tick (fitFull)
+  let growPending = false;
+  function growFull() {
+    if (growPending) return;
+    growPending = true;
+    requestAnimationFrame(() => {
+      growPending = false;
+      if (idx !== 2 || drag || searching) return;
+      const f = fullOf(top(), H[1]);
+      if (f > H[2] + 2) { H[2] = f; place(H[2]); pad(); }
+    });
+  }
   starBtn.addEventListener('click', () => { top()?.def.star?.toggle(); syncBar(); });
   actsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-act-id]'); if (b) { top()?.def.act?.(b.dataset.actId); syncBar(); } });
   folBtn.addEventListener('click', () => { top()?.def.follow?.toggle(); syncBar(); });

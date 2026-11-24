@@ -110,7 +110,7 @@ try {
   for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(200)) if (await page.evaluate(() => Boolean(document.querySelector('#board .board-found:not(.busy) .bd-row')) && !document.querySelector('#board .board-found .busy'))) break;
   await sleep(500);
   const day = await look();
-  check(day.full && day.level === 2 && day.n > 30 && day.topGone === false, `the search: the sheet at full (${day.level}), the whole day (${day.n} trains, ${day.gone} gone), starting at the next train`);
+  check(day.full && day.level === 2 && day.n > 30 && day.topGone === false, `the search: the sheet at full (${day.level}, the board's full look ${day.full}), the whole day (${day.n} trains, ${day.gone} gone), starting at the next train (the top row gone: ${day.topGone})`);
   const num = day.numbers.find(Boolean).slice(0, 2);
   await page.type('#board .board-q', num);
   await sleep(300);
