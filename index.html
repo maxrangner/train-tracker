@@ -98,7 +98,9 @@
       .sh-arrow { display: grid; place-items: center; width: 36px; height: 18px; border-radius: 9px; color: var(--muted); transition: transform .26s var(--ez), background .15s; }
       .sh-grab:hover .sh-arrow { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
-      #sheet[data-h="0"] .sh-arrow { transform: rotate(180deg); }
+      #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
+      /* (a train's card has its own "More" just above: one arrow, not two; Max, 2026-11-23) */
+      #sheet[data-page="train"] .sh-arrow { visibility: hidden; }
     }
     /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
@@ -130,6 +132,9 @@
     #sheet.no-bar .sh-bar { visibility: hidden; }
     /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
     #sheet .pg-head { touch-action: none; }
+    /* Home at rest: the search bar alone, nothing of the cards under it peeking (Max, 2026-11-23, again); while the finger
+       pulls it up they show */
+    #sheet[data-page="home"][data-h="0"]:not(.dragging):not([data-search]) .sh-pages { visibility: hidden; }
     /* (at full the card's top line stays at the top while its stops scroll under it: its Share, star and Follow in reach) */
     #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg); padding-block: 6px; margin-block: -6px 0; }
     .sh-btns { display: flex; align-items: center; gap: 8px; flex: none; }
@@ -137,6 +142,12 @@
        but a train's (its card's top line is its head: a map tap or a pull closes it) */
     .sh-up { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
     .sh-up:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* ‹ and a page's buttons on its title line (src/stack.js headOf) */
+    .pg :is(.g-head, .panel-head) > .sh-up { margin-right: 10px; }
+    .pg .panel-head:has(> .sh-up) { justify-content: flex-start; }
+    .pg :is(.g-head, .panel-head) > .sh-btns { margin-left: auto; padding-left: 10px; }
+    /* (a title beside ‹ and buttons wraps rather than being cut: "Lund C → Mal…") */
+    .pg .g-head:has(> .sh-up) .ttl { white-space: normal; overflow-wrap: anywhere; }
     /* a trip's pencil and bin beside its name (its page's .g-head, def.barIn) */
     .g-head .sh-btns { margin-left: auto; padding-left: 10px; gap: 6px; }
     .g-head .sh-act { min-width: 40px; height: 40px; padding: 0 9px; }
@@ -294,7 +305,13 @@
     .home-stats > .big { margin: 6px 0 0; }
     /* Parts as cards (Max's heading pick C, 2026-11-23: "hard to see where one section ends and the other begins"): each
        of Home's parts a soft card of its own, its heading inside, big and plain, the same on every page. */
-    .pg[data-key="home"] > .sec:not([hidden]) { background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
+    /* (and the other pages' parts the same way, Max 2026-11-23: "The sub cards implemented in main card have not followed to the
+       rest of the UI": a company's or a kind's parts, Settings, a board's list, a trip's lists) */
+    .pg > .sec:not([hidden]), .pg #settings, .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair {
+      background: color-mix(in srgb, var(--ink) 5%, transparent); border: 0; border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
+    .pg #settings { padding: 8px 14px; }
+    .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair { padding: 4px 12px; }
+    .pg:not([data-key="home"]) > .sec:first-child { margin-top: 0; }
     .pg[data-key="home"] > .sec.home-stats:not([hidden]) { padding: 12px 12px 14px; }
     .pg :is(.lab, .big) { font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 2px 0 10px; }
     .pg[data-key="home"] .home-stats > .big { margin: 2px 2px 10px; }

@@ -239,6 +239,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
     idx = Math.max(0, Math.min(2, i));
     sheet.dataset.h = String(idx);
+    // which way a tap on the handle moves it (a computer's arrow, index.html): a page with no low goes half ↔ full
+    // (Max, 2026-11-23: a station at half showed the arrow the wrong way)
+    sheet.dataset.next = (keepsLow(top()) && !searching && H[1] - H[0] >= 30 ? idx === 0 : idx < 2) ? 'more' : 'less';
     sheet.classList.remove('closing');
     if (idx < 2 && searching) closeSearch();
     const pg = top();
@@ -436,6 +439,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     def.mount?.(el, pg);
     return pg;
   }
+  // A page's title line: its .g-head or .panel-head at its top (one level in at most)
+  const headOf = pg => pg.el.querySelector(':scope > .g-head, :scope > .panel-head, :scope > :first-child > .g-head, :scope > :first-child > .panel-head');
   // The bar over a page: ☆, Follow and the page's own buttons when it has them; none (or taken into the page): no bar.
   function syncBar() {
     const pg = top();
@@ -462,16 +467,20 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       folBtn.setAttribute('aria-pressed', String(following));
       folBtn.lastElementChild.textContent = t(following ? 'following' : 'follow');
     }
-    // where the buttons sit: the page's own place for them (def.barIn), else the bar
-    const own = pg.def.barIn ? pg.def.barIn() : null, home = own ?? barEl;
-    if (btnsEl.parentElement !== home) home.append(btnsEl);
-    const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
     // ‹ one page back on every page but those that say noUp (a train's)
     const up = !pg.def.noUp;
     if (upBtn.hidden === up) upBtn.hidden = !up;
     const word = t('stepBack');
     if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);
-    sheet.classList.toggle('no-bar', !up && (Boolean(pg.def.barIn) || !any));
+    // ‹ and the buttons on the page's own title line, never a row of their own (Max, 2026-11-23: "The back arrow takes
+    // up a full row all by itself. Wasted space"): ‹ first, the buttons at its end (def.barIn: the page's own place)
+    const head = up ? headOf(pg) : null;
+    if (head && head.firstElementChild !== upBtn) head.prepend(upBtn);
+    else if (!head && upBtn.parentElement !== barEl) barEl.prepend(upBtn);
+    const own = (pg.def.barIn ? pg.def.barIn() : null) ?? head, place = own ?? barEl;
+    if (btnsEl.parentElement !== place) place.append(btnsEl);
+    const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
+    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(pg.def.barIn) || !any)));
   }
   function show(pg, prev, dir, opts = {}) {
     if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }

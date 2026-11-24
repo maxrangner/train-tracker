@@ -27,11 +27,9 @@ export const star = on => `<button class="panel-star" type="button" aria-pressed
 
 // Trafikverket's notes on the full card fold under one line (Max, 2026-11-16: they "sometimes take a lot of space";
 // folded by default (Max, 2026-11-16: "change default to collapsed"), problems fold too, with a red ⚠ and their count on the
-// line). Remembered on this device (a new name for the memory: choices made while open was the default start over).
-const NOTES_KEY = 'notesShown';
+// line). Every card opens with them folded, an opened fold not remembered (Max, 2026-11-23: "'Meddelanden' should be
+// compacted by default"; it was remembered on this device until then).
 let notesOpen = false;
-try { notesOpen = localStorage.getItem(NOTES_KEY) === 'true'; } catch { /* storage blocked: folded */ }
-const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
 // "All places": Settings → All places since 2026-11-22 (settings.allPlaces; a switch on the card until then).
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
 const notesBox = (lines, problems) => (notesOpen
@@ -189,6 +187,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     following = follow;   // opening a train on the map starts following it (main.js)
     canFollow = follow;
     target = null;
+    notesOpen = false;
     picking = false;
     onSelect?.(train.id);
     el.hidden = false;
@@ -578,7 +577,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); };
+    if (fold) fold.onclick = () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); };
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();
