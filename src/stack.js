@@ -267,6 +267,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (a computer: the sheet hangs from the top, so a pull down makes it taller)
     const grow = wide() ? -1 : 1;
     let h = drag.h0 + (drag.y0 - y) * grow;
+    const raw = h;   // (where the finger is, before the sheet gives way or stops at Home's rest)
     if (h > H[2]) h = H[2] + (h - H[2]) * 0.2;
     // (below its lowest a page that rests low gives way a little; one that closes there follows the finger all the way:
     // let go, it is where Home rests, no glide after, 2026-11-23)
@@ -278,7 +279,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (dt > 4) { drag.v = 0.65 * ((drag.ly - y) * grow / dt) + 0.35 * drag.v; drag.ly = y; drag.lt = now; }
     drag.h = h;
     place(h, false);
-    const closing = stack.length > 1 && h < H[0] - 30;
+    // (the finger 30 px under the page's lowest height: a train's collapsed card, 80 px, sits under Home's rest, so the
+    // sheet's own height can't get there)
+    const closing = stack.length > 1 && raw < H[0] - 30;
     if (closing !== sheet.classList.contains('closing')) sheet.classList.toggle('closing', closing);
     return true;
   }
@@ -501,6 +504,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     H[0] = lowOf(pg);
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
     pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, ...opts });
+    syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     [H[0], H[1]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
     pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
@@ -668,6 +672,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- the bar ----------
   upBtn.addEventListener('click', () => back());
+  // A page drawing its title line again drops ‹ and the buttons from it: put back at once, not at the next second (a
+  // board's tab or its search closed made its line 8 px shorter for a moment: sheet-moves-check)
+  // (before the frame is drawn: the observer runs before paint)
+  new MutationObserver(() => { if (!upBtn.isConnected || !btnsEl.isConnected) syncBar(); }).observe(pagesEl, { childList: true, subtree: true });
   starBtn.addEventListener('click', () => { top()?.def.star?.toggle(); syncBar(); });
   actsEl.addEventListener('click', (e) => { const b = e.target.closest('[data-act-id]'); if (b) { top()?.def.act?.(b.dataset.actId); syncBar(); } });
   folBtn.addEventListener('click', () => { top()?.def.follow?.toggle(); syncBar(); });
