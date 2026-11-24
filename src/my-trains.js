@@ -249,18 +249,25 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       else if (r.error) body = stateHtml('error', t('tripNoAnswer'));
       else if (!n.next) body = stateHtml('empty', noTrainWords(trip, n));
       else {
-        const d = n.next.dep;
-        const big = `<div class="trip-next"><small>${esc(t('nextTrain'))}</small><b>${hhmm(d.planned)}${late(d) > 0 ? ` <span class="m ${late(d) >= 6 ? 'late' : 'some'}">${hhmm(when(d))}</span>` : ''}</b>` +
-          `<span>${esc([n.next.number, trackText(d.track)].filter(Boolean).join(' · '))}</span>${lateTag(d)}</div>` +
+        // The next train: a button to its card (on the map too), with its company and where and when it gets there; with a
+        // change, the change and the train after it below (Max, 2026-11-24: "This is not very informative. Needs operator,
+        // and able to click on train to see more info. Show on map as well"). The list under it: the trains after it
+        // ("shows the same train again. Maybe 'more departures'").
+        const d = n.next.dep, a = n.next.arr, stop = trip.via ?? trip.to;
+        const big = `<button type="button" class="trip-next" data-train="${trainAttr(d)}"><small>${esc(t('nextTrain'))}</small>` +
+          `<b>${hhmm(d.planned)}${late(d) > 0 ? ` <span class="m ${late(d) >= 6 ? 'late' : 'some'}">${hhmm(when(d))}</span>` : ''}</b>` +
+          `<span>${esc([`${n.next.number} ${d.product ?? ''}`.trim(), trackText(d.track)].filter(Boolean).join(' · '))}</span>` +
+          `<span class="tn-to">${esc(`→ ${stationName(stop)} ${hhmm(when(a))}`)}</span>${lateTag(d)}<span class="tn-go">${icon('chevron', 20)}</span></button>` +
+          (n.pair ? `<div class="trip-next-chg">${chgBox(n.pair.change, n.pair.second, n.pair.rescue, trip.via, r.partial)}${n.pair.second ? legRow(n.pair.second, trip.to) : ''}</div>` : '') +
           (n.after ? `<p class="trip-fails">${esc(t('ifItFails', hhmm(when(n.after.dep))))}</p>` : `<p class="trip-fails">${esc(t('lastToday'))}</p>`);
         let list;
         if (r.trains) {
-          list = r.trains.filter(notGone).slice(0, LIST_MAX).map(x => legRow(x, trip.to)).join('');
+          list = r.trains.filter(notGone).filter(x => x !== n.next).slice(0, LIST_MAX).map(x => legRow(x, trip.to)).join('');
         } else {
-          list = r.pairs.filter(p => notGone(p.first)).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue, trip.via, r.partial)}` +
+          list = r.pairs.filter(p => notGone(p.first) && p.first !== n.next).slice(0, LIST_MAX / 2).map(p => `<div class="trip-pair">${legRow(p.first, trip.via)}${chgBox(p.change, p.second, p.rescue, trip.via, r.partial)}` +
             `${p.second ? legRow(p.second, trip.to) : ''}</div>`).join('');
         }
-        body = big + `<h4 class="lab">${esc(t('todaysTrains'))}</h4><div class="bd trip-list">${list}</div>`;
+        body = big + (list ? `<h4 class="lab">${esc(t('moreDepartures'))}</h4><div class="bd trip-list">${list}</div>` : '');
       }
       const html = head + body;
       if (el._h !== html) { el.innerHTML = html; el._h = html; }
