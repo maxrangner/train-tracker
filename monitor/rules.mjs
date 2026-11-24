@@ -66,7 +66,7 @@ const PROBLEMS = {
   'uploads-failing': { net: true,
     on: r => r.up && r.uploads && (r.upAgo === null ? r.upFor >= LIMITS.uploadS : r.upAgo >= LIMITS.uploadS),
     off: r => r.up && (!r.uploads || (r.upAgo !== null && r.upAgo < 30)),
-    subject: 'uploads to one.com are failing', ok: 'uploads to one.com work', look: 'one.com may be down or refusing the login. ' + LOOK.network },
+    subject: 'uploads to one.com are failing', ok: 'uploads to one.com work', look: 'The fetcher\'s error above says what (one.com down, the login refused, the web space full). ' + LOOK.network },
   'onecom-refused': { net: true,
     on: r => r.one.status === 429,
     off: (r, h) => h.slice(-LIMITS.clearRows).every(x => x.one.status !== 429),
@@ -87,6 +87,12 @@ const PROBLEMS = {
     on: r => r.up && r.upFor >= LIMITS.reportS && r.hour >= LIMITS.dayFrom && r.hour < LIMITS.dayTo && (r.reportAge === null || r.reportAge > LIMITS.reportS),
     off: r => r.up && r.reportAge !== null && r.reportAge <= 120,
     subject: 'no new train positions from Trafikverket', ok: 'train positions arrive', look: 'Trafikverket\'s stream may be down (the fetcher retries every minute). ' + LOOK.fetcher },
+  // One kind of the map's data no longer made (2026-11-24, the hang review, finding 4): the fetcher's status says which
+  // kinds' newest file is older than 3 times its period (fetcher/files.mjs lateKinds). Not in the first 20 minutes.
+  'data-late': { net: true,
+    on: (r, h) => h.slice(-2).length === 2 && h.slice(-2).every(x => x.up && x.upFor >= 1200 && x.late?.length),
+    off: r => r.up && !r.late?.length,
+    subject: 'part of the map\'s data stopped updating', ok: 'all of the map\'s data updates', look: 'Viewers see that part as it was (its "as of" time). ' + LOOK.fetcher },
 };
 
 // The rules' memory. step(row) takes the next minute and gives the mails to send now.
@@ -151,7 +157,11 @@ export function createRules({ summaryAt = '07:00', context = () => ({}) } = {}) 
     const [sh, sm] = summaryAt.split(':').map(Number), m = row.hour * 60 + row.minute, due = sh * 60 + sm;
     if (m >= due && m < due + 120 && summaryDay !== row.day) {
       summaryDay = row.day;
-      const s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject), context());
+      // A summary that can't be made still mails something (until 2026-11-24 the throw ended the monitor, which came
+      // back and tried again every minute until 09:00; the hang review, finding 7).
+      let s;
+      try { s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject), context()); }
+      catch (e) { s = { subject: 'the daily summary could not be made', text: `The daily summary could not be made: ${e.message}\nThe monitor goes on watching; tell Claude.` }; }
       mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text, html: s.html });
     }
     return out;
@@ -185,7 +195,17 @@ function detail(key, r) {
     case 'crash-loop': return 'The fetcher started again 3 or more times in 15 minutes: it is crashing.';
     case 'trv-refused': return `Trafikverket refused ${r.refused} question(s) in the last minute.`;
     case 'asking-too-much': return `${r.asks} questions to Trafikverket in the last minute.`;
-    case 'uploads-failing': return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${r.upError ? ` The fetcher says: ${r.upError}` : ''}`;
+    // The error with its time, and whether it came after the last good upload (until 2026-11-24 an hours-old error was
+    // quoted as if it were the cause; the hang review, finding 8).
+    case 'uploads-failing': {
+      const since = r.upAgo === null ? null : r.t - r.upAgo * 1000;
+      const fresh = r.upError && (since === null || (r.upErrorAt ?? 0) >= since);
+      const why = !r.upError ? ' The fetcher reports no error: it may be stuck (it restarts itself after 10 minutes of this).'
+        : fresh ? ` The fetcher's last error (${r.upErrorAt ? hm(r.upErrorAt) : 'time unknown'}): ${r.upError}${/(^|: )Failure$/.test(r.upError) ? ' ("Failure" alone may mean the web space on one.com is full: look at its control panel.)' : ''}`
+        : ` No error since the last good upload: it may be stuck (it restarts itself after 10 minutes of this). Its last error, from before (${hm(r.upErrorAt)}): ${r.upError}`;
+      return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${why}`;
+    }
+    case 'data-late': return `Late: ${(r.late ?? []).map(k => `${k.kind} (newest ${Math.round(k.age / 60)} min old; made every ${k.every >= 60 ? `${Math.round(k.every / 60)} min` : `${k.every} s`})`).join(', ')}. The fetcher's log says why (a question to Trafikverket failing, or the timetable not loading).`;
     case 'onecom-refused': return 'one.com refused the monitor\'s read of the newest file.';
     case 'stale-file': return r.one.age === null ? 'No recent file is found on one.com.' : `The newest file on one.com is ${r.one.age} s old.`;
     case 'clock-off': return `The Linux PC's clock is ${Math.abs(r.one.clockOff)} s ${r.one.clockOff > 0 ? 'ahead of' : 'behind'} one.com's.`;

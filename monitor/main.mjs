@@ -179,7 +179,8 @@ async function minuteRow() {
     feeds: fresh ? `${fresh.feeds.positions.mode}/${fresh.feeds.passings.mode}` : '-',
     uploads: Boolean(U), upOk: diff(U?.ok, BU.ok), upFailed: diff(U?.failed, BU.failed), reconnects: diff(U?.reconnects, BU.reconnects),
     bytesOut: diff(U?.bytes, BU.bytes), upAgo: U?.lastOkAt ? Math.round((fresh.now - U.lastOkAt) / 1000) : null,
-    upError: U?.lastError ?? null,
+    upError: U?.lastError ?? null, upErrorAt: U?.lastErrorAt ?? null,
+    late: (fresh?.late ?? []).filter(k => typeof k?.kind === 'string').map(k => ({ kind: k.kind, age: Number(k.age) || 0, every: Number(k.every) || 0 })),
     reportAge: fresh?.feeds.newestReport ? Math.max(0, Math.round((fresh.now - fresh.feeds.newestReport) / 1000)) : null,
     trains: fresh?.state.trains ?? null,
     one,
@@ -310,7 +311,13 @@ restore();
 poll();
 const pollTimer = setInterval(poll, MIN / 4);
 let minuteTimer = null;
-function nextMinute() { minuteTimer = setTimeout(async () => { await tick(); nextMinute(); }, MIN - (Date.now() % MIN) + MIN / 60); }
+// A minute that throws must not stop the minutes (until 2026-11-24 the next one was set only after it; a throw ended
+// the monitor: the hang review, finding 7).
+function nextMinute() {
+  minuteTimer = setTimeout(async () => {
+    try { await tick(); } catch (e) { log(`minute: ${e.stack ?? e.message}`); } finally { nextMinute(); }
+  }, MIN - (Date.now() % MIN) + MIN / 60);
+}
 nextMinute();
 
 function stop(why) {

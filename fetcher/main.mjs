@@ -18,7 +18,7 @@ import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCanc
 import { followPositions } from '../src/trains-source.js';
 import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
-import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, LIVE_MS } from './files.mjs';
+import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, lateKinds, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
@@ -103,7 +103,7 @@ const sizes = () => Object.fromEntries(Object.entries(shelf.names()).map(([kind,
   return [kind, { name, bytes: f?.json.length ?? 0, gz: f?.gz.length ?? 0 }];
 }));
 const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: process.pid, startedAt, feeds, state: state.sizes(),
-  load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), sizes: sizes(), upload: uploader?.stats() ?? null,
+  load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), late: lateKinds(shelf.names(), Date.now()), sizes: sizes(), upload: uploader?.stats() ?? null,
   memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null, viewers: viewers?.status() ?? null });
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
