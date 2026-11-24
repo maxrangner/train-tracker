@@ -61,7 +61,30 @@ export function parts(el) {
 //   filter, still (m/s under which a train stands) }
 export function homePage(d) {
   let put = null, stats = null, mostLate = null, el = null, up = 0;   // up: the height Home last rested at
+  let coOpen = false;   // the filter card's companies all shown ("N more" tapped)
   const LG = ['ontime', 'some', 'late', 'unknown'];
+  // The filter card (Max, 2026-11-24: "Sektions titel: Filter. Ett sätt att expandera för att se alla andra
+  // operatörer"; until then "Show only" in the search, which looked like it filtered the search): the lateness bar, and
+  // under it the companies on the map now, most trains first: the first CO_SHOWN and any picked one, "N more ⌄" for the
+  // rest. A tap turns a company on or off right here (src/filter.js; its pill above the bar, src/main.js data-cofilter).
+  const CO_SHOWN = 5;
+  function companiesHtml(frame) {
+    const n = new Map();
+    for (const x of frame) if (x.brand) n.set(x.brand, (n.get(x.brand) ?? 0) + 1);
+    const all = [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'sv')).map(([b]) => b);
+    if (!all.length) return '';
+    const on = b => d.filter.has('brand', b);
+    const shown = coOpen ? all : all.filter((b, i) => i < CO_SHOWN || on(b));
+    const rest = all.length - shown.length;
+    const more = coOpen ? `<button type="button" class="chip co-more" data-act="comore" aria-expanded="true">${esc(t('coFewer'))}${icon('chevronUp', 16)}</button>`
+      : rest > 0 ? `<button type="button" class="chip co-more" data-act="comore" aria-expanded="false">${esc(t('coMore', rest))}${icon('chevronDown', 16)}</button>` : '';
+    return `<div class="co-filter">${shown.map(b => `<button type="button" class="chip co-f${on(b) ? ' on' : ''}" data-cofilter="${esc(b)}" aria-pressed="${on(b)}">` +
+      `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}</button>`).join('')}${more}</div>`;
+  }
+  function filterHtml(frame) {
+    const co = companiesHtml(frame), lg = settings.homeLegend ? legendHtml(counts(frame)) : '';
+    return co || lg ? `<h4 class="lab">${esc(t('filterHead'))}</h4>${lg}${co}` : '';
+  }
   function legendHtml(c) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
     if (!total) return '';
@@ -121,7 +144,7 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    put('legend', settings.homeLegend ? legendHtml(counts(frame)) : '', 'legend');   // (Debug: off, Max 2026-11-23)
+    put('legend', filterHtml(frame), 'legend');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
@@ -152,6 +175,7 @@ export function homePage(d) {
     level(i) { if (i > 0 && !up) d.onShow?.(); up = i; if (i > 0) draw(); },
     every(i) { if (i > 0) draw(); },
     redraw: () => draw(true),
+    toggleCo() { coOpen = !coOpen; draw(); },
   };
 }
 

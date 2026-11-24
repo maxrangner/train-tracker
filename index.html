@@ -296,6 +296,12 @@
     .chip b { font-weight: 800; }
     .chip .dot { margin: 0; }
     .scopes { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }
+    /* Home's filter card: the companies under the lateness bar (src/home.js companiesHtml; Max, 2026-11-24), a picked one
+       ringed, "N more ⌄" in the accent colour */
+    .co-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .co-filter .chip { min-height: 36px; font-size: 14px; }
+    .co-filter .chip.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--hover)); }
+    .co-filter .co-more { color: var(--accent); font-weight: 700; gap: 2px; padding-right: 9px; }
     .dis-list { display: grid; gap: 6px; margin-top: 6px; }
     :is(.row, .chip, .lg-p, .sh-follow, .show-only):active { opacity: .7; }
 

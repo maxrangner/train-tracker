@@ -62,7 +62,7 @@
 //   R2. A tap on a train or a station on the map opens it at once, whatever is open (src/main.js onMapTap lets every
 //       tap through).
 //   R3. "Show only" (src/filter.js; the line above the bar with its ×, src/line.js) stays until its × is tapped: no map
-//       tap clears it. A company picked under the search's "Show only" sets it (src/main.js data-only).
+//       tap clears it. A company picked in Home's filter card sets it (src/main.js data-cofilter).
 //   R4. Esc and Android's back step back one page (back()); a pull down below low goes home (home()).
 // A part opened inside a page (a fold, the card's messages) is shown at once: reveal(el) (the sheet rises, or at full
 // the page scrolls to it), unreveal() when it is shut again.
