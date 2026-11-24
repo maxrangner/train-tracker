@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { swedishParts } from '../src/clock.js';
+import { lateKinds } from '../fetcher/files.mjs';
 
 const MIN = 60000;
 const show = process.argv.includes('--show');
@@ -120,6 +121,19 @@ const cases = [
   ['a restart while the internet is out: one mail when back', run('2026-11-17T10:00', 60, (i, r) => {
     if (i >= 30 && i < 37) Object.assign(r, { upOk: 0, upAgo: (i - 29) * 60, trvFailed: 2, feeds: 'poll/poll', one: { status: 'error', age: null } });
   }, undefined, 33), ['offline offline']],
+  // The hang review (2026-11-24). Finding 4: one kind of data frozen for 30 minutes (the fetcher's status says late).
+  ['part of the data late for 30 minutes', run('2026-11-17T10:00', 70, (i, r) => {
+    if (i >= 30 && i < 60) r.late = [{ kind: 'disruptions', age: 900 + (i - 30) * 60, every: 300 }];
+  }), ['problem data-late', 'ok data-late']],
+  ['a kind late in the fetcher\'s first 20 minutes: not mailed', run('2026-11-17T10:00', 30, (i, r) => {
+    if (i === 5) r.restarts = 1;
+    if (i >= 5 && i < 20) r.late = [{ kind: 'stations', age: 99999, every: 86400 }];
+  }), []],
+  // Finding 8: a stall like 2026-11-24's (no error since the last good upload) said as such, not an old error.
+  ['uploads stalled with an old error', run('2026-11-17T10:00', 40, (i, r) => {
+    r.upError = 'No response from server'; r.upErrorAt = at('2026-11-17T08:00');
+    if (i >= 20 && i < 30) Object.assign(r, { upOk: 0, upAgo: (i - 19) * 60, one: { status: 200, age: (i - 19) * 60 + 5 } });
+  }), ['problem stale-file', 'problem uploads-failing', 'ok uploads-failing', 'ok stale-file']],
 ];
 
 let bad = 0;
@@ -129,6 +143,34 @@ for (const [name, mails, want] of cases) {
   if (!ok) bad++;
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `\n     expected: ${want.join(', ') || 'none'}\n     got:      ${got.join(', ') || 'none'}`}`);
   if (show || !ok) for (const m of mails) console.log(`       [minute ${m.i}] Spårat: ${m.subject}\n         ${m.text.replace(/\n/g, '\n         ')}`);
+}
+{
+  const m = cases.find(c => c[0] === 'uploads stalled with an old error')[1].find(x => x.key === 'uploads-failing' && x.kind === 'problem');
+  const ok = /No error since the last good upload: it may be stuck/.test(m?.text ?? '') && /from before \(08:00\)/.test(m.text);
+  if (!ok) bad++;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} a stall's mail says no error came since the last good upload, the old error marked as from before${ok ? '' : `: ${m?.text}`}`);
+  const late = cases.find(c => c[0] === 'part of the data late for 30 minutes')[1].find(x => x.kind === 'problem');
+  const ok2 = /Late: disruptions \(newest \d+ min old; made every 5 min\)/.test(late?.text ?? '');
+  if (!ok2) bad++;
+  console.log(`${ok2 ? 'ok  ' : 'FAIL'} the late data's mail names the kind and its period${ok2 ? '' : `: ${late?.text}`}`);
+}
+// Finding 4, the fetcher's side (fetcher/files.mjs lateKinds): which kinds' newest file is late.
+{
+  const now = at('2026-11-17T10:00');
+  const late = lateKinds({ live: 'live-1.json', disruptions: `disruptions-${now - 16 * MIN}.json`, stats: `stats-${now - 14 * MIN}.json`,
+    'passings-add': `passings-add-${now - 9 * MIN}.json`, 'taps-add': `taps-add-${now - 11 * MIN}.json`, stations: `stations-${now - 30 * 3600000}.json`, 'card-07': `card-07-${now - 99 * MIN}.json` }, now);
+  const ok = JSON.stringify(late.map(k => k.kind)) === JSON.stringify(['disruptions', 'taps-add']) && late[0].every === 300;
+  if (!ok) bad++;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} late kinds: over 3 periods and 10 minutes (disruptions 16 min, taps-add 11 min); not stats 14 min, passings-add 9 min, stations 30 h, cards${ok ? '' : `: ${JSON.stringify(late)}`}`);
+}
+// Finding 7: a summary that throws still mails something, and the rules go on.
+{
+  const rules = createRules({ context: () => { throw new Error('made-up failure'); } });
+  const got = [];
+  for (let i = 0; i < 5; i++) got.push(...rules.step(normal(at('2026-11-17T06:58') + i * MIN)));
+  const ok = got.length === 1 && got[0].kind === 'summary' && /could not be made: made-up failure/.test(got[0].text);
+  if (!ok) bad++;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} a summary that can't be made: one short mail instead, the monitor goes on${ok ? '' : `: ${JSON.stringify(got)}`}`);
 }
 // The summary's wording on the quiet night.
 const s = cases.find(c => c[0].startsWith('the daily summary after'))[1].find(m => m.kind === 'summary');
