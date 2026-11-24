@@ -225,7 +225,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // the map's buttons and its credit ride on the sheet's top edge (a phone); beside it on a wide screen
     root.style.setProperty('--sheet-h', wide() ? '0px' : `${Math.round(h)}px`);
     root.classList.toggle('sheet-tall', !wide() && h > innerHeight - 260);
-    root.classList.toggle('sheet-high', h > H[1] + 70);
+    // (high: well over half and over 60 % of the screen; a short page at full, its content all of it since 2026-11-24,
+    // leaves the map's buttons and the live mark in place)
+    root.classList.toggle('sheet-high', h > H[1] + 70 && h > innerHeight * 0.6);
     sheet.style.setProperty('--sheet-off', wide() ? '0px' : `${Math.round(fullMax - h)}px`);
     if (glide && Math.abs(h - shownTo) > 2) lastDir = Math.sign(h - shownTo);
     shownTo = h;
