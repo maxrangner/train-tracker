@@ -476,6 +476,15 @@ function trainPage(id) {
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    // (its content at full, measured with its full look on for that moment: the sheet's full stops under it; src/stack.js
+    // fullOf)
+    atFull(measure) {
+      if (panel.openId !== id || panelEl.classList.contains('full')) return measure();
+      panelEl.classList.add('full');
+      const end = measure();
+      panelEl.classList.remove('full');
+      return end;
+    },
     // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
     // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
     // only while the card is compact and the sheet not at full (with all stops open "More" is elsewhere: the last
