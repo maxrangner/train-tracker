@@ -877,7 +877,9 @@
     /* The train card (src/panel.js; Max, 2026-11-15, sketch C). Compact: the number big with its company, two tiles
        (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line, "All stops".
        Full (.full): the star, Trafikverket's notes and the timeline instead of the line. No × on a phone. */
-    #panel .panel-title { align-items: baseline; gap: 8px; }
+    #panel .panel-title { flex-direction: column; align-items: flex-start; gap: 3px; }
+    #panel .panel-sub { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
+    #panel .panel-sub:empty { display: none; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed

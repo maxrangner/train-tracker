@@ -116,8 +116,10 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
   const head = (train, company) =>
-    `<div class="panel-head pg-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
-    (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span><span class="panel-buttons">` +
+    // (the company on a line of its own under the number, with the destination when collapsed: Max, 2026-11-24, "yes, on
+    // pc and phone"; beside the number it was cut short once ‹ came on the line)
+    `<div class="panel-head pg-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong><span class="panel-sub">` +
+    (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span></span><span class="panel-buttons">` +
     (info ? `<button class="panel-info" type="button" aria-pressed="${infoOn}" aria-label="${t('tiButton')}">${icon('about')}</button>` : '') +
     (number && isStarred ? star(isStarred(number)) : '') +
     (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${icon('follow', 15)}<span>${t(following ? 'following' : 'follow')}</span></button>` : '') +
@@ -412,7 +414,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // number, operator and destination"; index.html)
     const title = el.querySelector('.panel-title'), dest = `→ ${stationName(stops.at(-1).station)}`;
     let to = title?.querySelector('.ph-to');
-    if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); title.append(to); }
+    if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); (title.querySelector('.panel-sub') ?? title).append(to); }
     if (to && to.textContent !== dest) to.textContent = dest;
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;

@@ -239,6 +239,11 @@ try {
       .map(e => ({ n: e.classList.contains('cd-tiles') ? 'tiles' : e.classList.contains('why') ? 'why' : 'trip', y: Math.round(e.getBoundingClientRect().top) }))
       .sort((a, b) => a.y - b.y).map(x => x.n).join(' → '));
     check(order === 'tiles → trip' || order === 'tiles → why → trip', `the card at half, top to bottom: ${order} (want the tiles, why, then the trip line)`);
+    // over Home (a train tapped on the map) no ‹ on its card: only when it was opened from another page (Max, 2026-11-24:
+    // "only on the situation I mentioned or similar, not always"); its company on a line of its own under the number
+    const head = await page.evaluate(() => { const h = document.querySelector('#panel .panel-head'), n = h?.querySelector('.panel-title strong')?.getBoundingClientRect(), c = h?.querySelector('.panel-co')?.getBoundingClientRect();
+      return { below: window.__stack.keys().at(-2), up: Boolean(h?.querySelector(':scope > .sh-up')?.offsetParent), coUnder: n && c ? c.top >= n.bottom - 2 : null }; });
+    check(head.below === 'home' && !head.up && head.coUnder !== false, `a train over Home: ‹ ${head.up ? 'SHOWN' : 'none'}; its company under its number: ${head.coUnder}`);
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
     // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)
