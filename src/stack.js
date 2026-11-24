@@ -138,10 +138,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   }
   // the handle and the head: on a computer 10 px more (the sheet hangs from the top, room above the search field; index.html);
   // a page without a bar: the handle alone
-  const headPx = () => (sheet.classList.contains('no-bar') ? GRAB_PX : HEAD_PX) + (wide() ? 10 : 0);
+  // (the handle's row read from the page: a computer's train card has a thin one, index.html)
+  const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || GRAB_PX;
+  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : HEAD_PX - GRAB_PX) + grabH() + (wide() ? 10 : 0);
   function lowOf(pg) {
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
-    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(headPx() + c + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
+    // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
+    // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
+    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
     return pg?.key === 'home' ? HOME_LOW_PX + s : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0);
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
@@ -166,14 +170,30 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   }
   // The fade at the bottom edge: the page has more below what is shown (not at low: the head and a line).
   let shownTo = 0, lastDir = 0;   // the shown height, and which way the sheet last glided (1 up, -1 down)
-  function syncFade() {
+  // How much of the page is hidden under the shown bottom edge (px; its content, not its own room at the end). On a
+  // computer the handle's row is at the bottom: not part of what shows.
+  function hiddenBelow() {
     const pg = searching ? results : top()?.el;
-    if (!pg) return;
-    const visible = shownTo - pagesEl.offsetTop;
+    if (!pg) return { visible: 0, below: 0 };
+    const visible = shownTo - pagesEl.offsetTop - (wide() ? grabH() : 0);
     let last = 0;
     for (const c of pg.children) if (c.offsetHeight) last = Math.max(last, c.offsetTop + c.offsetHeight);
-    const more = visible > 140 && last - pg.scrollTop > visible + 6;
+    return { visible, below: last - pg.scrollTop - visible };
+  }
+  function syncFade() {
+    const { visible, below } = hiddenBelow();
+    const more = visible > 140 && below > 12;
     if (more !== sheet.classList.contains('more-below')) { sheet.classList.toggle('more-below', more); fadeEl.firstChild.tabIndex = more ? 0 : -1; }
+    syncNext(below);
+  }
+  // Which way a tap on the handle moves the sheet (a computer's arrow points that way, index.html): up to show more only
+  // when more is hidden (Max, 2026-11-24: the arrow "just expands the card to show more empty space"; Home at half gave
+  // no sign of more below); else down (a page without a low: closed).
+  function syncNext(below = hiddenBelow().below) {
+    const pg = top(), low = !searching && keepsLow(pg);
+    const more = (low && idx === 0) || (idx < 2 && below > 12) || (low && idx < 2 && H[1] - H[0] < 30);
+    const v = more ? 'more' : 'less';
+    if (sheet.dataset.next !== v) sheet.dataset.next = v;
   }
   function pad() { if (ready) onPad(Math.min(H[idx], H[1])); }
   // Half: the page's own (def.half, see the top), else the usual half.
@@ -239,9 +259,6 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
     idx = Math.max(0, Math.min(2, i));
     sheet.dataset.h = String(idx);
-    // which way a tap on the handle moves it (a computer's arrow, index.html): a page with no low goes half ↔ full
-    // (Max, 2026-11-23: a station at half showed the arrow the wrong way)
-    sheet.dataset.next = (keepsLow(top()) && !searching && H[1] - H[0] >= 30 ? idx === 0 : idx < 2) ? 'more' : 'less';
     sheet.classList.remove('closing');
     if (idx < 2 && searching) closeSearch();
     const pg = top();
@@ -350,8 +367,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (handleTap(e)) {
       drag = null;
       eatUntil = performance.now() + 400;   // (the click that may follow)
-      if (!searching && !keepsLow(top())) setIndex(idx === 2 ? 1 : 2);
-      else setIndex(idx === 0 ? (H[1] - H[0] < 30 ? 2 : 1) : 0);
+      syncNext();
+      const low = !searching && keepsLow(top());
+      if (sheet.dataset.next === 'more') setIndex(low && idx === 0 && H[1] - H[0] >= 30 ? 1 : 2);
+      else if (low || searching) setIndex(0);
+      else if (idx === 2) setIndex(1);
+      else backTo(0);   // (a page without a low, all of it shown at half: closed to Home, as a pull or a map tap)
       return;
     }
     dragEnd();
@@ -395,7 +416,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const t = tch;
     if (t && !t.on && t.held && e.type === 'touchend' && Math.abs(t.dx) < 12 && Math.abs(t.dy) < 12) {
       const b = t.target?.closest?.('button, a, label, [role="button"], [data-go], [data-act]');
-      if (b && b.isConnected && !b.disabled) { given = { el: b, at: performance.now() }; b.click(); }
+      if (b && b.isConnected && !b.disabled) { given = { el: b, at: performance.now() }; b.click(); setTimeout(() => { if (given?.el === b) given = null; }, 600); }
     }
     touching = false; if (tch?.on) dragEnd(); tch = null;
   }
@@ -483,7 +504,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const own = (pg.def.barIn ? pg.def.barIn() : null) ?? head, place = own ?? barEl;
     if (btnsEl.parentElement !== place) place.append(btnsEl);
     const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
-    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(pg.def.barIn) || !any)));
+    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(own) || !any)));
   }
   function show(pg, prev, dir, opts = {}) {
     if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
@@ -667,7 +688,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     onSearch(false);
   }
   input.addEventListener('focus', openSearch);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); setIndex(preSearch); } });
+  // (only while searching: a field left focused after the search closed took Esc and did nothing, so the first Esc over
+  // a page was lost; stats-board-check, 2026-11-24)
+  input.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!searching) { input.blur(); return; } e.stopPropagation(); closeSearch(); setIndex(preSearch); });
   sheet.querySelector('.sh-cancel').addEventListener('click', () => { closeSearch(); setIndex(preSearch); });
 
   // ---------- the bar ----------
@@ -727,7 +750,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     onSearch(fn) { onSearch = fn; },
     pageEl: key => stack.find(p => p.key === key)?.el ?? null,
     pageDef: key => stack.find(p => p.key === key)?.def ?? null,
-    measure, refit, mapTap, reveal, unreveal,
+    measure, refit, mapTap, reveal, unreveal, headPx,
   };
   return api;
 }

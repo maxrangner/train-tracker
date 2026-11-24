@@ -369,7 +369,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
         r.setAttribute('aria-pressed', String(Boolean(filter.has(type, v))));
         // A filter on: a row whose trains aren't on the map is dimmed, still a button (Max, 2026-11-21: "the companies
         // that no longer apply should be slightly greyed or otherwise shown to not be relevant. Still clickable")
-        r.classList.toggle('st-off', filter.active && !filter.has(type, v) && !(type === 'brand' ? filter.shows(v)
+        r.classList.toggle('st-off', filter.coActive && !filter.has(type, v) && !(type === 'brand' ? filter.shows(v)
           : filter.list().some(x => x.type === 'brand' && kindOf(x.v) === v)));
         const bar = $(r, '.st-bar'), w = `${(100 * n / most).toFixed(1)}%`;
         if (bar.style.width === '0px' || bar.style.width === '0') requestAnimationFrame(() => { bar.style.width = w; }); else bar.style.width = w;

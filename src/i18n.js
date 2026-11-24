@@ -35,7 +35,7 @@ const EN = {
   searchAria: 'Search for a train, a station, a company or a disruption',
   // The one sheet (Max's pick A, 2026-11-22): its pages, Home, the search, ☰, the line above the bar.
   home: 'Home', moreBelow: 'More below', cancel: 'Cancel',
-  theDay: 'The day', daySoon: 'The day is coming soon.', helpAbout: 'Help & About',
+  theDay: 'The day', daySoon: 'The day is coming soon.', aboutApp: 'About Spårat',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
   dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
   dayNow: 'now', dayDrag: 'The day: drag back in time', dayClose: 'Close The day', dayThen: c => `at ${c}`, dayLateUnknown: 'lateness not known',
@@ -50,7 +50,9 @@ const EN = {
   notOnMapNow: 'not on the map now', kindOfTrain: 'Kind of train',
   lateNow6: 'Late now', lateNowSub: '6 min late or more', standingStill: 'Standing still', standingSub: 'Not moving right now',
   showOnly: 'Show only', shownOnly: 'Shown only', onMapNow: 'on the map now',
-  groupLit: 'Only these trains are on the map while this is open. "Show only" keeps it so.',
+  groupLit: 'Its trains are lit on the map while this page is open. "Show only" keeps only them, until the ×.',
+  groupOnly: 'The map shows only these trains, on every page, until the × on the line above the bar.',
+  filtLate: { ontime: 'on time', some: 'late 3–5 min', late: 'late 6+ min', unknown: 'with no news' },
   itsTrains: 'The trains, most late first', noneOnMap: 'None on the map right now.',
   recent: 'Recent', trainsN: n => `${n} ${n === 1 ? 'train' : 'trains'} now`, trainsWord: 'Trains', stationsWord: 'Stations',
   companiesKinds: 'Companies and kinds', nothingFound: q => `Nothing found for "${q}". Try a train's number, a station or a company.`,
@@ -312,7 +314,6 @@ const EN = {
   shopWindow: 'Shop window', shopWindowSub: 'on its side, untouched for 30 s: the map tours by itself',
   shopFastest: (n, v) => `Fastest right now: ${n}, ${v} km/h`, shopLate: (n, m) => `Most late right now: ${n}, +${m} min`,
   shopDisruption: h => `Disruption: ${h}`, shopMeeting: (a, b) => `Two trains about to meet: ${a} and ${b}`, shopNothing: 'Sweden\'s trains, live',
-  helpTips: 'Good to know',
 };
 
 const SV = {
@@ -341,7 +342,7 @@ const SV = {
   searchPh: 'Sök tåg, stationer, bolag',
   // Det enda bladet (Max val A, 2026-11-22).
   home: 'Hem', moreBelow: 'Mer längre ner', cancel: 'Avbryt',
-  theDay: 'Dagen', daySoon: 'Dagen kommer snart.', helpAbout: 'Hjälp och om',
+  theDay: 'Dagen', daySoon: 'Dagen kommer snart.', aboutApp: 'Om Spårat',
   dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
   dayNow: 'nu', dayDrag: 'Dagen: dra bakåt i tiden', dayClose: 'Stäng Dagen', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
   dayOnlyLive: 'Bara live. Tillbaka till live?', dayOnlyLiveSub: 'Dagen visar bara kartan: inga kort eller tavlor för en tidigare tid.',
@@ -355,7 +356,9 @@ const SV = {
   notOnMapNow: 'inte på kartan nu', kindOfTrain: 'Tågtyp',
   lateNow6: 'Sena nu', lateNowSub: '6 min sena eller mer', standingStill: 'Står still', standingSub: 'Rör sig inte just nu',
   showOnly: 'Visa bara', shownOnly: 'Visas bara', onMapNow: 'på kartan nu',
-  groupLit: 'Bara de här tågen syns på kartan medan sidan är öppen. "Visa bara" behåller det.',
+  groupLit: 'Dess tåg lyser på kartan medan sidan är öppen. "Visa bara" visar bara dem, tills krysset.',
+  groupOnly: 'Kartan visar bara de här tågen, på alla sidor, tills krysset på raden ovanför fältet.',
+  filtLate: { ontime: 'i tid', some: '3–5 min sena', late: 'sena 6+ min', unknown: 'utan nyheter' },
   itsTrains: 'Tågen, mest sena först', noneOnMap: 'Inga på kartan just nu.',
   recent: 'Senaste', trainsN: n => `${n} tåg nu`, trainsWord: 'Tåg', stationsWord: 'Stationer',
   companiesKinds: 'Bolag och tågtyper', nothingFound: q => `Inget hittades för "${q}". Prova ett tågnummer, en station eller ett bolag.`,
@@ -606,7 +609,6 @@ const SV = {
   shopWindow: 'Skyltfönster', shopWindowSub: 'på sidan, orörd i 30 s: kartan visar runt själv',
   shopFastest: (n, v) => `Snabbast just nu: ${n}, ${v} km/h`, shopLate: (n, m) => `Mest sen just nu: ${n}, +${m} min`,
   shopDisruption: h => `Störning: ${h}`, shopMeeting: (a, b) => `Två tåg möts strax: ${a} och ${b}`, shopNothing: 'Sveriges tåg, live',
-  helpTips: 'Bra att veta',
 };
 
 export function t(key, ...values) {

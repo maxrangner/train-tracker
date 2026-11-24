@@ -285,7 +285,7 @@ try {
       await sleep(700);
       const m = await pc.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); return b ? Math.round(s.bottom - b.bottom) : null; });
       // (the sheet hangs from the top on a computer since 2026-11-23: its arrow's 20 px row is under "More")
-      check(m !== null && m >= 2 + 20 && m <= 16 + 20, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its arrow's row included (want 22 to 36)`);
+      check(m !== null && m >= 2 + 8 && m <= 16 + 8, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its thin handle row included (want 10 to 24)`);
       await pc.evaluate(() => window.__stack.home(0));
       await sleep(600);
       const pfg = await fieldGap(pc);
