@@ -328,6 +328,8 @@
     /* A group's page: its head, "Show only", the tiles, its trains. */
     .g-head { display: flex; align-items: center; min-width: 0; }
     .g-head .dot, .g-head .ring { width: 14px; height: 14px; margin-right: 10px; }
+    /* (a trip's or change's icon beside its name: room before the name; Max, 2026-11-24: "bad padding") */
+    .g-head > .r-ic { margin-right: 12px; }
     .ttl { font-size: 22px; font-weight: 800; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sub { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; }
     .show-only { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 42px; padding: 0 16px 0 12px; border: 0; border-radius: 21px;
