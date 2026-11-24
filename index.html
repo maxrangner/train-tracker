@@ -79,7 +79,7 @@
       #sheet .sh-grab { order: 99; }
       /* (the search field 12 px from the top edge, as from its sides; the arrow's row below it) */
       #sheet .sh-head { margin-top: 10px; }
-      #sheet .sh-fade { bottom: 20px; height: 32px; }
+      #sheet .sh-fade { bottom: 28px; height: 32px; }
       #sheet .sh-more { display: none; }
     }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
@@ -96,8 +96,9 @@
       .sh-grab { cursor: pointer; }
       .sh-grab i { display: none; }
       .sh-arrow { display: grid; place-items: center; width: 36px; height: 16px; border-radius: 8px; color: var(--accent); transition: transform .26s var(--ez), background .15s; }
-      /* (4 px clear of the sheet's bottom edge: Max, 2026-11-24 "just a hair too little padding") */
-      #sheet .sh-grab { align-items: start; }
+      /* (a band of its own, the arrow and its word in the middle: as much room under them as above; Max, 2026-11-24
+         "'Mer v' still too close to the edge. Or if this is a general UI rule, the padding above needs to be less") */
+      #sheet .sh-grab { height: 28px; align-items: center; }
       .sh-grab:hover .sh-arrow { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
@@ -197,7 +198,8 @@
     .sh-grab .sh-word { display: none; }
     @media (min-width: 440px) {
       #sheet .sh-grab { display: flex; justify-content: center; gap: 2px; }
-      #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap; }
+      #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap;
+        position: relative; top: -1px; margin-right: -8px; }
     }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

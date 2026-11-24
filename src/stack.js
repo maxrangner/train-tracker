@@ -157,7 +157,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
     // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
     if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
-    return pg?.key === 'home' ? HOME_LOW_PX + s : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0);
+    // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
+    const band = wide() ? Math.max(0, grabH() - GRAB_PX) : 0;
+    return pg?.key === 'home' ? HOME_LOW_PX + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0) + band;
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
   // screen: it floats 10 px above the bottom, so it takes the height shown itself (sliding it down would show its

@@ -102,6 +102,15 @@ try {
   // (at half the arrow points where a click goes: ⌄ more below shows full again, ⌃ goes to rest)
   const next = await page.evaluate(() => document.getElementById('sheet').dataset.next), l2 = await arrow();
   ok(l1 === 1 && l2 === (next === 'more' ? 2 : 0), `Home at full, the arrow clicked: height ${l1} (want half); again, its arrow "${next}": height ${l2}`);
+
+  // 8. The arrow's band at the sheet's bottom: as much room above the arrow as under it, at rest and at half (Max,
+  //    2026-11-24: "'Mer v' still too close to the edge")
+  for (const lvl of [0, 1]) {
+    await page.evaluate(l => window.__stack.home(l), lvl); await sleep(1300);
+    const m = await page.evaluate(() => { const g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(), a = document.querySelector('#sheet .sh-arrow').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+      return { above: Math.round(a.top - g.top), below: Math.round(s.bottom - a.bottom) }; });
+    ok(Math.abs(m.above - m.below) <= 2 && m.below >= 5, `Home at ${lvl ? 'half' : 'rest'}: the arrow ${m.above} px under its band's top, ${m.below} px over the sheet's bottom`);
+  }
 } finally {
   await browser.close();
 }
