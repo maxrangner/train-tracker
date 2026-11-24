@@ -213,14 +213,18 @@
     .pg > * { flex: none; }
     .sec { min-width: 0; }
     .sec[hidden], .sec:empty { display: none; }
-    .pg.in-r { animation: pg-in-r .3s var(--ez) both; }
-    .pg.in-l { animation: pg-in-l .3s var(--ez) both; }
-    .pg.out-l { animation: pg-out-l .18s ease-in both; pointer-events: none; }
-    .pg.out-r { animation: pg-out-r .18s ease-in both; pointer-events: none; }
-    @keyframes pg-in-r { from { opacity: 0; transform: translateX(28px); } }
-    @keyframes pg-in-l { from { opacity: 0; transform: translateX(-28px); } }
-    @keyframes pg-out-l { to { opacity: 0; transform: translateX(-28px); } }
-    @keyframes pg-out-r { to { opacity: 0; transform: translateX(28px); } }
+    /* A page change is one push: the new page slides in the whole width as the old one slides out, together, no fade
+       (Max, 2026-11-24: "the fade/wipe to next screen is very annoying. It's sliding and fading at the same time"; "Most
+       transitions between screens on the cards look bad, fade and swipe together"). */
+    .sh-pages { overflow: hidden; }
+    .pg.in-r { animation: pg-in-r .28s var(--ez) both; }
+    .pg.in-l { animation: pg-in-l .28s var(--ez) both; }
+    .pg.out-l { animation: pg-out-l .28s var(--ez) both; pointer-events: none; }
+    .pg.out-r { animation: pg-out-r .28s var(--ez) both; pointer-events: none; }
+    @keyframes pg-in-r { from { transform: translateX(100%); } }
+    @keyframes pg-in-l { from { transform: translateX(-100%); } }
+    @keyframes pg-out-l { to { transform: translateX(-100%); } }
+    @keyframes pg-out-r { to { transform: translateX(100%); } }
     @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
     /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
        scrolling, no own height limits (the sheet has them). */
