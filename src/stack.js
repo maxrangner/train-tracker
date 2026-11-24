@@ -391,7 +391,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (drag.body && !drag.moved && (scroller().scrollTop > 0 || dy < 7)) return;
     dragMove(e.clientY);
   };
-  // A tap on the handle: low ↔ half (from full: low). Taken from the finger, not the click: a finger that wandered
+  // A tap on the handle: low ↔ half (from full: half, then low). Taken from the finger, not the click: a finger that wandered
   // more than the drag's 8 px got no click and its drag went back where it was, so nothing happened (Max's phone).
   const handleTap = e => e.type === 'pointerup' && drag.grab && Math.abs(e.clientY - drag.ys) < TAP_PX && performance.now() - drag.t0 < TAP_MS;
   const pointerEnd = (e) => {
@@ -403,6 +403,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       syncNext();
       const low = !searching && keepsLow(top());
       if (sheet.dataset.next === 'more') setIndex(low && idx === 0 && H[1] - H[0] >= 30 ? 1 : 2);
+      // (from full one step: to half when the page has one of its own, then to rest; Max, 2026-11-24: "When Main menu is
+      // full expanded and the 'close arrow' is clicked, it should compact, not close it. Clicking map already closes.")
+      else if (idx === 2 && !searching && H[1] - H[0] >= 30) setIndex(1);
       else if (low || searching) setIndex(0);
       else if (idx === 2) setIndex(1);
       else backTo(0);   // (a page without a low, all of it shown at half: closed to Home, as a pull or a map tap)
