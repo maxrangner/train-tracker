@@ -41,6 +41,11 @@ const DEFAULTS = {
   // Home's lateness colours at the top (Debug, Max 2026-11-23: "Add debug toggle to remove the first colored keys in main
   // card"): on, as before.
   homeLegend: true,
+  // How a page comes into the sheet (Debug, Max 2026-11-24: "Do A, B and F and put them in debug options"; "Remove the
+  // fade on all"; the motion lab https://claude.ai/artifact/EtVxL1BiRBaYbgocQSw7xS): 'side' (A, sideways, as since the
+  // push of 2026-11-24), 'rise' (B, a card from the sheet's edge over the page before) or 'strip' (F, one strip along the
+  // sheet). index.html :root[data-motion].
+  pageMotion: 'side',
   // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
   // followed) or 'clear' (card and train let go).
@@ -89,6 +94,7 @@ const KEYS = {
   disruptionsMap: { param: 'dis' },
   routeEdge: { param: 'routeedge' },
   homeLegend: { param: 'legend' },
+  pageMotion: { param: 'motion' },
   pageOverTrain: { param: 'overtrain' },
   routeNames: { param: 'routenames' },
   nameSide: { param: 'nameside' },
@@ -126,6 +132,7 @@ const valid = {
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   homeLegend: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  pageMotion: v => (['side', 'rise', 'strip'].includes(v) ? v : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
   routeNames: v => (v === 'contrast' ? v : undefined),   // (fixed since 2026-11-23: Max, 'Remove debug settings'; a value saved before is ignored)
   nameSide: v => (v === 'auto' ? v : undefined),   // (fixed, as routeNames)

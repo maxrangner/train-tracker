@@ -74,6 +74,7 @@ import { t } from './i18n.js';
 const NARROW = typeof matchMedia === 'function' ? matchMedia('(max-width: 439px)') : null;
 const MAX_PAGES = 12;          // pages over Home at most (the oldest go)
 const HEAD_PX = 72;            // the handle and the head (search or a page's bar)
+const BAR_GAP_PX = 8;          // room between the search bar and the page under it (index.html #sheet:not(.no-bar) .sh-head)
 const GRAB_PX = 20;            // the handle alone (a page without a bar)
 const HOME_LOW_PX = HEAD_PX + 10;   // Home at rest: the search bar 12 px from the sheet edge below, as at its sides (Max, 2026-11-23)
 const FIT_GAP_PX = 28;         // under the last part shown at half (the fade and its chevron sit in it)
@@ -178,7 +179,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // a page without a bar: the handle alone
   // (the handle's row read from the page: a computer's train card has a thin one, index.html)
   const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || GRAB_PX;
-  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : HEAD_PX - GRAB_PX) + grabH() + (wide() ? 10 : 0);
+  // (with the search bar: 8 px more under it, so a scrolled page goes out of sight below it, not right at its edge;
+  // index.html .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
+  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : HEAD_PX - GRAB_PX + BAR_GAP_PX) + grabH() + (wide() ? 10 : 0);
   function lowOf(pg) {
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
     // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
