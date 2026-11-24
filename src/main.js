@@ -1222,7 +1222,7 @@ function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
   if (!filter.active) { line.clear('filter'); return; }
   const list = filter.list(), first = list[0];
-  const word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : type === 'late' ? t({ ontime: 'onTime', some: 'stKeySome', late: 'stKeyLate', unknown: 'stNoNews' }[v])
+  const word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : type === 'late' ? t('filtLate')[v]
     : v || t('stNoCompany'));
   line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(word).join(', ')))}</span>`,
     // (a tap: the first one's page; a lateness alone: Home with its bar)

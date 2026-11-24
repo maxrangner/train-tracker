@@ -179,12 +179,13 @@ export function groupPage(key, d) {
     const can = g.type === 'brand' || g.type === 'kind', on = can && d.filter.has(g.type, g.v);
     put('head', `<div class="g-head">${g.colour ? dot(g.colour) : '<i class="ring sq"></i>'}<b class="ttl">${esc(g.name())}</b></div>` +
       `<p class="sub">${esc(g.sub())}</p>` +
+      // (what the page does to the map, right under its heading, as every part's words: Max, 2026-11-24)
+      (can ? `<p class="src">${t(on ? 'groupOnly' : 'groupLit')}</p>` : '') +
       (can ? `<button type="button" class="show-only" data-act="showonly" aria-pressed="${on}">${icon(on ? 'check' : 'eye', 18)}<span>${t(on ? 'shownOnly' : 'showOnly')}</span></button>` : ''));
     put('tiles', `<div class="tiles"><div class="tile"><b>${n}</b><small>${t('onMapNow')}</small></div>` +
       (g.noPct ? `<div class="tile t-late"><b>${worst ? `+${worst.m} min` : '–'}</b><small>${t('stMostLate')}</small></div>`
         : `<div class="tile t-${pct >= 85 ? 'ontime' : pct >= 70 ? 'some' : 'late'}"><b>${known ? `${pct} %` : '–'}</b><small>${t('stKeyOnTime')}</small></div>`) + '</div>' +
-      (n ? `<div class="mini">${['ontime', 'some', 'late', 'unknown'].filter(k => c[k]).map(k => `<i class="m-${k}" style="flex-grow:${c[k]}"></i>`).join('')}</div>` : '') +
-      `<p class="src">${t('groupLit')}</p>`);
+      (n ? `<div class="mini">${['ontime', 'some', 'late', 'unknown'].filter(k => c[k]).map(k => `<i class="m-${k}" style="flex-grow:${c[k]}"></i>`).join('')}</div>` : ''));
     put('list', `<h4 class="lab">${t('itsTrains')}</h4><div class="rows">${all.slice(0, 80).map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
       sub: g.type === 'brand' ? '' : t(`kind_${kindOf(x.brand)}`) })).join('') || `<p class="empty">${t('noneOnMap')}</p>`}</div>`);
     if (stats) stats.update(d.snapshot(g.v), { first });

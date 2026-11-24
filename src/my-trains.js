@@ -236,7 +236,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     function draw() {
       if (!el) return;
       const r = results.get(trip.key), n = nextOf(trip);
-      const head = `<div class="g-head"><span class="r-ic trip">${icon('trip', 18)}</span><b class="ttl">${esc(tripName(trip))}</b></div>` +
+      const head = `<div class="g-head"><span class="r-ic trip">${icon('trip', 18)}</span><b class="ttl">${esc(tripName(trip)).replace(/ (?!→)(?<!→ )/g, " ")}</b></div>` +
         `<p class="sub">${esc(trip.via ? t('tripVia', stationName(trip.via)) : t('tripToday'))}</p>`;
       let body;
       if (!r) body = stateHtml('loading', t('loading'));

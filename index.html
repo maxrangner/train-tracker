@@ -833,6 +833,9 @@
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
+      /* (at full "i" joins them: Follow its arrow alone there too, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24) */
+      #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
+      #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-co { flex: 0 100 auto; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .ph-to { flex: 0 1 auto; }
       /* (.cd is display: contents: its own parts are faded, the trip line, tiles and list) */
