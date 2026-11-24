@@ -79,7 +79,10 @@ const motionK = () => (typeof document !== 'undefined' && document.documentEleme
 const BAR_GAP_PX = 8;          // room between the search bar and the page under it (index.html #sheet:not(.no-bar) .sh-head)
 const GRAB_PX = 20;            // the handle alone (a page without a bar)
 const HOME_LOW_PX = HEAD_PX + 10;   // Home at rest: the search bar 12 px from the sheet edge below, as at its sides (Max, 2026-11-23)
-const FIT_GAP_PX = 28;         // under the last part shown at half (the fade and its chevron sit in it)
+// Room under the last part shown (Max, 2026-11-24: "Still too much padding in the bottom of some cards. Please remove
+// ALL such cases"): 12 px when the page shows whole (nothing below, no sign); a phone's cut page 40 px (its "More" pill
+// sits in it); a computer's sign has its own band under the page.
+const FIT_GAP_PX = 12;
 // (a phone: room for the "More" pill under it, not over the part's lower edge; Max, 2026-11-24: "Dålig padding på 'mer'
 // pillret"; the pill 24 px tall, 4 px over the bottom bar)
 const FIT_GAP_PHONE_PX = 40;
@@ -158,9 +161,22 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // At full, its content grown or shrunk (a part opened, rows came in): full follows it (a glide), at most once a second
   // (src/stack.js's tick) or at once when a part is revealed.
   // (taller at once; shorter only when two ticks in a row agree: a part gliding shut or open is measured mid-glide)
-  let fullSeen = null;
+  // At half too, shorter only: its content shrank after it came in by itself (a status line gone, a part folded; refit's
+  // grow kept the room), so no empty room stays under it (Max, 2026-11-24: "Still too much padding in the bottom of some
+  // cards"); taller comes with refit as before.
+  let fullSeen = null, halfSeen = null;
   function fitFull() {
-    if (idx !== 2 || drag || searching) return;
+    if (drag || searching) return;
+    if (idx === 1) {
+      if (revealed) return;   // (grown on purpose for a part just opened: stays until it shuts, unreveal)
+      const h1 = heightsOf(top())[1];
+      if (h1 >= H[1] - 8) { halfSeen = null; return; }
+      if (halfSeen !== h1) { halfSeen = h1; return; }
+      halfSeen = null;
+      H[1] = h1; place(H[1]); pad();
+      return;
+    }
+    if (idx !== 2) return;
     const f = fullOf(top(), H[1]);
     if (Math.abs(f - H[2]) <= 2) { fullSeen = null; return; }
     if (f < H[2] && fullSeen !== f) { fullSeen = f; return; }
@@ -174,7 +190,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const measure = () => { let end = 0; for (const c of el.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight); return end; };
     const end = pg.def.atFull ? pg.def.atFull(measure) : measure();
     if (!end) return fullMax;
-    const need = headPx() + end + (wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX) + (wide() ? 0 : safe().bottom);
+    const need = headPx() + end + FIT_GAP_PX + (wide() ? 0 : safe().bottom);
     return Math.round(Math.max(half, Math.min(fullMax, need)));
   }
   // the handle and the head: on a computer 10 px more (the sheet hangs from the top, room above the search field; index.html);
@@ -259,7 +275,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function syncNext(below = hiddenBelow().below) {
     const pg = top(), low = !searching && keepsLow(pg);
     const more = (low && idx === 0) || (idx < 2 && below > 12) || (low && idx < 2 && H[1] - H[0] < 30);
-    const v = more ? 'more' : 'less';
+    // ('close': a tap would only close the page, which its ‹ does already: a computer shows no arrow then; Max,
+    // 2026-11-24 "Screens like this has both back arrow and the collapse arrow that dismisses it. Remove the last one")
+    const closes = !more && !low && !searching && !(idx === 2 && H[1] - H[0] >= 30);
+    const v = more ? 'more' : closes ? 'close' : 'less';
     if (sheet.dataset.next !== v) sheet.dataset.next = v;
   }
   function pad() { if (ready) onPad(Math.min(H[idx], H[1])); }
@@ -291,7 +310,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (up to a fifth taller than the usual half when that shows a whole part, never closer than 40 px to full)
     const hi = Math.min(limit * 1.2, fullMax - base - 40), lo = limit * 0.5, gap = wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX;
     const end = Math.max(...boxes.map(x => x.b));
-    if (end + gap <= hi) return Math.round(Math.max(low + 60, base + end + gap));
+    if (end + FIT_GAP_PX <= hi) return Math.round(Math.max(low + 60, base + end + FIT_GAP_PX));
     const clean = y => !boxes.some(x => x.h < 220 && x.t < y - 1 && x.b > y + 1);
     // the clean edges' distance from the usual half (above it counts half again: rather a little less than more)
     const off = c => (c <= limit ? limit - c : (c - limit) * 1.5);
@@ -399,8 +418,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head, .pg-head') && !el.closest(NOT_GRAB));
+  // ☰'s menu open (src/main.js openNav): the sheet holds still, no pull, no scroll, no tap on the page behind; only ☰
+  // and a map tap do anything then (Max, 2026-11-24: "When hamburger is acativated the normal scroll of the card should
+  // not be possible"; "Only tapping search should be normal behavior, or hamburger or tap the map dismisses")
+  const frozen = () => sheet.classList.contains('menu-open');
   function pointerDown(e) {
     touching = true;
+    if (frozen()) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     // Home's field: a finger's pull moves the sheet, its tap still searches (not while searching; not a mouse: its
     // press focuses the field at once)
@@ -498,7 +522,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     given = null;
   }, true);
   sheet.addEventListener('touchstart', (e) => {
-    tch = idx === 2 && e.touches.length === 1 && !e.target.closest(HEAD) && !(e.target.closest('input, textarea') && e.target === document.activeElement)
+    tch = !frozen() && idx === 2 && e.touches.length === 1 && !e.target.closest(HEAD) && !(e.target.closest('input, textarea') && e.target === document.activeElement)
       ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false, target: e.target, held: false, dx: 0, dy: 0 } : null;
     touching = true;
     e.target.addEventListener('touchmove', touchMove, { passive: false });
@@ -512,6 +536,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A wheel over a sheet that isn't at full raises it a step (a mouse has no pull).
   let wheelAt = 0;
   sheet.addEventListener('wheel', (e) => {
+    if (frozen()) { e.preventDefault(); return; }
     if (idx === 2 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
     if (e.deltaY > 0 && performance.now() - wheelAt > 450) { wheelAt = performance.now(); setIndex(idx === 0 && H[1] - H[0] < 30 ? 2 : idx + 1); }
@@ -519,6 +544,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A drag's click is no tap (the handle's tap: pointerEnd); on the page at low, a tap raises it to half.
   sheet.addEventListener('click', (e) => {
     if (performance.now() < eatUntil) { e.preventDefault(); e.stopPropagation(); return; }
+    if (frozen() && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); return; }
     if (e.target.closest('.sh-grab')) return;
     if (idx === 0 && !searching && e.target.closest('.pg') && !e.target.closest('button, a, input, [role="button"]')) setIndex(1);
   }, true);
@@ -687,7 +713,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     H[2] = Math.max(f, Math.min(fullMax, Math.round(need)));
     if (idx < 2) {
       H[0] = l0;
-      if (need <= Math.max(h1, H[idx]) + 2) { H[1] = Math.max(h1, H[1]); if (idx === 0) setIndex(1); else { place(H[1]); pad(); } return; }
+      if (need <= Math.max(h1, H[idx]) + 2) { revealed = { key: pg.key, from: idx, to: 1 }; H[1] = Math.max(h1, H[1], Math.round(need)); if (idx === 0) setIndex(1); else { place(H[1]); pad(); } return; }
       revealed = { key: pg.key, from: idx, to: 2 };
       setIndex(2);
     }

@@ -269,6 +269,10 @@ try {
       return { room: Math.round(Math.min(innerHeight, s.bottom) - end), scrolls: pg.scrollHeight > pg.clientHeight + 2 };
     });
     check(full.scrolls || (full.room >= 0 && full.room <= 48), `a train at full: ${full.scrolls ? 'longer than the screen, it scrolls' : `${full.room} px of room under its card (want 0 to 48)`}`);
+    // ("Mindre ⌃" the card's last part at full, under the stops: Max, 2026-11-24 "should always be at the bottom")
+    const last = await page.evaluate(() => { const more = document.querySelector('#panel .panel-more'), tl = document.querySelector('#panel .panel-table');
+      return more && tl ? Math.round(more.getBoundingClientRect().top - tl.getBoundingClientRect().bottom) : null; });
+    check(last !== null && last >= 0, `a train at full: "Mindre" ${last ?? '?'} px under the stops (want under them)`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at

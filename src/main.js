@@ -823,40 +823,32 @@ if (window.Capacitor?.isNativePlatform?.()) {
 document.querySelector('#sheet .sh-logo').innerHTML = logoSvg({ small: true });   // the logo in the search field (Max, 2026-11-23: "logo is gone")
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
+// ☰'s menu: its choices as buttons where the search field is, in its place while open (Max, 2026-11-24: "Revamp hamburger
+// menu... You cant search when manu is open anyways, and saves realaste. Also works better with the back arrows"; then
+// "Place the buttons where the search bar is! And same dismiss rules"); until then a card floating by the button. The
+// sheet keeps its height; the page behind holds still (src/stack.js frozen); ☰ or a map tap closes it.
+navButton.before(navEl);
+navEl.classList.remove('pop');
+navEl.classList.add('sh-menu');
 function openNav() {
+  if (stack.searching) return;
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
-  const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
-  // A computer: to the right of ☰, outside the sheet's box with room between, its top level with the search bar (Max,
-  // 2026-11-24: "move menu to the right of the hamburger instead"; then "Menu clips the search pill. Have it align with
-  // the search bar vertically and add padding"); it floats beside the sheet, over the map.
-  const sbox = document.getElementById('sheet').getBoundingClientRect(), bar = document.querySelector('#sheet .sh-field')?.getBoundingClientRect() ?? a;
-  if (innerWidth >= 440 && sbox.right + 12 + w <= innerWidth - 10) {
-    navEl.style.left = `${sbox.right + 12}px`;
-    navEl.style.top = `${Math.max(10, Math.min(innerHeight - h - 10, bar.top))}px`;
-    navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
-    return;
-  }
-  navEl.style.left = `${Math.max(10, Math.min(innerWidth - w - 10, a.right - w))}px`;
-  // Under the search bar (Max, 2026-11-24: "Menu should show below the search bar", then on the phone too: "make the
-  // menu appear below the search pill"); above it only when there's no room below (a phone's sheet at rest, its bar at
-  // the bottom).
-  // (a computer, the sheet at rest: under the whole box, its arrow included; Max, 2026-11-24 "Menu still not below the
-  // whole search pill")
-  const box = innerWidth >= 440 && stack.level === 0 ? document.getElementById('sheet').getBoundingClientRect().bottom : a.bottom;
-  const below = box + 10, fits = below + h <= innerHeight - 10;
-  navEl.style.top = `${fits || innerWidth >= 440 ? Math.min(innerHeight - h - 10, below) : Math.max(10, a.top - h - 10)}px`;
+  document.getElementById('sheet').classList.add('menu-open');
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
 function closeNav() {
   if (navEl.hidden) return;
   navEl.hidden = true;
   navButton.setAttribute('aria-expanded', 'false');
+  document.getElementById('sheet').classList.remove('menu-open');
 }
 onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
 // map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
-document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !navEl.contains(e.target) && !navButton.contains(e.target) && !mapEl.contains(e.target)) closeNav(); }, true);
+// (inside the sheet only its buttons and ☰ do anything while it is open: src/stack.js frozen. Outside the sheet and the
+// map, a press closes it as before: the map's own buttons, the pills.)
+document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !e.target.closest?.('#sheet') && !mapEl.contains(e.target)) closeNav(); }, true);
 // A mouse pressed on a button keeps it while it stays where the button was: a pressed button shrinks (button:active,
 // scale .94; a row .98), and a press held near a wide row's edge was let go outside it, so the click went to what was
 // beside it and nothing opened (Max, 2026-11-24: the › on a saved trip "Still doesn't do anything"; quick clicks
