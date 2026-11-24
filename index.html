@@ -150,6 +150,8 @@
     .sh-up:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* ‹ and a page's buttons on its title line (src/stack.js headOf) */
     .pg :is(.g-head, .panel-head) > .sh-up { margin-right: 10px; }
+    /* (on a train's top line the size of its other buttons: shown or hidden, the line keeps its height) */
+    #panel .panel-head > .sh-up { width: 40px; height: 40px; }
     .pg .panel-head:has(> .sh-up) { justify-content: flex-start; }
     .pg :is(.g-head, .panel-head) > .sh-btns { margin-left: auto; padding-left: 10px; }
     /* (a title beside ‹ and buttons wraps rather than being cut: "Lund C → Mal…") */
@@ -877,6 +879,10 @@
     /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed
        train card should not hide content below"; "Collapsed still peeks at the content below"). The rest fades back in
        as soon as it is pulled up. */
+    /* (at full "i" joins the buttons: Follow its arrow alone there, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24;
+       a computer too since its card got ‹: the name was squeezed out) */
+    #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
+    #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
     .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     @media (max-width: 439px) {
       #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
@@ -887,9 +893,6 @@
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
-      /* (at full "i" joins them: Follow its arrow alone there too, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24) */
-      #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
-      #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-co { flex: 0 100 auto; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .ph-to { flex: 0 1 auto; }
       /* (.cd is display: contents: its own parts are faded, the trip line, tiles and list) */
