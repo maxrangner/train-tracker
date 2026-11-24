@@ -108,6 +108,18 @@ try {
   const rows = await page.evaluate(() => [...document.querySelectorAll('.trip-list .bd-row')].map(r => ({ cancelled: r.classList.contains('canceled'), text: r.innerText.replace(/\n/g, ' ') })));
   ok(rows.length >= 5, `today's trains listed: ${rows.length} (${rows[0]?.text})`);
   ok(rows.some(r => r.cancelled), `a cancelled train crossed out: ${rows.find(r => r.cancelled)?.text}`);
+  // The next train: its company and arrival, not again in the list under it ("More departures"); a tap opens its card
+  // (Max, 2026-11-24: "Needs operator, and able to click on train to see more info"; "shows the same train again")
+  const nextBox = await page.evaluate(() => { const pg = document.querySelector('.pg[data-key="trip:Lu>Mc"]'), b = pg.querySelector('button.trip-next');
+    const n = b && JSON.parse(b.dataset.train)[3];
+    return { text: b?.innerText.replace(/\s+/g, ' ') ?? '', n, again: [...pg.querySelectorAll('.trip-list [data-train]')].some(r => JSON.parse(r.dataset.train)[3] === n), heading: pg.querySelector('h4.lab')?.textContent };
+  });
+  ok(/→ Malmö C \d\d:\d\d/.test(nextBox.text) && / \S+ \S+/.test(nextBox.text.split('·')[0]) && !nextBox.again && nextBox.heading === 'More departures',
+    `the next train's box: "${nextBox.text}", not again under "${nextBox.heading}" (${nextBox.again ? 'listed again' : 'once'})`);
+  await page.evaluate(() => document.querySelector('.pg[data-key="trip:Lu>Mc"] button.trip-next').click());
+  ok(await until(page, n => window.__stack.top().startsWith('train:') && document.querySelector('#panel .panel-head')?.textContent.includes(n), 8000, nextBox.n), `a tap on it opens train ${nextBox.n}`);
+  await page.evaluate(() => window.__stack.back());
+  await until(page, () => window.__stack.top() === 'trip:Lu>Mc');
   await setLevel(page, 2);
   await shot(page, '02-trip');
   // No trip pill above the bar (Max, 2026-11-23: 'Remove the trip pill')
@@ -139,12 +151,18 @@ try {
   // Delete: the first tap arms it, a double tap doesn't count, a second tap later deletes
   const del = () => page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
   await until(page, () => window.__stack.top() === 'trip:Lu>Hm' && Boolean(document.querySelector('#sheet .sh-acts [data-act-id="del"]')));
+  // (armed, the trip's name keeps its size: its words in the button squeezed the name to a letter's width; Max,
+  // 2026-11-24: "Deleting a card gets weird UI. This should have been caught by your tests")
+  const nameBox = () => page.evaluate(() => { const r = document.querySelector('.pg[data-key="trip:Lu>Hm"] .g-head .ttl').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+  const nameBefore = await nameBox();
   await del();
   await sleep(100);
   await del();
   await sleep(200);
   const armed = await page.evaluate(() => ({ text: document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.innerText ?? '', saved: Boolean(window.__ideas.favourites.trip('Lu>Hm')) }));
   ok(armed.saved && /again/i.test(armed.text), `Delete tapped twice quickly: still saved, it says "${armed.text}"`);
+  const nameArmed = await nameBox();
+  ok(nameArmed[0] === nameBefore[0] && nameArmed[1] === nameBefore[1], `armed, the trip's name keeps its size (${nameBefore.join('×')} → ${nameArmed.join('×')})`);
   await shot(page, '02b-delete-armed');
   await sleep(500);
   await del();

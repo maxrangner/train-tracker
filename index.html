@@ -166,8 +166,11 @@
     .sh-act { flex: none; min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 11px; border: 0; border-radius: 22px;
       background: var(--hover); color: var(--ink); font: 700 14px var(--font); cursor: pointer; }
     .sh-act span { display: none; }
-    .sh-act.armed { background: var(--t-late-bg); color: var(--t-late); padding: 0 14px 0 11px; }
-    .sh-act.armed span { display: inline; }
+    /* (armed: the button keeps its size, its words float under it: in the button they squeezed the trip's name to a
+       letter's width; Max, 2026-11-24, "Deleting a card gets weird UI") */
+    .sh-act.armed { position: relative; background: var(--t-late-bg); color: var(--t-late); }
+    .sh-act.armed span { display: block; position: absolute; top: calc(100% + 6px); right: 0; z-index: 6; white-space: nowrap; padding: 6px 11px;
+      border-radius: 12px; background: var(--t-late-bg); color: var(--t-late); font-size: 13.5px; box-shadow: var(--shadow-s); pointer-events: none; }
     .sh-act:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .sh-follow { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 15px; border: 0; border-radius: 22px; background: var(--hover);
       color: var(--ink); font: 700 14px var(--font); cursor: pointer; transition: background .15s, color .15s; }
@@ -384,6 +387,15 @@
     .trip-next.tight { background: var(--t-some-bg); } .trip-next.tight b { color: var(--t-some); }
     .trip-next.lost { background: var(--t-late-bg); } .trip-next.lost b { color: var(--t-late); }
     .trip-next.ok b { color: var(--t-ontime); }
+    /* a trip's next train is a button to its card (Max, 2026-11-24: "able to click on train to see more info"): its company,
+       where and when it gets there, an arrow; with a change, the change and the train after it under it */
+    button.trip-next { width: 100%; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; grid-template-columns: 1fr auto auto; }
+    button.trip-next:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+    button.trip-next > .tag { grid-column: 2; }
+    .trip-next .tn-to { grid-column: 1; color: var(--ink); font-size: 15px; font-weight: 700; }
+    button.trip-next > b { grid-column: 1; }
+    button.trip-next > span.tn-go { grid-column: 3; grid-row: 2 / span 3; align-self: center; color: var(--muted); display: grid; }
+    .trip-next-chg { display: grid; gap: 4px; padding: 6px 12px 0; }
     .m.some { color: var(--t-some); } .m.late { color: var(--t-late); }
     .trip-fails { margin: -4px 2px 0; color: var(--muted); font-size: 14px; font-weight: 600; }
     .trip-pair { border: 1px solid var(--line); border-radius: 14px; padding: 0 10px; margin-bottom: 8px; }
