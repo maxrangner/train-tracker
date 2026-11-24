@@ -268,7 +268,10 @@ try {
       await p.mouse.click(g0.x, g0.y);
       await sleep(700);
       const g1 = await grab(), l1 = (await state()).level;
-      ok(l1 > 0 && (g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn)), `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points up (${g1.turn})`);
+      // (it points the way its next click goes, 2026-11-24: down while more of Home is hidden, up when all is shown)
+      const more = await p.evaluate(() => document.getElementById('sheet').dataset.next === 'more');
+      const up = g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn);
+      ok(l1 > 0 && up === !more, `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points ${up ? 'up' : 'down'} (${more ? 'more hidden' : 'all shown'})`);
     } else ok(g0.dash && !g0.arrow, `phone 4: the handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
 
     // ---- 5: Home's hint only at full ----

@@ -181,6 +181,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   function close() {
     clearTimeout(refreshTimer);
     openId = null;
+    picking = false; el.classList.remove('picking');   // (the chooser goes with the card: the map kept waiting for it)
     el.hidden = true;
     el.innerHTML = '';
     onSelect?.(null);
@@ -667,7 +668,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
 
   // The card put away with the train still open (a screen over it, Settings → Debug → Screen over a train: 'follow'),
   // and shown again; it stays up to date meanwhile.
-  const hide = () => { el.hidden = true; };
+  const hide = () => { el.hidden = true; picking = false; el.classList.remove('picking'); };
   const show = () => { if (openId) el.hidden = false; };
   // The "to …" chooser shut at once, with no glide (a map tap: the tap rules, src/stack.js).
   function closePick() {

@@ -143,7 +143,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const headPx = () => (sheet.classList.contains('no-bar') ? 0 : HEAD_PX - GRAB_PX) + grabH() + (wide() ? 10 : 0);
   function lowOf(pg) {
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
-    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(headPx() + c + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
+    // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
+    // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
+    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
     return pg?.key === 'home' ? HOME_LOW_PX + s : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0);
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
@@ -370,7 +372,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       if (sheet.dataset.next === 'more') setIndex(low && idx === 0 && H[1] - H[0] >= 30 ? 1 : 2);
       else if (low || searching) setIndex(0);
       else if (idx === 2) setIndex(1);
-      else back();   // (a page without a low, all of it shown at half: closed)
+      else backTo(0);   // (a page without a low, all of it shown at half: closed to Home, as a pull or a map tap)
       return;
     }
     dragEnd();
@@ -414,7 +416,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const t = tch;
     if (t && !t.on && t.held && e.type === 'touchend' && Math.abs(t.dx) < 12 && Math.abs(t.dy) < 12) {
       const b = t.target?.closest?.('button, a, label, [role="button"], [data-go], [data-act]');
-      if (b && b.isConnected && !b.disabled) { given = { el: b, at: performance.now() }; b.click(); }
+      if (b && b.isConnected && !b.disabled) { given = { el: b, at: performance.now() }; b.click(); setTimeout(() => { if (given?.el === b) given = null; }, 600); }
     }
     touching = false; if (tch?.on) dragEnd(); tch = null;
   }
@@ -502,7 +504,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const own = (pg.def.barIn ? pg.def.barIn() : null) ?? head, place = own ?? barEl;
     if (btnsEl.parentElement !== place) place.append(btnsEl);
     const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
-    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(pg.def.barIn) || !any)));
+    sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(own) || !any)));
   }
   function show(pg, prev, dir, opts = {}) {
     if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
@@ -686,7 +688,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     onSearch(false);
   }
   input.addEventListener('focus', openSearch);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); setIndex(preSearch); } });
+  // (only while searching: a field left focused after the search closed took Esc and did nothing, so the first Esc over
+  // a page was lost; stats-board-check, 2026-11-24)
+  input.addEventListener('keydown', (e) => { if (e.key !== 'Escape') return; if (!searching) { input.blur(); return; } e.stopPropagation(); closeSearch(); setIndex(preSearch); });
   sheet.querySelector('.sh-cancel').addEventListener('click', () => { closeSearch(); setIndex(preSearch); });
 
   // ---------- the bar ----------
@@ -746,7 +750,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     onSearch(fn) { onSearch = fn; },
     pageEl: key => stack.find(p => p.key === key)?.el ?? null,
     pageDef: key => stack.find(p => p.key === key)?.def ?? null,
-    measure, refit, mapTap, reveal, unreveal,
+    measure, refit, mapTap, reveal, unreveal, headPx,
   };
   return api;
 }

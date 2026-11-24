@@ -51,7 +51,7 @@ function deeper(hex) {
   const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
   let h = 0, sat = 0;
-  if (d) { sat = d / (1 - Math.abs(2 * l - 1)); h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+  if (d) { sat = d / (1 - Math.abs(2 * l - 1)); h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; }
   const L = l * 0.88, S = sat * 0.75, c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = L - c / 2;
   const [R, G, B] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
   return '#' + [R, G, B].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
@@ -1747,7 +1747,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     async follow(getPlace, onEnd) {
       await ready;
       dragged = false;
-      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), moved: false, place: null, glide: null };
+      following = { getPlace, onEnd, locked: false, focus: defaultFocus(), moved: false, place: null, glide: null, since: performance.now() };
       zoomAroundCenter(true);
       followRotation(true);
       map.setTransformCameraUpdate(holdTrain);
@@ -1760,7 +1760,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     setSheet(h) {
       if (Math.abs(h - sheetH) < 1) return;
       sheetH = h;
-      if (following && !following.moved && behindCard(following.focus, 40)) { following.focus = defaultFocus(); following.locked = false; }
+      // (and while a train is still being opened, its first 1.5 s: it settles into the free middle once)
+      if (following && !following.moved && (behindCard(following.focus, 40) || performance.now() - following.since < 1500)) { following.focus = defaultFocus(); following.locked = false; }
     },
     // The camera rides the rails (Max's pick A, 2026-11-22: between a train and a station on its route, instead of a
     // jump): along these places ({ lon, lat }, in order), ending on the last at zoom z, held where defaultFocus is

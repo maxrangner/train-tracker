@@ -39,6 +39,8 @@ export function createFilter() {
       if (coActive() && !(chosen.brand.has(brand ?? '') || chosen.kind.has(kindOf(brand)))) return false;
       return lateKey === undefined || !chosen.late.size || chosen.late.has(lateKey);
     },
+    // The lateness part alone (a page that lights its own trains: the companies' part is the page's)
+    lateShows: lateKey => !chosen.late.size || chosen.late.has(lateKey),
     // What is chosen, companies first, the lateness last: [{ type, v }].
     list: () => [...[...chosen.brand].map(v => ({ type: 'brand', v })), ...[...chosen.kind].map(v => ({ type: 'kind', v })),
       ...[...chosen.late].map(v => ({ type: 'late', v }))],

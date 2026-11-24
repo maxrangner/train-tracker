@@ -433,7 +433,7 @@ function trainPage(id) {
     if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
       // (at most half the screen: from Home at full a loading card covered it all until its stops came; the handle is
       // its head since the bar went, 20 px, 30 on a computer, as src/stack.js counts it)
-      return Math.max(1, Math.round(Math.min(stack.shown, innerHeight * 0.5) - (innerWidth >= 440 ? 30 : 20)));
+      return Math.max(1, Math.round(Math.min(stack.shown, innerHeight * 0.5) - stack.headPx()));
     }
     if (!whole) {
       // collapsed: the head line alone (number, operator, destination; the rest is hidden at low: index.html)
@@ -838,7 +838,8 @@ function padMap() {
   root.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
   // (not while the card's "till …" chooser is open: it shuts back to the same height, and the map stays still; Max,
   // 2026-11-24: it "jumps the map around... Should not change map at all")
-  if (!panelEl.classList.contains('picking')) map.setSheet(sheetPad + h);
+  const choosing = panelEl.classList.contains('picking') && panel.openId && !panel.hidden && stack?.top() === `train:${panel.openId}`;
+  if (!choosing) map.setSheet(sheetPad + h);
   // The scale slider (74 px over the sheet and the ribbon, 190 tall) goes when it would reach the live mark at the top.
   root.classList.toggle('scale-squeezed', innerHeight - (NARROW.matches ? sheetPad + h : 0) - 74 - 190 < 52);
 }
@@ -1014,7 +1015,7 @@ function dayFrame(ts) {
     const near = map.nearView(), sun = settings.dayNight ? sunFor(T) : null, features = [];
     frameTrains = [];
     for (const x of dayView.at(T, near)) {
-      if (filter.active && !filter.shows(x.brand)) continue;
+      if (filter.active && !filter.shows(x.brand, x.late === null || x.late === undefined ? 'unknown' : lateClass(x.late))) continue;
       x.night = nightAt(x, sun);
       frameTrains.push(x);
       if (near(x.lon, x.lat)) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] }, properties: { id: x.id, bearing: x.bearing, ...pastProps(x) } });
@@ -1037,7 +1038,7 @@ function frame(ts) {
     const sun = settings.dayNight ? sunFor(t) : null;
     frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id), night: nightAt(x, sun) }));
     // only some trains: a group's page or the lateness bar's colour (lightTest) while it is open, else the filter
-    frameTrains = lightTest ? frameAll.filter(x => x.id === openId || lightTest(x))
+    frameTrains = lightTest ? frameAll.filter(x => x.id === openId || (lightTest(x) && filter.lateShows(legendKey(x))))
       : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand, legendKey(x))) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
@@ -1118,7 +1119,7 @@ onSettingChange((key) => {
   }
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
-  if (key === 'homeLegend') homeDef.redraw();   // Debug → Lateness colours on Home
+  if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); homeDef.redraw(); }   // Debug → Lateness colours on Home
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
