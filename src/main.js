@@ -1211,6 +1211,8 @@ const pageData = {
   myTrains: () => myTrains?.mineHtml() ?? null,   // the saved trips and pinned changes in Mine (src/my-trains.js)
   disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
   snapshot, filter, still: STAND_MS,
+  // a part just opened on Home shown whole, and let go again (src/stack.js reveal)
+  reveal: el => stack.reveal(el), unreveal: () => stack.unreveal(),
   // the lateness bar's colour: a filter with its pill, held on every page (src/filter.js; Max, 2026-11-24)
   legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); homeDef.redraw(); } },
   statsActions: {

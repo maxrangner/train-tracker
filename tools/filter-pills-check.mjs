@@ -41,9 +41,14 @@ for (const pc of [false, true]) {
   const f0 = await card();
   ok(f0.head === 'Filter' && f0.shown.length >= 1 && f0.shown.length <= 5 && (f0.shown.length < 5 || /^\d+ till$/.test(f0.more)), `the card "${f0.head}": ${f0.shown.length} companies, "${f0.more}"`);
   if (f0.more) {
-    await page.evaluate(() => document.querySelector('#sheet .co-filter .co-more').click()); await sleep(600);
+    await page.evaluate(() => document.querySelector('#sheet .co-filter .co-more').click()); await sleep(1000);
     const f1 = await card();
     ok(f1.shown.length > f0.shown.length && f1.more === 'Färre', `"${f0.more}" tapped: ${f1.shown.length} companies, "${f1.more}"`);
+    // (the sheet grew so the whole card shows: its end above the sheet's shown bottom; Max, 2026-11-24 "Expanding filters
+    // list in main card should expand that card to view all filters")
+    const whole = await page.evaluate(() => { const c = document.querySelector('#sheet .co-filter').closest('.sec').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+      const edge = Math.min(innerHeight, s.bottom) - (innerWidth >= 440 ? document.querySelector('#sheet .sh-grab').offsetHeight : 0); return { end: Math.round(c.bottom), edge: Math.round(edge), top: Math.round(c.top) }; });
+    ok(whole.end <= whole.edge && whole.top >= 0, `opened: the whole card in sight (its end ${whole.end} px, the shown edge ${whole.edge} px)`);
     const pick = f1.shown.at(-1);
     await page.evaluate(v => [...document.querySelectorAll('#sheet .co-filter .co-f')].find(c => c.dataset.cofilter === v).click(), pick); await sleep(800);
     await page.evaluate(() => document.querySelector('#sheet .co-filter .co-more').click()); await sleep(600);

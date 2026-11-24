@@ -179,7 +179,13 @@ export function homePage(d) {
     level(i) { if (i > 0 && !up) d.onShow?.(); up = i; if (i > 0) draw(); },
     every(i) { if (i > 0) draw(); },
     redraw: () => draw(true),
-    toggleCo() { coOpen = !coOpen; draw(); },
+    // (opened: the sheet grows until the whole card shows; folded: back to where it was; Max, 2026-11-24: "Expanding
+    // filters list in main card should expand that card to view all filters")
+    toggleCo() {
+      coOpen = !coOpen;
+      draw();
+      if (coOpen) d.reveal?.(el?.querySelector('.co-filter')?.closest('.sec')); else d.unreveal?.();
+    },
   };
 }
 
