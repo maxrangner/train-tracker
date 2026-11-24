@@ -70,7 +70,7 @@
     #sheet { --ez: cubic-bezier(.2, .85, .25, 1); position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden; touch-action: none; will-change: transform;
       background: var(--bg); color: var(--ink); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
-      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform .36s var(--ez); }
+      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform calc(.36s * var(--mk, 1)) var(--ez); }
     #sheet.dragging { transition: none; }
     /* A computer: the sheet hangs from the top left (Max, 2026-11-23: "the main pill should be top right as before... So
        flip it"; "The flip is only for PC! Phone stays as it is"): its search bar at the top, the arrow at its bottom
@@ -85,7 +85,7 @@
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
     @media (min-width: 440px) {
       #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
-        transition: height .36s var(--ez); will-change: height; }
+        transition: height calc(.36s * var(--mk, 1)) var(--ez); will-change: height; }
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
@@ -112,7 +112,7 @@
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
        tall; the head's empty parts count as the handle too. A phone only. */
     #sheet-grip { position: fixed; z-index: 4; left: 50%; width: 160px; margin-left: -80px; height: 24px; bottom: var(--sheet-shown, 72px);
-      touch-action: none; transition: bottom .36s cubic-bezier(.2, .85, .25, 1); }
+      touch-action: none; transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1); }
     #sheet.dragging ~ #sheet-grip { transition: none; }
     @media (min-width: 440px) { #sheet-grip { display: none; } }
     .sh-head { position: relative; z-index: 2; height: 52px; flex: none; margin: 0 12px; }
@@ -222,10 +222,10 @@
        (Max, 2026-11-24: "the fade/wipe to next screen is very annoying. It's sliding and fading at the same time"; "Most
        transitions between screens on the cards look bad, fade and swipe together"). */
     .sh-pages { overflow: hidden; }
-    .pg.in-r { animation: pg-in-r .28s var(--ez) both; }
-    .pg.in-l { animation: pg-in-l .28s var(--ez) both; }
-    .pg.out-l { animation: pg-out-l .28s var(--ez) both; pointer-events: none; }
-    .pg.out-r { animation: pg-out-r .28s var(--ez) both; pointer-events: none; }
+    .pg.in-r { animation: pg-in-r calc(.28s * var(--mk, 1)) var(--ez) both; }
+    .pg.in-l { animation: pg-in-l calc(.28s * var(--mk, 1)) var(--ez) both; }
+    .pg.out-l { animation: pg-out-l calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
+    .pg.out-r { animation: pg-out-r calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
     @keyframes pg-in-r { from { transform: translateX(100%); } }
     @keyframes pg-in-l { from { transform: translateX(-100%); } }
     @keyframes pg-out-l { to { transform: translateX(-100%); } }
@@ -234,14 +234,17 @@
        any). B 'rise': the new page comes as a card from the sheet's edge over the one before, which stays still; back,
        it goes away the same way. F 'strip': the pages one strip along the sheet, the new one pushing the old away. The
        sheet's edge: the bottom on a phone, the top on a computer (it hangs from there). */
+    /* Their speed (Debug → Animation speed, src/settings.js motionSpeed; Max, 2026-11-24 "Use current speed as fast, and
+       add a slower at 75%"): every page change and the sheet's glide take --mk times as long. */
+    :root[data-mspeed="calm"] { --mk: 1.3333; }
     :root[data-motion="rise"] .sh-pages > .pg { background: var(--bg); }
-    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in .3s var(--ez) both; z-index: 2; }
-    :root[data-motion="rise"] .pg.out-r { animation: pg-rise-out .26s cubic-bezier(.4, 0, .8, .4) both; z-index: 2; }
-    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still .3s both; }
-    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r .3s var(--ez) both; }
-    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l .3s var(--ez) both; }
-    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l .3s var(--ez) both; }
-    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r .3s var(--ez) both; }
+    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in calc(.3s * var(--mk, 1)) var(--ez) both; z-index: 2; }
+    :root[data-motion="rise"] .pg.out-r { animation: pg-rise-out calc(.26s * var(--mk, 1)) cubic-bezier(.4, 0, .8, .4) both; z-index: 2; }
+    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still calc(.3s * var(--mk, 1)) both; }
+    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r calc(.3s * var(--mk, 1)) var(--ez) both; }
     @keyframes pg-still { to { transform: none; } }
     @keyframes pg-rise-in { from { transform: translateY(var(--edge, 100%)); } }
     @keyframes pg-rise-out { to { transform: translateY(var(--edge, 100%)); } }
@@ -263,13 +266,13 @@
     .pg .tl-head { top: -4px; }
     /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
     @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
-    .maplibregl-ctrl-bottom-right { transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; }
+    .maplibregl-ctrl-bottom-right { transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; }
     #sheet.dragging ~ #map .maplibregl-ctrl-bottom-right, .sheet-dragging .maplibregl-ctrl-bottom-right { transition: none; }
 
     /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right. */
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
       max-width: calc(100% - 96px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
-      transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
+      transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
     /* (each pill: the filter's above any other, src/line.js) */
     #line .ln-pill { max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px;
       background: var(--card); color: var(--ink); box-shadow: var(--shadow-s); pointer-events: auto; }
@@ -1495,6 +1498,8 @@
         <div class="seg" data-key="homeLegend" role="group" aria-label="Lateness colours on Home" data-t-aria="homeLegend"><button type="button" data-v="true" data-t="on">On</button><button type="button" data-v="false" data-t="off">Off</button></div></div>
       <div class="debug-only set-row"><span data-t="pageMotion">Page change</span>
         <div class="seg" data-key="pageMotion" role="group" aria-label="Page change" data-t-aria="pageMotion"><button type="button" data-v="side" data-t="motionSide">Sideways</button><button type="button" data-v="rise" data-t="motionRise">From the edge</button><button type="button" data-v="strip" data-t="motionStrip">One strip</button></div></div>
+      <div class="debug-only set-row"><span data-t="motionSpeed">Animation speed</span>
+        <div class="seg" data-key="motionSpeed" role="group" aria-label="Animation speed" data-t-aria="motionSpeed"><button type="button" data-v="fast" data-t="speedFast">Fast</button><button type="button" data-v="calm" data-t="speedCalm">Calmer (75 %)</button></div></div>
       <div class="debug-only set-row"><span data-t="routeEdge">Route white edge</span>
         <div class="seg" data-key="routeEdge" role="group" aria-label="Route white edge" data-t-aria="routeEdge"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="debug-only set-row"><span data-t="noEstimate">With no expected time</span>

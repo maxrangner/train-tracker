@@ -74,6 +74,8 @@ import { t } from './i18n.js';
 const NARROW = typeof matchMedia === 'function' ? matchMedia('(max-width: 439px)') : null;
 const MAX_PAGES = 12;          // pages over Home at most (the oldest go)
 const HEAD_PX = 72;            // the handle and the head (search or a page's bar)
+// (the page changes' and the glide's time: 4/3 with Debug → Animation speed → Calmer; index.html --mk)
+const motionK = () => (typeof document !== 'undefined' && document.documentElement.dataset.mspeed === 'calm' ? 4 / 3 : 1);
 const BAR_GAP_PX = 8;          // room between the search bar and the page under it (index.html #sheet:not(.no-bar) .sh-head)
 const GRAB_PX = 20;            // the handle alone (a page without a bar)
 const HOME_LOW_PX = HEAD_PX + 10;   // Home at rest: the search bar 12 px from the sheet edge below, as at its sides (Max, 2026-11-23)
@@ -581,13 +583,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (old && old !== pg.el) {
       old.classList.remove('in-r', 'in-l');
       if (reduceMotion()) old.remove();
-      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300); }
+      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300 * motionK()); }
     }
     pg.el.classList.remove('out-l', 'out-r');
     if (prev && !reduceMotion()) {
       pg.el.classList.add(dir > 0 ? 'in-r' : 'in-l');
       const el0 = pg.el;
-      setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400);
+      setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400 * motionK());
     }
     pagesEl.append(pg.el);
     syncBar();
@@ -630,7 +632,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const prev = top();
     const gone = stack.splice(i + 1);
     show(top(), prev, -1, level === undefined ? {} : { level });
-    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 300); }
+    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 300 * motionK()); }
   }
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
   function refit({ grow = false, settle = false } = {}) {
