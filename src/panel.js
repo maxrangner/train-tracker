@@ -32,12 +32,14 @@ export const star = on => `<button class="panel-star" type="button" aria-pressed
 let notesOpen = false;
 // "All places": Settings → All places since 2026-11-22 (settings.allPlaces; a switch on the card until then).
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
-const notesBox = (lines, problems) => (notesOpen
-  ? `<div class="tv-box open"><button type="button" class="tv-toggle tv-fold" aria-expanded="true" aria-label="${t('foldNotes')}">${icon('chevronUp', 15)}</button>` +
-    `<div class="panel-tvnotes">${lines.join('')}</div></div>`
-  : `<div class="tv-box"><button type="button" class="tv-toggle" aria-expanded="false">` +
-    (problems ? `<span class="tv-warn">${icon('warning', 15)}${problems}</span>` : '') +
-    `<span>${t('notesCount', lines.length)}</span>${icon('chevronDown', 15)}</button></div>`);
+// Since 2026-11-24 the station's look (src/board.js msgsHtml; Max: "Messages in station card looks like this, with yellow
+// background. Shouldn't train cards be like this as well?"): a yellow line with ⚠, "3 messages about the train" and ⌄,
+// opened the same line with ⌃ and the messages under it, each a yellow tile (problems in red).
+const notesBox = lines => `<div class="tv-box board-msgs${notesOpen ? ' open' : ''}">` +
+  `<button type="button" class="tv-toggle board-msgs-toggle${notesOpen ? ' tv-fold' : ''}" aria-expanded="${notesOpen}"${notesOpen ? ` aria-label="${esc(t('foldNotes'))}"` : ''}>` +
+  `${icon('warning', 17)}<span>${t('trainNotesCount', lines.length)}</span>` +
+  `${icon(notesOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` +
+  (notesOpen ? `<div class="panel-tvnotes board-msg-list">${lines.join('')}</div>` : '') + '</div>';
 
 // "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {
@@ -534,7 +536,6 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
     // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)". Only on the full card.
     const noteLines = [];
-    let problemCount = 0;
     for (const kind of ['problems', 'notes']) {
       const at = new Map();   // text -> indices of the stops it is given at
       stops.forEach((s, i) => {
@@ -551,8 +552,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
           : run && idx.length >= 3 && idx.at(-1) === stops.length - 1 ? t('noteFrom', name(idx[0]))
           : run && idx.length >= 3 && idx[0] === 0 ? t('noteUntil', name(idx.at(-1)))
           : idx.slice(0, 2).map(name).join(', ') + (idx.length > 2 ? ` +${idx.length - 2}` : '');
-        if (kind === 'problems') problemCount++;
-        noteLines.push(`<p class="panel-tvnote${kind === 'problems' ? ' problem' : ''}">${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
+        noteLines.push(`<p class="panel-tvnote board-msg${kind === 'problems' ? ' problem' : ''}">${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
       }
     }
 
@@ -576,7 +576,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       (stops.length
         ? `<div class="cd"></div><div class="cd cd-tb"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
-          (noteLines.length ? notesBox(noteLines, problemCount) : '') +
+          (noteLines.length ? notesBox(noteLines) : '') +
           `<div class="panel-table tl"><div class="tl-head">` +
           // ("All places" back on the card, left of "Track": Max, 2026-11-23; the same setting as Settings → All places)
           `<span class="tl-all"><button type="button" class="tl-places" data-act="allplaces" aria-pressed="${Boolean(settings.allPlaces)}">${icon(settings.allPlaces ? 'check' : 'plus', 14)}${esc(t('allPlaces'))}</button></span><span>${t('track')}</span></div>${tlRows}</div>` +

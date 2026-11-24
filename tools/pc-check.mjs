@@ -85,6 +85,32 @@ try {
   await page.mouse.move(p.x + 200, p.y + 120, { steps: 8 }); await page.mouse.up(); await sleep(900);
   const stayed = await page.evaluate(() => window.__stack.top());
   ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
+
+  // 6. ☰ with Home at rest: the menu under the whole box, its arrow included (Max, 2026-11-24: "Menu still not below the
+  //    whole search pill")
+  await page.evaluate(() => window.__stack.home(0)); await sleep(1200);
+  await page.evaluate(() => document.querySelector('#sheet .sh-nav, #nav-button, [aria-controls="nav"]')?.click()); await sleep(500);
+  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(); return n && !n.hidden ? { top: Math.round(n.getBoundingClientRect().top), box: Math.round(s.bottom) } : null; });
+  ok(menu && menu.top >= menu.box + 4, `☰ at rest: the menu's top ${menu?.top} px, the box's bottom ${menu?.box} px`);
+  await page.keyboard.press('Escape'); await sleep(300);
+
+  // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
+  await page.evaluate(() => window.__stack.home(2)); await sleep(1200);
+  const arrow = async () => { const r = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+    await page.mouse.click(r.x, r.y); await sleep(900); return page.evaluate(() => window.__stack.level); };
+  const l1 = await arrow();
+  // (at half the arrow points where a click goes: ⌄ more below shows full again, ⌃ goes to rest)
+  const next = await page.evaluate(() => document.getElementById('sheet').dataset.next), l2 = await arrow();
+  ok(l1 === 1 && l2 === (next === 'more' ? 2 : 0), `Home at full, the arrow clicked: height ${l1} (want half); again, its arrow "${next}": height ${l2}`);
+
+  // 8. The arrow's band at the sheet's bottom: as much room above the arrow as under it, at rest and at half (Max,
+  //    2026-11-24: "'Mer v' still too close to the edge")
+  for (const lvl of [0, 1]) {
+    await page.evaluate(l => window.__stack.home(l), lvl); await sleep(1300);
+    const m = await page.evaluate(() => { const g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(), a = document.querySelector('#sheet .sh-arrow').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+      return { above: Math.round(a.top - g.top), below: Math.round(s.bottom - a.bottom) }; });
+    ok(Math.abs(m.above - m.below) <= 2 && m.below >= 5, `Home at ${lvl ? 'half' : 'rest'}: the arrow ${m.above} px under its band's top, ${m.below} px over the sheet's bottom`);
+  }
 } finally {
   await browser.close();
 }

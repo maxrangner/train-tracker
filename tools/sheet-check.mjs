@@ -6,8 +6,8 @@
 //   2 the sheet dragged: up and back below its start, held still, comes back to the height it started at (the nearest
 //     height); pulled up and held: full; a pull down held: half; a short quick swipe down from full: half (a swipe goes
 //     on to the next height); a long pull down below its lowest height closes every page (back to Home);
-//   3 every height change glides (heights in between, sampled each frame): All stops, Fewer stops, the handle tap
-//     (low ↔ half, from full to low), a short drag down from full;
+//   3 every height change glides (heights in between, sampled each frame): All stops, Fewer stops, the handle tap (from full: half)
+//     (low ↔ half, from full to half), a short drag down from full;
 //   4 the head (2026-11-23): the handle's target 44 px tall (the grip over the map and the handle), a finger's tap that
 //     wanders 11 px still toggles, a tap on the head between its buttons toggles, a pull down of 110 px from the head
 //     at full lowers it, Home's field pulled up raises the sheet (no search); a group's list ("2 trains here", and a
@@ -172,7 +172,9 @@ try {
       await glide('a quick swipe down from full', () => drag([80, 160], { fast: true }), 1);
       await setLevel(page, 2);
       await settle();
-      await glide('handle tap: full to low', tapHandle, 0);
+      // (one step: full to half, then rest; Max, 2026-11-24 "it should compact, not close it")
+      await glide('handle tap: full to half', tapHandle, 1);
+      await glide('handle tap: half to low, again', tapHandle, 0);
     }
 
     // ---- 4. The head (Max's phone, 2026-11-23: the handle "seems to hit it but doesn't respond", the sheet hard to

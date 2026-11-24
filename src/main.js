@@ -476,6 +476,15 @@ function trainPage(id) {
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
     level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    // (its content at full, measured with its full look on for that moment: the sheet's full stops under it; src/stack.js
+    // fullOf)
+    atFull(measure) {
+      if (panel.openId !== id || panelEl.classList.contains('full')) return measure();
+      panelEl.classList.add('full');
+      const end = measure();
+      panelEl.classList.remove('full');
+      return end;
+    },
     // Half: down to the card's "More" with room under it and nothing more (Max, 2026-11-23: "More" lay under Android's
     // own bar at the bottom of a short screen; then "empty space under More", on the phone and the computer). Measured
     // only while the card is compact and the sheet not at full (with all stops open "More" is elsewhere: the last
@@ -496,7 +505,8 @@ function trainPage(id) {
     // share, star and Follow in the card's top line beside the number, as before the sheet (Max, 2026-11-23); the sheet
     // has no bar over a train
     barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
-    noUp: true,   // (no ‹ over a train: its card's top line is the head; a map tap, a pull or the phone's back)
+    // (‹ first on the card's top line, as on a station's and a trip's page: Max, 2026-11-24 "Stations have back button,
+    // but trains dont"; "When viewing my trip and clicking a train showing it's card. THAT card should have a back button")
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -816,7 +826,10 @@ function openNav() {
   // Under the search bar (Max, 2026-11-24: "Menu should show below the search bar", then on the phone too: "make the
   // menu appear below the search pill"); above it only when there's no room below (a phone's sheet at rest, its bar at
   // the bottom).
-  const below = a.bottom + 10, fits = below + h <= innerHeight - 10;
+  // (a computer, the sheet at rest: under the whole box, its arrow included; Max, 2026-11-24 "Menu still not below the
+  // whole search pill")
+  const box = innerWidth >= 440 && stack.level === 0 ? document.getElementById('sheet').getBoundingClientRect().bottom : a.bottom;
+  const below = box + 10, fits = below + h <= innerHeight - 10;
   navEl.style.top = `${fits || innerWidth >= 440 ? Math.min(innerHeight - h - 10, below) : Math.max(10, a.top - h - 10)}px`;
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
@@ -1208,6 +1221,8 @@ const pageData = {
   myTrains: () => myTrains?.mineHtml() ?? null,   // the saved trips and pinned changes in Mine (src/my-trains.js)
   disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
   snapshot, filter, still: STAND_MS,
+  // a part just opened on Home shown whole, and let go again (src/stack.js reveal)
+  reveal: el => stack.reveal(el), unreveal: () => stack.unreveal(),
   // the lateness bar's colour: a filter with its pill, held on every page (src/filter.js; Max, 2026-11-24)
   legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); homeDef.redraw(); } },
   statsActions: {

@@ -132,7 +132,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   const stack = [];          // [{ key, def, el, scroll, lvl }]
   const top = () => stack[stack.length - 1];
-  let idx = 0, H = [HEAD_PX, 400, 800], searching = false, preSearch = 0, ready = false;
+  let idx = 0, H = [HEAD_PX, 400, 800], fullMax = 800, searching = false, preSearch = 0, ready = false;
   let drag = null, touching = false, lastScroll = 0, eatUntil = 0;
   const wide = () => !NARROW?.matches;
 
@@ -145,7 +145,33 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // [low, half] of a page
   function heightsOf(pg) {
     const h0 = lowOf(pg), h1 = halfOf(pg, h0);
-    return [keepsLow(pg) ? h0 : h1, h1];
+    return [keepsLow(pg) ? h0 : h1, h1, fullOf(pg, h1)];
+  }
+  // Full: the page's content and the usual room under it, never more than the screen's full (fullMax) nor less than its
+  // half (Max, 2026-11-24: "A full expanded card should never just show empty space. Cut it off earlier in that case").
+  // A page whose content differs at full (a train's card: its tables, its notes) measures it so (def.atFull(measure)).
+  // A phone's sheet stays fullMax tall and only slides (place): this is just where full stops.
+  // At full, its content grown or shrunk (a part opened, rows came in): full follows it (a glide), at most once a second
+  // (src/stack.js's tick) or at once when a part is revealed.
+  // (taller at once; shorter only when two ticks in a row agree: a part gliding shut or open is measured mid-glide)
+  let fullSeen = null;
+  function fitFull() {
+    if (idx !== 2 || drag || searching) return;
+    const f = fullOf(top(), H[1]);
+    if (Math.abs(f - H[2]) <= 2) { fullSeen = null; return; }
+    if (f < H[2] && fullSeen !== f) { fullSeen = f; return; }
+    fullSeen = null;
+    H[2] = f; place(H[2]); pad();
+  }
+  function fullOf(pg, half) {
+    const el = pg?.el;
+    // (a page whose content is not in yet: the screen's full, so the sheet only ever goes down to it once it is)
+    if (!el?.isConnected || searching || pg.def.fitted?.() === false) return fullMax;
+    const measure = () => { let end = 0; for (const c of el.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight); return end; };
+    const end = pg.def.atFull ? pg.def.atFull(measure) : measure();
+    if (!end) return fullMax;
+    const need = headPx() + end + (wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX) + (wide() ? 0 : safe().bottom);
+    return Math.round(Math.max(half, Math.min(fullMax, need)));
   }
   // the handle and the head: on a computer 10 px more (the sheet hangs from the top, room above the search field; index.html);
   // a page without a bar: the handle alone
@@ -156,17 +182,19 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
     // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
     // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
-    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, (H[2] ?? 800) - 40) : PAGE_LOW_PX + s; }
-    return pg?.key === 'home' ? HOME_LOW_PX + s : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0);
+    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, fullMax - 40) : PAGE_LOW_PX + s; }
+    // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
+    const band = wide() ? Math.max(0, grabH() - GRAB_PX) : 0;
+    return pg?.key === 'home' ? HOME_LOW_PX + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0) + band;
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
   // screen: it floats 10 px above the bottom, so it takes the height shown itself (sliding it down would show its
   // lower part in that gap).
-  const shownH = () => (wide() ? sheet.getBoundingClientRect().height : H[2] - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42);
+  const shownH = () => (wide() ? sheet.getBoundingClientRect().height : fullMax - new DOMMatrixReadOnly(getComputedStyle(sheet).transform).m42);
   function place(h, glide = true) {
     sheet.classList.toggle('dragging', !glide);
     if (wide()) { sheet.style.transform = ''; sheet.style.height = `${Math.round(h)}px`; }
-    else { sheet.style.height = `${H[2]}px`; sheet.style.transform = `translateY(${Math.round(H[2] - h)}px)`; }
+    else { sheet.style.height = `${fullMax}px`; sheet.style.transform = `translateY(${Math.round(fullMax - h)}px)`; }
     const lvl = h < H[0] + 28 ? 'low' : h > (H[1] + H[2]) / 2 ? 'full' : 'half';
     sheet.dataset.lvl = lvl;
     root.style.setProperty('--sheet-shown', `${Math.round(h)}px`);
@@ -174,7 +202,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     root.style.setProperty('--sheet-h', wide() ? '0px' : `${Math.round(h)}px`);
     root.classList.toggle('sheet-tall', !wide() && h > innerHeight - 260);
     root.classList.toggle('sheet-high', h > H[1] + 70);
-    sheet.style.setProperty('--sheet-off', wide() ? '0px' : `${Math.round(H[2] - h)}px`);
+    sheet.style.setProperty('--sheet-off', wide() ? '0px' : `${Math.round(fullMax - h)}px`);
     if (glide && Math.abs(h - shownTo) > 2) lastDir = Math.sign(h - shownTo);
     shownTo = h;
     if (glide) syncFade();
@@ -236,7 +264,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (!pg?.def.half) return snapHalf(pg, low);
     const want = pg.def.half();
     if (!(want > 0)) return usualHalf;
-    const h = Math.round(Math.max(low + (fittedLow(pg) ? 0 : 60), Math.min(headPx() + want + (wide() ? 0 : safe().bottom), H[2] - 40)));
+    const h = Math.round(Math.max(low + (fittedLow(pg) ? 0 : 60), Math.min(headPx() + want + (wide() ? 0 : safe().bottom), fullMax - 40)));
     // halfGrows: the page's half only ever taller than the usual one (a train's card: its "More" above the phone's
     // bar on a short screen; on a tall one the usual half, no glide once its stops are in: 2026-11-23)
     return pg.def.halfGrows ? Math.max(usualHalf, h) : h;
@@ -255,7 +283,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     }
     if (!boxes.length) return usualHalf;
     // (up to a fifth taller than the usual half when that shows a whole part, never closer than 40 px to full)
-    const hi = Math.min(limit * 1.2, H[2] - base - 40), lo = limit * 0.5, gap = wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX;
+    const hi = Math.min(limit * 1.2, fullMax - base - 40), lo = limit * 0.5, gap = wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX;
     const end = Math.max(...boxes.map(x => x.b));
     if (end + gap <= hi) return Math.round(Math.max(low + 60, base + end + gap));
     const clean = y => !boxes.some(x => x.h < 220 && x.t < y - 1 && x.b > y + 1);
@@ -277,8 +305,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const h = innerHeight, s = safe();
     const full = wide() ? h - 20 : h - TOP_ROOM_PX - s.top;
     usualHalf = Math.round(Math.min(h * 0.6, Math.max(h * 0.5, 360), full - 40));
-    H = [PAGE_LOW_PX, usualHalf, Math.round(full)];
-    [H[0], H[1]] = heightsOf(top());
+    fullMax = Math.round(full);
+    H = [PAGE_LOW_PX, usualHalf, fullMax];
+    [H[0], H[1], H[2]] = heightsOf(top());
     place(H[idx], false);
     sheet.getBoundingClientRect();
     sheet.classList.remove('dragging');
@@ -391,7 +420,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (drag.body && !drag.moved && (scroller().scrollTop > 0 || dy < 7)) return;
     dragMove(e.clientY);
   };
-  // A tap on the handle: low ↔ half (from full: low). Taken from the finger, not the click: a finger that wandered
+  // A tap on the handle: low ↔ half (from full: half, then low). Taken from the finger, not the click: a finger that wandered
   // more than the drag's 8 px got no click and its drag went back where it was, so nothing happened (Max's phone).
   const handleTap = e => e.type === 'pointerup' && drag.grab && Math.abs(e.clientY - drag.ys) < TAP_PX && performance.now() - drag.t0 < TAP_MS;
   const pointerEnd = (e) => {
@@ -403,6 +432,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       syncNext();
       const low = !searching && keepsLow(top());
       if (sheet.dataset.next === 'more') setIndex(low && idx === 0 && H[1] - H[0] >= 30 ? 1 : 2);
+      // (from full one step: to half when the page has one of its own, then to rest; Max, 2026-11-24: "When Main menu is
+      // full expanded and the 'close arrow' is clicked, it should compact, not close it. Clicking map already closes.")
+      else if (idx === 2 && !searching && H[1] - H[0] >= 30) setIndex(1);
       else if (low || searching) setIndex(0);
       else if (idx === 2) setIndex(1);
       else backTo(0);   // (a page without a low, all of it shown at half: closed to Home, as a pull or a map tap)
@@ -545,7 +577,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (old && old !== pg.el) {
       old.classList.remove('in-r', 'in-l');
       if (reduceMotion()) old.remove();
-      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 200); }
+      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300); }
     }
     pg.el.classList.remove('out-l', 'out-r');
     if (prev && !reduceMotion()) {
@@ -559,7 +591,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
     pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, ...opts });
     syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
-    [H[0], H[1]] = heightsOf(pg);   // (once its content is in)
+    [H[0], H[1], H[2]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
     pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
     syncBar();
@@ -594,18 +626,18 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const prev = top();
     const gone = stack.splice(i + 1);
     show(top(), prev, -1, level === undefined ? {} : { level });
-    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 220); }
+    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 300); }
   }
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
   function refit({ grow = false, settle = false } = {}) {
     if (searching) return;
     // (the half from the new low: from the old one, a card whose chooser shut kept its taller half, its room left empty
     // under it, and a map tap then only took that room away: Max's case (a), 2026-11-23)
-    let [h0, h1] = heightsOf(top());
-    if (grow && !(settle && lastDir < 0)) { h0 = Math.max(h0, H[0]); h1 = Math.max(h1, H[1]); }
-    if (h0 === H[0] && h1 === H[1]) { syncFade(); return; }
-    H[0] = h0; H[1] = h1;
-    if (idx < 2 && !drag) { place(H[idx]); pad(); }
+    let [h0, h1, h2] = heightsOf(top());
+    if (grow && !(settle && lastDir < 0)) { h0 = Math.max(h0, H[0]); h1 = Math.max(h1, H[1]); h2 = Math.max(h2, H[2]); }
+    if (h0 === H[0] && h1 === H[1] && h2 === H[2]) { syncFade(); return; }
+    H[0] = h0; H[1] = h1; H[2] = h2;
+    if (!drag) { place(H[idx]); pad(); }
   }
   function home(level) { if (stack.length > 1) backTo(0, level); else setIndex(level ?? idx); }
   // One step back: the search, a page, then the sheet down to rest. false: nothing left (Android: the app
@@ -622,7 +654,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (searching) { closeSearch(); setIndex(0); return 'down'; }
     const pg = top();
     pg.def.dismiss?.();
-    [H[0], H[1]] = heightsOf(pg);   // (what was dismissed took its room with it)
+    [H[0], H[1], H[2]] = heightsOf(pg);   // (what was dismissed took its room with it)
     revealed = null;
     // what of the page is shown: below full, at most its half (more is empty room a glide left under it: taking only
     // that away moves the sheet and shows nothing new, Max's cases (a) and (c) on the computer)
@@ -644,13 +676,16 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const r = el.getBoundingClientRect(), top0 = pg.el.getBoundingClientRect().top - pg.el.scrollTop;
     const start = r.top - top0, end = (bottom ?? r.bottom) - top0 + 12;
     const need = pagesEl.offsetTop + end + (wide() ? 0 : safe().bottom);   // the sheet's height that shows all of it
+    // (full: the page's new content, the part still gliding open counted to its end)
+    const [l0, h1, f] = heightsOf(pg);
+    H[2] = Math.max(f, Math.min(fullMax, Math.round(need)));
     if (idx < 2) {
-      const [l0, h1] = heightsOf(pg);
       H[0] = l0;
       if (need <= Math.max(h1, H[idx]) + 2) { H[1] = Math.max(h1, H[1]); if (idx === 0) setIndex(1); else { place(H[1]); pad(); } return; }
       revealed = { key: pg.key, from: idx, to: 2 };
       setIndex(2);
     }
+    if (idx === 2 && !drag) { place(H[2]); pad(); }
     // at full: scrolled until its end is in view, its start kept in view (the page's height at full: under the head, less
     // the fade at the bottom edge)
     const view = H[2] - pagesEl.offsetTop - 40 - (wide() ? 0 : safe().bottom);
@@ -708,12 +743,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pagesEl.append(results);
     onSearch(true);
     idx = 2; sheet.dataset.h = '2';
+    H[2] = fullMax;   // (the search: all of the screen)
     place(H[2]);
     results.scrollTop = 0;
   }
   function closeSearch() {
     if (!searching) return;
     searching = false;
+    H[2] = fullOf(top(), H[1]);
     delete sheet.dataset.search;
     results.hidden = true;
     if (input.value) input.value = '';
@@ -739,7 +776,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- each second: the page on top (not while a finger is on it or it scrolls) ----------
   const busy = () => touching || drag || performance.now() - lastScroll < 500;
-  setInterval(() => { const pg = top(); if (!pg || searching) return; if (!busy()) { pg.def.every?.(idx); syncFade(); } syncBar(); }, 1000);
+  setInterval(() => { const pg = top(); if (!pg || searching) return; if (!busy()) { pg.def.every?.(idx); fitFull(); syncFade(); } syncBar(); }, 1000);
 
   // ---------- the phone's own back in a browser (Max, 2026-11-23: "swipe back again closes the page, not swipe back")
   // The browser's back (Android's gesture, the back button) left the site. While there is something to step back from

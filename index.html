@@ -79,7 +79,7 @@
       #sheet .sh-grab { order: 99; }
       /* (the search field 12 px from the top edge, as from its sides; the arrow's row below it) */
       #sheet .sh-head { margin-top: 10px; }
-      #sheet .sh-fade { bottom: 20px; height: 32px; }
+      #sheet .sh-fade { bottom: 28px; height: 32px; }
       #sheet .sh-more { display: none; }
     }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
@@ -96,8 +96,9 @@
       .sh-grab { cursor: pointer; }
       .sh-grab i { display: none; }
       .sh-arrow { display: grid; place-items: center; width: 36px; height: 16px; border-radius: 8px; color: var(--accent); transition: transform .26s var(--ez), background .15s; }
-      /* (4 px clear of the sheet's bottom edge: Max, 2026-11-24 "just a hair too little padding") */
-      #sheet .sh-grab { align-items: start; }
+      /* (a band of its own, the arrow and its word in the middle: as much room under them as above; Max, 2026-11-24
+         "'Mer v' still too close to the edge. Or if this is a general UI rule, the padding above needs to be less") */
+      #sheet .sh-grab { height: 28px; align-items: center; }
       .sh-grab:hover .sh-arrow { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
@@ -149,6 +150,8 @@
     .sh-up:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     /* ‹ and a page's buttons on its title line (src/stack.js headOf) */
     .pg :is(.g-head, .panel-head) > .sh-up { margin-right: 10px; }
+    /* (on a train's top line the size of its other buttons: shown or hidden, the line keeps its height) */
+    #panel .panel-head > .sh-up { width: 40px; height: 40px; }
     .pg .panel-head:has(> .sh-up) { justify-content: flex-start; }
     .pg :is(.g-head, .panel-head) > .sh-btns { margin-left: auto; padding-left: 10px; }
     /* (a title beside ‹ and buttons wraps rather than being cut: "Lund C → Mal…") */
@@ -197,7 +200,8 @@
     .sh-grab .sh-word { display: none; }
     @media (min-width: 440px) {
       #sheet .sh-grab { display: flex; justify-content: center; gap: 2px; }
-      #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap; }
+      #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap;
+        position: relative; top: -1px; margin-right: -8px; }
     }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -209,14 +213,18 @@
     .pg > * { flex: none; }
     .sec { min-width: 0; }
     .sec[hidden], .sec:empty { display: none; }
-    .pg.in-r { animation: pg-in-r .3s var(--ez) both; }
-    .pg.in-l { animation: pg-in-l .3s var(--ez) both; }
-    .pg.out-l { animation: pg-out-l .18s ease-in both; pointer-events: none; }
-    .pg.out-r { animation: pg-out-r .18s ease-in both; pointer-events: none; }
-    @keyframes pg-in-r { from { opacity: 0; transform: translateX(28px); } }
-    @keyframes pg-in-l { from { opacity: 0; transform: translateX(-28px); } }
-    @keyframes pg-out-l { to { opacity: 0; transform: translateX(-28px); } }
-    @keyframes pg-out-r { to { opacity: 0; transform: translateX(28px); } }
+    /* A page change is one push: the new page slides in the whole width as the old one slides out, together, no fade
+       (Max, 2026-11-24: "the fade/wipe to next screen is very annoying. It's sliding and fading at the same time"; "Most
+       transitions between screens on the cards look bad, fade and swipe together"). */
+    .sh-pages { overflow: hidden; }
+    .pg.in-r { animation: pg-in-r .28s var(--ez) both; }
+    .pg.in-l { animation: pg-in-l .28s var(--ez) both; }
+    .pg.out-l { animation: pg-out-l .28s var(--ez) both; pointer-events: none; }
+    .pg.out-r { animation: pg-out-r .28s var(--ez) both; pointer-events: none; }
+    @keyframes pg-in-r { from { transform: translateX(100%); } }
+    @keyframes pg-in-l { from { transform: translateX(-100%); } }
+    @keyframes pg-out-l { to { transform: translateX(-100%); } }
+    @keyframes pg-out-r { to { transform: translateX(100%); } }
     @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
     /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
        scrolling, no own height limits (the sheet has them). */
@@ -458,9 +466,8 @@
     .nt-pill b { font-size: 17px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .nt-pill.none b { color: var(--muted); font-weight: 600; }
     .nt-stop.via .nt-pill small { color: var(--t-some); }
-    .nt-stop.to .nt-pill { background: color-mix(in srgb, var(--accent) 18%, var(--hover)); min-height: 64px; }
-    .nt-stop.to .nt-pill small { color: var(--accent); }
-    .nt-stop.to .nt-pill b { font-size: 20px; }
+    /* (FRÅN and TILL alike: Max, 2026-11-24 "Why do FRÅN and TILL fields look different?"; only the route's dots mark
+       its start and end) */
     .nt-pill.on { box-shadow: inset 0 0 0 2px var(--accent); cursor: text; }
     /* the pill being filled is the station search itself (Max's note 11: no second field) */
     .nt-q { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 0; border: 0; outline: none; background: none; color: var(--ink);
@@ -751,6 +758,7 @@
       background: var(--hover); border: 0; border-radius: 14px; padding: 11px 12px; cursor: pointer; }
     .dis-row:hover { box-shadow: inset 0 0 0 1.5px var(--line); }
     .dis-row b { display: block; font-weight: 700; }
+    .dis-row.dis-all > svg:last-child { margin-left: auto; align-self: center; color: var(--muted); flex: none; }
     .dis-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
     .dis-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
     .dis-dot.yellow { background: var(--dis-1); } .dis-dot.orange { background: var(--dis-2); } .dis-dot.red { background: var(--dis-3); }
@@ -875,17 +883,20 @@
     /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed
        train card should not hide content below"; "Collapsed still peeks at the content below"). The rest fades back in
        as soon as it is pulled up. */
+    /* (at full "i" joins the buttons: Follow its arrow alone there, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24;
+       a computer too since its card got ‹: the name was squeezed out) */
+    #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
+    #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
     .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     @media (max-width: 439px) {
       #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
       /* (collapsed: Follow only, as its arrow, so the number, the company and the destination fit; share and ☆ come back
          raised; a long company name gives way before the destination) */
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
+      /* (and its ‹ comes back raised too: collapsed it is the strip with the number and where it goes, 2026-11-24) */
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
-      /* (at full "i" joins them: Follow its arrow alone there too, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24) */
-      #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
-      #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-co { flex: 0 100 auto; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .ph-to { flex: 0 1 auto; }
       /* (.cd is display: contents: its own parts are faded, the trip line, tiles and list) */
@@ -1023,6 +1034,13 @@
     .tv-box.open { position: relative; }
     .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
     .tv-fold { position: absolute; top: -4px; right: -8px; width: 44px; height: 38px; padding: 0; justify-content: center; }   /* (a bigger target to fold them: 44 × 38) */
+    /* (the station's look since 2026-11-24, src/panel.js notesBox: its yellow line, open or folded, the messages under it
+       in the page's own scroll) */
+    #panel .tv-box.board-msgs { margin: 4px 0 2px; }
+    #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
+      background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
+    #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding-right: 0; margin: 0; max-height: none; overflow: visible; }
     /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
     .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
       background: var(--hover); border-radius: 14px; font-weight: 650; }

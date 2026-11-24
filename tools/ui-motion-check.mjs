@@ -2,7 +2,8 @@
 // https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and index.html "Motion"), on a phone-size page:
 //   1 a held button presses in and springs back; 9 the ☰ menu's rows follow it in;
 //   6 search rows arrive, and the same results again move nothing; the card's timeline rows arrive as it opens full,
-//     and its refresh moves nothing; Störningar's rows arrive as it opens (live data, skipped without problems);
+//     and its refresh moves nothing; Störningar opens as one push: no row arriving, no fade (since 2026-11-24; live data,
+//     skipped without problems);
 //   4 + 7 the card's lateness rolls to new minutes and its tile pulses, ending on the exact text; nothing rolls when a
 //     card opens; Anslutning's numbers roll, not when it opens;
 //   8 a tapped station (and a disruption sign, live) gets a copy that grows and is removed;
@@ -196,21 +197,29 @@ try {
   notes.push(`the longest pause between frames, slowed 4x: menu ${frames.menu} ms, search rows ${frames.search} ms${frames.late ? `, lateness ${frames.late} ms` : ''} (measured, not a limit)`);
   await page.close();
 
-  // ---- live: Störningar's rows arrive as it opens, a disruption sign answers ----
+  // ---- live: Störningar opens as one push (Max, 2026-11-24: "It's sliding and fading at the same time, and card
+  // jumps"; until then its rows arrived as it opened): no row arrives while it slides in, no page fades, the sheet moves
+  // one way; a disruption sign answers ----
   const live = await waitForMap(browser, { view: '5.5/62/16', train: 'toy', lang: 'sv', theme: 'light' });
   // the list's page (Home → All disruptions): its rows looked at from the moment it opens
   const listIn = await live.evaluate(async (L) => {
-    window.__disArrive = { n: 0, rows: 0 };
-    const look = () => { const el = document.querySelector(L); if (el) { const n = el.querySelectorAll('.arrive').length, rows = el.querySelectorAll('.dis-body > .dis-row, .dis-body > .dis-fold').length;
-      window.__disArrive = { n: Math.max(n, window.__disArrive.n), rows: Math.max(rows, window.__disArrive.rows) }; } if (!window.__disStop) requestAnimationFrame(look); };
+    window.__disArrive = { n: 0, rows: 0, fade: 1, tops: [] };
+    const look = () => { const el = document.querySelector(L), a = window.__disArrive;
+      if (el) { a.n = Math.max(a.n, el.querySelectorAll('.arrive').length); a.rows = Math.max(a.rows, el.querySelectorAll('.dis-body > .dis-row, .dis-body > .dis-fold').length); }
+      for (const pg of document.querySelectorAll('#sheet .sh-pages > .pg')) a.fade = Math.min(a.fade, Number(getComputedStyle(pg).opacity));
+      a.tops.push(Math.round(document.getElementById('sheet').getBoundingClientRect().top));
+      if (!window.__disStop) requestAnimationFrame(look); };
     requestAnimationFrame(look); return true; }, pageSel('dislist'));
   const hasDis = listIn && await openDisruptions(live);
   if (!hasDis) notes.push('Störningar not checked (no disruption in force, or no live link)');
   else {
     await sleep(600);
-    const { n, rows } = await live.evaluate(() => { window.__disStop = true; return window.__disArrive; });
+    const { n, rows, fade, tops } = await live.evaluate(() => { window.__disStop = true; return window.__disArrive; });
+    // (the sheet's top edge: the number of times it turned round while the page came in)
+    let turns = 0, dir = 0;
+    for (let k = 1; k < tops.length; k++) { const d = Math.sign(tops[k] - tops[k - 1]); if (d && dir && d !== dir) turns++; if (d) dir = d; }
     if (!rows) notes.push('Störningar has no rows now: not checked');
-    else check(n >= 1, `6: Störningar's rows arrive (${n} arriving of ${rows})`);
+    else check(n === 0 && fade >= 0.99 && turns === 0, `Störningar opens as one push: ${n} rows arriving of ${rows} (want 0), the pages' lowest opacity ${fade.toFixed(2)} (want 1), the sheet turned ${turns} times (want 0)`);
     await toRest(live);
     // Each sign in turn, close in, until one has no train or station beside it (a tap there opens the train, its label or the
     // station first, as always: seen 2026-11-20, a live train standing at Norrköping's sign).

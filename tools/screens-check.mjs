@@ -254,6 +254,16 @@ try {
     });
     check(low.h < 200 && low.gap >= 8 && low.gap <= 30 && /→/.test(low.dest) && !low.shown.length && low.whole && low.btns === 'sh-follow',
       `a train at low: ${low.h} px tall, ${low.gap} px under its head line, "${low.dest}" in it${low.whole ? '' : ' CUT'}, buttons ${low.btns || 'none'}, nothing else showing (${low.shown.join(', ') || 'none'})`);
+    // full: never empty room under the card (Max, 2026-11-24: "A full expanded card should never just show empty space"):
+    // the sheet ends within 48 px under its last part, or the card is longer than the screen's full (it scrolls)
+    await setLevel(page, 2);
+    await sleep(1500);
+    const full = await page.evaluate(() => {
+      const s = document.getElementById('sheet').getBoundingClientRect(), pg = document.querySelector('#panel').closest('.pg');
+      let end = 0; for (const c of pg.children) if (c.offsetHeight) end = Math.max(end, c.getBoundingClientRect().bottom);
+      return { room: Math.round(Math.min(innerHeight, s.bottom) - end), scrolls: pg.scrollHeight > pg.clientHeight + 2 };
+    });
+    check(full.scrolls || (full.room >= 0 && full.room <= 48), `a train at full: ${full.scrolls ? 'longer than the screen, it scrolls' : `${full.room} px of room under its card (want 0 to 48)`}`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at

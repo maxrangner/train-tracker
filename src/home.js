@@ -128,9 +128,11 @@ export function homePage(d) {
     if (!list) return '';
     const problems = list.filter(x => !isWork(x));
     return `<h4 class="lab">${t('disruptions')}</h4><div class="dis-list">${problems.slice(0, 3).map(x => disRowHtml(x, d.stationName, Date.now())).join('')}` +
-      (!problems.length ? `<p class="empty">${t(list.length ? 'noProblemsNow' : 'noDisruptions')}</p>` : '') + '</div>' +
-      (list.length ? `<div class="rows"><button type="button" class="row" data-go="dislist"><span class="r-ic warn">${icon('warning', 18)}</span>` +
-        `<span class="r-main"><b>${t('allDisruptions')}</b><small>${esc(t('disCount', problems.length, list.length - problems.length))}</small></span>${icon('chevron', 18)}</button></div>` : '');
+      (!problems.length ? `<p class="empty">${t(list.length ? 'noProblemsNow' : 'noDisruptions')}</p>` : '') +
+      // ("All disruptions" a row of the same list: its icon box the same size, in the same column, grey (a way on, not a
+      // disruption), its › at the end; Max, 2026-11-24: "The icons dont align")
+      (list.length ? `<button type="button" class="dis-row dis-all" data-go="dislist"><span class="dis-ic work" aria-hidden="true">${icon('warning', 16)}</span>` +
+        `<span><b>${t('allDisruptions')}</b><span class="dis-sub">${esc(t('disCount', problems.length, list.length - problems.length))}</span></span>${icon('chevron', 18)}</button>` : '') + '</div>';
   }
   function mostLateHtml(frame) {
     const late = frame.map(x => ({ x, m: d.lateOf(x.id) })).filter(o => o.m > 0).sort((a, b) => b.m - a.m).slice(0, 5);
@@ -177,7 +179,13 @@ export function homePage(d) {
     level(i) { if (i > 0 && !up) d.onShow?.(); up = i; if (i > 0) draw(); },
     every(i) { if (i > 0) draw(); },
     redraw: () => draw(true),
-    toggleCo() { coOpen = !coOpen; draw(); },
+    // (opened: the sheet grows until the whole card shows; folded: back to where it was; Max, 2026-11-24: "Expanding
+    // filters list in main card should expand that card to view all filters")
+    toggleCo() {
+      coOpen = !coOpen;
+      draw();
+      if (coOpen) d.reveal?.(el?.querySelector('.co-filter')?.closest('.sec')); else d.unreveal?.();
+    },
   };
 }
 
