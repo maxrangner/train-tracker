@@ -35,6 +35,7 @@ const EN = {
   searchAria: 'Search for a train, a station, a company or a disruption',
   // The one sheet (Max's pick A, 2026-11-22): its pages, Home, the search, ☰, the line above the bar.
   home: 'Home', moreBelow: 'More below', moreWord: 'More', cancel: 'Cancel',
+  filterHead: 'Filter', coMore: n => `${n} more`, coFewer: 'Fewer',
   theDay: 'The day', daySoon: 'The day is coming soon.', aboutApp: 'About Spårat',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
   dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
@@ -46,7 +47,7 @@ const EN = {
   scaleSlider: 'Zoom slider', scaleSliderSub: 'a bar on the map: Sweden – Town – Trackside',
   mine: 'Saved', savedTrips: 'Trips', savedTrains: 'Trains', savedStations: 'Stations', nearYou: 'Near you', mostLate: 'Most late', swedenNow: 'Sweden right now',
   allDisruptions: 'All disruptions', disCount: (p, w) => `${p} ${p === 1 ? 'problem' : 'problems'}${w ? ` · ${w} rail work` : ''}`,
-  lgHint: '<b>Right now</b> · tap a colour, only those stay on the map', lgLit: (n, w) => `Only ${n} trains on the map · ${w} · tap again for all`,
+  lgHint: '<b>Right now</b> · tap a colour or a company, only those stay on the map', lgLit: (n, w) => `Only ${n} trains on the map · ${w} · tap again for all`,
   notOnMapNow: 'not on the map now', kindOfTrain: 'Kind of train',
   lateNow6: 'Late now', lateNowSub: '6 min late or more', standingStill: 'Standing still', standingSub: 'Not moving right now',
   showOnly: 'Show only', shownOnly: 'Shown only', onMapNow: 'on the map now',
@@ -342,6 +343,7 @@ const SV = {
   searchPh: 'Sök tåg, stationer, bolag',
   // Det enda bladet (Max val A, 2026-11-22).
   home: 'Hem', moreBelow: 'Mer längre ner', moreWord: 'Mer', cancel: 'Avbryt',
+  filterHead: 'Filter', coMore: n => `${n} till`, coFewer: 'Färre',
   theDay: 'Dagen', daySoon: 'Dagen kommer snart.', aboutApp: 'Om Spårat',
   dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
   dayNow: 'nu', dayDrag: 'Dagen: dra bakåt i tiden', dayClose: 'Stäng Dagen', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
@@ -352,7 +354,7 @@ const SV = {
   scaleSlider: 'Zoomreglage', scaleSliderSub: 'ett reglage på kartan: Sverige – Stad – Vid spåret',
   mine: 'Sparade', savedTrips: 'Resor', savedTrains: 'Tåg', savedStations: 'Stationer', nearYou: 'Nära dig', mostLate: 'Mest sena', swedenNow: 'Sverige just nu',
   allDisruptions: 'Alla störningar', disCount: (p, w) => `${p} ${p === 1 ? 'störning' : 'störningar'}${w ? ` · ${w} banarbeten` : ''}`,
-  lgHint: '<b>Just nu</b> · tryck på en färg, bara de syns på kartan', lgLit: (n, w) => `Bara ${n} tåg på kartan · ${w} · tryck igen för alla`,
+  lgHint: '<b>Just nu</b> · tryck på en färg eller ett bolag, bara de syns på kartan', lgLit: (n, w) => `Bara ${n} tåg på kartan · ${w} · tryck igen för alla`,
   notOnMapNow: 'inte på kartan nu', kindOfTrain: 'Tågtyp',
   lateNow6: 'Sena nu', lateNowSub: '6 min sena eller mer', standingStill: 'Står still', standingSub: 'Rör sig inte just nu',
   showOnly: 'Visa bara', shownOnly: 'Visas bara', onMapNow: 'på kartan nu',

@@ -1707,10 +1707,11 @@ if (typeof ResizeObserver === 'function') {
 }
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], .dis-row[data-id]');
+  const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], [data-cofilter], .dis-row[data-id]');
   if (!b) return;
-  // a company under the search's "Show only": its filter on (the line above the bar, with its ×), and its page (R3)
-  if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
+  // a company in Home's filter card: on or off right there, Home stays (Max, 2026-11-24; src/home.js companiesHtml)
+  if (b.dataset.cofilter !== undefined) { filter.toggle('brand', b.dataset.cofilter); return; }
+  if (b.dataset.act === 'comore') { homeDef.toggleCo(); return; }
   // any row opening a company's or a kind's page (the search's results, Recent, Saved) filters too, as Home's do (Max,
   // 2026-11-23: "Filtering still doesn't show as a pill, and clicking the map eventually clears it. Should stick."):
   // a row that only lit its trains lost them at the next map tap

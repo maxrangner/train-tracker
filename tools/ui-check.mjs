@@ -348,13 +348,13 @@ try {
     scrolls: document.getElementById('search-results').scrollHeight > document.getElementById('search-results').clientHeight }));
   expect(search.rows >= Math.min(search.onMap, 200), `search "2": ${search.rows} rows for ${search.onMap} trains on the map`);
   expect(search.onMap < 12 || search.scrolls, 'the search list does not scroll');
-  // The empty search: Show only chips, only the companies (Max, 2026-11-23, note 3: not late now, standing still or
-  // the kinds); each sets its company's filter (tools/tap-check.mjs R3).
+  // The empty search: no "Show only" chips since 2026-11-24 (Max: they looked like they filtered the search; they are in
+  // Home's filter card now, tools/filter-pills-check.mjs).
   await typeSearch(page, '');
   await page.evaluate(() => { const i = document.getElementById('search'); i.value = ''; i.dispatchEvent(new Event('input')); });
   await sleep(300);
-  const chips = await page.evaluate(() => [...document.querySelectorAll('#search-results .scopes .chip')].map(c => c.dataset.go));
-  expect(chips.length >= 2 && chips.every(k => k.startsWith('co:')), `the empty search shows ${chips.length} "Show only" chips, only companies (${chips.filter(k => !k.startsWith('co:')).join(', ') || 'none other'})`);
+  const chips = await page.evaluate(() => document.querySelectorAll('#search-results .scopes .chip').length);
+  expect(chips === 0, `the empty search shows no "Show only" chips (${chips})`);
 
   // ---- A setting changes at once, without reloading the page ----
   await openFromMenu(page, 'settings');

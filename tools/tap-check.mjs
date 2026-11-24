@@ -7,7 +7,7 @@
 //       (c) "Show only" on, a train, a tap; (d) a "2 trains" list, a train from it, taps: never the list again.
 //       Also: ☰'s menu open over Home raised, one tap: the menu shut and Home down; the search open, one tap: shut.
 //   R2  a tap on a train (☰'s menu open; the chooser open) or a station (a train's page open) opens it at once.
-//   R3  "Show only" stays through map taps until its × is tapped; a company under the search's "Show only" sets it.
+//   R3  "Show only" stays through map taps until its × is tapped; a company in Home's filter card sets it.
 //   R4  Esc steps back one page (a train from a "2 trains" list: the list); the back chip goes Home.
 // And Max's notes of 2026-11-23: 4 a computer's handle is a small ⌃/⌄ arrow (a tap raises the sheet), a phone keeps the
 // dash; 5 Home's hint under the lateness colours only with Home at full; 6 rows rounded (hover, focus, press follow
@@ -99,16 +99,17 @@ try {
       await tapsHome();
     }
 
-    // ---- R3 + R1 (c): "Show only" from the search's chips, a train of that company, taps ----
-    await toRest(p);
-    await openSearch(p);
-    const chips = await p.evaluate(() => [...document.querySelectorAll('#search-results .scopes .chip')].map(c => c.dataset.go));
-    ok(chips.length > 0 && chips.every(k => k.startsWith('co:')), `${dev} R3: the search's "Show only" lists only companies (${chips.length}: ${chips.filter(k => !k.startsWith('co:')).join(', ') || 'no other'})`);
-    const co = chips[0]?.slice(3);
-    await p.evaluate(() => document.querySelector('#search-results .scopes .chip')?.click());
+    // ---- R3 + R1 (c): "Show only" from Home's filter card (the search's chips until 2026-11-24), a train of that
+    // company, taps ----
+    await p.evaluate(() => window.__stack.home(1));
+    await sleep(1500);
+    const chips = await p.evaluate(() => [...document.querySelectorAll('#sheet .co-filter .co-f')].map(c => c.dataset.cofilter));
+    ok(chips.length > 0, `${dev} R3: Home's filter card lists the companies (${chips.length})`);
+    const co = chips[0];
+    await p.evaluate(() => document.querySelector('#sheet .co-filter .co-f')?.click());
     await sleep(900);
     const c0 = await state();
-    ok(c0.filter && c0.top === `co:${co}`, `${dev} R3: the chip "${co}" sets its filter (line above the bar ${c0.filter ? 'shown' : 'not shown'}) and opens its page (${c0.top})`);
+    ok(c0.filter && c0.top === 'home', `${dev} R3: the company "${co}" sets its filter (line above the bar ${c0.filter ? 'shown' : 'not shown'}), Home stays (${c0.top})`);
     await toRest(p);
     const tc = await openChooserTrain(co);
     if (!tc) notes.push(`${dev} R1c: no ${co} train with a chooser (not checked)`);
