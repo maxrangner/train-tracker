@@ -388,6 +388,12 @@
     .trip-fails { margin: -4px 2px 0; color: var(--muted); font-size: 14px; font-weight: 600; }
     .trip-pair { border: 1px solid var(--line); border-radius: 14px; padding: 0 10px; margin-bottom: 8px; }
     .trip-pair .bd-row { border-bottom: 0; }
+    /* "Today's trains" and its list: the list's card right under its heading, and the pairs evenly inside it (Max,
+       2026-11-24: "Fix the big gap"; 34 px from the heading to the card, 16 to the first pair, 20 between pairs) */
+    .pg .lab:has(+ .bd.trip-list) { margin-bottom: 0; }
+    .pg .lab + .bd.trip-list { margin-top: 0; }
+    .pg .bd.trip-list:has(> .trip-pair) { padding: 8px; gap: 8px; }
+    .pg .bd.trip-list > .trip-pair { margin: 0; }
     .trip-chg, .chg-min { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 10px; font-size: 13.5px; font-weight: 700; }
     .chg-min { display: inline-flex; padding: 3px 8px; font-size: 12.5px; white-space: nowrap; }
     :is(.trip-chg, .chg-min).ok { background: var(--t-ontime-bg); color: var(--t-ontime); }
