@@ -265,7 +265,14 @@ try {
     const more = document.querySelector('#sheet .sh-more').getBoundingClientRect();
     // (its word: "More", not a heading's name: Home has several parts below; Max, 2026-11-24)
     const word = [...sheet.querySelectorAll('.sh-word')].filter(e => e.offsetParent && getComputedStyle(e).display !== 'none').map(e => e.textContent).join('|');
-    return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40, word };
+    // (the pill in a band of its own: 8 px or more under the card above, no card's edge behind it where the fade is not
+    // yet solid; Max, 2026-11-24 "Dålig padding på 'mer' pillret")
+    const fade = document.querySelector('#sheet .sh-fade').getBoundingClientRect(), solid = innerWidth >= 440 ? fade.top + fade.height * 0.4 : fade.top + 12;
+    const secs = [...pg.children].map(c => c.getBoundingClientRect()).filter(r => r.height);
+    const above = secs.filter(r => r.bottom <= more.top + 1).at(-1);
+    const pillGap = above ? Math.round(more.top - above.bottom) : null;
+    const behind = secs.some(r => r.top < solid - 1 && r.top > (above?.bottom ?? 0) + 1);
+    return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40, word, pillGap, behind };
   });
   const fieldGap = p => p.evaluate(() => { const f = document.querySelector('#sheet .sh-field').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
     return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), above: Math.round(f.top - s.top), side: Math.round(f.left - s.left) }; });
@@ -277,6 +284,7 @@ try {
   await sleep(400);
   const hc = await homeCuts(page);
   check(!hc.cut.length && hc.fade && hc.chevron && /^(More|Mer)$/.test(hc.word), `Home at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}, its word "${hc.word}" (want More)`);
+  check(hc.pillGap >= 8 && !hc.behind, `Home at half: the "More" pill ${hc.pillGap} px under the card above (want 8 or more), a card's edge behind it: ${hc.behind}`);
   await toRest(page);
   // ---- a computer (Max, 2026-11-23): a train's lowest height is the whole card down to "More", nothing under it ----
   if (t2) {
