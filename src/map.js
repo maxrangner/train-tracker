@@ -45,7 +45,18 @@ const ownStyle = s => {
 // The route, its travelled part and the "N trains" labels take the accent colour (Settings → Accent colour, Max
 // 2026-11-15); lateness and disruption colours come from src/colours.js.
 const accentOf = dark => (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT])[dark ? 'dark' : 'light'];
-const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: accentOf(dark).c, routeDone: accentOf(dark).done,
+// The travelled part one step further from the accent's own 'done' (Max, 2026-11-24: 'a little bit darker still. Or less
+// saturated... just a bit more'): 12 % less light and 25 % less colour, in every accent and both looks.
+function deeper(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  let h = 0, sat = 0;
+  if (d) { sat = d / (1 - Math.abs(2 * l - 1)); h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+  const L = l * 0.88, S = sat * 0.75, c = (1 - Math.abs(2 * L - 1)) * S, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = L - c / 2;
+  const [R, G, B] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + [R, G, B].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+const colours = dark => ({ ...colourBase(dark), group: accentOf(dark).c, route: accentOf(dark).c, routeDone: deeper(accentOf(dark).done),
   dis: DISRUPTION[dark ? 'dark' : 'light'] });
 // Soft (2026-11-15): pale, thin rails (pushed back, so the trains stand out), no white rail edge; rings and names in the
 // page's colours (src/colours.js).
@@ -1390,10 +1401,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const sheetSide = () => !narrow() && sheetH > size.h * 0.34;
   // Where a train is held: the middle of the free map, above the sheet (Max, 2026-11-15: "the default set position
   // for following does not have the train centered in view"), beside it on a wide screen when it is raised.
-  const defaultFocus = () => (sheetSide() ? { x: cardInMiddle() ? (cardRight() + size.w) / 2 : size.w / 2, y: size.h / 2 }
+  // (a computer's sheet hangs from the top left since 2026-11-23: the free map is beside and under it, its middle the
+  // same whatever the sheet's height, so a card that fits itself or opens its chooser moves nothing; Max, 2026-11-24:
+  // "clicking a train jitters the map")
+  const defaultFocus = () => (!narrow() ? { x: cardInMiddle() ? (cardRight() + size.w) / 2 : size.w / 2, y: size.h / 2 }
     : { x: size.w / 2, y: Math.round((TOP + sheetTop()) / 2) });
-  // Is a screen point behind the sheet?
-  const behindCard = (at, margin = 0) => (narrow() || at.x < cardRight() + margin) && at.y > sheetTop() - margin;
+  // Is a screen point behind the sheet? (a computer: the box at the top left)
+  const behindCard = (at, margin = 0) => (narrow() ? at.y > sheetTop() - margin : at.x < cardRight() + margin && at.y < GAP + sheetH + margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -1628,7 +1642,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     const h = map.getContainer().clientHeight;
     flying = true;
     map.fitBounds(bounds,
-      { padding: sheetSide() ? { top: TOP + 20, bottom: 30, left: cardRight() + 30, right: 80 }
+      { padding: !narrow() ? { top: TOP + 20, bottom: 30, left: cardRight() + 30, right: 80 }   // (a computer: the card at the top left)
         : { top: TOP + 20, bottom: Math.min(h - TOP - 80, sheetH + 30), left: 30, right: narrow() ? 60 : 80 },
         duration: 1000, maxZoom: 13 });
   }
@@ -1741,10 +1755,12 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     unfollow() { following = null; zoomAroundCenter(false); followRotation(false); map.setTransformCameraUpdate(null); },
     // The sheet came to rest at this height (src/stack.js; at most its half height): the free map is above it. A
     // followed train not dragged elsewhere glides to the new free middle (A's sheet, 2026-11-22).
+    // Only when the sheet would now cover where the train is held (Max, 2026-11-24: the card's "till …" chooser "jumps
+    // the map around. Jittery. Should not change map at all").
     setSheet(h) {
       if (Math.abs(h - sheetH) < 1) return;
       sheetH = h;
-      if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
+      if (following && !following.moved && behindCard(following.focus, 40)) { following.focus = defaultFocus(); following.locked = false; }
     },
     // The camera rides the rails (Max's pick A, 2026-11-22: between a train and a station on its route, instead of a
     // jump): along these places ({ lon, lat }, in order), ending on the last at zoom z, held where defaultFocus is

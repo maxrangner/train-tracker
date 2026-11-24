@@ -2,7 +2,7 @@
 // build, the view link, the open train, the phone), the Ko-fi button's link, the "come alive soon" note gone; the map
 // credit there at start, gone after 5 s or a drag, clear of the map's buttons. node tools/about-check.mjs (with
 // npm run dev; PAGE= for another port). Not the phone: whether its mail app opens.
-// The one sheet (2026-11-23): the train opened through tools/lib/screen.mjs, About from ☰ → Help & About; the map's
+// The one sheet (2026-11-23): the train opened through tools/lib/screen.mjs, About from ☰ → About Spårat; the map's
 // buttons the credit must keep clear of are My location's box and the scale slider (+ / − and 3D went).
 import { mkdirSync } from 'node:fs';
 import { launch, address, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
@@ -49,8 +49,8 @@ try {
     if (!body.includes(want)) fails.push(`bug mail body lacks "${want}"`);
   notes.push(`bug mail: to ${to}, "${subject}"; About says "${version}"`);
   notes.push('body:\n      ' + body.split('\r\n').join('\n      '));
-  const helpKey = await openFromMenu(page, 'help');   // About is in the menu (☰ → Help & About; a page since 2026-11-22)
-  if (helpKey !== 'page:help') fails.push(`☰ → Help & About opened ${helpKey}`);
+  const helpKey = await openFromMenu(page, 'help');   // About is in the menu (☰ → About Spårat; a page since 2026-11-22)
+  if (helpKey !== 'page:help') fails.push(`☰ → About Spårat opened ${helpKey}`);
   await page.evaluate(() => document.getElementById('kofi-button').click());
   const opened = await page.evaluate(() => window.__opened);
   if (opened[0] !== 'https://ko-fi.com/X1C729ZIK7') fails.push(`Ko-fi opened ${JSON.stringify(opened)}`);

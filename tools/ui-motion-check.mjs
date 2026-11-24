@@ -8,7 +8,7 @@
 //   8 a tapped station (and a disruption sign, live) gets a copy that grows and is removed;
 //   with "reduce motion": none of it. Also the longest pause between frames during the menu, a lateness change and the
 //   search rows, with the processor slowed 4x (measured, not a limit).
-// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, Help & About) and no count; the search's
+// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, About Spårat) and no count; the search's
 // rows are .row / .chip with data-go; a train, Connection and the disruptions are pages in the sheet (tools/lib/screen.mjs).
 // node tools/ui-motion-check.mjs (with npm run dev; PAGE= for another port).
 import { launch, sleep, CARD_HOUR } from './lib/browser.mjs';

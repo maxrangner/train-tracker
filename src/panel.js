@@ -98,6 +98,18 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let picking = false;    // the list of stops to count down to is open
   let opening = false, closing = false;   // it slides open (only when it opens, not at each redraw) and closed
   let infoOn = false;     // the train's own numbers instead of its stops ("i")
+  // The notes' fold answers a press and lift on it, not only a click (Max's PC, 2026-11-24: "Sometimes I have to click
+  // several times for it to expand"): a click needs the press and the lift on the same element, so one that moved or
+  // was drawn again in between (the card gliding after "More") got nothing. The click a lift may still bring is let go.
+  let foldPress = null, foldLetGo = 0, foldNow = null;
+  el.addEventListener('pointerdown', (e) => { foldPress = e.button === 0 && e.target.closest('.tv-toggle') ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+  el.addEventListener('pointerup', (e) => {
+    const p = foldPress;
+    foldPress = null;
+    if (!p || !foldNow || !e.target.closest('.tv-box') || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12 || performance.now() - p.t > 900) return;
+    foldLetGo = performance.now() + 600;
+    foldNow();
+  });
 
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
@@ -577,7 +589,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    if (fold) fold.onclick = () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); };
+    foldNow = fold ? () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); } : null;
+    if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();

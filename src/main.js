@@ -371,9 +371,8 @@ const holder = document.getElementById('page-holder');   // where Settings, Abou
 const trainMeta = new Map();   // trains opened that aren't on the map (the timetable search, a board): id -> { operational, date, number }
 let lightTest = null;          // only these trains on the map (a group's page, the lateness bar's colour): x -> true
 const light = (fn) => { lightTest = fn; lastDraw = 0; };
-let legend = null;             // the lateness bar's colour lit (Home), or null
 const lateOf = id => { const m = lateness.get(id)?.minutes; return m === undefined ? null : m; };
-const legendTest = k => x => (x.stale ? 'unknown' : lateClass(lateOf(x.id))) === k;
+const legendKey = x => (x.stale ? 'unknown' : lateClass(lateOf(x.id)));   // a train's lateness as the filter knows it
 
 // The camera rides the rails (A's ride): the places along a line ([[lon, lat]]) from one place to another.
 const mx = lon => (lon + 180) / 360, my = lat => (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2;
@@ -814,7 +813,9 @@ function openNav() {
   navButton.setAttribute('aria-expanded', 'true');
   const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
   navEl.style.left = `${Math.max(10, Math.min(innerWidth - w - 10, a.right - w))}px`;
-  navEl.style.top = `${Math.max(10, a.top - h - 10)}px`;
+  // (a phone: above ☰, the sheet at the bottom; a computer: under the search bar, the sheet hanging from the top: Max,
+  // 2026-11-24 "Menu should show below the search bar")
+  navEl.style.top = `${innerWidth >= 440 ? Math.min(innerHeight - h - 10, a.bottom + 10) : Math.max(10, a.top - h - 10)}px`;
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
 function closeNav() {
@@ -835,7 +836,9 @@ let sheetPad = 0;
 function padMap() {
   const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0, root = document.documentElement;
   root.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
-  map.setSheet(sheetPad + h);
+  // (not while the card's "till …" chooser is open: it shuts back to the same height, and the map stays still; Max,
+  // 2026-11-24: it "jumps the map around... Should not change map at all")
+  if (!panelEl.classList.contains('picking')) map.setSheet(sheetPad + h);
   // The scale slider (74 px over the sheet and the ribbon, 190 tall) goes when it would reach the live mark at the top.
   root.classList.toggle('scale-squeezed', innerHeight - (NARROW.matches ? sheetPad + h : 0) - 74 - 190 < 52);
 }
@@ -1035,7 +1038,7 @@ function frame(ts) {
     frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id), night: nightAt(x, sun) }));
     // only some trains: a group's page or the lateness bar's colour (lightTest) while it is open, else the filter
     frameTrains = lightTest ? frameAll.filter(x => x.id === openId || lightTest(x))
-      : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
+      : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand, legendKey(x))) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
     const x = trains.placedOne(openId, t);
@@ -1183,7 +1186,8 @@ const pageData = {
   myTrains: () => myTrains?.mineHtml() ?? null,   // the saved trips and pinned changes in Mine (src/my-trains.js)
   disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
   snapshot, filter, still: STAND_MS,
-  legend: { get: () => legend, set: (k) => { legend = legend === k ? null : k; light(legend ? legendTest(legend) : null); homeDef.redraw(); } },
+  // the lateness bar's colour: a filter with its pill, held on every page (src/filter.js; Max, 2026-11-24)
+  legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); homeDef.redraw(); } },
   statsActions: {
     openTrain: id => openTrain(id, { go: true }),
     openStation: sig => openStation(sig, { go: true }),
@@ -1218,9 +1222,12 @@ function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
   if (!filter.active) { line.clear('filter'); return; }
   const list = filter.list(), first = list[0];
-  line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')))}</span>`,
-    onTap: () => stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`),
-    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); }, closeLabel: t('filterClear') });
+  const word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : type === 'late' ? t({ ontime: 'onTime', some: 'stKeySome', late: 'stKeyLate', unknown: 'stNoNews' }[v])
+    : v || t('stNoCompany'));
+  line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(word).join(', ')))}</span>`,
+    // (a tap: the first one's page; a lateness alone: Home with its bar)
+    onTap: () => (first.type === 'late' ? stack.home(1) : stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`)),
+    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); homeDef.redraw(); }, closeLabel: t('filterClear') });
 }
 filter.onChange(showFilter);
 
@@ -1635,7 +1642,7 @@ function define(key) {
     case 'co': case 'kind': case 'late': case 'still': return groupPage(key, pageData);
     case 'page':
       if (v === 'settings') return heldPage(settingsPage, { name: () => t('settings'), kind: 'settings', onShow: () => { foldAccents(false); showSettings(); } });
-      if (v === 'help') return heldPage(helpEl, { name: () => t('helpAbout'), kind: 'help' });
+      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help' });   // (About Spårat, as before the sheet: Max, 2026-11-24)
       if (v === 'conn') return heldPage(connPage, { name: () => t('connTitle'), kind: 'conn', onShow: () => showConn() });
       return null;
     default: return null;
@@ -1647,7 +1654,7 @@ stack = createStack({
   onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
-    if (pg.key === 'home') light(legend ? legendTest(legend) : null);
+    if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
     // a train's line stays only under its own page and a station's (where the camera may still ride it); a trip's
     // page keeps its own stations' names (showTrip below) but no train's line
