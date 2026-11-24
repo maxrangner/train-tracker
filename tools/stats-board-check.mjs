@@ -103,14 +103,19 @@ try {
   const levelBefore = await page.evaluate(() => window.__stack.level);
   const look = () => page.evaluate(() => { const b = document.getElementById('board'), tab = b.querySelector('.board-found .panel-table'), pg = b.closest('.pg');
     const list = [...b.querySelectorAll('.board-found .bd-row')], top = tab && list.find(r => r.offsetTop >= tab.scrollTop - 2 && r.getBoundingClientRect().top >= pg.getBoundingClientRect().top - 2);
-    return { full: b.classList.contains('full'), level: window.__stack.level, n: list.length, gone: list.filter(r => r.classList.contains('gone')).length, topGone: top ? top.classList.contains('gone') : null,
+    // (the next train, the first not gone, in view; late in the day it can't come to the top: the list ends below it,
+    // 2026-11-24 at 22:00 only 8 of Uppsala C's 192 left, the check failed on the live data then)
+    const next = list.find(r => !r.classList.contains('gone')), nr = next?.getBoundingClientRect(), pr = pg.getBoundingClientRect(), shown = Math.min(innerHeight, document.getElementById('sheet').getBoundingClientRect().bottom);
+    const nextInView = Boolean(nr) && nr.top >= pr.top - 2 && nr.bottom <= shown + 2;
+    const atEnd = pg.scrollTop + pg.clientHeight >= pg.scrollHeight - 2;
+    return { full: b.classList.contains('full'), level: window.__stack.level, n: list.length, gone: list.filter(r => r.classList.contains('gone')).length, topGone: top ? top.classList.contains('gone') : null, nextInView, atEnd,
       numbers: list.map(r => r.querySelector('.bd-name small').textContent.split(' ')[0]), names: list.map(r => r.querySelector('.bd-name b').textContent), empty: Boolean(b.querySelector('.board-found .state')) }; });
   await page.evaluate(() => document.querySelector('#board .board-find').click());
   // (the board's rows stay, dimmed, until the day is in: wait for the day)
   for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(200)) if (await page.evaluate(() => Boolean(document.querySelector('#board .board-found:not(.busy) .bd-row')) && !document.querySelector('#board .board-found .busy'))) break;
   await sleep(500);
   const day = await look();
-  check(day.full && day.level === 2 && day.n > 30 && day.topGone === false, `the search: the sheet at full (${day.level}), the whole day (${day.n} trains, ${day.gone} gone), starting at the next train`);
+  check(day.full && day.level === 2 && day.n > 30 && (day.topGone === false || (day.atEnd && day.nextInView)), `the search: the sheet at full (${day.level}, the board's full look ${day.full}), the whole day (${day.n} trains, ${day.gone} gone), starting at the next train (the top row gone: ${day.topGone}; at the list's end with the next train in view: ${day.atEnd && day.nextInView})`);
   const num = day.numbers.find(Boolean).slice(0, 2);
   await page.type('#board .board-q', num);
   await sleep(300);
