@@ -58,17 +58,30 @@ try {
   const slide = () => page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden])')].map((r) => {
     const m = new DOMMatrixReadOnly(getComputedStyle(r).transform); return { x: Math.round(m.m41), y: Math.round(m.m42), o: Number(getComputedStyle(r).opacity) }; }));
   frames.menu = await pauses(page, async () => {
+    // (every frame for 0.6 s after the tap: each button's furthest sideways and up/down offset, its lowest opacity)
+    const rec = page.evaluate(() => new Promise((done) => {
+      const far = [0, 0, 0], up = [0, 0, 0], op = [1, 1, 1]; const t0 = performance.now();
+      const f = () => { [...document.querySelectorAll('#nav .nav-row:not([hidden])')].forEach((r, i) => { const m = new DOMMatrixReadOnly(getComputedStyle(r).transform);
+        far[i] = Math.max(far[i], Math.round(m.m41)); up[i] = Math.max(up[i], Math.abs(Math.round(m.m42))); op[i] = Math.min(op[i], Number(getComputedStyle(r).opacity)); });
+        if (performance.now() - t0 > 600) done({ far, up, op }); else requestAnimationFrame(f); };
+      requestAnimationFrame(f); }));
     await page.click('#nav-button');
-    await sleep(60);
-    const s = await slide();
-    check(s.length === 3 && s.every(r => r.x > 0 && r.y === 0 && r.o === 1), `9: the menu's 3 buttons slide out of ☰ (just after the tap, sideways: ${s.map(r => r.x).join(', ')} px; up/down ${s.map(r => r.y).join(', ')}, opacity ${s.map(r => r.o).join(', ')})`);
+    const s = await rec;
+    check(s.far.every(x => x > 0) && s.up.every(y => y === 0) && s.op.every(o => o === 1), `9: the menu's 3 buttons slide out of ☰ (furthest ${s.far.join(', ')} px sideways; up/down ${s.up.join(', ')}; lowest opacity ${s.op.join(', ')})`);
   });
   await sleep(500);
+  // shut: every frame watched until the menu is gone (a busy PC draws the slide's first frame late: an 80 ms sample read
+  // 0 px under the full check's load, 2026-11-24): it moved sideways towards ☰, never faded, then went
+  const backRec = page.evaluate(() => new Promise((done) => {
+    let maxX = 0, minO = 1; const t0 = performance.now();
+    const f = () => { const nav = document.getElementById('nav');
+      for (const r of nav.querySelectorAll('.nav-row:not([hidden])')) { const m = new DOMMatrixReadOnly(getComputedStyle(r).transform); maxX = Math.max(maxX, Math.round(m.m41)); minO = Math.min(minO, Number(getComputedStyle(r).opacity)); }
+      if (nav.hidden || performance.now() - t0 > 2000) done({ maxX, minO, hidden: nav.hidden }); else requestAnimationFrame(f); };
+    requestAnimationFrame(f); }));
   await page.click('#nav-button');
-  await sleep(80);
-  const back = await slide(), still = await page.evaluate(() => !document.getElementById('nav').hidden);
-  check(still && back.every(r => r.x > 0 && r.o === 1), `9: shut, they slide back into ☰ (still shown 80 ms after: ${still}, ${back.map(r => r.x).join(', ')} px)`);
-  await sleep(600);
+  const back = await backRec;
+  check(back.hidden && back.maxX > 0 && back.minO === 1, `9: shut, they slide back into ☰ (furthest ${back.maxX} px, lowest opacity ${back.minO}, then gone: ${back.hidden})`);
+  await sleep(300);
 
   // ---- 6: search rows ----
   await openSearch(page);
@@ -174,7 +187,9 @@ try {
   await page.click('#status');
   await sleep(150);
   const opened = await page.evaluate(() => { const n = document.querySelector('#conn-body .n-trains'); return { text: n.textContent, v: n._v }; });
-  check(String(opened.v) === opened.text.replace(/\s/g, ''), `4: Anslutning shows its numbers at once as it opens (${opened.text}, roll at ${opened.v})`);
+  // (a roll as it opens would come from 0 or far below; within 2 of the shown number is the count itself changing at that
+  // moment, a train in or out: seen 2026-11-24, 293 → 294)
+  check(Math.abs(Number(opened.v) - Number(opened.text.replace(/\s/g, ''))) <= 2, `4: Anslutning shows its numbers at once as it opens (${opened.text}, roll at ${opened.v})`);
   await page.evaluate(() => { const n = document.querySelector('#conn-body .n-trains'); n._v = Number(n.textContent.replace(/\s/g, '')) - 60; });
   let seen = new Set();
   for (let t0 = Date.now(); Date.now() - t0 < 2000; await sleep(40)) seen.add(await page.evaluate(() => document.querySelector('#conn-body .n-trains').textContent));
