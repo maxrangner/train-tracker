@@ -40,7 +40,7 @@ import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
-import { roll, arrive } from './motion.js';
+import { roll, arrive, reduceMotion } from './motion.js';
 // The sheet's ideas (build plan parts 3 and 6, 2026-11-23): My trains and the change, "You seem to be on", Peek, the
 // shop window, Share, "Why are we standing?".
 import { createMyTrains } from './my-trains.js';
@@ -510,8 +510,10 @@ function trainPage(id) {
     // (‹ first on the card's top line when it was opened from another page (a trip, a station, a company, the search...):
     // Max, 2026-11-24 "When viewing my trip and clicking a train showing it's card. THAT card should have a back button";
     // then "only on the situation I mentioned or similar, not always. Just clicking a train now shows the back arrow":
-    // over Home (a train tapped on the map) none)
-    noUp: () => stack.keys().at(-2) === 'home',
+    // over Home (a train tapped on the map) none; nor over another train: from train to train on the map is no going
+    // back, Max 2026-11-24 "Back button is only when coming from a different screen, like station or trip selecting a
+    // train. Not just tapping between them on the map")
+    noUp: () => { const below = stack.keys().at(-2) ?? 'home'; return below === 'home' || below.startsWith('train:'); },
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -793,7 +795,7 @@ const dayBack = () => {
 };
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!navEl.hidden) { closeNav(); return; }
+  if (navOpen) { closeNav(); return; }
   if (document.activeElement?.matches?.('.board-q')) return;   // (the board's own search closes itself)
   if (dayBack()) return;
   stack.back();
@@ -812,7 +814,7 @@ if (window.Capacitor?.isNativePlatform?.()) {
   const keyboardUp = () => Boolean(document.activeElement?.matches?.('input, textarea')) && innerHeight < tallest.h - 150;
   import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
     if (keyboardUp()) { document.activeElement.blur(); return; }
-    if (!navEl.hidden) { closeNav(); return; }
+    if (navOpen) { closeNav(); return; }
     if (dayBack()) return;
     if (!stack.back()) App.minimizeApp();
   }));
@@ -830,25 +832,54 @@ for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.d
 navButton.before(navEl);
 navEl.classList.remove('pop');
 navEl.classList.add('sh-menu');
+// Open and shut, the buttons slide out of ☰ and back into it, no fade (Max, 2026-11-24: "it should animate both in and
+// out, sliding form the hamburger"; "Remove the fade on all"); the speed as the page changes' (Debug → Animation speed).
+let navOpen = false;
+function slideNav(open) {
+  const b = navButton.getBoundingClientRect(), k = settings.motionSpeed === 'calm' ? 4 / 3 : 1;
+  const rows = [...navEl.querySelectorAll('.nav-row:not([hidden])')];
+  for (const r of rows) r.getAnimations().forEach(a => a.cancel());
+  if (reduceMotion()) return Promise.resolve();
+  return Promise.all(rows.map((r, i) => {
+    const from = { transform: `translateX(${Math.round(b.left - r.getBoundingClientRect().left)}px)` }, to = { transform: 'none' };
+    // (the first button travels furthest: it leaves first and comes back last)
+    const n = rows.length - 1 - i;
+    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: open ? 'cubic-bezier(.2, .8, .2, 1)' : 'cubic-bezier(.4, 0, .8, .4)', fill: 'forwards' }).finished.catch(() => {});
+  }));
+}
+// (opened with Home pulled up: Home goes down to rest, Max 2026-11-24 "When menu is called while main card is already
+// opened it should close"; a page opened from it and backed out of: Home with the menu open again, "When menu option is
+// backed out of, the menu should still be open": navBack, src/main.js onChange)
+let navBack = false;
 function openNav() {
-  if (stack.searching) return;
+  if (stack.searching || navOpen) return;
+  if (stack.top() === 'home' && stack.level > 0) stack.setLevel(0);
+  navOpen = true;
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   document.getElementById('sheet').classList.add('menu-open');
+  stack.refit();   // (a computer at rest: the box closes round the bar)
+  slideNav(true).then(() => { if (navOpen) for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel()); });
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
 function closeNav() {
-  if (navEl.hidden) return;
-  navEl.hidden = true;
+  if (!navOpen) return;
+  navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
-  document.getElementById('sheet').classList.remove('menu-open');
+  slideNav(false).then(() => {
+    if (navOpen) return;   // (opened again meanwhile)
+    navEl.hidden = true;
+    for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel());
+    document.getElementById('sheet').classList.remove('menu-open');
+    stack.refit();
+  });
 }
-onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
+onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
 // map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
 // (inside the sheet only its buttons and ☰ do anything while it is open: src/stack.js frozen. Outside the sheet and the
 // map, a press closes it as before: the map's own buttons, the pills.)
-document.addEventListener('pointerdown', (e) => { if (!navEl.hidden && !e.target.closest?.('#sheet') && !mapEl.contains(e.target)) closeNav(); }, true);
+document.addEventListener('pointerdown', (e) => { if (navOpen && !e.target.closest?.('#sheet') && !mapEl.contains(e.target)) closeNav(); }, true);
 // A mouse pressed on a button keeps it while it stays where the button was: a pressed button shrinks (button:active,
 // scale .94; a row .98), and a press held near a wide row's edge was let go outside it, so the click went to what was
 // beside it and nothing opened (Max, 2026-11-24: the › on a saved trip "Still doesn't do anything"; quick clicks
@@ -927,8 +958,8 @@ function defineNow(key) {
 }
 
 document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
-document.getElementById('open-settings').onclick = () => { closeNav(); stack.open('page:settings'); };
-document.getElementById('help-button').onclick = () => { closeNav(); stack.open('page:help'); };
+document.getElementById('open-settings').onclick = () => { closeNav(); navBack = true; stack.open('page:settings'); };
+document.getElementById('help-button').onclick = () => { closeNav(); navBack = true; stack.open('page:help'); };
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -1709,6 +1740,8 @@ stack = createStack({
   define: defineNow,
   onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
+    // back on Home from a page the menu opened: the menu open again (navBack, openNav above)
+    if (pg.key === 'home' && navBack) { navBack = false; setTimeout(openNav, 0); }
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
