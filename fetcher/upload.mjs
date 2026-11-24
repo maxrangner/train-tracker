@@ -41,6 +41,15 @@ const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|
 const HTACCESS = readFileSync(new URL('./data.htaccess', import.meta.url));
 
 const callOn = (s, fn, ...a) => new Promise((res, rej) => s[fn](...a, (e, v) => e ? rej(e) : res(v)));
+// Every request on the kept connection has a time limit (2026-11-24, TODO 69: one write that one.com never answered,
+// on a connection whose keepalives still worked, held the uploads from 06:27 until a restart at 08:01: no error, no
+// reconnect, the map dark). Past the limit the connection counts as broken: a new one is opened, the file waits for it.
+export const CALL_MS = 30000;
+const noAnswer = (fn, ms) => Object.assign(new Error(`one.com: no answer to ${fn} in ${ms / 1000} s`), { noAnswer: true });
+const limited = (p, ms, fn) => new Promise((res, rej) => {
+  const t = setTimeout(() => rej(noAnswer(fn, ms)), ms);
+  p.then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
+});
 const gone = e => e?.code === 2;   // SFTP "no such file"
 const verifier = cfg => {
   const pins = cfg.SFTP_HOSTKEY.split(',').map(s => s.trim().replace(/^SHA256:/, '').replace(/=+$/, ''));
@@ -52,13 +61,14 @@ const verifier = cfg => {
 // whatever the path leads through, files only go where Spårat's marker is. Links above it are one.com's own (measured
 // 2026-11-17: /webroots is a link, and /webroots/4506cfb2 links to /customers/…/webroots/4506cfb2), so a "real path"
 // rule can't be used there.
-async function folderProblem(s, dir) {
+// ask(fn, ...args): one SFTP call (with its time limit on the kept connection).
+async function folderProblem(ask, dir) {
   let d;
-  try { d = await callOn(s, 'lstat', dir); } catch (e) { if (gone(e)) return `${dir} does not exist (it is never made here)`; throw e; }
+  try { d = await ask('lstat', dir); } catch (e) { if (gone(e)) return `${dir} does not exist (it is never made here)`; throw e; }
   if (d.isSymbolicLink()) return `${dir} is a link: SFTP_DIR must be Spårat's data folder itself`;
   if (!d.isDirectory()) return `${dir} is not a folder`;
   let m;
-  try { m = await callOn(s, 'lstat', `${dir}/${MARK}`); } catch (e) { if (gone(e)) return `${dir} has no ${MARK}: not Spårat's folder`; throw e; }
+  try { m = await ask('lstat', `${dir}/${MARK}`); } catch (e) { if (gone(e)) return `${dir} has no ${MARK}: not Spårat's folder`; throw e; }
   if (!m.isFile()) return `${dir}/${MARK} is not a plain file`;
   return null;
 }
@@ -71,7 +81,7 @@ export function folderCheck(cfg, { Client = ssh2.Client } = {}) {
     const c = new Client();
     const t = setTimeout(() => { c.end(); rej(new Error('one.com: no answer in 30 s')); }, 30000);
     c.on('ready', () => c.sftp(async (e, s) => {
-      try { if (e) throw e; res(await folderProblem(s, dir)); } catch (err) { rej(err); } finally { clearTimeout(t); c.end(); }
+      try { if (e) throw e; res(await folderProblem((fn, ...a) => callOn(s, fn, ...a), dir)); } catch (err) { rej(err); } finally { clearTimeout(t); c.end(); }
     }));
     c.on('error', e => { clearTimeout(t); rej(e); });
     c.connect({ host: cfg.SFTP_HOST, port: Number(cfg.SFTP_PORT ?? 22), username: cfg.SFTP_USER, password: cfg.SFTP_PASS,
@@ -109,7 +119,7 @@ export function checkDir(raw) {
   return dir;
 }
 
-export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Client, tryAgainMs = TRY_AGAIN_MS } = {}) {
+export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Client, tryAgainMs = TRY_AGAIN_MS, callMs = CALL_MS } = {}) {
   for (const k of ['SFTP_HOST', 'SFTP_USER', 'SFTP_PASS', 'SFTP_DIR', 'SFTP_HOSTKEY'])
     if (!cfg[k]) throw new Error(`--upload needs ${k} in the settings file`);
   const dir = checkDir(cfg.SFTP_DIR);
@@ -140,7 +150,12 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     }
   }
 
-  const call = (fn, ...a) => callOn(sftp, fn, ...a);
+  const ask = s => (fn, ...a) => limited(callOn(s, fn, ...a), callMs, fn);
+  // A call on the kept connection; no answer in time breaks that connection (the work loop then stops, the job waits).
+  const call = (fn, ...a) => {
+    const s = sftp;
+    return ask(s)(fn, ...a).catch(e => { if (e.noAnswer && s && sftp === s) broken(e); throw e; });
+  };
   let blockedUntil = 0;   // breakFor(): a pretend outage (the live test)
 
   function connect() {
@@ -149,36 +164,39 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     if (Date.now() < blockedUntil) { retryTimer = setTimeout(connect, blockedUntil - Date.now()); return; }
     const c = new Client();
     client = c;
+    // Only this connection's own events count: an old one closing late must not break the one opened after it.
+    const brokenIf = e => { if (client === c) broken(e); };
     c.on('ready', () => c.sftp(async (e, s) => {
+      if (client !== c) return;
       if (e) return broken(e);
       let why;
-      try { why = await folderProblem(s, dir); } catch (err) { return broken(err); }
+      try { why = await folderProblem(ask(s), dir); } catch (err) { return brokenIf(err); }
       if (client !== c) return;
       if (why) return refuse(c, why);
-      try { await putHtaccess(s); } catch (err) { return broken(err); }
+      try { await putHtaccess(ask(s)); } catch (err) { return brokenIf(err); }
       if (client !== c) return;
       sftp = s;
       if (tries || stats.refused) log(`upload: connected${tries ? ` again after ${tries} tries` : ''}; ${dir} is Spårat's folder`);
       tries = 0; stats.connected = true; stats.refused = null;
       work();
     }));
-    c.on('error', broken);
-    c.on('close', () => broken(new Error('connection closed')));
+    c.on('error', brokenIf);
+    c.on('close', () => brokenIf(new Error('connection closed')));
     c.connect({
       host: cfg.SFTP_HOST, port: Number(cfg.SFTP_PORT ?? 22), username: cfg.SFTP_USER, password: cfg.SFTP_PASS,
       readyTimeout: 20000, keepaliveInterval: 15000, keepaliveCountMax: 3,
       hostVerifier: verifier(cfg),
     });
   }
-  async function putHtaccess(s) {
+  async function putHtaccess(q) {
     const p = `${dir}/.htaccess`;
     try {
-      const st = await callOn(s, 'lstat', p);
+      const st = await q('lstat', p);
       if (!st.isFile()) throw new Error(`${p} is not a plain file: not written`);
-      const now = await callOn(s, 'readFile', p);
+      const now = await q('readFile', p);
       if (Buffer.compare(now, HTACCESS) === 0) return;
     } catch (e) { if (!gone(e)) throw e; }
-    await callOn(s, 'writeFile', p, HTACCESS);
+    await q('writeFile', p, HTACCESS);
   }
   // The folder isn't Spårat's: nothing is written; look again in 10 minutes (a fix needs no restart).
   function refuse(c, why) {
@@ -192,7 +210,7 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     if (closing || !client) return;
     const c = client;
     client = null; sftp = null; stats.connected = false; busy = false;
-    try { c.end(); } catch { /* already gone */ }
+    try { c.end(); if (e?.noAnswer) c.destroy?.(); } catch { /* already gone */ }   // a silent line: drop it at once
     const wait = WAITS[Math.min(tries, WAITS.length - 1)];
     stats.lastError = String(e?.message ?? e); stats.lastErrorAt = Date.now();
     if (tries === 0 || tries % 10 === 0) log(`upload: ${e?.message ?? e}; connecting again in ${wait / 1000} s`);
@@ -305,12 +323,21 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     readCount(name, offset = 0) {
       if (!COUNT_NAME.test(name)) return Promise.reject(new Error(`not a count file: ${name}`));
       if (!sftp) return Promise.reject(new Error('not connected to one.com'));
+      const on = sftp;
       return new Promise((res, rej) => {
         const parts = [];
-        const s = sftp.createReadStream(`${COUNT_DIR}/${name}`, { start: offset });
-        s.on('data', c => parts.push(c));
-        s.on('end', () => res(Buffer.concat(parts).toString('utf8')));
-        s.on('error', e => (e.code === 2 ? res('') : rej(e)));
+        const s = on.createReadStream(`${COUNT_DIR}/${name}`, { start: offset });
+        let t;   // a read one.com stops answering (nothing for callMs): the same as a call with no answer
+        const arm = () => { clearTimeout(t); t = setTimeout(() => {
+          const e = noAnswer('read', callMs);
+          try { s.destroy?.(); } catch { /* gone */ }
+          if (sftp === on) broken(e);
+          rej(e);
+        }, callMs); };
+        arm();
+        s.on('data', c => { parts.push(c); arm(); });
+        s.on('end', () => { clearTimeout(t); res(Buffer.concat(parts).toString('utf8')); });
+        s.on('error', e => { clearTimeout(t); if (e.code === 2) res(''); else rej(e); });
       });
     },
     // The live test (main.mjs --test-breaks): drop the connection and refuse to connect for ms, like a lost internet.
