@@ -1742,6 +1742,8 @@ stack = createStack({
   onChange(pg) {
     // back on Home from a page the menu opened: the menu open again (navBack, openNav above)
     if (pg.key === 'home' && navBack) { navBack = false; setTimeout(openNav, 0); }
+    // (the menu is Home's: another page coming up, from the status pill or the map, shuts it)
+    if (pg.key !== 'home' && navOpen) closeNav();
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
