@@ -89,7 +89,7 @@ try {
   const level = () => page.evaluate(() => window.__stack.level);
   const top = () => page.evaluate(() => window.__stack.top());
   const has = sel => page.evaluate(s => Boolean(document.querySelector(s)), sel);
-  // a tap on the handle (a finger: src/stack.js toggles low ↔ half, from full to low; 2026-11-23)
+  // a tap on the handle (a finger: src/stack.js toggles low ↔ half, from full to half; 2026-11-24)
   const tapHandle = async () => { const r = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }); await page.touchscreen.tap(r.x, r.y); };
   // a finger on the handle moved by dy, held still, lifted
   const drag = dy => async () => {
