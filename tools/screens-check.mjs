@@ -263,7 +263,9 @@ try {
     const pg = document.querySelector('#sheet .pg[data-key="home"]');
     const cut = [...pg.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *')].filter((e) => { const r = e.getBoundingClientRect(); return r.height > 0 && r.height < 220 && r.top < bottom - 20 && r.bottom > bottom + 1; });   // (under the fade's solid lower 20 px nothing shows)
     const more = document.querySelector('#sheet .sh-more').getBoundingClientRect();
-    return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40 };
+    // (its word: "More", not a heading's name: Home has several parts below; Max, 2026-11-24)
+    const word = [...sheet.querySelectorAll('.sh-word')].filter(e => e.offsetParent && getComputedStyle(e).display !== 'none').map(e => e.textContent).join('|');
+    return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40, word };
   });
   const fieldGap = p => p.evaluate(() => { const f = document.querySelector('#sheet .sh-field').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
     return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), above: Math.round(f.top - s.top), side: Math.round(f.left - s.left) }; });
@@ -274,7 +276,7 @@ try {
   await setLevel(page, 1);
   await sleep(400);
   const hc = await homeCuts(page);
-  check(!hc.cut.length && hc.fade && hc.chevron, `Home at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}`);
+  check(!hc.cut.length && hc.fade && hc.chevron && /^(More|Mer)$/.test(hc.word), `Home at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}, its word "${hc.word}" (want More)`);
   await toRest(page);
   // ---- a computer (Max, 2026-11-23): a train's lowest height is the whole card down to "More", nothing under it ----
   if (t2) {
@@ -294,7 +296,7 @@ try {
       await pc.evaluate(() => window.__stack.setLevel(1));
       await sleep(900);
       const pcut = await homeCuts(pc);
-      check(!pcut.cut.length, `a computer, Home at half: cut through: ${pcut.cut.join(', ') || 'nothing'}`);
+      check(!pcut.cut.length && /^(More|Mer)$/.test(pcut.word), `a computer, Home at half: cut through: ${pcut.cut.join(', ') || 'nothing'}; the arrow's word "${pcut.word}" (want More)`);
     } else fails.push(`a computer: train ${t2.number} could not be opened`);
     errors.push(...pc.errors);
     await pc.close();

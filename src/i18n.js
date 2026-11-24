@@ -34,7 +34,7 @@ const EN = {
   searchPh: 'Search trains, stations, companies',
   searchAria: 'Search for a train, a station, a company or a disruption',
   // The one sheet (Max's pick A, 2026-11-22): its pages, Home, the search, ☰, the line above the bar.
-  home: 'Home', moreBelow: 'More below', cancel: 'Cancel',
+  home: 'Home', moreBelow: 'More below', moreWord: 'More', cancel: 'Cancel',
   theDay: 'The day', daySoon: 'The day is coming soon.', aboutApp: 'About Spårat',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
   dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
@@ -341,7 +341,7 @@ const SV = {
   connecting: 'ansluter…',
   searchPh: 'Sök tåg, stationer, bolag',
   // Det enda bladet (Max val A, 2026-11-22).
-  home: 'Hem', moreBelow: 'Mer längre ner', cancel: 'Avbryt',
+  home: 'Hem', moreBelow: 'Mer längre ner', moreWord: 'Mer', cancel: 'Avbryt',
   theDay: 'Dagen', daySoon: 'Dagen kommer snart.', aboutApp: 'Om Spårat',
   dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
   dayNow: 'nu', dayDrag: 'Dagen: dra bakåt i tiden', dayClose: 'Stäng Dagen', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',

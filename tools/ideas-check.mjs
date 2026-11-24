@@ -120,6 +120,31 @@ try {
   ok(await until(page, n => window.__stack.top().startsWith('train:') && document.querySelector('#panel .panel-head')?.textContent.includes(n), 8000, nextBox.n), `a tap on it opens train ${nextBox.n}`);
   await page.evaluate(() => window.__stack.back());
   await until(page, () => window.__stack.top() === 'trip:Lu>Mc');
+  // The "more below" sign names the one part hidden below ("More departures"), "More" when more than that is hidden
+  // or the list is cut (Max, 2026-11-24: "C, but main should say 'mer'")
+  await setLevel(page, 1);
+  await sleep(900);
+  const sign = await page.evaluate(() => {
+    const sheet = document.getElementById('sheet'), edge = Math.min(innerHeight, sheet.getBoundingClientRect().bottom) - 4 - (innerWidth >= 440 ? sheet.querySelector('.sh-grab').offsetHeight : 0);
+    const lab = document.querySelector('.pg[data-key="trip:Lu>Mc"] h4.lab');
+    return { more: sheet.classList.contains('more-below'), word: document.querySelector('#sheet .sh-more .sh-word')?.textContent, labHidden: Boolean(lab) && lab.getBoundingClientRect().top >= edge };
+  });
+  ok(!sign.more || sign.word === (sign.labHidden ? 'More departures' : 'More'),
+    `the trip at half: the "more below" sign ${sign.more ? `says "${sign.word}"` : 'not shown'} (its list's heading ${sign.labHidden ? 'hidden' : 'in sight'})`);
+  // (both cases every run: room pushed in above the list so only it is hidden, then the room taken away again)
+  const named = await page.evaluate(async () => {
+    const pg = document.querySelector('.pg[data-key="trip:Lu>Mc"]'), lab = pg.querySelector('h4.lab');
+    if (!lab) return 'no list';
+    const prev = lab.previousElementSibling;
+    prev.style.marginBottom = '900px';
+    pg.dispatchEvent(new Event('scroll'));
+    await new Promise(r => setTimeout(r, 300));
+    const w = document.querySelector('#sheet .sh-more .sh-word').textContent;
+    prev.style.marginBottom = '';
+    pg.dispatchEvent(new Event('scroll'));
+    return w;
+  });
+  ok(named === 'More departures', `the trip, only its list hidden: the sign says "${named}" (want More departures)`);
   await setLevel(page, 2);
   await shot(page, '02-trip');
   // No trip pill above the bar (Max, 2026-11-23: 'Remove the trip pill')

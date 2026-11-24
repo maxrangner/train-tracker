@@ -89,6 +89,11 @@ const NOT_GRAB = 'button, a, input, select, textarea, label, [role="button"]';  
 // the head: the sheet's own, or on a page without a bar its first line where it says so (a train's card: number and
 // buttons; its empty parts are the handle as the bar's were)
 const HEAD = '.sh-grab, .sh-head, .pg-head';
+// A page part's heading (the "more below" word, moreWord): the part is a heading, or starts with one; its own words
+// without what is inside its spans (a train's info: the age beside "Speed now").
+const PART_HEAD = 'h2, h3, h4';
+const partHead = c => (c.matches(PART_HEAD) ? c : c.firstElementChild?.matches(PART_HEAD) ? c.firstElementChild : null);
+const partName = h => [...h.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() || h.textContent.trim();
 
 export function createStack({ sheet, define, onPad = () => {}, onChange = () => {} }) {
   const root = document.documentElement;
@@ -104,11 +109,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // the fade at the shown bottom edge with its "more below" chevron (syncFade): a tap shows more (half to full; at full
   // the page scrolls on)
   const fadeEl = Object.assign(document.createElement('div'), { className: 'sh-fade' });
-  fadeEl.innerHTML = `<button type="button" class="sh-more" tabindex="-1" aria-label="${esc(t('moreBelow'))}">${icon('chevronDown', 18)}</button>`;
+  // Its word beside the arrow (Max, 2026-11-24: an arrow that does something says what): the hidden part's heading when
+  // only one part is below ("Fler avgångar"), else "Mer" (Home: "There is more than störningar down there"); moreWord.
+  fadeEl.innerHTML = `<button type="button" class="sh-more" tabindex="-1" aria-label="${esc(t('moreBelow'))}"><span class="sh-word"></span>${icon('chevronDown', 18)}</button>`;
   sheet.append(fadeEl);
   // A computer (440 px wide and up): the handle's dash becomes a small arrow (Max, 2026-11-23: the dash is a phone
   // thing): ⌃ at rest (a tap raises the sheet), ⌄ raised (a tap lowers it); index.html .sh-arrow. A phone keeps the dash.
-  sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-arrow">${icon('chevronUp', 18)}</span>`);
+  // With more below, the same word as the phone's sign beside it.
+  sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-word"></span><span class="sh-arrow">${icon('chevronUp', 18)}</span>`);
   fadeEl.firstChild.addEventListener('click', () => {
     if (idx < 2) { setIndex(2); return; }
     const pg = scroller();
@@ -184,7 +192,29 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const { visible, below } = hiddenBelow();
     const more = visible > 140 && below > 12;
     if (more !== sheet.classList.contains('more-below')) { sheet.classList.toggle('more-below', more); fadeEl.firstChild.tabIndex = more ? 0 : -1; }
+    if (more) syncWord(visible);
     syncNext(below);
+  }
+  // The word for what is hidden below the shown edge: a heading's name when the hidden part is one whole part (its
+  // heading first, no other heading after it, nothing of a shown part cut off), else "More".
+  function moreWord(visible) {
+    const pg = searching ? results : top()?.el;
+    // (Home always "More": Max, 2026-11-24 "main should say 'mer'")
+    if (!pg || (!searching && top().key === 'home')) return t('moreWord');
+    const kids = [...pg.children].filter(c => c.offsetHeight);
+    const at = c => c.offsetTop - pg.scrollTop;
+    const hidden = kids.filter(c => at(c) >= visible - 4);
+    const cut = kids.some(c => at(c) < visible - 4 && at(c) + c.offsetHeight > visible + 12);
+    const heads = hidden.map(partHead).filter(Boolean);
+    return !cut && heads.length === 1 && partHead(hidden[0]) ? partName(heads[0]) : t('moreWord');
+  }
+  let shownWord = null;
+  function syncWord(visible) {
+    const w = moreWord(visible);
+    if (w === shownWord) return;
+    shownWord = w;
+    for (const el of sheet.querySelectorAll('.sh-word')) el.textContent = w;
+    fadeEl.firstChild.setAttribute('aria-label', w === t('moreWord') ? t('moreBelow') : `${t('moreBelow')}: ${w}`);
   }
   // Which way a tap on the handle moves the sheet (a computer's arrow points that way, index.html): up to show more only
   // when more is hidden (Max, 2026-11-24: the arrow "just expands the card to show more empty space"; Home at half gave

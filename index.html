@@ -185,8 +185,17 @@
       background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 40%); opacity: 0; transition: opacity .2s; }
     #sheet.more-below .sh-fade { opacity: 1; }
     #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
-    .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 20px; margin-left: -22px; padding: 0;
-      display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--hover); color: var(--accent); cursor: pointer; }
+    /* (its word beside the arrow, src/stack.js moreWord: Max, 2026-11-24 "C, but main should say 'mer'") */
+    .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); height: 24px; max-width: calc(100% - 32px); transform: translateX(-50%);
+      padding: 0 8px 0 12px; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; background: var(--hover); color: var(--accent); cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
+    .sh-more svg { flex: none; }
+    .sh-word { overflow: hidden; text-overflow: ellipsis; }
+    .sh-grab .sh-word { display: none; }
+    @media (min-width: 440px) {
+      #sheet .sh-grab { display: flex; justify-content: center; gap: 2px; }
+      #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap; }
+    }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (min-width: 440px) { .sh-more { bottom: 4px; } }
