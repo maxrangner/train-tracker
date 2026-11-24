@@ -91,19 +91,20 @@
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
     /* A computer: the dash is a small arrow (src/stack.js; Max, 2026-11-23: the dash is a phone thing): ⌃ at rest (a
        tap raises the sheet), ⌄ raised (a tap lowers it). */
-    .sh-arrow { display: none; }
+    .sh-arrow, .sh-pill { display: none; }
     @media (min-width: 440px) {
       .sh-grab { cursor: pointer; }
       .sh-grab i { display: none; }
-      .sh-arrow { display: grid; place-items: center; width: 36px; height: 16px; border-radius: 8px; color: var(--accent); transition: transform .26s var(--ez), background .15s; }
+      .sh-arrow { display: grid; place-items: center; width: 20px; height: 16px; color: var(--accent); transition: transform .26s var(--ez); }
+      .sh-pill { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px; border-radius: 10px; transition: background .15s; }
       /* (a band of its own, the arrow and its word in the middle: as much room under them as above; Max, 2026-11-24
          "'Mer v' still too close to the edge. Or if this is a general UI rule, the padding above needs to be less") */
       #sheet .sh-grab { height: 28px; align-items: center; }
-      .sh-grab:hover .sh-arrow { background: var(--hover); }
+      .sh-grab:hover .sh-pill { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
       /* (a train's card has its own "More" just above: one arrow, not two; Max, 2026-11-23) */
-      #sheet[data-page="train"] .sh-arrow { display: none; }
+      #sheet[data-page="train"] :is(.sh-arrow, .sh-pill) { display: none; }
       /* (and its row thin: under "More" only a sliver of room, Max 2026-11-24: "still too much padding") */
       #sheet[data-page="train"] .sh-grab { height: 8px; }
     }
@@ -201,7 +202,7 @@
     @media (min-width: 440px) {
       #sheet .sh-grab { display: flex; justify-content: center; gap: 2px; }
       #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap;
-        position: relative; top: -1px; margin-right: -8px; }
+        position: relative; top: -1px; }
     }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
