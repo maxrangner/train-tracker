@@ -28,7 +28,12 @@ try {
   expect(w[2] && !w[3], 'isWork: an older file\'s name "Banarbete…" without a code');
 
   // ---- Home's count, then the list ----
-  const count = await page.evaluate(h => document.querySelector(`${h} [data-go="dislist"] small`)?.textContent ?? '', HOME);
+  const count = await page.evaluate(h => document.querySelector(`${h} [data-go="dislist"] .dis-sub`)?.textContent ?? '', HOME);
+  // Home's rows and "All disruptions": their icons the same size, in one column (Max, 2026-11-24: "The icons dont align")
+  if (count) {
+    const ics = await page.evaluate(h => [...document.querySelectorAll(`${h} .dis-list .dis-row .dis-ic`)].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; }), HOME);
+    expect(ics.length >= 2 && ics.every(([x, w]) => Math.abs(x - ics[0][0]) <= 1 && w === ics[0][1]), `Home's disruption icons in one column, one size: ${JSON.stringify(ics)}`);
+  }
   const openList = async () => { await openDisruptions(page); await sleep(200); };
   if (!count) notes.push('no disruption in force at all: Home has no "All disruptions" row, the list not checked');
   else {
