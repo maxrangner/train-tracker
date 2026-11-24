@@ -70,7 +70,7 @@
     #sheet { --ez: cubic-bezier(.2, .85, .25, 1); position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden; touch-action: none; will-change: transform;
       background: var(--bg); color: var(--ink); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
-      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform .36s var(--ez); }
+      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform calc(.36s * var(--mk, 1)) var(--ez); }
     #sheet.dragging { transition: none; }
     /* A computer: the sheet hangs from the top left (Max, 2026-11-23: "the main pill should be top right as before... So
        flip it"; "The flip is only for PC! Phone stays as it is"): its search bar at the top, the arrow at its bottom
@@ -85,7 +85,7 @@
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
     @media (min-width: 440px) {
       #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
-        transition: height .36s var(--ez); will-change: height; }
+        transition: height calc(.36s * var(--mk, 1)) var(--ez); will-change: height; }
     }
     .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
@@ -105,14 +105,18 @@
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
       /* (a train's card has its own "More" just above: one arrow, not two; Max, 2026-11-23) */
       #sheet[data-page="train"] :is(.sh-arrow, .sh-pill) { display: none; }
+      #sheet[data-next="close"] :is(.sh-arrow, .sh-pill) { visibility: hidden; }
       /* (and its row thin: under "More" only a sliver of room, Max 2026-11-24: "still too much padding") */
       #sheet[data-page="train"] .sh-grab { height: 8px; }
+      /* (the fade on its thin row then, not 20 px above the edge: the text under it showed sharp under a line; Max,
+         2026-11-24 "BUG: A random border clipping the text") */
+      #sheet[data-page="train"] .sh-fade { bottom: 8px; }
     }
     /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
        tall; the head's empty parts count as the handle too. A phone only. */
     #sheet-grip { position: fixed; z-index: 4; left: 50%; width: 160px; margin-left: -80px; height: 24px; bottom: var(--sheet-shown, 72px);
-      touch-action: none; transition: bottom .36s cubic-bezier(.2, .85, .25, 1); }
+      touch-action: none; transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1); }
     #sheet.dragging ~ #sheet-grip { transition: none; }
     @media (min-width: 440px) { #sheet-grip { display: none; } }
     .sh-head { position: relative; z-index: 2; height: 52px; flex: none; margin: 0 12px; }
@@ -135,6 +139,10 @@
        step back). A page without buttons of its own has no bar: the head folds to nothing (src/stack.js .no-bar); a
        train's buttons sit in its card's top line beside the number (def.barIn). */
     #sheet.no-bar .sh-head { height: 0; }
+    /* (8 px between the search bar and the page under it: scrolled, the page goes out of sight below that room, not
+       right at the bar's edge; Max, 2026-11-24 "When scolling main card the top is cut of kind of ugly... Better just add
+       the padding"; src/stack.js BAR_GAP_PX) */
+    #sheet:not(.no-bar):not([data-h="0"]) .sh-head { margin-bottom: 8px; }   /* (not at rest: the bar alone, as tuned) */
     #sheet.no-bar .sh-bar { visibility: hidden; }
     /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
     #sheet .pg-head { touch-action: none; }
@@ -207,7 +215,7 @@
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (min-width: 440px) { .sh-more { bottom: 4px; } }
-    .pg { position: absolute; inset: 0; overflow: hidden; padding: 4px 16px calc(40px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
+    .pg { position: absolute; inset: 0; overflow: hidden; padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
       overscroll-behavior: contain; scrollbar-width: thin; box-sizing: border-box; }
     #sheet[data-h="2"] .pg { overflow-y: auto; touch-action: pan-y; }
     #sheet[data-search] .pg:not(.res) { display: none; }
@@ -218,14 +226,37 @@
        (Max, 2026-11-24: "the fade/wipe to next screen is very annoying. It's sliding and fading at the same time"; "Most
        transitions between screens on the cards look bad, fade and swipe together"). */
     .sh-pages { overflow: hidden; }
-    .pg.in-r { animation: pg-in-r .28s var(--ez) both; }
-    .pg.in-l { animation: pg-in-l .28s var(--ez) both; }
-    .pg.out-l { animation: pg-out-l .28s var(--ez) both; pointer-events: none; }
-    .pg.out-r { animation: pg-out-r .28s var(--ez) both; pointer-events: none; }
+    .pg.in-r { animation: pg-in-r calc(.28s * var(--mk, 1)) var(--ez) both; }
+    .pg.in-l { animation: pg-in-l calc(.28s * var(--mk, 1)) var(--ez) both; }
+    .pg.out-l { animation: pg-out-l calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
+    .pg.out-r { animation: pg-out-r calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
     @keyframes pg-in-r { from { transform: translateX(100%); } }
     @keyframes pg-in-l { from { transform: translateX(-100%); } }
     @keyframes pg-out-l { to { transform: translateX(-100%); } }
     @keyframes pg-out-r { to { transform: translateX(100%); } }
+    /* The other two ways (Debug → Page change, src/settings.js pageMotion; Max, 2026-11-24 "Do A, B and F"; no fade in
+       any). B 'rise': the new page comes as a card from the sheet's edge over the one before, which stays still; back,
+       it goes away the same way. F 'strip': the pages one strip along the sheet, the new one pushing the old away. The
+       sheet's edge: the bottom on a phone, the top on a computer (it hangs from there). */
+    /* Their speed (Debug → Animation speed, src/settings.js motionSpeed; Max, 2026-11-24 "Use current speed as fast, and
+       add a slower at 75%"): every page change and the sheet's glide take --mk times as long. */
+    :root[data-mspeed="calm"] { --mk: 1.3333; }
+    :root[data-motion="rise"] .sh-pages > .pg { background: var(--bg); }
+    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in calc(.3s * var(--mk, 1)) var(--ez) both; z-index: 2; }
+    :root[data-motion="rise"] .pg.out-r { animation: pg-rise-out calc(.26s * var(--mk, 1)) cubic-bezier(.4, 0, .8, .4) both; z-index: 2; }
+    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still calc(.3s * var(--mk, 1)) both; }
+    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r calc(.3s * var(--mk, 1)) var(--ez) both; }
+    @keyframes pg-still { to { transform: none; } }
+    @keyframes pg-rise-in { from { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-rise-out { to { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-strip-in-r { from { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-strip-out-l { to { transform: translateY(calc(-1 * var(--edge, 100%))); } }
+    @keyframes pg-strip-in-l { from { transform: translateY(calc(-1 * var(--edge, 100%))); } }
+    @keyframes pg-strip-out-r { to { transform: translateY(var(--edge, 100%)); } }
+    @media (min-width: 440px) { .sh-pages { --edge: -100%; } }
     @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
     /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
        scrolling, no own height limits (the sheet has them). */
@@ -239,13 +270,13 @@
     .pg .tl-head { top: -4px; }
     /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
     @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
-    .maplibregl-ctrl-bottom-right { transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; }
+    .maplibregl-ctrl-bottom-right { transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; }
     #sheet.dragging ~ #map .maplibregl-ctrl-bottom-right, .sheet-dragging .maplibregl-ctrl-bottom-right { transition: none; }
 
     /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right. */
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
       max-width: calc(100% - 96px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
-      transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
+      transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
     /* (each pill: the filter's above any other, src/line.js) */
     #line .ln-pill { max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px;
       background: var(--card); color: var(--ink); box-shadow: var(--shadow-s); pointer-events: auto; }
@@ -792,13 +823,13 @@
     .board-msgs-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 14px; cursor: pointer;
       background: var(--t-some-bg); color: var(--t-some); font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
     .board-msgs-toggle span { flex: 1; color: var(--ink); }
-    /* (the messages in one yellow card, a thin line between them, the title line a card of its own; a station's and a
-       train's alike: Max, 2026-11-24 "Can the messages themselves be in one yellow card instead of individual?") */
+    /* (the messages in one yellow card, the title line a card of its own; a station's and a train's alike: Max,
+       2026-11-24 "Can the messages themselves be in one yellow card instead of individual?"; no lines between them:
+       "Remove the lines between the messages") */
     .board-msg-list { display: grid; gap: 0; max-height: 30vh; overflow: auto; touch-action: pan-y; padding: 2px 12px; border-radius: 14px; background: var(--t-some-bg); }
     .board-msg-list[hidden] { display: none; }
     #board .busy { opacity: 0.45; transition: opacity .15s; }
     .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 0; color: var(--ink); }
-    .board-msg + .board-msg { border-top: 1px solid color-mix(in srgb, var(--t-some) 28%, transparent); }
 
     #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
     /* Motion (Max, 2026-11-20: "feels a bit static and stiff"; his picks on https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe;
@@ -816,7 +847,26 @@
     #nav:not([hidden]) .nav-row:nth-child(3) { animation-delay: 60ms; }
     #nav:not([hidden]) .nav-row:nth-child(4) { animation-delay: 90ms; }
     #nav:not([hidden]) .nav-row:nth-child(5) { animation-delay: 120ms; }
-    @keyframes nav-in { from { opacity: 0; transform: translateY(-8px); } }
+    @keyframes nav-in { from { transform: translateY(-8px); } }
+    /* ☰'s menu in the sheet, under the search field: its choices a row of buttons (src/main.js openNav; Max, 2026-11-24
+       "Revamp hamburger menu... as buttons"). No fade (Max: "Remove the fade on all"). */
+    /* (each a pill as wide as its words, the same padding as the filter's chips, no icons; Max, 2026-11-24 "Text has
+       horrible padding. Looks strange, not clean like other UI") */
+    .sh-search > .sh-menu { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; margin: 0; padding: 0; }
+    .sh-search > .sh-menu[hidden] { display: none; }
+    .sh-search > .sh-menu .nav-row { flex: 0 1 auto; width: auto; min-width: 0; min-height: 0; height: 40px; padding: 0 14px; justify-content: center; border-radius: 20px;
+      background: var(--hover); font-size: 14px; font-weight: 600; }
+    .sh-search > .sh-menu .nav-ic { display: none; }
+    /* (they slide out of ☰ and back, src/main.js slideNav: not the old card's drop; ☰ over them as they pass under it) */
+    #nav.sh-menu:not([hidden]) .nav-row { animation: none; }
+    .sh-search #nav-button { position: relative; z-index: 3; }
+    .sh-search > .sh-menu .nav-t { flex: none; overflow: hidden; text-overflow: ellipsis; }
+    .sh-search > .sh-menu .nav-row:hover { background: color-mix(in srgb, var(--accent) 14%, var(--hover)); }
+    /* (a computer: open, the arrow's band goes and the box closes round the bar; Max, 2026-11-24 "Menu should remove the
+       arrow and contract to match needed height"; src/stack.js lowOf) */
+    @media (min-width: 440px) { #sheet.menu-open .sh-grab { display: none; } #sheet.menu-open .sh-head { margin-bottom: 10px; } }
+    #sheet.menu-open .sh-field { display: none; }
+    #sheet.menu-open .sh-pages .pg { overflow: hidden !important; touch-action: none; }
     /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
     .cd-late { position: relative; }
     .cd-late.flash { animation: late-pop .5s cubic-bezier(.2, .9, .25, 1); }
@@ -1007,7 +1057,9 @@
     .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
-    #panel.full .panel-more { margin: 6px 0 2px; }
+    /* (full: "Mindre ⌃" always last, under the stops, not above them; Max, 2026-11-24 "All train cards 'mindre ^' should
+       always be at the bottom") */
+    #panel.full .panel-more { margin: 6px 0 2px; order: 99; }
     #panel:not(.full) .panel-more { margin-top: 0; padding: 2px 4px; }
     /* The arrow shows where the card goes: on a phone it grows up (Mer ⌃), on a wider screen down (Mer ⌄) (Max, 2026-11-16). */
     @media (min-width: 440px) { .panel-more svg { transform: rotate(180deg); } }
@@ -1422,7 +1474,7 @@
   </div>
   <!-- ☰ (Max, 2026-11-22): a small menu just above itself: The day, Settings, Help & About. -->
   <nav id="nav" class="pop" hidden aria-label="Menu" data-t-aria="navAria">
-    <button id="open-day" class="nav-row" type="button"><span class="nav-ic" data-icon="day"></span><span class="nav-t" data-t="theDay">The day</span></button>
+    <button id="open-day" class="nav-row" type="button"><span class="nav-ic" data-icon="day"></span><span class="nav-t" data-t="theDay">Rewind</span></button>
     <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
     <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="aboutApp">About Spårat</span></button>
   </nav>
@@ -1469,6 +1521,10 @@
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
       <div class="debug-only set-row"><span data-t="homeLegend">Lateness colours on Home</span>
         <div class="seg" data-key="homeLegend" role="group" aria-label="Lateness colours on Home" data-t-aria="homeLegend"><button type="button" data-v="true" data-t="on">On</button><button type="button" data-v="false" data-t="off">Off</button></div></div>
+      <div class="debug-only set-row"><span data-t="pageMotion">Page change</span>
+        <div class="seg" data-key="pageMotion" role="group" aria-label="Page change" data-t-aria="pageMotion"><button type="button" data-v="side" data-t="motionSide">Sideways</button><button type="button" data-v="rise" data-t="motionRise">From the edge</button><button type="button" data-v="strip" data-t="motionStrip">One strip</button></div></div>
+      <div class="debug-only set-row"><span data-t="motionSpeed">Animation speed</span>
+        <div class="seg" data-key="motionSpeed" role="group" aria-label="Animation speed" data-t-aria="motionSpeed"><button type="button" data-v="fast" data-t="speedFast">Fast</button><button type="button" data-v="calm" data-t="speedCalm">Calmer (75 %)</button></div></div>
       <div class="debug-only set-row"><span data-t="routeEdge">Route white edge</span>
         <div class="seg" data-key="routeEdge" role="group" aria-label="Route white edge" data-t-aria="routeEdge"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="debug-only set-row"><span data-t="noEstimate">With no expected time</span>
@@ -1496,7 +1552,7 @@
         <button id="bug-button" class="about-btn" type="button"><span class="about-ic"></span><span data-t="reportBug">Report a bug</span></button>
       </div>
       <p class="about-soon" data-t="comingSoon">Both buttons work soon.</p>
-      <h3 data-t="credits">Credits</h3>
+      <!-- (no heading over the credits: Max, 2026-11-24 "About, just remove the TEXT 'Tack till', not the content below it") -->
       <ul class="about-credits" data-lang="en"><li><span>Trains, timetables, stations, tracks, disruptions</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (open data)</b></li><li><span>Map data</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, ODbL</b></li><li><span>Map tiles</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Map style</span><b>Positron and Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> and CARTO (CC BY 4.0), recoloured</b></li><li><span>Drawn with</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Fonts</span><b>Outfit and Noto Sans, SIL Open Font License</b></li><li><span>Spårat: source code (free software, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
       <ul class="about-credits" data-lang="sv" hidden><li><span>Tåg, tidtabeller, stationer, spår, störningar</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (öppna data)</b></li><li><span>Kartdata</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> bidragsgivare, ODbL</b></li><li><span>Kartrutor</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Kartstil</span><b>Positron och Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> och CARTO (CC BY 4.0), omfärgade</b></li><li><span>Byggd med</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Typsnitt</span><b>Outfit och Noto Sans, SIL Open Font License</b></li><li><span>Spårat: källkod (fri programvara, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
       <p class="about-note" data-t="notAffiliated">Train companies' names and liveries belong to their owners. Spårat is not affiliated with them or with Trafikverket.</p>

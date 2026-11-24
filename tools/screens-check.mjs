@@ -99,7 +99,9 @@ try {
     await sleep(300);
     const s = await sheetState(page);
     check(await navShown(), `${name} (now ${s.key} at ${s.level}), ☰ tapped 30 ms later: the menu opens`);
-    await page.evaluate(() => { document.getElementById('nav').hidden = true; });
+    // (shut the way a person does, and waited for: its buttons slide back into ☰ first)
+    await page.keyboard.press('Escape');
+    await until(page, () => document.getElementById('nav').hidden, 1500);
     await toRest(page);
   }
 
@@ -244,6 +246,14 @@ try {
     const head = await page.evaluate(() => { const h = document.querySelector('#panel .panel-head'), n = h?.querySelector('.panel-title strong')?.getBoundingClientRect(), c = h?.querySelector('.panel-co')?.getBoundingClientRect();
       return { below: window.__stack.keys().at(-2), up: Boolean(h?.querySelector(':scope > .sh-up')?.offsetParent), coUnder: n && c ? c.top >= n.bottom - 2 : null }; });
     check(head.below === 'home' && !head.up && head.coUnder !== false, `a train over Home: ‹ ${head.up ? 'SHOWN' : 'none'}; its company under its number: ${head.coUnder}`);
+    // nor from train to train (Max, 2026-11-24: "Not just tapping between them on the map"): another train opened over it
+    const other = await page.evaluate(() => { const cur = window.__stack.top(); return window.__trains.reports().map(r => `train:${r.id}`).find(k => k !== cur); });
+    if (other) {
+      await page.evaluate(k => window.__stack.open(k, { go: true }), other); await sleep(1200);
+      const t2 = await page.evaluate(() => ({ below: window.__stack.keys().at(-2), up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent) }));
+      check(!t2.up, `a train over another train (${t2.below}): ‹ ${t2.up ? 'SHOWN' : 'none'}`);
+      await page.evaluate(() => window.__stack.back()); await sleep(1000);
+    }
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
     // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)
@@ -269,6 +279,10 @@ try {
       return { room: Math.round(Math.min(innerHeight, s.bottom) - end), scrolls: pg.scrollHeight > pg.clientHeight + 2 };
     });
     check(full.scrolls || (full.room >= 0 && full.room <= 48), `a train at full: ${full.scrolls ? 'longer than the screen, it scrolls' : `${full.room} px of room under its card (want 0 to 48)`}`);
+    // ("Mindre ⌃" the card's last part at full, under the stops: Max, 2026-11-24 "should always be at the bottom")
+    const last = await page.evaluate(() => { const more = document.querySelector('#panel .panel-more'), tl = document.querySelector('#panel .panel-table');
+      return more && tl ? Math.round(more.getBoundingClientRect().top - tl.getBoundingClientRect().bottom) : null; });
+    check(last !== null && last >= 0, `a train at full: "Mindre" ${last ?? '?'} px under the stops (want under them)`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at

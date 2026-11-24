@@ -31,7 +31,12 @@ export const setLevel = async (page, i) => { await page.evaluate(n => window.__s
 
 // Down to Home at rest: menus and the search closed, every page gone.
 export async function toRest(page) {
-  await page.evaluate(() => { document.getElementById('nav').hidden = true; if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
+  // (☰'s menu shut as a person does, Esc, and waited for: its buttons slide back into ☰; open, Home holds still)
+  if (await page.evaluate(() => !document.getElementById('nav').hidden)) {
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await until(page, () => document.getElementById('nav').hidden, 1500);
+  }
+  await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
   await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0);
   await sleep(300);
 }

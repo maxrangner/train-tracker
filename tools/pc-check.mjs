@@ -86,12 +86,23 @@ try {
   const stayed = await page.evaluate(() => window.__stack.top());
   ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
 
-  // 6. ☰ with Home at rest: the menu under the whole box, its arrow included (Max, 2026-11-24: "Menu still not below the
-  //    whole search pill")
-  await page.evaluate(() => window.__stack.home(0)); await sleep(1200);
-  await page.evaluate(() => document.querySelector('#sheet .sh-nav, #nav-button, [aria-controls="nav"]')?.click()); await sleep(500);
-  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(); return n && !n.hidden ? { top: Math.round(n.getBoundingClientRect().top), box: Math.round(s.bottom) } : null; });
-  ok(menu && menu.top >= menu.box + 4, `☰ at rest: the menu's top ${menu?.top} px, the box's bottom ${menu?.box} px`);
+  // 6. ☰: its choices as buttons where the search field was, on its row (Max, 2026-11-24: "Place the buttons where the
+  //    search bar is! And same dismiss rules"); the page behind holds still (a wheel over it moves nothing); a choice
+  //    opens its page, the menu goes
+  await page.evaluate(() => window.__stack.home(1)); await sleep(1200);
+  await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(700);
+  const menu = await page.evaluate(() => { const n = document.querySelector('.sh-search > .sh-menu'), b = document.getElementById('nav-button').getBoundingClientRect(); if (!n || n.hidden) return null;
+    const r = n.getBoundingClientRect(); return { sameRow: Math.abs(r.top - b.top) <= 1, field: Boolean(document.querySelector('#sheet .sh-field').offsetParent), rows: n.querySelectorAll('.nav-row').length }; });
+  ok(menu && menu.rows === 3 && menu.sameRow && !menu.field, `☰: ${menu?.rows} buttons on the search bar's row (${menu?.sameRow}), the field away (${menu ? !menu.field : '?'})`);
+  const still = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
+  const over = await page.evaluate(() => { const r = document.querySelector('.pg[data-key="home"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 120 }; });
+  await page.mouse.move(over.x, over.y); await page.mouse.wheel({ deltaY: 400 }); await sleep(700);
+  const still2 = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
+  ok(still2.lvl === still.lvl && still2.top === still.top, `the menu open, a wheel over the page: height ${still.lvl} -> ${still2.lvl}, scrolled ${still.top} -> ${still2.top} (want nothing)`);
+  await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(1200);
+  const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.querySelector('.sh-search > .sh-menu').hidden }));
+  ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes (${after.open ? 'still open' : 'shut'})`);
+  await page.evaluate(() => window.__stack.home(0)); await sleep(800);
   await page.keyboard.press('Escape'); await sleep(300);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
@@ -115,6 +126,17 @@ try {
   const pill = await page.evaluate(() => { const w = document.querySelector('#sheet .sh-grab .sh-word'), a = document.querySelector('#sheet .sh-arrow');
     if (!w?.offsetWidth) return null; const wr = w.getBoundingClientRect(), ar = a.getBoundingClientRect(); return { gap: Math.round(ar.left - wr.right), one: Boolean(w.closest('.sh-pill')?.contains(a)) }; });
   ok(!pill || (pill.gap >= 0 && pill.one), `"Mer" and its arrow: ${pill ? `${pill.gap} px apart, one pill ${pill.one}` : 'no word shown now'}`);
+  // 10. A page whose arrow would only close it (its ‹ does that): no arrow (Max, 2026-11-24: "both back arrow and the
+  //     collapse arrow that dismisses it. Remove the last one"); a train's card at full: the fade down to its thin band
+  await page.evaluate(() => window.__stack.open('page:help', { go: true })); await sleep(1300);
+  await page.evaluate(() => window.__stack.setLevel(1)); await sleep(1000);
+  const cl = await page.evaluate(() => ({ next: document.getElementById('sheet').dataset.next, shown: getComputedStyle(document.querySelector('#sheet .sh-arrow')).visibility }));
+  ok(cl.next !== 'close' || cl.shown === 'hidden', `About at half: the arrow would ${cl.next}, shown: ${cl.shown}`);
+  const id = await page.evaluate(() => window.__trains.reports().map(r => r.id)[5]);
+  await page.evaluate(i => window.__stack.open(`train:${i}`, { go: true }), id); await sleep(1500);
+  await page.evaluate(() => window.__stack.setLevel(2)); await sleep(1300);
+  const fb = await page.evaluate(() => { const f = document.querySelector('#sheet .sh-fade').getBoundingClientRect(), g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return Math.round(g.top - f.bottom); });
+  ok(Math.abs(fb) <= 1, `a train at full: the fade ends ${fb} px above its band (want 0; Max: "A random border clipping the text")`);
 } finally {
   await browser.close();
 }

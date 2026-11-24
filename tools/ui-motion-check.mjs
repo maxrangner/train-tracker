@@ -52,16 +52,23 @@ try {
   const after = await page.evaluate(() => getComputedStyle(document.getElementById('nav-button')).scale);
   check(held === '0.94' && after === 'none', `1: a held button is pressed in (scale ${held}, after ${after})`);
 
-  // ---- 9: the menu's rows follow it in (the tap above opened it; close and open again) ----
-  if (await page.evaluate(() => !document.getElementById('nav').hidden)) { await page.click('#nav-button'); await sleep(400); }
+  // ---- 9: the menu's buttons slide out of ☰ and back into it, sideways only, no fade (Max, 2026-11-24: "it should
+  // animate both in and out, sliding form the hamburger"); the tap above opened it: close and open again ----
+  if (await page.evaluate(() => !document.getElementById('nav').hidden)) { await page.click('#nav-button'); await sleep(600); }
+  const slide = () => page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden])')].map((r) => {
+    const m = new DOMMatrixReadOnly(getComputedStyle(r).transform); return { x: Math.round(m.m41), y: Math.round(m.m42), o: Number(getComputedStyle(r).opacity) }; }));
   frames.menu = await pauses(page, async () => {
     await page.click('#nav-button');
-    await sleep(40);
-    const names = await animNames(page, '#nav .nav-row:not([hidden])');
-    check(names.filter(n => n === 'nav-in').length === 3, `9: the menu's 3 rows follow it in (${names.length} animated: ${[...new Set(names)].join(', ') || 'none'})`);
+    await sleep(60);
+    const s = await slide();
+    check(s.length === 3 && s.every(r => r.x > 0 && r.y === 0 && r.o === 1), `9: the menu's 3 buttons slide out of ☰ (just after the tap, sideways: ${s.map(r => r.x).join(', ')} px; up/down ${s.map(r => r.y).join(', ')}, opacity ${s.map(r => r.o).join(', ')})`);
   });
+  await sleep(500);
   await page.click('#nav-button');
-  await sleep(400);
+  await sleep(80);
+  const back = await slide(), still = await page.evaluate(() => !document.getElementById('nav').hidden);
+  check(still && back.every(r => r.x > 0 && r.o === 1), `9: shut, they slide back into ☰ (still shown 80 ms after: ${still}, ${back.map(r => r.x).join(', ')} px)`);
+  await sleep(600);
 
   // ---- 6: search rows ----
   await openSearch(page);

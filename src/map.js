@@ -1052,7 +1052,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   let selBgFor = '';
   // Placed to the exact (fractional) pixel: rounded to whole pixels, the ring flickered between two pixels on phones,
   // whose screen middle falls on a half pixel (measured 2026-11-12: moved in 4 of 10 frames; 0 with this).
-  const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true });
+  // (lying on the map, tilted with it like the other trains' symbols, not upright facing the screen: Max, 2026-11-24 "When
+  // a train is selected the drop is 2d flat. Should be 3d like the others")
+  const selMarker = new Marker({ element: selEl, anchor: 'center', subpixelPositioning: true, pitchAlignment: 'map', rotationAlignment: 'map' });
   let selShown = false, selText = '', selClass = '';
   // The selected train's label: its own element, not inside the marker, placed by us on whole screen (device) pixels.
   // The marker sits at the exact fraction (the ring needs it); a label inside it snapped a pixel back and forth when a
@@ -2020,8 +2022,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       selLate = props.late;
       const cls =`sel-train late-${props.stale ? 'stale' : props.late}${modelsAt(map.getZoom()) ? ' model' : ''}${tri ? ' tri' : ''}${settings.trainSymbol === 'drop' ? ' drop' : ''}`;
       if (cls !== selClass) { selEl.className = selClass = cls; selLabel.classList.toggle('stale', Boolean(props.stale)); }
-      // The triangle turned the way the train goes, on the screen (the map may be turned).
-      const turn = tri ? `rotate(${((place.bearing ?? 0) - map.getBearing()).toFixed(1)}deg)` : '';
+      // The triangle turned the way the train goes (the marker lies on the map and turns with it).
+      const turn = tri ? `rotate(${(place.bearing ?? 0).toFixed(1)}deg)` : '';
       if (selDot.style.transform !== turn) selDot.style.transform = turn;
       // Round a toy the ring is as wide as the toy is long, plus a margin; otherwise the dot-sized ring (CSS).
       const ring = isToy() && map.getZoom() >= modelZoom() ? `${settings.toySize + 16}px` : '';
