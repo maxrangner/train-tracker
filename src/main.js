@@ -816,7 +816,10 @@ function openNav() {
   // Under the search bar (Max, 2026-11-24: "Menu should show below the search bar", then on the phone too: "make the
   // menu appear below the search pill"); above it only when there's no room below (a phone's sheet at rest, its bar at
   // the bottom).
-  const below = a.bottom + 10, fits = below + h <= innerHeight - 10;
+  // (a computer, the sheet at rest: under the whole box, its arrow included; Max, 2026-11-24 "Menu still not below the
+  // whole search pill")
+  const box = innerWidth >= 440 && stack.level === 0 ? document.getElementById('sheet').getBoundingClientRect().bottom : a.bottom;
+  const below = box + 10, fits = below + h <= innerHeight - 10;
   navEl.style.top = `${fits || innerWidth >= 440 ? Math.min(innerHeight - h - 10, below) : Math.max(10, a.top - h - 10)}px`;
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
