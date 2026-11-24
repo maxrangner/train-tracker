@@ -254,11 +254,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
 
   // ---------- the finger: from anywhere on the sheet (A's drag) ----------
   // ys, t0: where and when the finger came down; top: the highest it went; i0: the height it started at
-  function dragBegin(y, id) { drag = { y0: y, h0: shownH(), h: null, moved: false, ly: y, lt: performance.now(), v: 0, id, ys: y, t0: performance.now(), top: y, i0: idx }; }
+  function dragBegin(y, id) { drag = { y0: y, h0: shownH(), h: null, moved: false, ly: y, lt: performance.now(), v: 0, id, ys: y, t0: performance.now(), top: y, low: y, i0: idx }; }
   function dragMove(y) {
     if (!drag) return false;
     drag.top = Math.min(drag.top, y);
-    if (!drag.moved) { if (Math.abs(drag.y0 - y) < 8) return false; drag.moved = true; drag.y0 = y; }
+    drag.low = Math.max(drag.low, y);
+    if (!drag.moved) { if (Math.abs(drag.y0 - y) < 10) return false;   // (a tap's wobble is no drag)
+      drag.moved = true; drag.y0 = y; }
     // (a computer: the sheet hangs from the top, so a pull down makes it taller)
     const grow = wide() ? -1 : 1;
     let h = drag.h0 + (drag.y0 - y) * grow;
@@ -300,6 +302,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // pulled down, never up first: at least one height lower (2026-11-23: a pull of 150 px from full came back up to
     // full, the nearest height; on a train's page too, 225 px from full and 230 from its half)
     if (!wide() && d.i0 > 0 && to >= d.i0 && h < d.h0 - PULL_PX && d.ys - d.top < 10) to = d.i0 - 1;
+    // and pulled up, never down first: at least one height higher (a pull of 260 px from a train's half came back to
+    // it: 247 px from half, 252 from full, 2026-11-23)
+    if (!wide() && d.i0 < 2 && to <= d.i0 && h > d.h0 + PULL_PX && d.low - d.ys < 10) to = d.i0 + 1;
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head, .pg-head') && !el.closest(NOT_GRAB));
@@ -368,7 +373,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       if (!tch.top || !e.cancelable || dy < -3 || Math.abs(dx) > Math.abs(dy) + 2) { tch = null; return; }
       if (dy <= 0) return;
       e.preventDefault();
-      if (dy < 7) return;
+      tch.held = true; tch.dx = dx; tch.dy = dy;
+      if (dy < 10) return;
       tch.on = true;
       dragBegin(tch.y, -1);
     }
@@ -377,11 +383,25 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   }
   function touchEnd(e) {
     for (const [type, fn] of [['touchmove', touchMove], ['touchend', touchEnd], ['touchcancel', touchEnd]]) e.currentTarget.removeEventListener(type, fn);
+    // A tap whose finger wobbled down a few px: its moves were held for a pull that never came, and the browser then
+    // drops the click (Max's phone, 2026-11-23: the card's notes "sometimes needs two clicks to expand"); the click is
+    // given here, once (a click the browser sends after all is dropped).
+    const t = tch;
+    if (t && !t.on && t.held && e.type === 'touchend' && Math.abs(t.dx) < 12 && Math.abs(t.dy) < 12) {
+      const b = t.target?.closest?.('button, a, label, [role="button"], [data-go], [data-act]');
+      if (b && b.isConnected && !b.disabled) { given = { el: b, at: performance.now() }; b.click(); }
+    }
     touching = false; if (tch?.on) dragEnd(); tch = null;
   }
+  let given = null;   // { el, at }: the click given above
+  addEventListener('click', (e) => {
+    if (!given || !e.isTrusted) return;
+    if (performance.now() - given.at < 600 && given.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); }
+    given = null;
+  }, true);
   sheet.addEventListener('touchstart', (e) => {
     tch = idx === 2 && e.touches.length === 1 && !e.target.closest(HEAD) && !(e.target.closest('input, textarea') && e.target === document.activeElement)
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false } : null;
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY, top: (scroller()?.scrollTop ?? 0) <= 0, on: false, target: e.target, held: false, dx: 0, dy: 0 } : null;
     touching = true;
     e.target.addEventListener('touchmove', touchMove, { passive: false });
     e.target.addEventListener('touchend', touchEnd);
