@@ -43,7 +43,9 @@ export function arrive(rows, seen, key = r => r.textContent.trim()) {
     const k = key(r);
     if (seen.has(k)) continue;
     seen.add(k);
-    if (still || i >= ARRIVE_MAX) continue;
+    // (rows of a page sliding in come with it, not after it: one motion; Max, 2026-11-24 "It's sliding and fading at the
+    // same time, and card jumps". Rows that come in later still arrive.)
+    if (still || i >= ARRIVE_MAX || r.closest?.('.pg.in-r, .pg.in-l')) continue;
     r.style.setProperty('--i', Math.min(i++, 9));
     if (r.classList.contains('arrive')) { r.classList.remove('arrive'); void r.offsetWidth; }
     r.classList.add('arrive');

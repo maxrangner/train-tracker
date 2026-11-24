@@ -577,7 +577,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (old && old !== pg.el) {
       old.classList.remove('in-r', 'in-l');
       if (reduceMotion()) old.remove();
-      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 200); }
+      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300); }
     }
     pg.el.classList.remove('out-l', 'out-r');
     if (prev && !reduceMotion()) {
@@ -626,7 +626,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const prev = top();
     const gone = stack.splice(i + 1);
     show(top(), prev, -1, level === undefined ? {} : { level });
-    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 220); }
+    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 300); }
   }
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
   function refit({ grow = false, settle = false } = {}) {
