@@ -8,7 +8,7 @@
 //   8 a tapped station (and a disruption sign, live) gets a copy that grows and is removed;
 //   with "reduce motion": none of it. Also the longest pause between frames during the menu, a lateness change and the
 //   search rows, with the processor slowed 4x (measured, not a limit).
-// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, Help & About) and no count; the search's
+// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, About Spårat) and no count; the search's
 // rows are .row / .chip with data-go; a train, Connection and the disruptions are pages in the sheet (tools/lib/screen.mjs).
 // node tools/ui-motion-check.mjs (with npm run dev; PAGE= for another port).
 import { launch, sleep, CARD_HOUR } from './lib/browser.mjs';
@@ -154,11 +154,11 @@ try {
     await sleep(2500);
     const sw = await page.evaluate(() => ({ ...window.__seen, late: document.querySelector('#panel .cd-late b')?.textContent, tiles: document.querySelectorAll('#panel .tile').length,
       busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent,
-      key: window.__stack.top(), chip: document.querySelector('#sheet .sh-back span')?.textContent }));
+      key: window.__stack.top(), inCard: Boolean(document.querySelector('#panel .panel-head .sh-follow')) }));
     const want2 = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id2);
     if (!id2) notes.push('5 not checked: no second lone train near the middle');
-    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && /^(Home|Hem)$/.test(sw.chip ?? ''),
-      `5: card to card: ${sw.key} over ${first} (the back chip "${sw.chip}"), ${sw.heads.join(' → ')}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late}`);
+    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && sw.inCard,
+      `5: card to card: ${sw.key} over ${first} (its buttons ${sw.inCard ? 'in the card' : 'NOT in the card'}), ${sw.heads.join(' → ')}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late}`);
     await toRest(page);
   }
 

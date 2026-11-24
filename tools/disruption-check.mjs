@@ -81,18 +81,18 @@ try {
       await sleep(800);
       const s = await sheetState(page);
       const card = await page.evaluate(() => Boolean(document.querySelector('#sheet .pg #disruption')));
-      expect(s.key === `dis:${id}` && card && s.back === 'Hem', `a disruption from the list: its page ${s.key} (${card ? 'drawn' : 'empty'}) over ${s.keys.join(' > ')}, the back chip "${s.back}"`);
+      expect(s.key === `dis:${id}` && card, `a disruption from the list: its page ${s.key} (${card ? 'drawn' : 'empty'}) over ${s.keys.join(' > ')}`);
       const after = await back(page);
       await sleep(300);
       const backAt = await page.evaluate(L => ({ top: document.querySelector(L)?.scrollTop ?? -1 }), LIST);
       expect(after === 'dislist' && Math.abs(backAt.top - at) < 2, `back: ${after} again, scrolled where it was (${backAt.top} of ${at} px)`);
       if (!problemsShown) { await page.evaluate(L => document.querySelector(`${L} .dis-fold`).click(), LIST); await sleep(300); }
-      // One opened from the map has Home under it (the chip says so)
+      // One opened from the map has Home under it
       await toRest(page);
       await page.evaluate(i => window.__stack.open(`dis:${i}`), id);
       await sleep(600);
       const fromMap = await sheetState(page);
-      expect(fromMap.back === 'Hem', `a disruption opened alone: the back chip "${fromMap.back}" (Home under it)`);
+      expect(fromMap.keys.join(' > ') === `home > dis:${id}`, `a disruption opened alone: ${fromMap.keys.join(' > ')} (want Home under it)`);
       await toRest(page);
       await page.evaluate(() => window.__map.jumpTo({ center: [16.5, 62.5], zoom: 4.6, bearing: 0, pitch: 0 }));   // (opening it flew the map there)
       await sleep(1200);

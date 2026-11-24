@@ -111,7 +111,8 @@ try {
     await sleep(600);
   }
   // until the sheet's height stops changing (a glide ends)
-  const settle = async () => { let a = await sheet(); for (let i = 0; i < 20; i++) { await sleep(120); const b = await sheet(); if (b.h === a.h) return b; a = b; } return a; };
+  // (two quiet readings in a row: a page busy drawing a card held a glide 140 ms before it began, 2026-11-23)
+  const settle = async () => { let a = await sheet(), same = 0; for (let i = 0; i < 30; i++) { await sleep(120); const b = await sheet(); same = b.h === a.h ? same + 1 : 0; if (same >= 2) return b; a = b; } return a; };
 
   const key = await openCard();
   if (!key) fails.push('setup: no train page with its stops opened');
@@ -197,16 +198,13 @@ try {
       await wander(PHONE.width / 2, c.top - 14);
       c = await sheet();
       if (c.level !== 1) fails.push(`4 a wandering tap on the grip above the sheet at low: height ${c.level}, wanted 1`);
-      // a tap on the head's empty part (between the back chip and the bar's buttons): half → low
-      const gap = await page.evaluate(() => {
-        const back = document.querySelector('#sheet .sh-back').getBoundingClientRect();
-        const next = [...document.querySelectorAll('#sheet .sh-bar button')].filter(b => !b.hidden && b.getBoundingClientRect().left > back.right).map(b => b.getBoundingClientRect().left);
-        return { x: (back.right + Math.min(innerWidth - 12, ...next)) / 2, y: back.top + back.height / 2 };
-      });
+      // a tap on the head (the card's top line, its number: no bar since 2026-11-23; the gap before its buttons can be
+      // a few px, a finger there lands on Share): half → low
+      const gap = await page.evaluate(() => { const r = document.querySelector('#panel .panel-title strong').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await page.touchscreen.tap(gap.x, gap.y);
       await sleep(600);
       c = await sheet();
-      if (c.level !== 0) fails.push(`4 a tap on the head between its buttons at half: height ${c.level}, wanted 0`);
+      if (c.level !== 0) fails.push(`4 a tap on the card's top line (its number) at half: height ${c.level}, wanted 0`);
       // a pull down of 110 px from the head at full, held still: lowered (it came back up to full, the nearest height)
       await setLevel(page, 2);
       await settle();

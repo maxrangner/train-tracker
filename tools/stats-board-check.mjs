@@ -56,7 +56,8 @@ try {
   const kindV = await page.evaluate(h => { const r = [...document.querySelectorAll(`${h} .st-brow[data-filter="kind"]`)].find(x => x.style.order === '0'); r.click(); return r.dataset.v; }, HOME);
   await until(page, k => window.__stack.top() === `kind:${k}`, 3000, kindV);
   await sleep(500);
-  await page.evaluate(() => document.querySelector('#sheet .show-only')?.click());
+  // (a row tapped on Home filters already since 2026-11-23: 'Visa bara' then shows it on; tapped only when off)
+  await page.evaluate(() => { const b = document.querySelector('#sheet .show-only'); if (b && b.getAttribute('aria-pressed') !== 'true') b.click(); });
   await sleep(300);
   await back(page);
   await setLevel(page, 2);
@@ -86,7 +87,7 @@ try {
   const backKey = await back(page);
   await sleep(800);
   const homeAgain = await page.evaluate(h => ({ count: Number(document.querySelector(`${h} .st-count`).textContent.replace(/\D/g, '')), companies: Boolean(document.querySelector(`${h} .st-brow[data-filter="brand"]`)) }), HOME);
-  check(s.back === 'Hem' && backKey === 'home' && homeAgain.companies && homeAgain.count > co.count, `the back chip "${s.back}": ${backKey}, all trains again (${homeAgain.count})`);
+  check(s.keys.at(-2) === 'home' && backKey === 'home' && homeAgain.companies && homeAgain.count > co.count, `back from ${s.keys.join(' > ')}: ${backKey}, all trains again (${homeAgain.count})`);
   // Busiest's rows open the station's board
   const busy = await page.evaluate(h => { const b = document.querySelector(`${h} .st-rank [data-sig]`); b?.click(); return Boolean(b); }, HOME);
   if (busy) {

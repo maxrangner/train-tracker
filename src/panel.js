@@ -27,11 +27,9 @@ export const star = on => `<button class="panel-star" type="button" aria-pressed
 
 // Trafikverket's notes on the full card fold under one line (Max, 2026-11-16: they "sometimes take a lot of space";
 // folded by default (Max, 2026-11-16: "change default to collapsed"), problems fold too, with a red ⚠ and their count on the
-// line). Remembered on this device (a new name for the memory: choices made while open was the default start over).
-const NOTES_KEY = 'notesShown';
+// line). Every card opens with them folded, an opened fold not remembered (Max, 2026-11-23: "'Meddelanden' should be
+// compacted by default"; it was remembered on this device until then).
 let notesOpen = false;
-try { notesOpen = localStorage.getItem(NOTES_KEY) === 'true'; } catch { /* storage blocked: folded */ }
-const remember = on => { try { localStorage.setItem(NOTES_KEY, String(on)); } catch { /* used now, not remembered */ } };
 // "All places": Settings → All places since 2026-11-22 (settings.allPlaces; a switch on the card until then).
 // Open: the notes, with only a small ⌃ at the top right to fold them (Max, 2026-11-16: no ⚠ or "Notes (3)" then).
 const notesBox = (lines, problems) => (notesOpen
@@ -90,7 +88,7 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
 // stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
 // sets .full); onStop(sig): a stop in the timeline tapped (its station's page); onFold(open, box): its messages opened
 // or shut (box: their part).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null }) {
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null, onHead }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
@@ -100,11 +98,23 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let picking = false;    // the list of stops to count down to is open
   let opening = false, closing = false;   // it slides open (only when it opens, not at each redraw) and closed
   let infoOn = false;     // the train's own numbers instead of its stops ("i")
+  // The notes' fold answers a press and lift on it, not only a click (Max's PC, 2026-11-24: "Sometimes I have to click
+  // several times for it to expand"): a click needs the press and the lift on the same element, so one that moved or
+  // was drawn again in between (the card gliding after "More") got nothing. The click a lift may still bring is let go.
+  let foldPress = null, foldLetGo = 0, foldNow = null;
+  el.addEventListener('pointerdown', (e) => { foldPress = e.button === 0 && e.target.closest('.tv-toggle') ? { x: e.clientX, y: e.clientY, t: performance.now() } : null; });
+  el.addEventListener('pointerup', (e) => {
+    const p = foldPress;
+    foldPress = null;
+    if (!p || !foldNow || !e.target.closest('.tv-box') || Math.hypot(e.clientX - p.x, e.clientY - p.y) > 12 || performance.now() - p.t > 900) return;
+    foldLetGo = performance.now() + 600;
+    foldNow();
+  });
 
   // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
   // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
   const head = (train, company) =>
-    `<div class="panel-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
+    `<div class="panel-head pg-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong>` +
     (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span><span class="panel-buttons">` +
     (info ? `<button class="panel-info" type="button" aria-pressed="${infoOn}" aria-label="${t('tiButton')}">${icon('about')}</button>` : '') +
     (number && isStarred ? star(isStarred(number)) : '') +
@@ -118,6 +128,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (s) s.onclick = () => { const on = onStar(number); s.outerHTML = star(on); wireHead(); };
     const i = el.querySelector('.panel-info');
     if (i) i.onclick = () => setInfo(!infoOn);
+    onHead?.(el.querySelector('.panel-head'));   // (a new head line: the sheet puts the page's buttons in it again)
   }
   function setInfo(on) {
     infoOn = on;
@@ -170,6 +181,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   function close() {
     clearTimeout(refreshTimer);
     openId = null;
+    picking = false; el.classList.remove('picking');   // (the chooser goes with the card: the map kept waiting for it)
     el.hidden = true;
     el.innerHTML = '';
     onSelect?.(null);
@@ -188,6 +200,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     following = follow;   // opening a train on the map starts following it (main.js)
     canFollow = follow;
     target = null;
+    notesOpen = false;
     picking = false;
     onSelect?.(train.id);
     el.hidden = false;
@@ -340,11 +353,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const nextName = standing(next) ? t('cdAt', stationName(next.station)) : stationName(next.station);
     const isEnd = goal === ahead.at(-1);
     const pct = f => `${(f * 100).toFixed(1)}%`;
-    const trip = `<div class="cd-trip"><div class="cd-bar"><span class="cd-done" style="width:${pct(here)}"></span>` +
+    const atEnd = nextIdx === stops.length - 1;   // (its name is in the end's pill: no line under the bar for it)
+    const trip = `<div class="cd-trip${atEnd ? ' no-at' : ''}"><div class="cd-bar"><span class="cd-done" style="width:${pct(here)}"></span>` +
       `<i class="cd-first"></i>${!isEnd && goal.i !== nextIdx ? `<i class="cd-goal" style="left:${pct(frac((goal.s.arr ?? goal.s.dep).planned))}"></i>` : ''}` +
       `<i class="cd-train" style="left:${pct(here)}"></i><i class="cd-end${isEnd ? ' goal' : ''}"></i></div>` +
       `<div class="cd-names"><span class="cd-from"><em>${esc(stationName(stops[0].station))}</em></span>` +
-      `<b class="cd-at${goal.i === nextIdx ? ' goal' : ''}" style="--at:${pct(here)}">${esc(nextName)}</b>` +
+      (atEnd ? '' : `<b class="cd-at${goal.i === nextIdx ? ' goal' : ''}" style="--at:${pct(here)}">${esc(nextName)}</b>`) +
       `<span class="cd-to${isEnd ? ' goal' : ''}"><em>${esc(stationName(stops.at(-1).station))}</em></span></div></div>`;
     // The timeline's line where the train is: "In 4 min" to the next stop; standing there, "Leaves in 2 min".
     const nx = row({ s: next, i: nextIdx }), soon = nx.w.at - tNow < 30000;
@@ -392,10 +406,19 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
     const late = lateNow(stops);
+    // "→ Destination" in the head line, shown only when the card rests collapsed on a phone (Max, 2026-11-23: "only
+    // number, operator and destination"; index.html)
+    const title = el.querySelector('.panel-title'), dest = `→ ${stationName(stops.at(-1).station)}`;
+    let to = title?.querySelector('.ph-to');
+    if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); title.append(to); }
+    if (to && to.textContent !== dest) to.textContent = dest;
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
-    // the trip line first, then the tiles (Max's card pick 3, 2026-11-23)
-    const html = `${g.trip}<div class="cd-tiles">${g.tiles}</div>${g.list}`;
+    // the tiles (lateness, the time to the stop, its chooser), then the page's parts (why it stands), then the trip line
+    // (Max, 2026-11-23: "lateness and arrival time and disruption reason comes before the progress bar")
+    const html = `<div class="cd-tiles">${g.tiles}</div>${g.list}`;
+    const tb = el.querySelector('.cd-tb');
+    if (tb && tb._h !== g.trip) { tb.innerHTML = g.trip; tb._h = g.trip; }
     el.classList.toggle('picking', Boolean(g.list));   // the card grows while the stops ahead are listed
     if (html === glanceSeen) return;   // each second: only when something on it changed
     glanceSeen = html;
@@ -551,21 +574,24 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
       (route.asOf && now() - route.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(route.asOf))}</p>` : '') +
       (stops.length
-        ? `<div class="cd"></div>` +
+        ? `<div class="cd"></div><div class="cd cd-tb"></div>` +
           `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
           (noteLines.length ? notesBox(noteLines, problemCount) : '') +
-          `<div class="panel-table tl"><div class="tl-head"><span></span><span></span><span></span><span>${t('track')}</span></div>${tlRows}</div>` +
+          `<div class="panel-table tl"><div class="tl-head">` +
+          // ("All places" back on the card, left of "Track": Max, 2026-11-23; the same setting as Settings → All places)
+          `<span class="tl-all"><button type="button" class="tl-places" data-act="allplaces" aria-pressed="${Boolean(settings.allPlaces)}">${icon(settings.allPlaces ? 'check' : 'plus', 14)}${esc(t('allPlaces'))}</button></span><span>${t('track')}</span></div>${tlRows}</div>` +
           (info ? '<div class="panel-info-box"></div>' : '')
         : stateHtml('empty', t('noStops')));
     wireHead();
     // The page's own parts under the tiles (src/main.js: why it stands, Share, Add my change; 2026-11-23)
     const x = stops.length ? extra?.(openId) : null;
-    if (x) { const at = el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
+    if (x) { const at = el.querySelector('.cd-tb') ?? el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    if (fold) fold.onclick = () => { notesOpen = !notesOpen; remember(notesOpen); draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); };
+    foldNow = fold ? () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); } : null;
+    if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();
@@ -642,7 +668,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
 
   // The card put away with the train still open (a screen over it, Settings → Debug → Screen over a train: 'follow'),
   // and shown again; it stays up to date meanwhile.
-  const hide = () => { el.hidden = true; };
+  const hide = () => { el.hidden = true; picking = false; el.classList.remove('picking'); };
   const show = () => { if (openId) el.hidden = false; };
   // The "to …" chooser shut at once, with no glide (a map tap: the tap rules, src/stack.js).
   function closePick() {

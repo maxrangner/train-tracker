@@ -125,6 +125,27 @@ try {
     await sleep(400);
     ok(!(await state()).filter, `${dev} R3: its × clears it`);
 
+    // ---- R3 from Home (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the filtering. Also
+    // in a train card when filtering, if dismissing the train card the filtering goes away"): a company in Home's list
+    // is the filter at once; map taps back to Home and a train opened and closed keep it ----
+    await toRest(p);
+    await p.evaluate(() => window.__stack.setLevel(2));
+    await sleep(700);
+    const hco = await p.evaluate(() => { const b = document.querySelector('.pg[data-key="home"] [data-filter="brand"]'); b?.click(); return b?.dataset.v ?? null; });
+    await sleep(900);
+    if (!hco) notes.push(`${dev} R3 Home: no company row on Home (not checked)`);
+    else {
+      const h0 = await state();
+      await tapsHome();
+      const h1 = await state();
+      const ht = await openChooserTrain(hco);
+      if (ht) await tapsHome();
+      const h2 = await state();
+      ok(h0.filter && h1.filter && h2.filter, `${dev} R3 Home: ${hco} from Home's list is the filter (${h0.filter}); after map taps home (${h1.filter}); after a train opened and closed (${ht ? h2.filter : 'no train'})`);
+      await p.evaluate(() => document.querySelector('#line .line-x')?.click());
+      await sleep(400);
+    }
+
     // ---- R1 (d): a "2 trains" list, a train from it, taps: the card closes, never back to the list ----
     await toRest(p);
     const openPickTrain = async () => {
@@ -141,7 +162,7 @@ try {
     ok(d0.keys.includes('pick:') && d0.top.startsWith('train:') && !dTops.some(k => k?.startsWith('pick:')) && d1.keys === 'home' && (dev === 'phone' || dTops.length === 1),
       `${dev} R1d: ${d0.keys}, map taps: ${dTops.join(' -> ')} (want Home${dev === 'pc' ? ' in one tap' : ''}, never the list again)`);
 
-    // ---- R4: Esc one page back (the list), the chip home ----
+    // ---- R4: Esc one page back (the list); no Home chip (2026-11-23): a pull down below low goes home ----
     await toRest(p);
     await openPickTrain();
     await p.keyboard.press('Escape');
@@ -150,9 +171,7 @@ try {
     ok(e1.top?.startsWith('pick:'), `${dev} R4: Esc over a train from a list: ${e1.keys} (want the list)`);
     await p.evaluate(() => document.querySelector('#picker [data-i]')?.click());
     await sleep(1200);
-    await p.evaluate(() => document.querySelector('#sheet .sh-back').click());
-    await sleep(600);
-    ok((await state()).keys === 'home', `${dev} R4: the back chip: ${(await state()).keys} (want Home)`);
+    ok(await p.evaluate(() => !document.querySelector('#sheet .sh-back')), `${dev} R4: a Home chip is there (want none)`);
 
     // ---- R1 with ☰'s menu open, and with the search open (a computer: the map is free beside the sheet) ----
     await toRest(p);
@@ -249,7 +268,10 @@ try {
       await p.mouse.click(g0.x, g0.y);
       await sleep(700);
       const g1 = await grab(), l1 = (await state()).level;
-      ok(l1 > 0 && (g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn)), `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points up (${g1.turn})`);
+      // (it points the way its next click goes, 2026-11-24: down while more of Home is hidden, up when all is shown)
+      const more = await p.evaluate(() => document.getElementById('sheet').dataset.next === 'more');
+      const up = g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn);
+      ok(l1 > 0 && up === !more, `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points ${up ? 'up' : 'down'} (${more ? 'more hidden' : 'all shown'})`);
     } else ok(g0.dash && !g0.arrow, `phone 4: the handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
 
     // ---- 5: Home's hint only at full ----

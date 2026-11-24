@@ -1,6 +1,6 @@
 // Max's notes of 2026-11-20 in the test browser (phone size, a replay), on the one sheet (2026-11-22, src/stack.js):
 //   - one page on top, in the stack's order: a train, a station from its stops over it; only the top page is in the
-//     sheet, the back chip says Home (since 2026-11-23), back (Esc) steps down the stack to Home and nothing is left;
+//     sheet, no Home chip (since 2026-11-23), back (Esc) steps down the stack to Home and nothing is left;
 //   - a page over a train lets its card go; back to it, the card is there again and the train followed (until
 //     2026-11-22 Settings → Debug → "Screen over a train" chose this: the stack decides now);
 //   - ☰'s menu answers at once after a swipe of the sheet (a page swiped away, Home swiped down: ☰ 30 ms later opens);
@@ -68,17 +68,17 @@ try {
     await until(page, s => window.__stack.top() === `station:${s}`, 3000, sig);
     await sleep(900);
     const over = await page.evaluate(() => ({ ...{ keys: window.__stack.keys() }, pages: [...document.querySelectorAll('#sheet .sh-pages > .pg:not(.res)')].filter(p => p.isConnected).map(p => p.dataset.key),
-      chip: document.querySelector('#sheet .sh-back span')?.textContent, card: document.getElementById('panel').closest('.pg')?.dataset.key ?? null,
+      card: document.getElementById('panel').closest('.pg')?.dataset.key ?? null,
       cardShown: !document.getElementById('panel').hidden && Boolean(document.getElementById('panel').closest('.pg')) }));
-    check(over.keys.join(' > ') === `home > ${tr.key} > station:${sig}` && over.pages.length === 1 && over.pages[0] === `station:${sig}` && over.chip === 'Home',
-      `a station from ${tr.number}'s stops: ${over.keys.join(' > ')}, in the sheet only ${over.pages.join(', ')}, the back chip "${over.chip}"`);
+    check(over.keys.join(' > ') === `home > ${tr.key} > station:${sig}` && over.pages.length === 1 && over.pages[0] === `station:${sig}`,
+      `a station from ${tr.number}'s stops: ${over.keys.join(' > ')}, in the sheet only ${over.pages.join(', ')}`);
     check(!over.cardShown, `the station over the train: its card let go (shown in ${over.card ?? 'no page'})`);
     const k1 = await back(page);
     await sleep(800);
     const backAt = await page.evaluate(() => ({ title: document.querySelector('#panel .panel-title strong')?.textContent ?? '', in: document.getElementById('panel').closest('.pg')?.dataset.key ?? null,
-      follow: document.querySelector('#sheet .sh-follow')?.getAttribute('aria-pressed'), chip: document.querySelector('#sheet .sh-back span')?.textContent }));
-    check(k1 === tr.key && backAt.in === tr.key && backAt.title.startsWith(tr.number) && backAt.follow === 'true' && backAt.chip === 'Home',
-      `back: ${k1}, its card "${backAt.title}" in ${backAt.in}, Follow ${backAt.follow}, the back chip "${backAt.chip}"`);
+      follow: document.querySelector('#sheet .sh-follow')?.getAttribute('aria-pressed'), inCard: Boolean(document.querySelector('#panel .panel-head .sh-follow')) }));
+    check(k1 === tr.key && backAt.in === tr.key && backAt.title.startsWith(tr.number) && backAt.follow === 'true' && backAt.inCard,
+      `back: ${k1}, its card "${backAt.title}" in ${backAt.in}, Follow ${backAt.follow}${backAt.inCard ? ' in the card' : ' NOT in the card'}`);
     const k2 = await back(page);
     const left = await page.evaluate(() => ({ keys: window.__stack.keys(), pages: document.querySelectorAll('#sheet .sh-pages > .pg:not(.res)').length }));
     check(k2 === 'home' && left.keys.length === 1, `back again: ${k2}, ${left.keys.length} page(s) left`);
@@ -216,8 +216,8 @@ try {
     await setLevel(page, 1);
     await sleep(1600);   // (its half is read again each second)
     const more = await page.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(); return b ? { bottom: Math.round(b.bottom), h: innerHeight } : null; });
-    // (and no empty space under it: Max's phone, 2026-11-23, second round)
-    check(!more || (more.bottom <= more.h - 20 && more.bottom >= more.h - 40), `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 20 to 40)`);
+    // (and no empty space under it: Max's phone, 2026-11-23, second and third rounds)
+    check(!more || (more.bottom <= more.h - 2 && more.bottom >= more.h - 16), `a train at half: "More" ends ${more ? more.h - more.bottom : '?'} px above the bottom (want 2 to 16)`);
     // the chooser ("to Kallhäll"): the sheet follows the card at once (Max, 2026-11-23: "the card expands after way too long")
     const h0 = await settle();
     await click('#panel .cd-stop');
@@ -231,15 +231,29 @@ try {
     let hShut = 0;
     for (let i = 0; i < 10 && Math.abs((hShut = await shownH()) - h0) > 4; i++) await sleep(100);
     // open: the list's last stop on screen at once, the sheet taller for it unless it fit already (the train card with
-    // its trip line on top, Max's pick 3: the list often fits without the sheet growing)
+    // its trip line under the tiles: the list often fits without the sheet growing)
     check(lastRow > 0 && lastRow <= 851 - 20 && Math.abs(hShut - h0) <= 4, `the chooser: the sheet ${h0} → ${hOpen} px 0.3 s after opening (its last stop ends ${851 - lastRow} px above the bottom), ${hShut} px after shutting`);
+    // the order at half (Max, 2026-11-23: "lateness and arrival time and disruption reason comes before the progress
+    // bar"): the tiles, then why it stands (when it does), then the trip line
+    const order = await page.evaluate(() => [...document.querySelectorAll('#panel .cd-tiles, #panel .tr-extras .why, #panel .cd-trip')]
+      .map(e => ({ n: e.classList.contains('cd-tiles') ? 'tiles' : e.classList.contains('why') ? 'why' : 'trip', y: Math.round(e.getBoundingClientRect().top) }))
+      .sort((a, b) => a.y - b.y).map(x => x.n).join(' → '));
+    check(order === 'tiles → trip' || order === 'tiles → why → trip', `the card at half, top to bottom: ${order} (want the tiles, why, then the trip line)`);
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
+    // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)
+    await sleep(700);
     const low = await page.evaluate(() => {
-      const els = [...document.querySelectorAll('#panel .panel-head, #panel .panel-alert')].filter(e => e.offsetParent);
-      return { h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), gap: Math.round(innerHeight - Math.max(...els.map(e => e.getBoundingClientRect().bottom))) };
+      const head = document.querySelector('#panel .panel-head'), to = document.querySelector('#panel .ph-to');
+      const shown = [...document.querySelectorAll('#panel > :not(.panel-head):not(.cd), #panel .cd > *')].filter(e => e.offsetParent && getComputedStyle(e).opacity !== '0' && e.getBoundingClientRect().top < innerHeight).map(e => e.className);
+      return { h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), gap: Math.round(innerHeight - head.getBoundingClientRect().bottom),
+        dest: to && to.offsetParent ? to.textContent : '', shown,
+        // (the buttons in the head line: Follow only, the name and the destination whole; Max, 2026-11-23)
+        whole: Boolean(to) && to.scrollWidth <= to.clientWidth + 1 && [...head.querySelectorAll('.panel-co')].every(c => c.scrollWidth <= c.clientWidth + 1),
+        btns: [...head.querySelectorAll('.sh-btns button')].filter(b => b.offsetParent).map(b => b.className.split(' ')[0]).join(',') };
     });
-    check(low.h < 220 && low.gap >= 10 && low.gap <= 30, `a train at low: the condensed card ${low.h} px tall, ${low.gap} px under its last line (want 10 to 30)`);
+    check(low.h < 200 && low.gap >= 8 && low.gap <= 30 && /→/.test(low.dest) && !low.shown.length && low.whole && low.btns === 'sh-follow',
+      `a train at low: ${low.h} px tall, ${low.gap} px under its head line, "${low.dest}" in it${low.whole ? '' : ' CUT'}, buttons ${low.btns || 'none'}, nothing else showing (${low.shown.join(', ') || 'none'})`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at
@@ -271,7 +285,7 @@ try {
       await sleep(700);
       const m = await pc.evaluate(() => { const b = document.querySelector('#panel .panel-more')?.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); return b ? Math.round(s.bottom - b.bottom) : null; });
       // (the sheet hangs from the top on a computer since 2026-11-23: its arrow's 20 px row is under "More")
-      check(m !== null && m >= 12 + 20 && m <= 40 + 20, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its arrow's row included (want 32 to 60)`);
+      check(m !== null && m >= 2 + 8 && m <= 16 + 8, `a computer, a train at its lowest: "More" ${m ?? '?'} px above the sheet's bottom, its thin handle row included (want 10 to 24)`);
       await pc.evaluate(() => window.__stack.home(0));
       await sleep(600);
       const pfg = await fieldGap(pc);
@@ -317,6 +331,9 @@ try {
     // on a button: a swipe down lowers it, a tap is still the button's
     await setLevel(page, 2);
     await settle();
+    // (from the page's top: at full a page scrolled down scrolls back first, as on the page above)
+    await page.evaluate(s => { document.querySelector(s).scrollTop = 0; }, pgSel);
+    await sleep(300);
     const more = await centre('#panel .panel-more');
     await swipe(more.x, Math.min(more.y, 560), 250);
     await settle();

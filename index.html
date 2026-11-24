@@ -95,10 +95,16 @@
     @media (min-width: 440px) {
       .sh-grab { cursor: pointer; }
       .sh-grab i { display: none; }
-      .sh-arrow { display: grid; place-items: center; width: 36px; height: 18px; border-radius: 9px; color: var(--muted); transition: transform .26s var(--ez), background .15s; }
+      .sh-arrow { display: grid; place-items: center; width: 36px; height: 16px; border-radius: 8px; color: var(--accent); transition: transform .26s var(--ez), background .15s; }
+      /* (4 px clear of the sheet's bottom edge: Max, 2026-11-24 "just a hair too little padding") */
+      #sheet .sh-grab { align-items: start; }
       .sh-grab:hover .sh-arrow { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
-      #sheet[data-h="0"] .sh-arrow { transform: rotate(180deg); }
+      #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
+      /* (a train's card has its own "More" just above: one arrow, not two; Max, 2026-11-23) */
+      #sheet[data-page="train"] .sh-arrow { display: none; }
+      /* (and its row thin: under "More" only a sliver of room, Max 2026-11-24: "still too much padding") */
+      #sheet[data-page="train"] .sh-grab { height: 8px; }
     }
     /* The handle's touch target (Max's phone, 2026-11-23: "seems to hit it but doesn't respond"): the bar stays thin;
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
@@ -119,15 +125,38 @@
     #search::-webkit-search-cancel-button { display: none; }
     #nav-button { flex: none; width: 48px; height: 48px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
     #nav-button[aria-expanded="true"] { background: var(--accent); color: var(--accent-ink); }
-    #nav-button:focus-visible, .sh-back:focus-visible, .sh-star:focus-visible, .sh-follow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #nav-button:focus-visible, .sh-star:focus-visible, .sh-follow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .sh-cancel { display: none; height: 44px; padding: 0 8px; border: 0; background: none; color: var(--accent); font: 700 15px var(--font); cursor: pointer; }
     #sheet[data-search] #nav-button { display: none; }
     #sheet[data-search] .sh-cancel { display: block; }
-    .sh-back { display: inline-flex; align-items: center; gap: 2px; height: 44px; max-width: 62%; min-width: 0; padding: 0 16px 0 8px; border: 0; border-radius: 22px;
-      background: var(--hover); color: var(--ink); font: 700 15px var(--font); cursor: pointer; transition: background .15s, color .15s; touch-action: none; -webkit-user-select: none; user-select: none; }
-    .sh-back .icon { flex: none; }
-    .sh-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #sheet.closing .sh-back { background: var(--accent); color: var(--accent-ink); }
+    /* No back chip (Max, 2026-11-23: "Remove home button"; a map tap or a pull down goes home, Esc and Android's back
+       step back). A page without buttons of its own has no bar: the head folds to nothing (src/stack.js .no-bar); a
+       train's buttons sit in its card's top line beside the number (def.barIn). */
+    #sheet.no-bar .sh-head { height: 0; }
+    #sheet.no-bar .sh-bar { visibility: hidden; }
+    /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
+    #sheet .pg-head { touch-action: none; }
+    /* Home at rest: the search bar alone, nothing of the cards under it peeking (Max, 2026-11-23, again); while the finger
+       pulls it up they show */
+    #sheet[data-page="home"][data-h="0"]:not(.dragging):not([data-search]) .sh-pages { visibility: hidden; }
+    /* (at full the card's top line stays at the top while its stops scroll under it: its Share, star and Follow in reach) */
+    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg); padding-block: 6px; margin-block: -6px 0;
+      box-shadow: 0 -12px 0 var(--bg); }   /* (the band above it too: the stops showed through there, Max 2026-11-24) */
+    .sh-btns { display: flex; align-items: center; gap: 8px; flex: none; }
+    /* ‹: one page back (Max, 2026-11-23: "With home gone, some screens need a back button like disruptions"); every page
+       but a train's (its card's top line is its head: a map tap or a pull closes it) */
+    .sh-up { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
+    .sh-up:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* ‹ and a page's buttons on its title line (src/stack.js headOf) */
+    .pg :is(.g-head, .panel-head) > .sh-up { margin-right: 10px; }
+    .pg .panel-head:has(> .sh-up) { justify-content: flex-start; }
+    .pg :is(.g-head, .panel-head) > .sh-btns { margin-left: auto; padding-left: 10px; }
+    /* (a title beside ‹ and buttons wraps rather than being cut: "Lund C → Mal…") */
+    .pg .g-head:has(> .sh-up) .ttl { white-space: normal; overflow-wrap: anywhere; }
+    /* a trip's pencil and bin beside its name (its page's .g-head, def.barIn) */
+    .g-head .sh-btns { margin-left: auto; padding-left: 10px; gap: 6px; }
+    .g-head .sh-act { min-width: 40px; height: 40px; padding: 0 9px; }
+    .panel-buttons .sh-btns { gap: 6px; }
     .sh-grow { flex: 1; }
     .sh-star { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
     .sh-star[aria-pressed="true"] { color: var(--c-some); }
@@ -154,7 +183,7 @@
     #sheet.more-below .sh-fade { opacity: 1; }
     #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
     .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 20px; margin-left: -22px; padding: 0;
-      display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--hover); color: var(--muted); cursor: pointer; }
+      display: grid; place-items: center; border: 0; border-radius: 10px; background: var(--hover); color: var(--accent); cursor: pointer; }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (min-width: 440px) { .sh-more { bottom: 4px; } }
@@ -191,23 +220,22 @@
 
     /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right. */
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
-      max-width: calc(100% - 96px); display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px; background: var(--card); color: var(--ink);
-      box-shadow: var(--shadow-s); transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
+      max-width: calc(100% - 96px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
+      transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
+    /* (each pill: the filter's above any other, src/line.js) */
+    #line .ln-pill { max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px;
+      background: var(--card); color: var(--ink); box-shadow: var(--shadow-s); pointer-events: auto; }
     @media (min-width: 440px) { #line { left: calc(10px + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); max-width: 420px; } }
     .sheet-high #line { opacity: 0; pointer-events: none; }
     #line .line-main { min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 6px 0 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
     #line .line-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #line .line-x { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
 
-    /* The small menus: ☰'s, just above it, and the trail under a held back chip. */
+    /* The small menu: ☰'s, just above it. */
     .pop { position: fixed; z-index: 9; min-width: 210px; max-width: 290px; box-sizing: border-box; display: grid; gap: 2px; padding: 6px;
       background: var(--card); color: var(--ink); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px var(--line); animation: pop-in .16s cubic-bezier(.2, .85, .25, 1) both; }
     @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(.97); } }
     .pop small { padding: 6px 12px 2px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
-    #trail button { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 14px 0 10px; border: 0; border-radius: 12px; background: none; color: var(--ink);
-      font: 600 16px var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; text-align: left; }
-    #trail button span { overflow: hidden; text-overflow: ellipsis; }
-    #trail button:hover, #trail button:focus-visible { background: var(--hover); outline: none; }
     .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 14px 6px 8px; border: 0; border-radius: 12px; background: transparent;
       color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
     .nav-row:hover, .nav-row:focus-visible { background: var(--hover); outline: none; }
@@ -257,7 +285,7 @@
     .chip .dot { margin: 0; }
     .scopes { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }
     .dis-list { display: grid; gap: 6px; margin-top: 6px; }
-    :is(.row, .chip, .lg-p, .sh-back, .sh-follow, .show-only):active { opacity: .7; }
+    :is(.row, .chip, .lg-p, .sh-follow, .show-only):active { opacity: .7; }
 
     /* Home: the lateness bar you can tap. */
     .lg { display: flex; gap: 3px; height: 46px; }
@@ -282,8 +310,15 @@
     .home-stats > .big { margin: 6px 0 0; }
     /* Parts as cards (Max's heading pick C, 2026-11-23: "hard to see where one section ends and the other begins"): each
        of Home's parts a soft card of its own, its heading inside, big and plain, the same on every page. */
-    .pg[data-key="home"] > .sec:not([hidden]) { background: color-mix(in srgb, var(--ink) 5%, transparent); border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
-    .pg[data-key="home"] > .sec.home-stats:not([hidden]) { padding: 12px 12px 14px; }
+    /* (and the other pages' parts the same way, Max 2026-11-23: "The sub cards implemented in main card have not followed to the
+       rest of the UI": a company's or a kind's parts, Settings, a board's list, a trip's lists) */
+    .pg > .sec:not([hidden]), .pg #settings, .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair {
+      background: color-mix(in srgb, var(--ink) 5%, transparent); border: 0; border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
+    .pg #settings { padding: 8px 14px; }
+    .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair { padding: 4px 12px; }
+    .pg:not([data-key="home"]) > .sec:first-child { margin-top: 0; }
+    /* (its right side too: an older rule for scrolling parts set it to 0, its numbers ran to the card's edge; Max 2026-11-24) */
+    #sheet .pg[data-key="home"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
     .pg :is(.lab, .big) { font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--ink); margin: 2px 0 10px; }
     .pg[data-key="home"] .home-stats > .big { margin: 2px 2px 10px; }
     .st-groups .st-sec-bars > .st-sub { display: none; }
@@ -320,6 +355,8 @@
     .tr-acts, .st-extras { display: flex; flex-wrap: wrap; gap: 8px; }
     .st-extras { margin-top: 4px; }
     .tr-acts .chip, .st-extras .chip { gap: 7px; }
+    /* "Add a change" only on the expanded card (Max, 2026-11-23); its row goes with it */
+    #sheet:not([data-h="2"]) .tr-extras .tr-acts { display: none; }
     .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
       background: var(--t-some-bg); color: var(--t-some); font: inherit; }
     .why.none { background: var(--hover); color: var(--muted); }
@@ -429,7 +466,7 @@
     .pk-row.canceled b, .pk-row.canceled span:not(.tag) { text-decoration: line-through; color: var(--muted); }
     #peek .empty { padding: 4px 12px 8px; }
     /* The shop window: everything pressable fades, one line of words at the bottom; a touch anywhere ends it. */
-    html.shop :is(#sheet, #sheet-grip, #line, #status, #nav, #trail, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease !important; }
+    html.shop :is(#sheet, #sheet-grip, #line, #status, #nav, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0 !important; pointer-events: none !important; transition: opacity .8s ease !important; }
     #shop { position: fixed; inset: 0; z-index: 30; background: transparent; }
     .shop-line { position: absolute; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); margin: 0; max-width: calc(100% - 40px);
       padding: 10px 18px; border-radius: 22px; background: var(--card); color: var(--ink); box-shadow: var(--shadow); font: 650 16px/1.3 var(--font); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -773,6 +810,11 @@
       border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0;
     }
     .panel-close:focus-visible, .panel-info:focus-visible, .menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* (the card's top line: "i", Share, ☆ and Follow one height, 40 px; Max, 2026-11-24: "'i' pill is smaller than the
+       others") */
+    #panel .panel-head :is(.panel-info, .sh-star, .sh-act) { width: 40px; min-width: 40px; height: 40px; padding: 0; }
+    #panel .panel-head .sh-follow { height: 40px; }
+    #panel .panel-buttons { gap: 6px; }
     .panel-follow { display: inline-flex; align-items: center; gap: 6px; }
     /* The train card (src/panel.js; Max, 2026-11-15, sketch C). Compact: the number big with its company, two tiles
        (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line, "All stops".
@@ -780,6 +822,26 @@
     #panel .panel-title { align-items: baseline; gap: 8px; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed
+       train card should not hide content below"; "Collapsed still peeks at the content below"). The rest fades back in
+       as soon as it is pulled up. */
+    .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    @media (max-width: 439px) {
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
+      /* (collapsed: Follow only, as its arrow, so the number, the company and the destination fit; share and ☆ come back
+         raised; a long company name gives way before the destination) */
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
+      /* (at full "i" joins them: Follow its arrow alone there too, so the company's name isn't cut, "SJ Snabb…"; 2026-11-24) */
+      #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
+      #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-co { flex: 0 100 auto; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .ph-to { flex: 0 1 auto; }
+      /* (.cd is display: contents: its own parts are faded, the trip line, tiles and list) */
+      #panel > :not(.panel-head), #panel .cd > * { transition: opacity .2s; }
+      #sheet[data-page="train"][data-h="0"]:not(.dragging) :is(#panel > :not(.panel-head):not(.cd), #panel .cd > *) { opacity: 0; pointer-events: none; }
+    }
     #panel:not(.full) .panel-star, #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
     /* "i" (src/train-info.js; Max, 2026-11-20): on the full card, the train's own numbers instead of the notes and stops. */
@@ -857,23 +919,33 @@
     /* The trip line on top (Max's card pick 3, 2026-11-23): the start and the end as pills above the line, each with an
        arrow joined to it pointing at its circle (the bar's end circles sit 8 px in from each side), the end big in the
        accent colour; where the train is, under its own dot. */
-    .cd-trip { position: relative; margin: 2px 0 14px; padding-top: 46px; padding-bottom: 22px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
+    /* (less room under it, Max's phone 2026-11-23: "The empty space/padding at the bottom is still way too much": no
+       margin under it, and no line for the next stop when that is the end, in its pill already) */
+    .cd-trip.no-at { padding-bottom: 6px; }
+    .cd-trip { position: relative; margin: 2px 0 0; padding-top: 42px; padding-bottom: 20px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
     .cd-names { display: block; position: static; height: 0; margin: 0; }
     .cd-names > * { position: absolute; overflow: visible; }
-    .cd-from, .cd-to { display: flex; align-items: center; border-radius: 999px; box-sizing: border-box; }
-    .cd-from { left: 0; top: 10px; max-width: 40%; padding: 3px 10px; background: var(--pill); color: var(--muted); font-size: 13px; font-weight: 700; line-height: 16px; }
-    .cd-to { right: 0; top: 0; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
+    .cd-from, .cd-to { display: flex; align-items: center; border-radius: 12px; box-sizing: border-box; }
+    .cd-from { left: -10px; top: 10px; max-width: 40%; padding: 3px 10px; border-radius: 10px; background: var(--pill); color: var(--muted); font-size: 13px; font-weight: 700; line-height: 16px; }
+    .cd-to { right: -10px; top: -2px; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
     .cd-names .cd-to.goal { color: var(--accent-ink); }
     .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 1px); border: 7px solid transparent; border-bottom: 0; }
-    .cd-from::after { left: 1px; border-top-color: var(--pill); }
-    .cd-to::after { right: 1px; border-top-color: var(--accent); }
-    .cd-names .cd-at { top: 68px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
+    /* Each pill's pointer drawn as the app draws them (the map's bubbles, .near-label): a 9 px square turned 45°, half
+       out under the pill, its tip slightly rounded; the pills rounded 12 px like those bubbles. Each pill reaches 10 px
+       past the card's edge so its pointer sits on the straight bottom edge (clear of the rounded corner) right over its
+       circle (8 px in); its widest point just inside the pill, so no shoulder shows (Max's zoom: "Still have small gaps"). Max,
+       2026-11-23: "I just want the arrows like the rest of the app draws them, but make it work for this card." */
+    .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 6px); width: 9px; height: 9px; background: inherit;
+      transform: rotate(45deg); border-radius: 0 0 2px 0; }
+    .cd-to::after { right: 13.5px; }
+    .cd-from::after { left: 13.5px; }
+    .cd-names .cd-at { top: 62px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); }
     .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
       font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
     .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
     #panel.full .panel-more { margin: 6px 0 2px; }
+    #panel:not(.full) .panel-more { margin-top: 0; padding: 2px 4px; }
     /* The arrow shows where the card goes: on a phone it grows up (Mer ⌃), on a wider screen down (Mer ⌄) (Max, 2026-11-16). */
     @media (min-width: 440px) { .panel-more svg { transform: rotate(180deg); } }
     .panel-note { margin: 4px 0 6px; color: var(--muted); }
@@ -900,7 +972,7 @@
     .tv-toggle > span:not(.tv-warn) { flex: 1; }
     .tv-box.open { position: relative; }
     .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
-    .tv-fold { position: absolute; top: 0; right: -6px; width: 34px; height: 30px; padding: 0; justify-content: center; }
+    .tv-fold { position: absolute; top: -4px; right: -8px; width: 44px; height: 38px; padding: 0; justify-content: center; }   /* (a bigger target to fold them: 44 × 38) */
     /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
     .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
       background: var(--hover); border-radius: 14px; font-weight: 650; }
@@ -1023,13 +1095,22 @@
       background: var(--accent); border: 0; color: var(--accent-ink); box-shadow: none; }
     .tl-row.canceled .tl-dot { background: var(--c-late); }
     /* "Track" over the tracks (Max, 2026-11-15), kept at the top while the stops scroll. */
-    .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; padding: 2px 0 4px;
+    /* "All places" at the row's left, a button like the card's others (Max, 2026-11-23: "not aligned well… alignt it left") */
+    .tl-head .tl-all { grid-column: 1 / 4; display: flex; justify-content: flex-start; align-items: center; }
+    .tl-places { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 13px; border: 0; border-radius: 17px; background: var(--hover); color: var(--ink);
+      font: 700 13.5px var(--font); text-transform: none; letter-spacing: 0; cursor: pointer; }
+    .tl-places:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .tl-places[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+    .tl-head { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; padding: 2px 0 6px;
       background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
       background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
     .tl-now { min-height: 40px; color: var(--accent); font-weight: 700; font-size: 13.5px; }
     /* The places between the stops ("All places"): soft boxes beside the line, a small dot on the line for each. */
     .tl-row.place { min-height: 0; }
+    /* (a stop opens its board: a hand and a soft background under the mouse; Max, 2026-11-24: "not indicated possible") */
+    .tl-row[data-sig] { cursor: pointer; border-radius: 12px; }
+    @media (hover: hover) { .tl-row[data-sig]:hover { background: var(--hover); } }
     .tl-pbox { grid-column: 3 / -1; align-self: stretch; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 8px; align-items: center;
       background: var(--hover); padding: 1px 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
     .tl-pbox b { font-weight: 600; }
@@ -1260,11 +1341,11 @@
         <button class="sh-cancel" type="button" data-t="cancel">Cancel</button>
       </div>
       <div class="sh-bar">
-        <button class="sh-back" type="button"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg><span></span></button>
+        <button class="sh-up" type="button" hidden><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14.5 6-6 6 6 6"/></svg></button>
         <i class="sh-grow"></i>
-        <span class="sh-acts" hidden></span>
+        <span class="sh-btns"><span class="sh-acts" hidden></span>
         <button class="sh-star" type="button" hidden></button>
-        <button class="sh-follow" type="button" aria-pressed="false" hidden><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 19 20l-7-3.8L5 20z"/></svg><span></span></button>
+        <button class="sh-follow" type="button" aria-pressed="false" hidden><svg class="icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 19 20l-7-3.8L5 20z"/></svg><span></span></button></span>
       </div>
     </div>
     <div class="sh-pages"><div id="search-results" class="pg res" aria-live="polite" hidden></div></div>
@@ -1273,7 +1354,7 @@
   <nav id="nav" class="pop" hidden aria-label="Menu" data-t-aria="navAria">
     <button id="open-day" class="nav-row" type="button"><span class="nav-ic" data-icon="day"></span><span class="nav-t" data-t="theDay">The day</span></button>
     <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
-    <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="helpAbout">Help &amp; About</span></button>
+    <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="aboutApp">About Spårat</span></button>
   </nav>
   <!-- What the pages show, waiting here while not shown (src/main.js moves each into its page). -->
   <div id="page-holder" hidden>
@@ -1316,6 +1397,8 @@
         <span class="range"><input id="set-closesize" type="range" min="1" max="6" step="0.5"><output id="set-closesize-out" for="set-closesize"></output></span></div>
       <div class="debug-only set-row"><span data-t="boardRows">Station board</span>
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
+      <div class="debug-only set-row"><span data-t="homeLegend">Lateness colours on Home</span>
+        <div class="seg" data-key="homeLegend" role="group" aria-label="Lateness colours on Home" data-t-aria="homeLegend"><button type="button" data-v="true" data-t="on">On</button><button type="button" data-v="false" data-t="off">Off</button></div></div>
       <div class="debug-only set-row"><span data-t="routeEdge">Route white edge</span>
         <div class="seg" data-key="routeEdge" role="group" aria-label="Route white edge" data-t-aria="routeEdge"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="debug-only set-row"><span data-t="noEstimate">With no expected time</span>
@@ -1334,7 +1417,7 @@
        button to submit bugs"). The coffee button waits for his Ko-fi link (src/main.js KOFI_URL); the bug button does
        nothing yet ("Leave non functional for now"). The ids stay #help, #help-title, #help-button (tools). -->
   <div id="help" hidden>
-    <div class="panel-head"><strong id="help-title" data-t="helpAbout">Help &amp; About</strong>
+    <div class="panel-head"><strong id="help-title" data-t="aboutApp">About Spårat</strong>
       <button class="panel-close" type="button" aria-label="Close" data-t-aria="closeHelp"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
     <div class="help-body">
       <div class="about-top"><span class="about-logo"></span><p data-t="aboutLine">A live map of Sweden's trains</p></div>
@@ -1343,25 +1426,6 @@
         <button id="bug-button" class="about-btn" type="button"><span class="about-ic"></span><span data-t="reportBug">Report a bug</span></button>
       </div>
       <p class="about-soon" data-t="comingSoon">Both buttons work soon.</p>
-      <h3 data-t="helpTips">Good to know</h3>
-      <ul class="help-tips" data-lang="en">
-        <li><b>My trains.</b> Home → Saved → New trip, or "Save a trip from here" on a station's board: today's trains between two stations, with a change if you like. The next one shows just above the search bar; a tap opens the trip.</li>
-        <li><b>Add my change.</b> On a train's page: pick where you change and the train you change to. Saved then shows it as a trip: the minutes you have, both tracks, yellow when tight, red when lost.</li>
-        <li><b>Peek.</b> Hold a finger on a station on the map: its next three departures, until you let go. With a mouse, hold the button.</li>
-        <li><b>You seem to be on…</b> With My location on, the app notices the train you ride on and offers to ride along: next stop, minutes, track. Your place stays on the phone; it is never saved or sent.</li>
-        <li><b>Why are we standing?</b> A train that has stood still for a minute says why, when Trafikverket says it: a disruption on the line, its own note, or how late it is leaving.</li>
-        <li><b>Share.</b> On a train's page: a link that opens Spårat on that train.</li>
-        <li><b>Shop window.</b> Lay the phone on its side and leave it for 30 s: the buttons fade and the map tours Sweden (the fastest train, the most late, a disruption, two trains meeting). A touch brings everything back. Off in Settings.</li>
-      </ul>
-      <ul class="help-tips" data-lang="sv" hidden>
-        <li><b>Mina tåg.</b> Hem → Sparade → Ny resa, eller "Spara en resa härifrån" på en stations tavla: dagens tåg mellan två stationer, med ett byte om du vill. Nästa tåg syns precis ovanför sökfältet; ett tryck öppnar resan.</li>
-        <li><b>Lägg till mitt byte.</b> På ett tågs sida: välj var du byter och tåget du byter till. Under Sparade syns det då som en resa: minuterna du har och båda spåren, gult när det är snålt, rött när bytet missas.</li>
-        <li><b>Snabbtitt.</b> Håll fingret på en station på kartan: dess tre nästa avgångar, tills du släpper. Med mus: håll knappen nere.</li>
-        <li><b>Du verkar sitta på…</b> Med Min plats på märker appen tåget du åker med och erbjuder att åka med: nästa stopp, minuter, spår. Din plats stannar i telefonen; den sparas eller skickas aldrig.</li>
-        <li><b>Varför står vi?</b> Ett tåg som har stått still en minut säger varför, när Trafikverket säger det: en störning på linjen, deras egen anteckning, eller hur sent det går.</li>
-        <li><b>Dela.</b> På ett tågs sida: en länk som öppnar Spårat på det tåget.</li>
-        <li><b>Skyltfönster.</b> Lägg telefonen på sidan och låt den vara i 30 s: knapparna tonas bort och kartan visar runt i Sverige (snabbaste tåget, det mest sena, en störning, två tåg som möts). Ett tryck tar tillbaka allt. Stängs av i Inställningar.</li>
-      </ul>
       <h3 data-t="credits">Credits</h3>
       <ul class="about-credits" data-lang="en"><li><span>Trains, timetables, stations, tracks, disruptions</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (open data)</b></li><li><span>Map data</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors, ODbL</b></li><li><span>Map tiles</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Map style</span><b>Positron and Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> and CARTO (CC BY 4.0), recoloured</b></li><li><span>Drawn with</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Fonts</span><b>Outfit and Noto Sans, SIL Open Font License</b></li><li><span>Spårat: source code (free software, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>
       <ul class="about-credits" data-lang="sv" hidden><li><span>Tåg, tidtabeller, stationer, spår, störningar</span><b><a href="https://data.trafikverket.se/" target="_blank" rel="noopener">Trafikverket</a> (öppna data)</b></li><li><span>Kartdata</span><b>© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> bidragsgivare, ODbL</b></li><li><span>Kartrutor</span><b><a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a></b></li><li><span>Kartstil</span><b>Positron och Dark Matter, © <a href="https://openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> och CARTO (CC BY 4.0), omfärgade</b></li><li><span>Byggd med</span><b><a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre GL JS</a> (BSD), <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a> (MIT)</b></li><li><span>Typsnitt</span><b>Outfit och Noto Sans, SIL Open Font License</b></li><li><span>Spårat: källkod (fri programvara, AGPL-3.0)</span><b><a href="https://github.com/maxrangner/train-tracker" target="_blank" rel="noopener">github.com/maxrangner/train-tracker</a></b></li></ul>

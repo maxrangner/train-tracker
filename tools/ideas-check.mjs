@@ -110,14 +110,12 @@ try {
   ok(rows.some(r => r.cancelled), `a cancelled train crossed out: ${rows.find(r => r.cancelled)?.text}`);
   await setLevel(page, 2);
   await shot(page, '02-trip');
-  // The line above the bar
+  // No trip pill above the bar (Max, 2026-11-23: 'Remove the trip pill')
   await page.evaluate(() => window.__stack.home(0));
   await sleep(600);
-  const line = await page.evaluate(() => ({ id: window.__line.shown, text: document.getElementById('line').innerText }));
-  ok(line.id === 'trip' && /→ Malmö C/.test(line.text), `the line above the bar: "${line.text.replace(/\n/g, ' ')}"`);
-  await shot(page, '03-line');
-  await page.click('#line .line-main');
-  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc'), 'a tap on the line opens the trip');
+  ok(await page.evaluate(() => !document.querySelector('#line [data-ln="trip"]')), 'no trip pill above the bar');
+  await page.evaluate(() => window.__stack.open('trip:Lu>Mc'));
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc'), 'the trip opens again');
 
   // ---- a saved trip's Edit and Delete (Max's phone, 2026-11-23: "can't be edited or deleted") ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Cst', 'U'); });   // (a second trip: the edited one keeps its place before it)
@@ -244,6 +242,19 @@ try {
   const why = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
   ok(/Växelfel/.test(why), `531: "${why}"`);
   await shot(page, '06-why-531');
+  // "All places" on the card, left of "Track" (Max, 2026-11-23): on, the places between stops; off again, gone
+  await setLevel(page, 2);
+  await sleep(1200);
+  const tlRows = () => page.evaluate(() => document.querySelectorAll('#panel .tl-row').length);
+  const before = await tlRows();
+  await page.evaluate(() => document.querySelector('#panel .tl-places')?.click());
+  await until(page, () => document.querySelector('#panel .tl-places')?.getAttribute('aria-pressed') === 'true', 4000);
+  await sleep(800);
+  const withAll = await tlRows();
+  await page.evaluate(() => document.querySelector('#panel .tl-places')?.click());
+  await sleep(800);
+  ok(withAll > before && (await tlRows()) === before, `"All places" on the card: ${before} rows → ${withAll} → ${await tlRows()} off again`);
+  await setLevel(page, 1);
   // at night only the 3D trains' windows glow, not the dots (Max, 2026-11-23)
   ok(!(await page.evaluate(() => Boolean(window.__map.getLayer('train-glow')))), 'no glow round the dots at night (only the 3D windows)');
   // a moving train 8+ minutes late says why it is late (Max, 2026-11-23: "don't see the reason for the delay")
@@ -254,24 +265,35 @@ try {
   if (!lateOne) ok(false, 'a moving train 8+ min late in the replay to test "Why late?" on');
   else {
     await openTrainByNumber(page, lateOne);
-    ok(await until(page, () => /why late\?/i.test(document.querySelector('.tr-extras .why')?.innerText ?? ''), 8000),
-      `${lateOne}, moving and late, says why: "${await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '')}"`);
+    await sleep(2500);
+    // (only with an answer: no line for "no reason reported", Max 2026-11-23)
+    const w = await page.evaluate(() => window.__ideas.why(window.__stack.top().slice(6)));
+    const shown = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
+    ok(w ? /why late\?/i.test(shown) : !shown, `${lateOne}, moving and late: ${w ? `a reason (${w.kind}), says "${shown}"` : `no reason, ${shown ? `still says "${shown}"` : 'no line'}`}`);
     await shot(page, '06b-why-late');
     await openTrainByNumber(page, 531);   // (Share below is 531's)
   }
 
   // ---- 3. Share (the copied-link way) ----
-  await page.evaluate(() => document.querySelector('.tr-extras [data-x="share"]').click());
+  // (Share beside the star in the sheet's head since 2026-11-23)
+  ok(await page.evaluate(() => Boolean(document.querySelector('#panel .panel-head .sh-acts [data-act-id="share"]'))), 'Share is beside the star, in the card top line');
+  await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
   await until(page, () => Boolean(document.querySelector('.tr-extras .share-note')), 3000);
   const shared = await page.evaluate(() => ({ ...window.__lastShare, note: document.querySelector('.tr-extras .share-note')?.innerText.replace(/\n/g, ' ') ?? '',
     onMap: Boolean(document.querySelector('#map .map-note:not([hidden])')) }));
   ok(shared.url === 'https://sparat.rangner.com/#train=531' && ['copied', 'shown'].includes(shared.how) && shared.note.includes(shared.url), `Share without a share sheet: ${shared.how}, "${shared.note}"`);
   // (Max's phone, 2026-11-23: the note over the map was hard to see beside the slider: now under Share, in the card)
-  ok(!shared.onMap, 'the note is in the card, under Share, not over the map');
+  ok(!shared.onMap, 'the note is in the card, not over the map');
   await shot(page, '07-share');
 
   // ---- 4. Add my change: a later stop, then a train leaving there; pinned in Saved, its page a trip's ----
+  // ("Add a change" only on the expanded card since 2026-11-23: not at half, there at full)
+  await setLevel(page, 1);
+  const atHalf = await page.evaluate(() => Boolean(document.querySelector('.tr-extras [data-go^="addchange:"]')?.offsetParent));
+  await setLevel(page, 2);
+  const atFull = await page.evaluate(() => Boolean(document.querySelector('.tr-extras [data-go^="addchange:"]')?.offsetParent));
+  ok(!atHalf && atFull, `"Add a change" only on the expanded card (at half ${atHalf}, at full ${atFull})`);
   await page.evaluate(() => document.querySelector('.tr-extras [data-go^="addchange:"]')?.click());
   ok(await until(page, () => window.__stack.top().startsWith('addchange:')), 'Add my change opens its page');
   await until(page, () => Boolean(document.querySelector('#sheet [data-stop]')));

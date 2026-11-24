@@ -10,6 +10,7 @@
 // open; "Show only" keeps that after it closes, through src/filter.js) and the rows every page and the search share.
 // Every row is a door: data-go carries the stack key it opens (src/stack.js); src/main.js listens for them.
 import { t } from './i18n.js';
+import { settings } from './settings.js';
 import { esc } from './html.js';
 import { icon } from './icons.js';
 import { tagHtml } from './tag.js';
@@ -65,10 +66,12 @@ export function homePage(d) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
     if (!total) return '';
     const words = { ontime: t('onTime'), some: t('stKeySome'), late: t('stKeyLate'), unknown: t('stNoNews') };
-    return `<div class="lg"${on ? ' data-on' : ''}>${LG.filter(k => c[k] > 0).map(k => `<button type="button" class="lg-p t-${k}${on === k ? ' on' : ''}" ` +
+    // (the line saying what the bar does above it: every part's words come right under its heading, Max 2026-11-24
+    // "Descriptive text sometimes before, sometimes after")
+    return `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(t({ ontime: 'stLegOnTime', some: 'stLegSome', late: 'stLegLate', unknown: 'stLegUnknown' }[on]))) : t('lgHint')}</p>` +
+      `<div class="lg"${on ? ' data-on' : ''}>${LG.filter(k => c[k] > 0).map(k => `<button type="button" class="lg-p t-${k}${on === k ? ' on' : ''}" ` +
       `style="flex-grow:${c[k]}" data-legend="${k}" aria-pressed="${on === k}" aria-label="${esc(`${c[k]} · ${words[k]}`)}"><i></i>` +
-      `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>` +
-      `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(t({ ontime: 'stLegOnTime', some: 'stLegSome', late: 'stLegLate', unknown: 'stLegUnknown' }[on]))) : t('lgHint')}</p>`;
+      `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>`;
   }
   // Saved ("Mina" until 2026-11-23, Max: "Sparade", with small headings for what it holds): Trips (the saved trips and
   // pinned changes, src/my-trains.js, then "+ New trip"), Trains (starred), Stations (starred); a heading only when it
@@ -84,8 +87,8 @@ export function homePage(d) {
       .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' }));
     const mt = d.myTrains?.() ?? { rows: [], add: '' };
     const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
-    return `<h4 class="lab">${t('mine')}</h4>${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}` +
-      (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`);
+    return `<h4 class="lab">${t('mine')}</h4>` + (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +
+      `${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}`;
   }
   function nearHtml() {
     const here = d.location();
@@ -118,7 +121,7 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    put('legend', legendHtml(counts(frame)), 'legend');
+    put('legend', settings.homeLegend ? legendHtml(counts(frame)) : '', 'legend');   // (Debug: off, Max 2026-11-23)
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
@@ -176,12 +179,13 @@ export function groupPage(key, d) {
     const can = g.type === 'brand' || g.type === 'kind', on = can && d.filter.has(g.type, g.v);
     put('head', `<div class="g-head">${g.colour ? dot(g.colour) : '<i class="ring sq"></i>'}<b class="ttl">${esc(g.name())}</b></div>` +
       `<p class="sub">${esc(g.sub())}</p>` +
+      // (what the page does to the map, right under its heading, as every part's words: Max, 2026-11-24)
+      (can ? `<p class="src">${t(on ? 'groupOnly' : 'groupLit')}</p>` : '') +
       (can ? `<button type="button" class="show-only" data-act="showonly" aria-pressed="${on}">${icon(on ? 'check' : 'eye', 18)}<span>${t(on ? 'shownOnly' : 'showOnly')}</span></button>` : ''));
     put('tiles', `<div class="tiles"><div class="tile"><b>${n}</b><small>${t('onMapNow')}</small></div>` +
       (g.noPct ? `<div class="tile t-late"><b>${worst ? `+${worst.m} min` : '–'}</b><small>${t('stMostLate')}</small></div>`
         : `<div class="tile t-${pct >= 85 ? 'ontime' : pct >= 70 ? 'some' : 'late'}"><b>${known ? `${pct} %` : '–'}</b><small>${t('stKeyOnTime')}</small></div>`) + '</div>' +
-      (n ? `<div class="mini">${['ontime', 'some', 'late', 'unknown'].filter(k => c[k]).map(k => `<i class="m-${k}" style="flex-grow:${c[k]}"></i>`).join('')}</div>` : '') +
-      `<p class="src">${t('groupLit')}</p>`);
+      (n ? `<div class="mini">${['ontime', 'some', 'late', 'unknown'].filter(k => c[k]).map(k => `<i class="m-${k}" style="flex-grow:${c[k]}"></i>`).join('')}</div>` : ''));
     put('list', `<h4 class="lab">${t('itsTrains')}</h4><div class="rows">${all.slice(0, 80).map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
       sub: g.type === 'brand' ? '' : t(`kind_${kindOf(x.brand)}`) })).join('') || `<p class="empty">${t('noneOnMap')}</p>`}</div>`);
     if (stats) stats.update(d.snapshot(g.v), { first });

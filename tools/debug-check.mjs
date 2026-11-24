@@ -47,6 +47,13 @@ try {
   s = await shown();
   expect(s.every(Boolean), `#debug: ${rows(s)}`);
   await page.evaluate(() => { try { localStorage.removeItem('debugShown'); } catch {} });
+  // Debug → Lateness colours on Home (Max, 2026-11-23): off, Home has no colour bar; on, it is back
+  const legendOn = () => page.evaluate(() => { window.__stack.setLevel(1); return new Promise(r => setTimeout(() => r(document.querySelectorAll('.pg[data-key="home"] .lg-p').length), 1500)); });
+  await go({ legend: 'false' });
+  const off = await legendOn();
+  await go({ legend: 'true' });
+  const on = await legendOn();
+  expect(off === 0 && on > 0, `Lateness colours on Home: off ${off} colours, on ${on}`);
   expect(!errors.length, `page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
 } finally { await browser.close(); }
 

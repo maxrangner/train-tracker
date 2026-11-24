@@ -177,6 +177,8 @@ const panel = createPanel(panelEl, {
   onStop: sig => openStation(sig),
   // under its tiles: why it stands, Share, Add my change (trainExtras, below)
   extra: id => trainExtras(id),
+  // the card's head line drawn again: its share, star and Follow back in it (the train page's barIn)
+  onHead: () => stack?.refreshBar(),
   // the line on how its place is known (also each second, below), for a card just opened
   statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
   station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
@@ -369,9 +371,8 @@ const holder = document.getElementById('page-holder');   // where Settings, Abou
 const trainMeta = new Map();   // trains opened that aren't on the map (the timetable search, a board): id -> { operational, date, number }
 let lightTest = null;          // only these trains on the map (a group's page, the lateness bar's colour): x -> true
 const light = (fn) => { lightTest = fn; lastDraw = 0; };
-let legend = null;             // the lateness bar's colour lit (Home), or null
 const lateOf = id => { const m = lateness.get(id)?.minutes; return m === undefined ? null : m; };
-const legendTest = k => x => (x.stale ? 'unknown' : lateClass(lateOf(x.id))) === k;
+const legendKey = x => (x.stale ? 'unknown' : lateClass(lateOf(x.id)));   // a train's lateness as the filter knows it
 
 // The camera rides the rails (A's ride): the places along a line ([[lon, lat]]) from one place to another.
 const mx = lon => (lon + 180) / 360, my = lat => (1 - Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)) / Math.PI) / 2;
@@ -393,7 +394,15 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
-let lastCardHalf = 0;   // the last train card's half, measured (px from its page's top): a new card's until its own is in
+let lastCardHalf = 0;
+// The open card's height: its first fit once it is in exactly (the sheet then moves once, up or down: no bounce); after
+// that only taller as parts come in, or either way within 1.5 s of the person touching the card (the chooser shut).
+function refitCard() {
+  const def = stack.pageDef(stack.top());
+  const done = Boolean(panelEl.querySelector('.panel-more, .state.empty, .state.error'));
+  if (done && def?.fitted?.() === false) { stack.refit(); return; }
+  stack.refit({ grow: performance.now() - cardTouched > 1500 });
+}   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
 function trainPage(id) {
@@ -412,19 +421,24 @@ function trainPage(id) {
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
   // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
   // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
-  const CARD_GAP = 20;
+  const CARD_GAP = 4;   // (under "More": 20, then 10 were too much on Max's phone, 2026-11-23)
   function cardTo(whole) {
     const pg = panelEl.parentElement;
-    if (panel.openId !== id || !pg?.classList.contains('pg') || stack.level === 2 || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
-    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
-      if (wantHalf || lastCardHalf) return wantHalf || lastCardHalf;
-      return stack.shown > stack.heights[1] ? 0 : Math.max(1, Math.round(stack.shown - 72));
-    }
+    if (panel.openId !== id || !pg?.classList.contains('pg') || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
+    // Still coming in (the last card's parts may still be in it): the sheet waits where it is; once the card is in, it
+    // moves once to fit it exactly, up or down (refitCard). Until 2026-11-23 it took the last card's height and, only
+    // ever growing, kept that empty space under a shorter card (Max's phone: "too much empty space down").
+    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
+      // (at most half the screen: from Home at full a loading card covered it all until its stops came; the handle is
+      // its head since the bar went, 20 px, 30 on a computer, as src/stack.js counts it)
+      return Math.max(1, Math.round(Math.min(stack.shown, innerHeight * 0.5) - stack.headPx()));
+    }
     if (!whole) {
-      const b = Math.max(below(panelEl.querySelector('.panel-head')), below(panelEl.querySelector('.panel-alert')));
-      if (b > 0) wantLow = Math.ceil(b + 14);   // (14: the tiles start 18 px under that line, and must not peek in)
+      // collapsed: the head line alone (number, operator, destination; the rest is hidden at low: index.html)
+      const b = below(panelEl.querySelector('.panel-head'));
+      if (b > 0) wantLow = Math.ceil(b + 12);
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
@@ -440,7 +454,9 @@ function trainPage(id) {
       const fresh = panel.openId !== id;
       if (fresh) panel.open(m, { follow: m.onMap });
       else if (panel.hidden) panel.show();
-      panelEl.classList.toggle('full', stack.level === 2);
+      // (a train just opened starts compact, whatever height the sheet had: from the search at full it took that height
+      // and measured itself full, then dropped, 2026-11-23)
+      panelEl.classList.toggle('full', dir <= 0 && stack.level === 2);
       if (!m.onMap) { map.unfollow(); return; }
       buzz();
       panel.setFollowing(true);
@@ -469,11 +485,18 @@ function trainPage(id) {
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
     low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
-    every() { if (panel.openId === id) { drawExtras(id); stack.refit({ grow: true, settle: !fitted }); } },
+    every() { if (panel.openId === id) { drawExtras(id); refitCard(); } },
     fitted: () => fitted,
     // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
     dismiss() { if (panel.openId === id) panel.closePick(); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
+    // Share beside the star (Max, 2026-11-23)
+    acts: () => [{ id: 'share', icon: 'share', label: t('share') }],
+    act: (what) => { if (what === 'share') shareOpen(); },
+    // share, star and Follow in the card's top line beside the number, as before the sheet (Max, 2026-11-23); the sheet
+    // has no bar over a train
+    barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
+    noUp: true,   // (no ‹ over a train: its card's top line is the head; a map tap, a pull or the phone's back)
     follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
     redraw: () => panel.relabel(),
   };
@@ -503,9 +526,11 @@ function whyFor(id) {
   if (!x || x.stale || !route) return null;
   const known = { train: x, route, station: sig => stations.get(sig), disruptions: live && disruptions.loaded ? disruptions.list : [],
     lines: d => disruptions.stretchesOf(d), now: now() };
-  if ((x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS) return { ...whyStanding(known), title: 'whyTitle' };
-  if ((lateOf(id) ?? 0) >= LATE_MIN) return { ...whyLate(known), title: 'whyLateTitle' };
-  return null;
+  // only a late train, and only with an answer (Max, 2026-11-23: it showed with no issue, even early; 'No reason
+  // reported' said nothing)
+  if ((lateOf(id) ?? 0) < LATE_MIN) return null;
+  const w = (x.v ?? 0) < STAND_MS && stoodFor(id, now()) >= STOOD_MS ? { ...whyStanding(known), title: 'whyTitle' } : { ...whyLate(known), title: 'whyLateTitle' };
+  return w.kind === 'none' || w.kind === 'stop' ? null : w;
 }
 function whyHtml(w) {
   if (!w || w.kind === 'stop') return '';
@@ -529,19 +554,21 @@ function shareNoteHtml(id) {
 function drawExtras(id) {
   const route = panel.openId === id ? panel.route : null;
   const ahead = (route?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
-  const html = whyHtml(whyFor(id)) + `<div class="tr-acts"><button type="button" class="chip" data-x="share">${icon('share', 17)}${esc(t('share'))}</button>` +
+  // (Share is beside the star in the head; "Add a change" only on the expanded card: Max, 2026-11-23)
+  const html = whyHtml(whyFor(id)) + '<div class="tr-acts">' +
     (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>' + shareNoteHtml(id);
   if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }
 }
 function trainExtras(id) { drawExtras(id); return extrasEl; }
-extrasEl.addEventListener('click', (e) => {
-  if (!e.target.closest('[data-x="share"]') || !panel.openId) return;
+// Share, from its button beside the star (the train page's acts)
+function shareOpen() {
+  if (!panel.openId) return;
   const n = panel.number ?? trains.get(panel.openId)?.number;
   if (!n) return;
   const id = panel.openId;
   shareTrain({ number: n, title: t('shareTitle', n), text: t('shareText', n),
     note: (how, url) => { shareNote = { id, how, url, at: Date.now() }; drawExtras(id); } });
-});
+}
 // What a page of the sheet's ideas needs to know about a train: its numbers (and its route, while its card has it).
 function trainInfo(id) {
   const r = trains.get(id), m = trainMeta.get(id), x = r ?? m;
@@ -656,7 +683,8 @@ function pickPage(key) {
     half() {
       const list = mine?.contains(pickerEl) ? pickerEl.querySelector('.pick-list') : null;
       if (!list) return 0;
-      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.42));
+      // (the sheet about half the screen at most: its handle 20 px over the page, no bar since 2026-11-23)
+      return Math.min(Math.round(list.getBoundingClientRect().bottom - mine.getBoundingClientRect().top + 14), Math.round(innerHeight * 0.5) - 24);
     },
     hide: letGo,
     unmount() { letGo(); pickLists.delete(key); },
@@ -785,7 +813,9 @@ function openNav() {
   navButton.setAttribute('aria-expanded', 'true');
   const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
   navEl.style.left = `${Math.max(10, Math.min(innerWidth - w - 10, a.right - w))}px`;
-  navEl.style.top = `${Math.max(10, a.top - h - 10)}px`;
+  // (a phone: above ☰, the sheet at the bottom; a computer: under the search bar, the sheet hanging from the top: Max,
+  // 2026-11-24 "Menu should show below the search bar")
+  navEl.style.top = `${innerWidth >= 440 ? Math.min(innerHeight - h - 10, a.bottom + 10) : Math.max(10, a.top - h - 10)}px`;
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
 function closeNav() {
@@ -806,7 +836,10 @@ let sheetPad = 0;
 function padMap() {
   const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0, root = document.documentElement;
   root.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
-  map.setSheet(sheetPad + h);
+  // (not while the card's "till …" chooser is open: it shuts back to the same height, and the map stays still; Max,
+  // 2026-11-24: it "jumps the map around... Should not change map at all")
+  const choosing = panelEl.classList.contains('picking') && panel.openId && !panel.hidden && stack?.top() === `train:${panel.openId}`;
+  if (!choosing) map.setSheet(sheetPad + h);
   // The scale slider (74 px over the sheet and the ribbon, 190 tall) goes when it would reach the live mark at the top.
   root.classList.toggle('scale-squeezed', innerHeight - (NARROW.matches ? sheetPad + h : 0) - 74 - 190 < 52);
 }
@@ -982,7 +1015,7 @@ function dayFrame(ts) {
     const near = map.nearView(), sun = settings.dayNight ? sunFor(T) : null, features = [];
     frameTrains = [];
     for (const x of dayView.at(T, near)) {
-      if (filter.active && !filter.shows(x.brand)) continue;
+      if (filter.active && !filter.shows(x.brand, x.late === null || x.late === undefined ? 'unknown' : lateClass(x.late))) continue;
       x.night = nightAt(x, sun);
       frameTrains.push(x);
       if (near(x.lon, x.lat)) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] }, properties: { id: x.id, bearing: x.bearing, ...pastProps(x) } });
@@ -1005,8 +1038,8 @@ function frame(ts) {
     const sun = settings.dayNight ? sunFor(t) : null;
     frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id), night: nightAt(x, sun) }));
     // only some trains: a group's page or the lateness bar's colour (lightTest) while it is open, else the filter
-    frameTrains = lightTest ? frameAll.filter(x => x.id === openId || lightTest(x))
-      : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
+    frameTrains = lightTest ? frameAll.filter(x => x.id === openId || (lightTest(x) && filter.lateShows(legendKey(x))))
+      : filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand, legendKey(x))) : frameAll;
     frameById = new Map(frameAll.map(x => [x.id, x]));
   } else if (openId && frameById.has(openId)) {
     const x = trains.placedOne(openId, t);
@@ -1086,6 +1119,7 @@ onSettingChange((key) => {
   }
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
+  if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); homeDef.redraw(); }   // Debug → Lateness colours on Home
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)
@@ -1153,7 +1187,8 @@ const pageData = {
   myTrains: () => myTrains?.mineHtml() ?? null,   // the saved trips and pinned changes in Mine (src/my-trains.js)
   disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
   snapshot, filter, still: STAND_MS,
-  legend: { get: () => legend, set: (k) => { legend = legend === k ? null : k; light(legend ? legendTest(legend) : null); homeDef.redraw(); } },
+  // the lateness bar's colour: a filter with its pill, held on every page (src/filter.js; Max, 2026-11-24)
+  legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); homeDef.redraw(); } },
   statsActions: {
     openTrain: id => openTrain(id, { go: true }),
     openStation: sig => openStation(sig, { go: true }),
@@ -1188,9 +1223,12 @@ function showFilter() {
   lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
   if (!filter.active) { line.clear('filter'); return; }
   const list = filter.list(), first = list[0];
-  line.set('filter', { priority: 10, html: `<span>${esc(t('filterShowing', list.map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')))}</span>`,
-    onTap: () => stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`),
-    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); }, closeLabel: t('filterClear') });
+  const word = ({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : type === 'late' ? t('filtLate')[v]
+    : v || t('stNoCompany'));
+  line.set('filter', { priority: 10, always: true, html: `<span>${esc(t('filterShowing', list.map(word).join(', ')))}</span>`,
+    // (a tap: the first one's page; a lateness alone: Home with its bar)
+    onTap: () => (first.type === 'late' ? stack.home(1) : stack.open(first.type === 'kind' ? `kind:${first.v}` : `co:${first.v}`)),
+    onClose: () => { filter.clear(); stack.pageDef(stack.top())?.redraw?.(); homeDef.redraw(); }, closeLabel: t('filterClear') });
 }
 filter.onChange(showFilter);
 
@@ -1244,7 +1282,7 @@ function disListPage() {
       else stack.unreveal();
     };
   }
-  return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
+  return { name: () => t('disruptions'), kind: 'dislist', startLevel: 2 /* (opens full: Max, 2026-11-23) */, mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
 }
 // A disruption: its words; opened (not come back to), the map shows all of its stretches (one station: flies to it).
 function disPage(id) {
@@ -1605,7 +1643,7 @@ function define(key) {
     case 'co': case 'kind': case 'late': case 'still': return groupPage(key, pageData);
     case 'page':
       if (v === 'settings') return heldPage(settingsPage, { name: () => t('settings'), kind: 'settings', onShow: () => { foldAccents(false); showSettings(); } });
-      if (v === 'help') return heldPage(helpEl, { name: () => t('helpAbout'), kind: 'help' });
+      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help' });   // (About Spårat, as before the sheet: Max, 2026-11-24)
       if (v === 'conn') return heldPage(connPage, { name: () => t('connTitle'), kind: 'conn', onShow: () => showConn() });
       return null;
     default: return null;
@@ -1617,7 +1655,7 @@ stack = createStack({
   onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
-    if (pg.key === 'home') light(legend ? legendTest(legend) : null);
+    if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
     // a train's line stays only under its own page and a station's (where the camera may still ride it); a trip's
     // page keeps its own stations' names (showTrip below) but no train's line
@@ -1634,7 +1672,7 @@ let cardTouched = 0;
 panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
 panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
 if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) stack.refit({ grow: performance.now() - cardTouched > 1500, settle: stack.pageDef(stack.top())?.fitted?.() === false }); }).observe(panelEl);
+  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) refitCard(); }).observe(panelEl);
 }
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
@@ -1642,11 +1680,24 @@ document.getElementById('sheet').addEventListener('click', (e) => {
   if (!b) return;
   // a company under the search's "Show only": its filter on (the line above the bar, with its ×), and its page (R3)
   if (b.dataset.onlyType && !filter.has(b.dataset.onlyType, b.dataset.onlyV)) filter.toggle(b.dataset.onlyType, b.dataset.onlyV);
+  // any row opening a company's or a kind's page (the search's results, Recent, Saved) filters too, as Home's do (Max,
+  // 2026-11-23: "Filtering still doesn't show as a pill, and clicking the map eventually clears it. Should stick."):
+  // a row that only lit its trains lost them at the next map tap
+  const grp = /^(co|kind):(.*)$/.exec(b.dataset.go ?? '');
+  if (grp) { const type = grp[1] === 'kind' ? 'kind' : 'brand'; if (!filter.has(type, grp[2])) filter.toggle(type, grp[2]); }
   if (b.dataset.go) stack.open(b.dataset.go, { go: true });
   else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
-  else if (b.dataset.filter) stack.open(b.dataset.filter === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  // A company or kind picked on Home is a filter with its pill above the search bar (its × the only way out): a map
+  // tap or a train card closed keeps it (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the
+  // filtering... Filtered view should be able to show clean map with filter as a pill"), as "Show only" in the search.
+  else if (b.dataset.filter) {
+    const type = b.dataset.filter === 'kind' ? 'kind' : 'brand';
+    if (!filter.has(type, b.dataset.v)) filter.toggle(type, b.dataset.v);
+    stack.open(type === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  }
   else if (b.dataset.act === 'favtrain') pickFavouriteTrain(b.dataset.n);
   else if (b.dataset.act === 'showonly') stack.pageDef(stack.top())?.toggleShowOnly?.();
+  else if (b.dataset.act === 'allplaces') setSetting('allPlaces', !settings.allPlaces);
   else if (b.dataset.id && b.classList.contains('dis-row')) stack.open(`dis:${b.dataset.id}`);
 });
 // For the tools (tools/lib/screen.mjs): the stack's keys, its top, the sheet's height; opening and going back.
