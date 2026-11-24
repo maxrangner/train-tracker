@@ -64,6 +64,27 @@ try {
     })));
     for (const [name, shown] of Object.entries(seen)) ok(shown, `${name} shown with Home at ${level === 2 ? 'full' : 'half'}`);
   }
+
+  // 5. a row's edge pressed at hand speed (Max, 2026-11-24: the › on a saved trip "Still doesn't do anything": a held
+  //    press shrank the row, the release was beside it); and pressed, then moved off it: no click
+  await page.evaluate(() => localStorage.setItem('favourites', JSON.stringify({ stations: [], trains: [], trips: [{ key: 'Cst>G>Mc', from: 'Cst', via: 'G', to: 'Mc' }], changes: [] })));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => window.__stack?.top?.() === 'home' && document.querySelector('#sheet .trip-row'), { timeout: 30000 });
+  await sleep(2000);
+  const edge = async () => {
+    await page.evaluate(() => window.__stack.home(1)); await sleep(1200);
+    return page.evaluate(() => { const r = [...document.querySelector('#sheet .trip-row').querySelectorAll('svg')].at(-1).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+  };
+  let p = await edge();
+  await page.mouse.move(p.x, p.y, { steps: 4 }); await sleep(150);
+  await page.mouse.down(); await sleep(150); await page.mouse.up(); await sleep(900);
+  const opened = await page.evaluate(() => window.__stack.top());
+  ok(opened === 'trip:Cst>G>Mc', `the › on a saved trip, held 150 ms: ${opened}`);
+  p = await edge();
+  await page.mouse.move(p.x, p.y); await page.mouse.down(); await sleep(100);
+  await page.mouse.move(p.x + 200, p.y + 120, { steps: 8 }); await page.mouse.up(); await sleep(900);
+  const stayed = await page.evaluate(() => window.__stack.top());
+  ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
 } finally {
   await browser.close();
 }
