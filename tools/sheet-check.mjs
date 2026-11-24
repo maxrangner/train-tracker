@@ -7,7 +7,7 @@
 //     height); pulled up and held: full; a pull down held: half; a short quick swipe down from full: half (a swipe goes
 //     on to the next height); a long pull down below its lowest height closes every page (back to Home);
 //   3 every height change glides (heights in between, sampled each frame): All stops, Fewer stops, the handle tap (from full: half)
-//     (low ↔ half, from full to low), a short drag down from full;
+//     (low ↔ half, from full to half), a short drag down from full;
 //   4 the head (2026-11-23): the handle's target 44 px tall (the grip over the map and the handle), a finger's tap that
 //     wanders 11 px still toggles, a tap on the head between its buttons toggles, a pull down of 110 px from the head
 //     at full lowers it, Home's field pulled up raises the sheet (no search); a group's list ("2 trains here", and a

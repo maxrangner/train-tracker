@@ -458,9 +458,8 @@
     .nt-pill b { font-size: 17px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .nt-pill.none b { color: var(--muted); font-weight: 600; }
     .nt-stop.via .nt-pill small { color: var(--t-some); }
-    .nt-stop.to .nt-pill { background: color-mix(in srgb, var(--accent) 18%, var(--hover)); min-height: 64px; }
-    .nt-stop.to .nt-pill small { color: var(--accent); }
-    .nt-stop.to .nt-pill b { font-size: 20px; }
+    /* (FRÅN and TILL alike: Max, 2026-11-24 "Why do FRÅN and TILL fields look different?"; only the route's dots mark
+       its start and end) */
     .nt-pill.on { box-shadow: inset 0 0 0 2px var(--accent); cursor: text; }
     /* the pill being filled is the station search itself (Max's note 11: no second field) */
     .nt-q { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 0; border: 0; outline: none; background: none; color: var(--ink);
