@@ -92,6 +92,7 @@ export function createState() {
       return { rows: out, brands };
     },
     markAsked(ids, at) { for (const id of ids) { let t = planned.get(id); if (!t) planned.set(id, t = { rows: new Map(), until: 0, asked: 0, brand: null }); t.asked = at; } },
-    sizes: () => ({ trains: latest.size, passings: passings.size, planned: planned.size, ...count }),
+    // (count.passings, every passing seen, was spread over passings, the ones kept, until 2026-11-24: the status said 144523)
+    sizes: () => ({ trains: latest.size, passings: passings.size, planned: planned.size, records: count.records, passingsSeen: count.passings }),
   };
 }
