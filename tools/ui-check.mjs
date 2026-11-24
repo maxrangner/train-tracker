@@ -117,7 +117,7 @@ try {
     await sleep(1200);
     const cn = await page.evaluate(() => ({ key: window.__stack.top(), title: document.getElementById('conn-title').textContent,
       state: document.querySelector('#conn-body .conn-hero')?.dataset.state, map: document.querySelector('#conn-body .conn-map canvas')?.width ?? 0,
-      trains: document.querySelector('#conn-body .n-trains')?.textContent, chip: document.querySelector('#sheet .sh-back span')?.textContent }));
+      trains: document.querySelector('#conn-body .n-trains')?.textContent }));
     expect(cn.key === 'page:conn' && cn.title === connWord && cn.state && cn.map > 0 && Number(cn.trains) > 0,
       `${lang}/${theme}: the live mark opened ${cn.key} "${cn.title}" (state ${cn.state}, Sweden ${cn.map ? 'drawn' : 'missing'}, ${cn.trains} trains)`);
     const backed = await back(page);
@@ -172,9 +172,9 @@ try {
   if (!tapped || head?.startsWith(tapped)) break;
   }
   expect(tapped && head?.startsWith(tapped), `tapping train ${tapped} opened ${head ? `"${head}"` : 'nothing'} (3 tries)`);
-  // The back chip says Home (since 2026-11-23: it always goes home).
-  const chip = await page.evaluate(() => document.querySelector('#sheet .sh-back span')?.textContent);
-  expect(!head || chip === 'Home', `a train's page over Home: the back chip says "${chip}"`);
+  // No Home chip and no bar over a train: its share, star and Follow in its card's top line (2026-11-23).
+  const bar = await page.evaluate(() => ({ chip: Boolean(document.querySelector('#sheet .sh-back')), inCard: [...document.querySelectorAll('#panel .panel-head .sh-btns button')].filter(b => !b.hidden).length }));
+  expect(!head || (!bar.chip && bar.inCard === 3), `a train's page over Home: ${bar.chip ? 'a Home chip, ' : ''}${bar.inCard} buttons in the card's top line (want no chip, 3)`);
 
   // ---- The compact card (2026-11-15): two tiles; the stop tile lists the stops ahead and counts down to the one
   // picked; "All stops" raises the sheet and opens it full; no × in the sheet ----

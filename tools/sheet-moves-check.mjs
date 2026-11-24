@@ -18,7 +18,7 @@
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
 import { waitForMap, until, toRest, setLevel, openSearch, typeSearch, openMenu, openFromMenu, openConnection, openDisruptions, back, HOME, pageSel } from './lib/screen.mjs';
 
-const WATCH = [['the sheet', '#sheet'], ['the card', '#panel'], ['the board', '#board'], ['☰', '#nav'], ['the trail', '#trail'], ['the line', '#line'],
+const WATCH = [['the sheet', '#sheet'], ['the card', '#panel'], ['the board', '#board'], ['☰', '#nav'], ['the line', '#line'],
   ['the map buttons', '.maplibregl-ctrl-bottom-right'], ['the slider', '.scale']];
 const fails = [], notes = [];
 const KNOWN = [   // [the step, the element, what it is]: none now

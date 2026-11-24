@@ -86,7 +86,7 @@ try {
   const backKey = await back(page);
   await sleep(800);
   const homeAgain = await page.evaluate(h => ({ count: Number(document.querySelector(`${h} .st-count`).textContent.replace(/\D/g, '')), companies: Boolean(document.querySelector(`${h} .st-brow[data-filter="brand"]`)) }), HOME);
-  check(s.back === 'Hem' && backKey === 'home' && homeAgain.companies && homeAgain.count > co.count, `the back chip "${s.back}": ${backKey}, all trains again (${homeAgain.count})`);
+  check(s.keys.at(-2) === 'home' && backKey === 'home' && homeAgain.companies && homeAgain.count > co.count, `back from ${s.keys.join(' > ')}: ${backKey}, all trains again (${homeAgain.count})`);
   // Busiest's rows open the station's board
   const busy = await page.evaluate(h => { const b = document.querySelector(`${h} .st-rank [data-sig]`); b?.click(); return Boolean(b); }, HOME);
   if (busy) {

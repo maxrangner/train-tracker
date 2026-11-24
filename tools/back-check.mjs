@@ -1,9 +1,8 @@
 // The Android app's back button (2026-11-17), in the test browser: the app's bridge is stood in for (window.Capacitor
 // says "native", the @capacitor/app module is replaced by a stub that keeps the page's back handler), then "back" is
-// pressed. Since the one sheet (2026-11-22, src/stack.js) one press steps back one thing, in this order: the trail (the
-// back chip held) → the search → the page on top → the sheet down to rest → the app to the background. Here: a
-// station's board, a train from its rows on top, the trail open: back closes the trail, then the train, then the
-// board; Home pulled up goes down; at rest the app goes away. ☰'s menu: back closes it, and only it. The search with
+// pressed. Since the one sheet (2026-11-22, src/stack.js) one press steps back one thing, in this order: the search →
+// the page on top → the sheet down to rest → the app to the background. Here: a station's board, a train from its rows
+// on top: back closes the train, then the board; Home pulled up goes down; at rest the app goes away. ☰'s menu: back closes it, and only it. The search with
 // the keyboard up: back hides only the keyboard, then the search closes (the sheet back where it was).
 // node tools/back-check.mjs (with npm run dev; PAGE= for another port). Not the real phone: the press is the handler
 // called directly. Also the buzz (2026-11-20): in the app it goes through the haptics plugin, here a stub that counts
@@ -36,9 +35,9 @@ try {
   }
   await sleep(1500);
   const state = () => page.evaluate(() => ({ keys: window.__stack.keys().join(' > '), top: window.__stack.top(), level: window.__stack.level,
-    searching: window.__stack.searching, trail: !document.getElementById('trail')?.hidden, nav: !document.getElementById('nav').hidden,
+    searching: window.__stack.searching, nav: !document.getElementById('nav').hidden,
     typing: document.activeElement?.id === 'search', away: Boolean(window.__minimized) }));
-  const say = s => `${s.keys} at ${s.level}${s.searching ? ', searching' : ''}${s.trail ? ', trail open' : ''}${s.nav ? ', ☰ open' : ''}${s.away ? ', AWAY' : ''}`;
+  const say = s => `${s.keys} at ${s.level}${s.searching ? ', searching' : ''}${s.nav ? ', ☰ open' : ''}${s.away ? ', AWAY' : ''}`;
   const back = async () => { await page.evaluate(() => window.__back({ canGoBack: false })); await sleep(550); return state(); };
   if (!(await page.evaluate(() => typeof window.__back === 'function'))) fails.push('the page did not register a back handler');
   else {
@@ -61,29 +60,21 @@ try {
     if (!s0.top?.startsWith('train:') || s0.keys.split(' > ').length !== 3) fails.push(`setup: ${say(s0)} (want Home > a station > a train)`);
     else {
       if (buzzes.n < 1 || buzzes.style !== 'LIGHT') fails.push(`opening a train in the app: ${buzzes.n} buzz(es) through the haptics plugin (want at least 1, light)`);
-      // the trail: the back chip held (src/stack.js HOLD_MS 480)
-      const chip = await page.evaluate(() => { const r = document.querySelector('#sheet .sh-back').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-      await page.mouse.move(chip.x, chip.y); await page.mouse.down(); await sleep(700); await page.mouse.up();
-      await sleep(200);
-      const t0 = await state();
-      if (!t0.trail) fails.push(`setup: holding the back chip did not open the trail (${say(t0)})`);
-      const s1 = await back();
-      if (s1.trail || s1.top !== s0.top || s1.away) fails.push(`1st back: ${say(s1)} (want: the trail closed, the train still on top)`);
       const s2 = await back();
-      if (s2.top !== station || s2.away) fails.push(`2nd back: ${say(s2)} (want: the train gone, the board on top)`);
+      if (s2.top !== station || s2.away) fails.push(`1st back: ${say(s2)} (want: the train gone, the board on top)`);
       const s3 = await back();
-      if (s3.top !== 'home' || s3.away) fails.push(`3rd back: ${say(s3)} (want: Home)`);
+      if (s3.top !== 'home' || s3.away) fails.push(`2nd back: ${say(s3)} (want: Home)`);
       if (s3.level > 0) {
         const s4 = await back();
-        if (s4.level !== 0 || s4.away) fails.push(`4th back: ${say(s4)} (want: Home down at rest)`);
+        if (s4.level !== 0 || s4.away) fails.push(`3rd back: ${say(s4)} (want: Home down at rest)`);
       }
       const s5 = await back();
       if (!s5.away) fails.push(`back at rest: ${say(s5)} (want: the app to the background)`);
-      notes.push(`${s0.keys}: trail → ${s1.top} → ${s2.top} → ${s3.top} → at rest → away`);
+      notes.push(`${s0.keys}: ${s2.top} → ${s3.top} → at rest → away`);
     }
 
-    // ---- the back chip (Max, 2026-11-23: "should always go home"): it says Home over any page and a tap takes every
-    // page away; Android's back above still steps one at a time ----
+    // ---- no Home chip (Max, 2026-11-23: "Remove home button"): over a train no bar at all, its share, star and Follow
+    // in its card's top line; over Settings no bar (nothing of its own) ----
     await page.evaluate(() => { window.__minimized = false; });
     const st2 = await openStationByName(page, 'Stockholm C');
     await until(page, () => Boolean(document.querySelector('#board .bd-row:not(.gone)')), 10000);
@@ -91,13 +82,13 @@ try {
     await until(page, () => window.__stack.top()?.startsWith('train:'), 4000);
     await sleep(800);
     const c0 = await state();
-    const word = await page.evaluate(() => document.querySelector('#sheet .sh-back span')?.textContent.trim());
-    await page.evaluate(() => document.querySelector('#sheet .sh-back').click());
-    await sleep(600);
-    const c1 = await state();
-    if (!st2 || c0.keys.split(' > ').length !== 3) fails.push(`the chip setup: ${say(c0)} (want Home > a station > a train)`);
-    else if (!/^(Home|Hem)$/.test(word ?? '') || c1.keys !== 'home' || c1.away) fails.push(`the back chip over ${say(c0)}: said "${word}", after a tap ${say(c1)} (want "Home", only Home left)`);
-    else notes.push(`the back chip over ${c0.keys}: "${word}", a tap → ${c1.keys}`);
+    const bar = await page.evaluate(() => ({ chip: Boolean(document.querySelector('#sheet .sh-back')), noBar: document.getElementById('sheet').classList.contains('no-bar'),
+      inCard: Boolean(document.querySelector('#panel .panel-head .sh-btns .sh-follow')), head: Math.round(document.querySelector('#sheet .sh-head').getBoundingClientRect().height) }));
+    if (!st2 || c0.keys.split(' > ').length !== 3) fails.push(`the bar setup: ${say(c0)} (want Home > a station > a train)`);
+    else if (bar.chip || !bar.noBar || !bar.inCard || bar.head > 1) fails.push(`over a train: ${JSON.stringify(bar)} (want no chip, no bar, the buttons in the card's head line)`);
+    else notes.push(`over ${c0.keys}: no chip, no bar, the buttons in the card's top line`);
+    await page.evaluate(() => window.__stack.home(0));
+    await sleep(500);
 
     // ---- one "N trains here" over another (Max's phone, 2026-11-23: back to "2 trains here" showed an empty page):
     // back shows the first list's rows again ----
@@ -202,5 +193,5 @@ try {
   if (errors.length) fails.push('page errors: ' + errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }
 for (const n of notes) console.log(`  ${n}`);
-console.log(fails.length ? `back-check FAILED:\n  ${fails.join('\n  ')}` : 'back-check ok: trail → page → page → Home → down → background, one per press; ☰ alone; with the keyboard up, back hides only the keyboard, then the search');
+console.log(fails.length ? `back-check FAILED:\n  ${fails.join('\n  ')}` : 'back-check ok: page → page → Home → down → background, one per press; ☰ alone; with the keyboard up, back hides only the keyboard, then the search');
 process.exit(fails.length ? 1 : 0);

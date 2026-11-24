@@ -148,25 +148,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return { rows: [...trips, ...changes], add };
   }
 
-  // ---------- the line above the bar ----------
-  function drawLine() {
-    let best = null;
-    for (const trip of favourites.trips) {
-      const s = summary(trip);
-      if (s.at !== null && (!best || s.at < best.s.at)) best = { key: `trip:${trip.key}`, s, trip };
-    }
-    for (const c of todayChanges()) {
-      const s = changeSummary(c);
-      if (s.at !== null && (!best || s.at < best.s.at)) best = { key: `change:${c.key}`, s, c };
-    }
-    if (!best) { line.clear('trip'); return; }
-    const { s } = best;
-    const words = best.trip
-      ? [`${hhmm(s.dep.planned)} → ${stationName(best.trip.to)}`, trackText(s.track)].filter(Boolean).join(' · ')
-      : s.text;
-    line.set('trip', { priority: 20, html: `<span class="ln-ic${best.c ? ` ${changeClass(s.ch)}` : ''}">${icon(best.c ? 'change' : 'trip', 16)}</span><span>${esc(words)}</span>` +
-      `${s.late > 0 ? tagHtml(s.late, { short: true }) : ''}`, onTap: () => stack.open(best.key) });
-  }
+  // ---------- the line above the bar: no trip pill (Max, 2026-11-23: "Remove the trip pill"; a saved trip is on Home's
+  // Saved and its own page) ----------
+  function drawLine() { line.clear('trip'); }
   let busy = false;
   async function refreshAll() {
     if (busy || document.hidden) return;
@@ -280,11 +264,13 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       mount(page) { el = page; openRow(el); },
       acts: () => (favourites.trip(trip.key) ? ed.acts() : []),
       act: ed.act,
+      // the pencil and the bin beside its name (Max, 2026-11-23: "placed awkwardly. Move them")
+      barIn: () => el?.querySelector('.g-head') ?? null,
       // On the map too (Max, 2026-11-23: "Clicking a saved trip should show it on the map"): its stations at once, its
       // next train once today's trains are in (still its page on top then).
       show() {
         ed.reset(); draw(); onMap();
-        load(trip).then(() => { draw(); drawLine(); if (stack.top() === `trip:${trip.key}`) onMap(); });
+        load(trip).then(() => { draw(); drawLine(); stack.refreshBar(); if (stack.top() === `trip:${trip.key}`) onMap(); });
       },
       every() { if (due(trip)) load(trip).then(draw); else draw(); },
       unmount() { ed.stop(); },
@@ -315,7 +301,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         const row = (x, words) => `<button type="button" class="bd-row${x.canceled ? ' canceled' : ''}" data-train="${trainAttr(x)}"><span class="bd-time">${timeHtml(x)}</span>` +
           `<span class="bd-name"><b>${esc(words)}</b><small>${esc(`${x.number} ${x.product ?? ''}`)}</small></span>` +
           `<span class="bd-tag">${lateTag(x)}</span><span class="tl-trk">${esc(x.track || '')}</span></button>`;
-        body = `<div class="trip-next ${changeClass(ch)}"><small>${esc(t('toChange'))}</small><b>${ch.lost ? esc(t('changeLost')) : esc(t('minutesN', ch.minutes))}</b>` +
+        body = `<div class="trip-next ${changeClass(ch)}"><small>${esc(t('toChangeAt', stationName(c.at)))}</small><b>${ch.lost ? esc(t('changeLost')) : esc(t('minutesN', ch.minutes))}</b>` +
           `<span>${esc(`${t('trackShort')} ${ch.tracks[0] ?? '–'} → ${ch.tracks[1] ?? '–'}`)}</span></div>` +
           (ch.tight && !ch.lost ? `<p class="trip-fails">${esc(t('changeTight'))}</p>` : '') +
           `<h4 class="lab">${esc(t('todaysTrains'))}</h4>` +
@@ -329,11 +315,12 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       mount(page) { el = page; openRow(el); },
       acts: () => (favourites.change(c.key) ? ed.acts() : []),
       act: ed.act,
+      barIn: () => el?.querySelector('.g-head') ?? null,
       show(_, { dir } = {}) {
         ed.reset();
         if (dir !== 0) showStation(c.at);
         draw(); onMap();
-        loadChange(c).then(() => { draw(); drawLine(); if (stack.top() === `change:${c.key}`) onMap(); });
+        loadChange(c).then(() => { draw(); drawLine(); stack.refreshBar(); if (stack.top() === `change:${c.key}`) onMap(); });
       },
       every() { if (stale(c.at)) loadChange(c).then(draw); else draw(); },
       unmount() { ed.stop(); },
@@ -478,6 +465,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     const noSheetPull = (e) => { if (e.target.closest('[data-grip]')) e.stopPropagation(); };
     return {
       name: () => t(edit ? 'editTrip' : 'newTrip'), kind: 'newtrip',
+      startLevel: 2,   // (opens full: its fields in view, not cut off at half; Max's phone, 2026-11-23)
       mount(page) {
         el = page;
         addEventListener('resize', onResize);

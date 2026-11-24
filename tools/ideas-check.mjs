@@ -110,14 +110,12 @@ try {
   ok(rows.some(r => r.cancelled), `a cancelled train crossed out: ${rows.find(r => r.cancelled)?.text}`);
   await setLevel(page, 2);
   await shot(page, '02-trip');
-  // The line above the bar
+  // No trip pill above the bar (Max, 2026-11-23: 'Remove the trip pill')
   await page.evaluate(() => window.__stack.home(0));
   await sleep(600);
-  const line = await page.evaluate(() => ({ id: window.__line.shown, text: document.getElementById('line').innerText }));
-  ok(line.id === 'trip' && /→ Malmö C/.test(line.text), `the line above the bar: "${line.text.replace(/\n/g, ' ')}"`);
-  await shot(page, '03-line');
-  await page.click('#line .line-main');
-  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc'), 'a tap on the line opens the trip');
+  ok(await page.evaluate(() => !document.querySelector('#line [data-ln="trip"]')), 'no trip pill above the bar');
+  await page.evaluate(() => window.__stack.open('trip:Lu>Mc'));
+  ok(await until(page, () => window.__stack.top() === 'trip:Lu>Mc'), 'the trip opens again');
 
   // ---- a saved trip's Edit and Delete (Max's phone, 2026-11-23: "can't be edited or deleted") ----
   await page.evaluate(() => { window.__ideas.favourites.addTrip('Cst', 'U'); });   // (a second trip: the edited one keeps its place before it)
@@ -267,15 +265,18 @@ try {
   if (!lateOne) ok(false, 'a moving train 8+ min late in the replay to test "Why late?" on');
   else {
     await openTrainByNumber(page, lateOne);
-    ok(await until(page, () => /why late\?/i.test(document.querySelector('.tr-extras .why')?.innerText ?? ''), 8000),
-      `${lateOne}, moving and late, says why: "${await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '')}"`);
+    await sleep(2500);
+    // (only with an answer: no line for "no reason reported", Max 2026-11-23)
+    const w = await page.evaluate(() => window.__ideas.why(window.__stack.top().slice(6)));
+    const shown = await page.evaluate(() => document.querySelector('.tr-extras .why')?.innerText.replace(/\n/g, ' ') ?? '');
+    ok(w ? /why late\?/i.test(shown) : !shown, `${lateOne}, moving and late: ${w ? `a reason (${w.kind}), says "${shown}"` : `no reason, ${shown ? `still says "${shown}"` : 'no line'}`}`);
     await shot(page, '06b-why-late');
     await openTrainByNumber(page, 531);   // (Share below is 531's)
   }
 
   // ---- 3. Share (the copied-link way) ----
   // (Share beside the star in the sheet's head since 2026-11-23)
-  ok(await page.evaluate(() => Boolean(document.querySelector('#sheet .sh-acts [data-act-id="share"]'))), 'Share is beside the star');
+  ok(await page.evaluate(() => Boolean(document.querySelector('#panel .panel-head .sh-acts [data-act-id="share"]'))), 'Share is beside the star, in the card top line');
   await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="share"]').click());
   await until(page, () => Boolean(window.__lastShare));
   await until(page, () => Boolean(document.querySelector('.tr-extras .share-note')), 3000);

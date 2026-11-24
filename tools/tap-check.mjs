@@ -162,7 +162,7 @@ try {
     ok(d0.keys.includes('pick:') && d0.top.startsWith('train:') && !dTops.some(k => k?.startsWith('pick:')) && d1.keys === 'home' && (dev === 'phone' || dTops.length === 1),
       `${dev} R1d: ${d0.keys}, map taps: ${dTops.join(' -> ')} (want Home${dev === 'pc' ? ' in one tap' : ''}, never the list again)`);
 
-    // ---- R4: Esc one page back (the list), the chip home ----
+    // ---- R4: Esc one page back (the list); no Home chip (2026-11-23): a pull down below low goes home ----
     await toRest(p);
     await openPickTrain();
     await p.keyboard.press('Escape');
@@ -171,9 +171,7 @@ try {
     ok(e1.top?.startsWith('pick:'), `${dev} R4: Esc over a train from a list: ${e1.keys} (want the list)`);
     await p.evaluate(() => document.querySelector('#picker [data-i]')?.click());
     await sleep(1200);
-    await p.evaluate(() => document.querySelector('#sheet .sh-back').click());
-    await sleep(600);
-    ok((await state()).keys === 'home', `${dev} R4: the back chip: ${(await state()).keys} (want Home)`);
+    ok(await p.evaluate(() => !document.querySelector('#sheet .sh-back')), `${dev} R4: a Home chip is there (want none)`);
 
     // ---- R1 with ☰'s menu open, and with the search open (a computer: the map is free beside the sheet) ----
     await toRest(p);
