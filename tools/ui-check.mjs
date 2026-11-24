@@ -52,8 +52,8 @@ try {
     const navRows = await page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden]) .nav-t')].map(b => b.textContent));
     expect(navRows.length === 3 && navRows.includes(word), `${lang}/${theme}: ☰ lists ${JSON.stringify(navRows)}`);
     await page.keyboard.press('Escape');
-    await sleep(200);
-    expect(await page.evaluate(() => document.getElementById('nav').hidden), `${lang}/${theme}: Esc left ☰'s menu open`);
+    // (its buttons slide back into ☰ first, ~0.3 s: waited for, at most 1.5 s)
+    expect(await until(page, () => document.getElementById('nav').hidden, 1500), `${lang}/${theme}: Esc left ☰'s menu open`);
     // ---- Home pulled up: Statistik's parts (2026-11-22: Statistik is no page of its own) ----
     await setLevel(page, 2);
     await sleep(1200);

@@ -207,6 +207,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, fullMax - 40) : PAGE_LOW_PX + s; }
     // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
     const band = wide() ? Math.max(0, grabH() - GRAB_PX) : 0;
+    // (a computer, ☰'s menu open over Home at rest: the bar alone, 10 px above and under it, no arrow band: index.html)
+    if (pg?.key === 'home' && wide() && sheet.classList.contains('menu-open')) return 10 + (HEAD_PX - GRAB_PX) + 10;
     return pg?.key === 'home' ? HOME_LOW_PX + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0) + band;
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
@@ -775,10 +777,25 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pagesEl.append(results);
     onSearch(true);
     idx = 2; sheet.dataset.h = '2';
-    H[2] = fullMax;   // (the search: all of the screen)
+    H[2] = searchFull();
     place(H[2]);
     results.scrollTop = 0;
   }
+  // The search's height: a phone's all of the screen (its keyboard covers the lower half: the field goes up, clear of
+  // it); a computer's as tall as its results, growing and shrinking with them (Max, 2026-11-24: "Just clicking the
+  // search bar expands the card fully with just empty space. It should be sized dynamically relating to the search
+  // results")
+  function searchFull() {
+    if (!wide()) return fullMax;
+    let end = 0;
+    for (const c of results.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight);
+    return Math.round(Math.min(fullMax, Math.max(headPx() + 120, headPx() + end + FIT_GAP_PX)));
+  }
+  new MutationObserver(() => {
+    if (!searching || !wide() || drag) return;
+    const f = searchFull();
+    if (Math.abs(f - H[2]) > 2) { H[2] = f; place(H[2]); }
+  }).observe(results, { childList: true, subtree: true, characterData: true });
   function closeSearch() {
     if (!searching) return;
     searching = false;
