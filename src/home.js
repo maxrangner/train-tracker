@@ -89,10 +89,8 @@ export function homePage(d) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
     if (!total) return '';
     const words = { ontime: t('onTime'), some: t('stKeySome'), late: t('stKeyLate'), unknown: t('stNoNews') };
-    // (the line saying what the bar does above it: every part's words come right under its heading, Max 2026-11-24
-    // "Descriptive text sometimes before, sometimes after")
-    return `<p class="lg-hint">${on ? t('lgLit', `<b>${c[on]}</b>`, esc(t({ ontime: 'stLegOnTime', some: 'stLegSome', late: 'stLegLate', unknown: 'stLegUnknown' }[on]))) : t('lgHint')}</p>` +
-      `<div class="lg"${on ? ' data-on' : ''}>${LG.filter(k => c[k] > 0).map(k => `<button type="button" class="lg-p t-${k}${on === k ? ' on' : ''}" ` +
+    // (no line of words over it since 2026-11-24, Max: 'Remove the "just nu tryck..." line'; a lit colour shows as its pill)
+    return `<div class="lg"${on ? ' data-on' : ''}>${LG.filter(k => c[k] > 0).map(k => `<button type="button" class="lg-p t-${k}${on === k ? ' on' : ''}" ` +
       `style="flex-grow:${c[k]}" data-legend="${k}" aria-pressed="${on === k}" aria-label="${esc(`${c[k]} · ${words[k]}`)}"><i></i>` +
       `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>`;
   }

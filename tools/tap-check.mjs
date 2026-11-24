@@ -275,10 +275,10 @@ try {
       ok(l1 > 0 && up === !more, `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points ${up ? 'up' : 'down'} (${more ? 'more hidden' : 'all shown'})`);
     } else ok(g0.dash && !g0.arrow, `phone 4: the handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
 
-    // ---- 5: Home's hint only at full ----
+    // ---- 5: no hint line over Home's lateness bar at any height (Max, 2026-11-24: 'Remove the "just nu tryck..." line') ----
     const hint = [];
-    for (const l of [0, 1, 2]) { await setLevel(p, l); await sleep(300); hint.push(await p.evaluate(() => Boolean(document.querySelector('#sheet .pg[data-key="home"] .lg-hint')?.offsetParent))); }
-    ok(!hint[0] && !hint[1] && hint[2], `${dev} 5: Home's hint shown at rest/half/full: ${hint.join('/')} (want false/false/true)`);
+    for (const l of [0, 1, 2]) { await setLevel(p, l); await sleep(300); hint.push(await p.evaluate(() => Boolean(document.querySelector('#sheet .pg[data-key="home"] .lg-hint')))); }
+    ok(!hint.some(Boolean), `${dev} 5: Home's hint line at rest/half/full: ${hint.join('/')} (want none)`);
 
     // ---- 6: rows rounded, the lines between them straight ----
     await setLevel(p, 2);
