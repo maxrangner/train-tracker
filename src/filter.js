@@ -5,7 +5,8 @@
 // And a lateness (Max, 2026-11-24: Home's lateness colours "should show as a pill on map. Filters should always show on
 // map as pill"; it lit only while Home showed, a train opened showed every train again): one of 'ontime', 'some',
 // 'late', 'unknown' (src/lateness.js lateClass, 'unknown' for a train with no news). It narrows the companies' choice:
-// SJ Snabbtåg and late = SJ Snabbtåg's late trains.
+// SJ Snabbtåg and late = SJ Snabbtåg's late trains. Two filters, two pills (Max, 2026-11-24: "separate pills for
+// separate filters. Allow more than one."): the companies' and kinds' pill, the lateness' pill, each × its own.
 import { kindOf } from './train-kinds.js';
 
 export function createFilter() {
@@ -33,6 +34,8 @@ export function createFilter() {
     },
     get late() { return [...chosen.late][0] ?? null; },
     clear() { chosen.brand.clear(); chosen.kind.clear(); chosen.late.clear(); changed(); },
+    // the companies and kinds only (their pill's ×), the lateness kept
+    clearCo() { if (!coActive()) return; chosen.brand.clear(); chosen.kind.clear(); changed(); },
     // Whether a train of this company (null / '' when not known) is shown; lateKey: the train's lateness (left out:
     // the companies' choice alone).
     shows(brand, lateKey) {

@@ -16,7 +16,8 @@ export function createLine(el) {
   function draw() {
     let best = null;
     for (const [id, it] of items) if (!it.always && (!best || (it.priority ?? 0) > (best[1].priority ?? 0))) best = [id, it];
-    const pills = [...items].filter(([, it]) => it.always);
+    // (the always ones by priority: the same order whichever came first)
+    const pills = [...items].filter(([, it]) => it.always).sort((a, b) => (b[1].priority ?? 0) - (a[1].priority ?? 0));
     if (best) pills.push(best);
     shown = [...pills].sort((a, b) => (b[1].priority ?? 0) - (a[1].priority ?? 0))[0]?.[0] ?? null;
     el.hidden = !pills.length;
