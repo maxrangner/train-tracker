@@ -86,12 +86,13 @@ try {
   const stayed = await page.evaluate(() => window.__stack.top());
   ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
 
-  // 6. ☰ with Home at rest: the menu under the whole box, its arrow included (Max, 2026-11-24: "Menu still not below the
-  //    whole search pill")
+  // 6. ☰: the menu to the right of the button, its top level with it (Max, 2026-11-24: "move menu to the right of the
+  //    hamburger instead"; until then under the whole box)
   await page.evaluate(() => window.__stack.home(0)); await sleep(1200);
-  await page.evaluate(() => document.querySelector('#sheet .sh-nav, #nav-button, [aria-controls="nav"]')?.click()); await sleep(500);
-  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(); return n && !n.hidden ? { top: Math.round(n.getBoundingClientRect().top), box: Math.round(s.bottom) } : null; });
-  ok(menu && menu.top >= menu.box + 4, `☰ at rest: the menu's top ${menu?.top} px, the box's bottom ${menu?.box} px`);
+  await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(500);
+  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), b = document.getElementById('nav-button').getBoundingClientRect(); if (!n || n.hidden) return null;
+    const r = n.getBoundingClientRect(); return { left: Math.round(r.left), top: Math.round(r.top), btnRight: Math.round(b.right), btnTop: Math.round(b.top) }; });
+  ok(menu && menu.left >= menu.btnRight + 4 && Math.abs(menu.top - menu.btnTop) <= 2, `☰: the menu at ${menu?.left},${menu?.top}, the button's right ${menu?.btnRight}, its top ${menu?.btnTop}`);
   await page.keyboard.press('Escape'); await sleep(300);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")

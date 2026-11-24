@@ -73,7 +73,8 @@ if (sharedAt) dropShared();
 // good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).
 const FILES_DELAY_MS = 30 * 1000;
 
-window.__started = true;   // index.html reports it on screen if this line is never reached
+window.__started = true;
+document.documentElement.dataset.motion = settings.pageMotion;   // how a page comes in (index.html :root[data-motion]; Debug)   // index.html reports it on screen if this line is never reached
 translatePage();           // the page's own words in the chosen language (Settings → Language)
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
 // has loaded (or failed: then trains move in straight lines between reports).
@@ -825,6 +826,14 @@ function openNav() {
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   const a = navButton.getBoundingClientRect(), w = navEl.offsetWidth, h = navEl.offsetHeight;
+  // A computer: to the right of ☰, its top level with the button (Max, 2026-11-24: "move menu to the right of the
+  // hamburger instead"); it floats beside the sheet, over the map.
+  if (innerWidth >= 440 && a.right + 10 + w <= innerWidth - 10) {
+    navEl.style.left = `${a.right + 10}px`;
+    navEl.style.top = `${Math.max(10, Math.min(innerHeight - h - 10, a.top))}px`;
+    navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
+    return;
+  }
   navEl.style.left = `${Math.max(10, Math.min(innerWidth - w - 10, a.right - w))}px`;
   // Under the search bar (Max, 2026-11-24: "Menu should show below the search bar", then on the phone too: "make the
   // menu appear below the search pill"); above it only when there's no room below (a phone's sheet at rest, its bar at
@@ -1157,6 +1166,7 @@ onSettingChange((key) => {
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); homeDef.redraw(); }   // Debug → Lateness colours on Home
+  if (key === 'pageMotion') document.documentElement.dataset.motion = settings.pageMotion;   // Debug → Page change
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)

@@ -135,6 +135,10 @@
        step back). A page without buttons of its own has no bar: the head folds to nothing (src/stack.js .no-bar); a
        train's buttons sit in its card's top line beside the number (def.barIn). */
     #sheet.no-bar .sh-head { height: 0; }
+    /* (8 px between the search bar and the page under it: scrolled, the page goes out of sight below that room, not
+       right at the bar's edge; Max, 2026-11-24 "When scolling main card the top is cut of kind of ugly... Better just add
+       the padding"; src/stack.js BAR_GAP_PX) */
+    #sheet:not(.no-bar):not([data-h="0"]) .sh-head { margin-bottom: 8px; }   /* (not at rest: the bar alone, as tuned) */
     #sheet.no-bar .sh-bar { visibility: hidden; }
     /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
     #sheet .pg-head { touch-action: none; }
@@ -226,6 +230,26 @@
     @keyframes pg-in-l { from { transform: translateX(-100%); } }
     @keyframes pg-out-l { to { transform: translateX(-100%); } }
     @keyframes pg-out-r { to { transform: translateX(100%); } }
+    /* The other two ways (Debug → Page change, src/settings.js pageMotion; Max, 2026-11-24 "Do A, B and F"; no fade in
+       any). B 'rise': the new page comes as a card from the sheet's edge over the one before, which stays still; back,
+       it goes away the same way. F 'strip': the pages one strip along the sheet, the new one pushing the old away. The
+       sheet's edge: the bottom on a phone, the top on a computer (it hangs from there). */
+    :root[data-motion="rise"] .sh-pages > .pg { background: var(--bg); }
+    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in .3s var(--ez) both; z-index: 2; }
+    :root[data-motion="rise"] .pg.out-r { animation: pg-rise-out .26s cubic-bezier(.4, 0, .8, .4) both; z-index: 2; }
+    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still .3s both; }
+    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r .3s var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l .3s var(--ez) both; }
+    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l .3s var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r .3s var(--ez) both; }
+    @keyframes pg-still { to { transform: none; } }
+    @keyframes pg-rise-in { from { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-rise-out { to { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-strip-in-r { from { transform: translateY(var(--edge, 100%)); } }
+    @keyframes pg-strip-out-l { to { transform: translateY(calc(-1 * var(--edge, 100%))); } }
+    @keyframes pg-strip-in-l { from { transform: translateY(calc(-1 * var(--edge, 100%))); } }
+    @keyframes pg-strip-out-r { to { transform: translateY(var(--edge, 100%)); } }
+    @media (min-width: 440px) { .sh-pages { --edge: -100%; } }
     @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
     /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
        scrolling, no own height limits (the sheet has them). */
@@ -1469,6 +1493,8 @@
         <div class="seg" data-key="boardRows" role="group" aria-label="Trains on a station board" data-t-aria="boardRowsAria"><button type="button" data-v="8">8</button><button type="button" data-v="12">12</button><button type="button" data-v="20">20</button></div></div>
       <div class="debug-only set-row"><span data-t="homeLegend">Lateness colours on Home</span>
         <div class="seg" data-key="homeLegend" role="group" aria-label="Lateness colours on Home" data-t-aria="homeLegend"><button type="button" data-v="true" data-t="on">On</button><button type="button" data-v="false" data-t="off">Off</button></div></div>
+      <div class="debug-only set-row"><span data-t="pageMotion">Page change</span>
+        <div class="seg" data-key="pageMotion" role="group" aria-label="Page change" data-t-aria="pageMotion"><button type="button" data-v="side" data-t="motionSide">Sideways</button><button type="button" data-v="rise" data-t="motionRise">From the edge</button><button type="button" data-v="strip" data-t="motionStrip">One strip</button></div></div>
       <div class="debug-only set-row"><span data-t="routeEdge">Route white edge</span>
         <div class="seg" data-key="routeEdge" role="group" aria-label="Route white edge" data-t-aria="routeEdge"><button type="button" data-v="false" data-t="off">Off</button><button type="button" data-v="true" data-t="on">On</button></div></div>
       <div class="debug-only set-row"><span data-t="noEstimate">With no expected time</span>
