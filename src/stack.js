@@ -119,7 +119,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A computer (440 px wide and up): the handle's dash becomes a small arrow (Max, 2026-11-23: the dash is a phone
   // thing): ⌃ at rest (a tap raises the sheet), ⌄ raised (a tap lowers it); index.html .sh-arrow. A phone keeps the dash.
   // With more below, the same word as the phone's sign beside it.
-  sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-word"></span><span class="sh-arrow">${icon('chevronUp', 18)}</span>`);
+  // (the word and the arrow one pill, lit together under the mouse: Max, 2026-11-24 "v-pill background blocks 'mer'")
+  sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-pill"><span class="sh-word"></span><span class="sh-arrow">${icon('chevronUp', 18)}</span></span>`);
   fadeEl.firstChild.addEventListener('click', () => {
     if (idx < 2) { setIndex(2); return; }
     const pg = scroller();
@@ -556,8 +557,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       folBtn.setAttribute('aria-pressed', String(following));
       folBtn.lastElementChild.textContent = t(following ? 'following' : 'follow');
     }
-    // ‹ one page back on every page but those that say noUp (a train's)
-    const up = !pg.def.noUp;
+    // ‹ one page back on every page but those that say noUp (true, or a function: a train's, over Home)
+    const up = !(typeof pg.def.noUp === 'function' ? pg.def.noUp() : pg.def.noUp);
     if (upBtn.hidden === up) upBtn.hidden = !up;
     const word = t('stepBack');
     if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);

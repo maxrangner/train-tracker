@@ -91,19 +91,20 @@
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
     /* A computer: the dash is a small arrow (src/stack.js; Max, 2026-11-23: the dash is a phone thing): ⌃ at rest (a
        tap raises the sheet), ⌄ raised (a tap lowers it). */
-    .sh-arrow { display: none; }
+    .sh-arrow, .sh-pill { display: none; }
     @media (min-width: 440px) {
       .sh-grab { cursor: pointer; }
       .sh-grab i { display: none; }
-      .sh-arrow { display: grid; place-items: center; width: 36px; height: 16px; border-radius: 8px; color: var(--accent); transition: transform .26s var(--ez), background .15s; }
+      .sh-arrow { display: grid; place-items: center; width: 20px; height: 16px; color: var(--accent); transition: transform .26s var(--ez); }
+      .sh-pill { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px; border-radius: 10px; transition: background .15s; }
       /* (a band of its own, the arrow and its word in the middle: as much room under them as above; Max, 2026-11-24
          "'Mer v' still too close to the edge. Or if this is a general UI rule, the padding above needs to be less") */
       #sheet .sh-grab { height: 28px; align-items: center; }
-      .sh-grab:hover .sh-arrow { background: var(--hover); }
+      .sh-grab:hover .sh-pill { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
       /* (a train's card has its own "More" just above: one arrow, not two; Max, 2026-11-23) */
-      #sheet[data-page="train"] .sh-arrow { display: none; }
+      #sheet[data-page="train"] :is(.sh-arrow, .sh-pill) { display: none; }
       /* (and its row thin: under "More" only a sliver of room, Max 2026-11-24: "still too much padding") */
       #sheet[data-page="train"] .sh-grab { height: 8px; }
     }
@@ -201,7 +202,7 @@
     @media (min-width: 440px) {
       #sheet .sh-grab { display: flex; justify-content: center; gap: 2px; }
       #sheet.more-below:not(.dragging):not([data-search]):not([data-page="train"])[data-next="more"] .sh-grab .sh-word { display: block; color: var(--accent); font-size: 13px; font-weight: 600; line-height: 16px; white-space: nowrap;
-        position: relative; top: -1px; margin-right: -8px; }
+        position: relative; top: -1px; }
     }
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -342,10 +343,6 @@
     .lg-p.t-unknown { background: var(--t-unknown-bg); color: var(--t-unknown); } .lg-p.t-unknown i { background: var(--c-unknown); }
     .lg[data-on] .lg-p:not(.on) { opacity: .32; }
     .lg-p.on { box-shadow: inset 0 0 0 2.5px currentColor; }
-    .lg-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* only with Home raised to full (Max, 2026-11-23: at rest the ⌄ at the bottom edge says there is more) */
-    #sheet:not([data-h="2"]) .lg-hint { display: none; }
-    .lg-hint b { color: var(--ink); }
     .home-stats.stats-body { padding: 0; gap: 12px; }
     .home-stats > .big { margin: 6px 0 0; }
     /* Parts as cards (Max's heading pick C, 2026-11-23: "hard to see where one section ends and the other begins"): each
@@ -795,10 +792,13 @@
     .board-msgs-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 14px; cursor: pointer;
       background: var(--t-some-bg); color: var(--t-some); font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
     .board-msgs-toggle span { flex: 1; color: var(--ink); }
-    .board-msg-list { display: grid; gap: 6px; max-height: 30vh; overflow: auto; touch-action: pan-y; }
+    /* (the messages in one yellow card, a thin line between them, the title line a card of its own; a station's and a
+       train's alike: Max, 2026-11-24 "Can the messages themselves be in one yellow card instead of individual?") */
+    .board-msg-list { display: grid; gap: 0; max-height: 30vh; overflow: auto; touch-action: pan-y; padding: 2px 12px; border-radius: 14px; background: var(--t-some-bg); }
     .board-msg-list[hidden] { display: none; }
     #board .busy { opacity: 0.45; transition: opacity .15s; }
-    .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 12px; border-radius: 14px; background: var(--t-some-bg); color: var(--ink); }
+    .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 0; color: var(--ink); }
+    .board-msg + .board-msg { border-top: 1px solid color-mix(in srgb, var(--t-some) 28%, transparent); }
 
     #panel, #board, #picker, #disruption { display: flex; flex-direction: column; }
     /* Motion (Max, 2026-11-20: "feels a bit static and stiff"; his picks on https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe;
@@ -877,7 +877,9 @@
     /* The train card (src/panel.js; Max, 2026-11-15, sketch C). Compact: the number big with its company, two tiles
        (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line, "All stops".
        Full (.full): the star, Trafikverket's notes and the timeline instead of the line. No × on a phone. */
-    #panel .panel-title { align-items: baseline; gap: 8px; }
+    #panel .panel-title { flex-direction: column; align-items: flex-start; gap: 3px; }
+    #panel .panel-sub { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
+    #panel .panel-sub:empty { display: none; }
     #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
     .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     /* The collapsed train card on a phone: only its number, operator and destination (Max, 2026-11-23: "A fully collapsed
@@ -1040,7 +1042,7 @@
     #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
       background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
     #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding-right: 0; margin: 0; max-height: none; overflow: visible; }
+    #panel .tv-box.open .panel-tvnotes.board-msg-list { padding: 2px 12px; margin: 0; gap: 0; max-height: none; overflow: visible; }
     /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
     .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
       background: var(--hover); border-radius: 14px; font-weight: 650; }
