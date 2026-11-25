@@ -1806,6 +1806,9 @@ function define(key) {
     default: return null;
   }
 }
+// The sheet's pages scroll themselves (at full): with a mouse, our own thin bar for whichever is on top (src/scrollbar.js;
+// Max, 2026-11-25: the browser's bar "shows a black background" when grabbed and "changes width")
+const pageBar = addScrollbar(null, { host: document.querySelector('#sheet .sh-pages') });
 stack = createStack({
   sheet: document.getElementById('sheet'),
   define: defineNow,
@@ -1823,9 +1826,10 @@ stack = createStack({
     // page keeps its own stations' names (showTrip below) but no train's line
     if (pg.def.kind === 'trip' && !panel.openId) { map.setPath(null); map.setAbroad(null); }
     else if (pg.def.kind !== 'train' && pg.def.kind !== 'station' && !panel.openId) clearPath();
+    pageBar.follow(pg.el);
   },
 });
-stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); });
+stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); pageBar.follow(on ? document.getElementById('search-results') : stack.pageEl(stack.top())); });
 // A train's card that changed its size (the "to Kallhäll" chooser opened or shut, its stops come in, Share's note):
 // the sheet follows at once, not at the next second's tick (Max, 2026-11-23: "the card expands after way too long").
 // Taller at once; shorter only when the person changed the card within the last 1.5 s (the chooser shut): its own
