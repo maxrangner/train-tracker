@@ -14,18 +14,20 @@ mkdirSync(OUT, { recursive: true });
 const browser = await launch();
 const shots = { phone: [], pc: [] };
 try {
-  for (const [name, size] of [['phone', PHONE], ['pc', { width: 1280, height: 800, deviceScaleFactor: 1 }]]) {
+  for (const [name, size] of [['phone', PHONE], ['pc', { width: 1280, height: 800, deviceScaleFactor: 2 }]]) {
     const page = await waitForMap(browser, { size, lang: 'sv', view: '6.2/62.0/16.0', ...(replay ? { replay: CARD_HOUR } : {}) });
     await until(page, () => (window.__trains?.count ?? 0) > 50, 30000);
     await sleep(replay ? 2500 : 6000);
-    const shot = async (file, label, note) => { await sleep(900); const path = `${OUT}/${name}-${file}.png`; await page.screenshot({ path }); shots[name].push({ image: path, label, note }); };
+    // (a computer: its left part, the box and some map, so the words can be read at the sheet's size)
+    const shot = async (file, label, note) => { await sleep(900); const path = `${OUT}/${name}-${file}.png`;
+      await page.screenshot({ path, ...(name === 'pc' ? { clip: { x: 0, y: 0, width: 560, height: 700 } } : {}) }); shots[name].push({ image: path, label, note }); };
     const chip = async (key) => {
       await page.evaluate(k => document.querySelector(`#sheet[data-root] .sh-chips [data-chip="${k}"], #chips [data-chip="${k}"]`).click(), key);
       await until(page, k => window.__stack.top() === k, 4000, key);
       await until(page, () => !document.querySelector('#sheet .pg.in-r, #sheet .pg.in-l, #sheet .pg-ghost'), 4000);
     };
     await toRest(page);
-    await shot('1-start', 'Start', 'The bar alone, the chips above it');
+    await shot('1-start', 'Start', name === 'pc' ? 'The search box alone, the chips under it' : 'The bar alone, the chips above it');
     await chip('dislist');
     await shot('2-disruptions', 'Störningar', 'Its chip tapped: the card, the chips in its head');
     await chip('saved');
