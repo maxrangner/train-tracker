@@ -842,9 +842,11 @@ function slideNav(open) {
   if (reduceMotion()) return Promise.resolve();
   return Promise.all(rows.map((r, i) => {
     const from = { transform: `translateX(${Math.round(b.left - r.getBoundingClientRect().left)}px)` }, to = { transform: 'none' };
-    // (the first button travels furthest: it leaves first and comes back last)
+    // (the first button travels furthest: it leaves first and comes back last; shutting takes as long as opening and
+    // the same curve, Max 2026-11-25: "Should be same speed. Same as opening": it started slowly; they pass behind the
+    // menu's right edge, by ☰, never over it: index.html #nav.sh-menu clip-path)
     const n = rows.length - 1 - i;
-    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: open ? 'cubic-bezier(.2, .8, .2, 1)' : 'cubic-bezier(.4, 0, .8, .4)', fill: 'forwards' }).finished.catch(() => {});
+    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' }).finished.catch(() => {});
   }));
 }
 // (opened with Home pulled up: Home goes down to rest, Max 2026-11-24 "When menu is called while main card is already
