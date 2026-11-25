@@ -855,7 +855,8 @@
        "Revamp hamburger menu... as buttons"). No fade (Max: "Remove the fade on all"). */
     /* (each a pill as wide as its words, the same padding as the filter's chips, no icons; Max, 2026-11-24 "Text has
        horrible padding. Looks strange, not clean like other UI") */
-    .sh-search > .sh-menu { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; margin: 0; padding: 0; }
+    .sh-search > .sh-menu { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; margin: 0; padding: 0;
+      clip-path: inset(-8px 0 -8px -8px); }   /* (cut at its right edge, by ☰: the buttons come out from beside it and go back, never over or past it; Max 2026-11-25) */
     .sh-search > .sh-menu[hidden] { display: none; }
     .sh-search > .sh-menu .nav-row { flex: 0 1 auto; width: auto; min-width: 0; min-height: 0; height: 40px; padding: 0 14px; justify-content: center; border-radius: 20px;
       background: var(--hover); font-size: 14px; font-weight: 600; }

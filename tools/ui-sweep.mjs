@@ -230,12 +230,12 @@ async function openTrainFromMap(page) {
 const moreBtn = '#panel .panel-more';
 const T = [
   { name: 'menu open', setup: toRest, act: p => click(p, '#nav-button') },
-  { name: 'menu close', setup: openMenu, act: p => click(p, '#nav-button') },
-  { name: 'menu → settings', setup: openMenu, act: p => click(p, '#open-settings') },
-  { name: 'settings → back', setup: async (p) => { await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
-  { name: 'menu → about', setup: openMenu, act: p => click(p, '#help-button') },
-  { name: 'about → back', setup: async (p) => { await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
-  { name: 'menu → rewind', setup: openMenu, act: p => click(p, '#open-day') },
+  { name: 'menu close', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#nav-button') },
+  { name: 'menu → settings', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-settings') },
+  { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
+  { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
+  { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
+  { name: 'menu → rewind', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-day') },
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
   { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
