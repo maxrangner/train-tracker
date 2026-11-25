@@ -132,6 +132,9 @@
     font: 600 12.5px/1.2 var(--font); font-variant-numeric: tabular-nums; color: var(--ink); background: var(--card);
     padding: 4px 9px 5px; border-radius: 12px; box-shadow: var(--shadow-s); animation: bubble-in .18s ease-out; transition: opacity .15s ease-in; }
   .near-label.out { opacity: 0; }
+  .near-label.hover { z-index: 1; }
+  /* pressed and held on the map: its labels go (src/map.js hideLabels) */
+  .labels-held :is(.near-labels, .station-names, .sel-label) { opacity: 0; transition: opacity .12s; }
   @keyframes bubble-in { from { opacity: 0; } }
   .near-label::before { content: ''; position: absolute; left: 50%; top: -4px; width: 9px; height: 9px; margin-left: -4.5px;
     background: inherit; transform: rotate(45deg); border-radius: 2px 0 0 0; }

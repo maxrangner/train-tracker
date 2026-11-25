@@ -240,6 +240,33 @@ try {
   ok(se.target.level === 1 && Math.abs(se.target.height - se.half) <= 1 && se.done.height === se.target.height && Math.abs(se.h - se.target.height) <= 1
     && se.dt >= 200 && se.again < 50 && se.calls === 1,
   `to half: target ${se.target.level}, ${se.target.height} px (half ${se.half}); settled after ${se.dt} ms at ${se.h} px (want the glide's end, ~360 ms), again at once (${se.again} ms); onSettled ${se.calls}x (want 1)`);
+
+  // 16. Hover over a train's drop: its label shows; the mouse away: gone (Max, 2026-11-25: "Hovering over a drop or train
+  //     should show it's label"). Further out, where the map leaves many labels out.
+  await page.evaluate(() => window.__stack.home(0)); await sleep(600);
+  await page.evaluate(() => window.__map.jumpTo({ center: [16, 61], zoom: 5.5, bearing: 0, pitch: 0 })); await sleep(2000);
+  const dot = await page.evaluate(() => { const fs = window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).filter(f => !f.properties.point_count);
+    for (const f of fs) { const q = window.__map.project(f.geometry.coordinates); if (q.x > 520 && q.x < innerWidth - 80 && q.y > 80 && q.y < innerHeight - 80) return { x: q.x, y: q.y, id: f.properties.id }; } return null; });
+  if (dot) {
+    await page.mouse.move(dot.x - 40, dot.y - 40); await page.mouse.move(dot.x, dot.y, { steps: 4 }); await sleep(400);
+    const on = await page.evaluate(() => { const h = document.querySelector('.near-label.hover'); return h ? h.textContent : null; });
+    await page.mouse.move(dot.x + 150, dot.y + 150, { steps: 4 }); await sleep(300);
+    const off = await page.evaluate(() => Boolean(document.querySelector('.near-label.hover')));
+    ok(on && !off, `hover over a drop: its label "${on}" shows; the mouse away: ${off ? 'still there' : 'gone'}`);
+  } else console.log('note no lone drop on screen for the hover step');
+
+  // 17. Pressed and held on the map: the labels go; let go: back (Max, 2026-11-25: "Clicking and holding on map should just
+  //     hide all labels when held. Return when released"); a plain click changes nothing
+  await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 12 })); await sleep(2000);
+  const labelOp = () => page.evaluate(() => ({ held: document.documentElement.classList.contains('labels-held'), text: window.__map.getPaintProperty('station-names', 'text-opacity') }));
+  await page.mouse.move(900, 450); await page.mouse.down(); await sleep(400);
+  const during = await labelOp();
+  await page.mouse.up(); await sleep(200);
+  const after2 = await labelOp();
+  await page.mouse.click(900, 450); await sleep(100);
+  const click = await labelOp();
+  ok(during.held && during.text === 0 && !after2.held && after2.text !== 0 && !click.held,
+    `held on the map: labels ${during.held ? 'hidden' : 'SHOWN'} (station names' opacity ${JSON.stringify(during.text)}); let go: ${after2.held ? 'still hidden' : 'back'}; a plain click: ${click.held ? 'hid them' : 'nothing'}`);
 } finally {
   await browser.close();
 }
