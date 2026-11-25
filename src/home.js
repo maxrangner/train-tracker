@@ -178,12 +178,13 @@ function statsPage(d) {
   }
   return {
     name: () => t('navStats'), kind: 'stats',
-    // Its half: its title and Sweden right now whole (src/stack.js half(); without it the half stopped under the title:
-    // no clean edge between a third and a half of the screen, Sweden's map is taller than that)
+    // Its half: its title and Sweden right now whole, the next part's top hidden under the fade at the edge, a phone's
+    // "More" pill in the room between (src/css/page.css: 20 px under Sweden) (src/stack.js half(); without it the half
+    // stopped under the title: no clean edge between a third and a half of the screen, Sweden's map is taller than that)
     half() {
       const se = page?.querySelector('.home-stats > .st-se');
       if (!se?.offsetHeight) return null;
-      return Math.round(se.getBoundingClientRect().bottom - page.getBoundingClientRect().top + page.scrollTop + 14 + (isWide() ? 12 : 40));
+      return Math.round(se.getBoundingClientRect().bottom - page.getBoundingClientRect().top + page.scrollTop + (isWide() ? 20 : 38));
     },
     mount(el) {
       page = el;

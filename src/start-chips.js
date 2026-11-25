@@ -13,7 +13,7 @@
 // credit and scale ride on a phone's sheet's top edge; a computer's sheet is at the top).
 //
 // createStartChips({ stack, counts: { dis() -> { n, colour } or null, saved() -> n }, held() -> bool (☰'s menu
-//   shown) }) -> { draw() (the numbers again: each second), sync() (shown or not: a page came, the search, the menu) };
+//   shown), has(key) -> bool (that chip shown: Störningar only with live data, a replay has none) }) -> { draw() (the numbers again: each second), sync() (shown or not: a page came, the search, the menu) };
 //   stack is a getter.
 import { titleIcon, titleChip } from './icons.js';
 import { t } from './i18n.js';
@@ -24,7 +24,7 @@ import { swap } from './home.js';
 export const START_KEYS = ['dislist', 'saved', 'stats'];
 const CHIPS = { dislist: { icon: 'warning', word: 'disruptions' }, saved: { icon: 'star', word: 'mine' }, stats: { icon: 'bars', word: 'navStats' } };
 
-export function createStartChips({ stack, counts, held }) {
+export function createStartChips({ stack, counts, held, has = () => true }) {
   const root = document.documentElement;
   const float = Object.assign(document.createElement('div'), { id: 'chips', className: 'sc-row' });
   float.setAttribute('role', 'group');
@@ -35,7 +35,7 @@ export function createStartChips({ stack, counts, held }) {
 
   function html(lit) {
     const dis = counts.dis(), saved = counts.saved();
-    return START_KEYS.map((key) => {
+    return START_KEYS.filter(has).map((key) => {
       const c = CHIPS[key], on = key === lit;
       const n = key === 'dislist' ? dis?.n : key === 'saved' ? saved : null;
       const colour = key === 'dislist' && dis ? ` style="--ct:${dis.colour}"` : '';

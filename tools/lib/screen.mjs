@@ -118,19 +118,28 @@ export async function openFromMenu(page, name) {
   return pageKey(page);
 }
 
-// Home's parts are drawn (its Statistik parts, and its Disruptions part once they are in: live only).
+// Home: the search bar alone since 2026-11-25 (Max's pick C); its parts are pages of their own, opened by the start's
+// chips (src/start-chips.js): 'dislist' (Störningar), 'saved' (Sparade), 'stats' (Statistik); Filter from ☰ ('filter').
 export const HOME = '#sheet .pg[data-key="home"]';
 export const pageSel = key => `#sheet .pg[data-key="${key}"]`;
-// The list of disruptions (live only): Home's "All disruptions" row tapped; waits for its page. Returns whether it
-// opened (false without disruptions: no row).
+// A start chip tapped as a person does: the one over the map at rest, else the one in an open chip card's head; waits
+// for its card to stand (slid in, the one it replaced gone). Returns whether it opened.
+export async function openChip(page, key) {
+  if (!(await page.evaluate(() => document.getElementById('sheet').hasAttribute('data-root')))) await toRest(page);
+  const sel = await page.evaluate(() => (document.getElementById('sheet').hasAttribute('data-root') ? '#sheet .sh-chips' : '#chips'));
+  await page.click(`${sel} [data-chip="${key}"]`);
+  const came = await until(page, k => window.__stack.top() === k, 3000, key);
+  await until(page, () => !document.querySelector('#sheet .pg.in-r, #sheet .pg.in-l, #sheet .pg-ghost'), 4000);
+  await page.evaluate(() => window.__stack.whenSettled());
+  await sleep(200);
+  return came;
+}
+// The list of disruptions (live only): the chip Störningar tapped once they are in (its number shows); waits for its
+// page. Returns whether it opened (false: none came).
 export async function openDisruptions(page, { wait = 45000 } = {}) {
   await toRest(page);
-  await until(page, h => Boolean(document.querySelector(`${h} .dis-list`)), wait, HOME);
-  const row = await page.evaluate(h => { const b = document.querySelector(`${h} [data-go="dislist"]`); b?.click(); return Boolean(b); }, HOME);
-  if (!row) return false;
-  await until(page, () => window.__stack.top() === 'dislist', 3000);
-  await sleep(500);
-  return true;
+  if (!(await until(page, () => Boolean(document.querySelector('#chips [data-chip="dislist"] .ct-n')), wait))) return false;
+  return openChip(page, 'dislist');
 }
 
 // The live mark at the top: Connection as a page.

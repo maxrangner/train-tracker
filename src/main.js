@@ -288,7 +288,7 @@ stack.onSearch((on) => {
   pageBar.follow(on ? document.getElementById('search-results') : stack.pageEl(stack.top()));
   chips.sync();
 });
-chips = createStartChips({ stack: () => stack, held: () => nav.shown,
+chips = createStartChips({ stack: () => stack, held: () => nav.shown, has: key => key !== 'dislist' || live,
   counts: { dis: () => (live && disruptions.loaded ? start.disChip() : null), saved: () => start.savedCount() } });
 chips.sync();
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).

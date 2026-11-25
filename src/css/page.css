@@ -84,6 +84,8 @@
   /* (Statistik's numbers: their right side too, which the pages' no-own-scrolling rule set to 0: sheet.css) */
   #sheet .pg[data-key="stats"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
   .home-stats > .big { margin: 2px 2px 10px; }
+  /* (Statistik at half ends under Sweden right now: room there for a phone's "More" pill, src/home.js statsPage half) */
+  .home-stats > .st-se { margin-bottom: 8px; }
   .most-late { display: grid; }
   /* The Filter page's card: the lateness bar, the companies under it (src/home.js companiesHtml), small and tight; a picked
      company ringed, "N more ⌄" in the accent colour; in dark the buttons a step lighter than the card. */
