@@ -42,7 +42,7 @@ try {
   // hold it whole, nor Max's own domain as a mail address.
   const whole = ['sparat.app', '+bugs', '@', 'gmail.com'].join('');
   if (to !== whole) fails.push(`bug mail to "${to}"`);
-  const code = await page.evaluate(() => fetch('/src/main.js').then(r => r.text()));
+  const code = await page.evaluate(() => Promise.all(['/src/main.js', '/src/about.js'].map(f => fetch(f).then(r => r.text()))).then(a => a.join('\n')));
   if (code.includes(whole) || code.includes(['@', 'rangner.com'].join(''))) fails.push('the page\'s code holds the bug address whole');
   if (!/^Spårat \d+\.\d+\.\d+ \(\w+\+?\): felrapport$/.test(subject)) fails.push(`bug mail subject "${subject}"`);
   for (const want of ['Vad hände?', 'https://sparat.rangner.com/#view=', `Valt tåg: ${number}`, 'replay ', 'Telefon eller webbläsare: Mozilla'])

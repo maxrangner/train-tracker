@@ -1,0 +1,97 @@
+/* My trains (src/my-trains.js): Saved's rows, a trip's page (its next train, today's trains, its changes), a new trip,
+   and the ride page (src/ride.js). */
+@layer app {
+  .r-ic.trip { color: var(--accent); }
+  .r-ic.trip.tight { background: var(--t-some-bg); color: var(--t-some); }
+  .r-ic.trip.lost { background: var(--t-late-bg); color: var(--t-late); }
+  .add-row .r-ic { color: var(--accent); }
+  .add-row b { color: var(--accent); }
+  .trip-row .via { font-style: normal; font-weight: 500; color: var(--muted); font-size: 13px; }
+
+  /* A trip's next train: a button to its card, its company, where and when it gets there, an arrow; with a change, the
+     change and the train after it under it. */
+  .trip-next { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; padding: 12px 14px; border-radius: 16px; background: var(--hover); }
+  .trip-next small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .trip-next b { font-size: 30px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .trip-next b .m { font-size: 18px; }
+  .trip-next > span:not(.tag) { grid-column: 1; color: var(--muted); font-size: 14.5px; font-weight: 600; }
+  .trip-next > .tag { grid-column: 2; grid-row: 2 / span 2; justify-self: end; }
+  .trip-next.tight { background: var(--t-some-bg); } .trip-next.tight b { color: var(--t-some); }
+  .trip-next.lost { background: var(--t-late-bg); } .trip-next.lost b { color: var(--t-late); }
+  .trip-next.ok b { color: var(--t-ontime); }
+  button.trip-next { width: 100%; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; grid-template-columns: 1fr auto auto; }
+  button.trip-next:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+  button.trip-next > .tag { grid-column: 2; }
+  .trip-next .tn-to { grid-column: 1; color: var(--ink); font-size: 15px; font-weight: 700; }
+  button.trip-next > b { grid-column: 1; }
+  button.trip-next > span.tn-go { grid-column: 3; grid-row: 2 / span 3; align-self: center; color: var(--muted); display: grid; }
+  .trip-next-chg { display: grid; gap: 4px; padding: 6px 12px 0; }
+  .trip-fails { margin: -4px 2px 0; color: var(--muted); font-size: 14px; font-weight: 600; }
+  /* Today's trains: the list's card right under its heading, the pairs (a train, its change, the next) evenly inside it.
+     A pair is a card of its own (page.css). */
+  .trip-pair { margin-bottom: 8px; }
+  .trip-pair .bd-row { border-bottom: 0; }
+  .pg .lab:has(+ .bd.trip-list) { margin-bottom: 0; }
+  .pg .lab + .bd.trip-list { margin-top: 0; }
+  .pg .bd.trip-list:has(> .trip-pair) { padding: 8px; gap: 8px; }
+  .pg .bd.trip-list > .trip-pair { margin: 0; }
+  .trip-chg, .chg-min { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 10px; font-size: 13.5px; font-weight: 700; }
+  .chg-min { display: inline-flex; padding: 3px 8px; font-size: 12.5px; white-space: nowrap; }
+  :is(.trip-chg, .chg-min).ok { background: var(--t-ontime-bg); color: var(--t-ontime); }
+  :is(.trip-chg, .chg-min).tight { background: var(--t-some-bg); color: var(--t-some); }
+  :is(.trip-chg, .chg-min).lost { background: var(--t-late-bg); color: var(--t-late); }
+  .trip-chg.unknown { background: var(--hover); color: var(--muted); }   /* the onward train not loaded yet (only part of the day known) */
+  .trip-chg.rescue { background: var(--t-ontime-bg); color: var(--t-ontime); margin-top: 4px; }   /* a lost change: the later train that works */
+  .trip-chg[data-at] { cursor: pointer; }   /* a change: a tap shows its station on the map */
+
+  /* A new trip as a route: the stations on a line with dots, each a pill (From, a Change yellow with its ×, To big),
+     six dots to drag it; the pill being filled is the station search itself. */
+  .nt-route { position: relative; display: grid; gap: 0; }
+  .nt-route::before { content: ''; position: absolute; left: 15.5px; width: 3px; border-radius: 2px; background: var(--line);
+    top: var(--l0, 30px); height: calc(var(--l1, 90px) - var(--l0, 30px)); }
+  .nt-stop { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 5px 0; z-index: 1; }
+  .nt-dot { justify-self: center; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--muted); background: var(--bg); box-sizing: border-box; }
+  .nt-stop.via .nt-dot { border-color: var(--c-some); }
+  .nt-stop.to .nt-dot { width: 20px; height: 20px; border-color: var(--accent); background: var(--accent); }
+  .nt-pill { display: grid; gap: 1px; min-width: 0; width: 100%; box-sizing: border-box; min-height: 58px; padding: 8px 14px; border: 0; border-radius: 14px;
+    background: var(--hover); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .nt-pill small { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .nt-pill b { font-size: 17px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nt-pill.none b { color: var(--muted); font-weight: 600; }
+  .nt-stop.via .nt-pill small { color: var(--t-some); }
+  .nt-pill.on { box-shadow: inset 0 0 0 2px var(--accent); cursor: text; }
+  .nt-q { width: 100%; min-width: 0; box-sizing: border-box; height: 26px; padding: 0; border: 0; outline: none; background: none; color: var(--ink);
+    font: 800 17px var(--font); -webkit-appearance: none; appearance: none; }
+  .nt-stop.to .nt-q { font-size: 20px; }
+  .nt-q::placeholder { color: var(--muted); font-weight: 600; opacity: 1; }
+  .nt-q::-webkit-search-cancel-button { display: none; }
+  .nt-res { margin-left: 40px; }
+  .nt-res:empty { display: none; }
+  .nt-room { display: block; height: 75vh; }
+  .nt-x { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
+  .nt-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .nt-grip { width: 38px; height: 46px; display: grid; place-items: center; color: var(--ink); opacity: .7; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .nt-add { justify-self: start; display: inline-flex; align-items: center; gap: 6px; margin: 3px 0 3px 40px; min-height: 36px; padding: 0 14px; border: 1.5px dashed var(--muted);
+    border-radius: 999px; background: none; color: var(--ink); font: 700 14px var(--font); cursor: pointer; }
+  .nt-route.dragging { user-select: none; -webkit-user-select: none; }
+  .nt-route.dragging .nt-add { display: none; }
+  .nt-stop.lifted { z-index: 3; cursor: grabbing; }
+  .nt-stop.lifted .nt-grip { cursor: grabbing; }
+  .nt-stop.lifted .nt-pill { box-shadow: 0 10px 28px rgba(0, 0, 0, .35), inset 0 0 0 2px var(--accent); transform: rotate(-1deg); }
+  .nt-gap { margin-left: 40px; border: 2px dashed var(--accent); border-radius: 14px; opacity: .7; box-sizing: border-box; }
+  .nt-save { justify-self: start; align-self: flex-start; background: var(--accent); color: var(--accent-ink); }   /* (as wide as its words) */
+  .nt-save:disabled { opacity: .45; cursor: default; }
+
+  /* The ride page: big and simple. */
+  .ride { display: grid; gap: 12px; }
+  .ride-lab { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .ride .ttl { font-size: 24px; white-space: normal; }
+  .ride-next { display: grid; grid-template-columns: 1fr auto; align-items: end; column-gap: 12px; padding: 14px 16px; border-radius: 18px; background: var(--hover); }
+  .ride-next > small:first-child { grid-column: 1 / -1; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+  .ride-next > b { font-size: 28px; font-weight: 800; line-height: 1.15; }
+  .ride-min { grid-row: 2 / span 2; grid-column: 2; font-size: 18px; font-weight: 700; color: var(--muted); }
+  .ride-min b { font-size: 46px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .ride-next > small:last-child { color: var(--muted); font-size: 14px; }
+  .ride .tile b { font-size: 26px; }
+  .ride .show-only { justify-self: start; }
+}

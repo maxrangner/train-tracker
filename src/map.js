@@ -12,12 +12,12 @@ import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
+import { isWide, sheetGeometry } from './layout.js';
 import { lateSet, tagSet, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
 import stationSizes from './big-stations.json';
-import { createScaleSlider, SCALE_CSS } from './scale-slider.js';
+import { createScaleSlider } from './scale-slider.js';
 import { createSun } from './sun.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import 'maplibre-gl/dist/maplibre-gl.css';
 
 setWorkerUrl(workerUrl);
 
@@ -374,7 +374,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
-  // + and − only with a mouse (index.html, the Soft look 2026-11-15). Without the scale slider (Settings → Zoom slider,
+  // + and − only with a mouse (src/css/map.css, the Soft look 2026-11-15). Without the scale slider (Settings → Zoom slider,
   // off by default: Max, 2026-11-23) the compass button is always there (Max, 2026-11-20: "when view is at default
   // position it should say "3d" and tilt the camera so the 3d trains show"): flat and north up it says "3D" and a tap
   // tilts the view to TILT_3D (zoom and place kept); turned or tilted it is the compass (a tap: flat, north up). With
@@ -456,14 +456,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // The scale slider (Max's idea 10, 2026-11-22: "the whole bar with the thumb drag"; src/scale-slider.js): on the
   // right edge above the sheet, Sweden – Town – Trackside; it zooms round the middle of the free map above the sheet
   // (a followed train is held there by the camera hook below, so it stays in place); its top third tilts the view.
-  if (!document.getElementById('scale-css')) document.head.append(Object.assign(document.createElement('style'), { id: 'scale-css', textContent: SCALE_CSS }));
   const slider = createScaleSlider(map, {
     around: () => { const f = following?.focus ?? defaultFocus(); return [f.x, f.y]; },
     label: key => t(`scale_${key}`),
     reduce: reduceMotion,
   });
   map.getContainer().appendChild(slider.el);
-  // Settings → Zoom slider (off by default): the slider and its look of the map's buttons (index.html .slider-on)
+  // Settings → Zoom slider (off by default): the slider and its look of the map's buttons (src/css/map.css .slider-on)
   const sliderShow = () => { slider.el.hidden = !settings.scaleSlider; map.getContainer().classList.toggle('slider-on', Boolean(settings.scaleSlider)); };
   sliderShow();
 
@@ -928,7 +927,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (nearest) return tapTrain(nearest.properties.id, e.point);
       onTrainTap?.(null);
     });
-    // A tapped disruption sign or station answers: a copy of it over it grows to 130% and back (index.html .sign-pop;
+    // A tapped disruption sign or station answers: a copy of it over it grows to 130% and back (src/css/map.css .sign-pop;
     // Max's pick 8, 2026-11-20). A page element riding on the map (a Marker), so the map itself doesn't draw again;
     // drawn as the map draws them (disruption-icons, station-dots: the same sizes at this zoom).
     const atZoom = (stops) => { const z = map.getZoom(); let i = 0; while (i < stops.length - 2 && z > stops[i + 1][0]) i++;
@@ -1028,7 +1027,52 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
     map.on('render', placeNearLabels);
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
+    map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; hoverLabel(null); });
+    // A mouse over a train's drop shows its label (Max, 2026-11-25: "Hovering over a drop or train should show it's
+    // label"): where the map leaves labels out (further out, or overlapping) and close in alike; the selected train has
+    // its own. Kept on its train as it moves (re-read under the mouse every frame while it is there).
+    let hoverAt = null;
+    map.on('mousemove', 'train-dots', (e) => { hoverAt = e.point; hoverLabel(e.features[0]); });
+    map.on('render', () => {
+      if (!hoverAt || !hoverEl.isConnected) return;
+      const pad = 6, f = map.queryRenderedFeatures([[hoverAt.x - pad, hoverAt.y - pad], [hoverAt.x + pad, hoverAt.y + pad]], { layers: ['train-dots'] })[0];
+      hoverLabel(f ?? null);
+    });
+    map.getCanvas().addEventListener('mouseleave', () => { hoverAt = null; hoverLabel(null); });
+    // Pressed and held on the map: every label goes while held, back on release (Max, 2026-11-25: "Clicking and holding
+    // on map should just hide all labels when held. Return when released"): the map's own (trains', stations', places')
+    // text and the route's pills, and the page's labels on it. A plain click or tap shows no change (only after HOLD_MS).
+    const HOLD_MS = 180;
+    let holdTimer = 0, held = null;
+    const hideLabels = (on) => {
+      if (on === Boolean(held)) return;
+      if (on) {
+        held = new globalThis.Map();
+        for (const l of map.getStyle().layers) {
+          if (l.type !== 'symbol') continue;
+          const text = l.layout?.['text-field'] !== undefined, pill = l.id === 'route-names';
+          if (!text && !pill) continue;
+          held.set(l.id, { text: text ? map.getPaintProperty(l.id, 'text-opacity') : undefined, icon: pill ? map.getPaintProperty(l.id, 'icon-opacity') : undefined, text0: text, pill });
+          if (text) map.setPaintProperty(l.id, 'text-opacity', 0);
+          if (pill) map.setPaintProperty(l.id, 'icon-opacity', 0);
+        }
+      } else {
+        for (const [id, v] of held) {
+          if (!map.getLayer(id)) continue;
+          if (v.text0) map.setPaintProperty(id, 'text-opacity', v.text ?? 1);
+          if (v.pill) map.setPaintProperty(id, 'icon-opacity', v.icon ?? 1);
+        }
+        held = null;
+      }
+      document.documentElement.classList.toggle('labels-held', on);
+    };
+    map.getCanvasContainer().addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => hideLabels(true), HOLD_MS);
+    });
+    const release = () => { clearTimeout(holdTimer); hideLabels(false); };
+    for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, release);
     resolve();
   }));
 
@@ -1153,6 +1197,23 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const nearBox = document.createElement('div');
   nearBox.className = 'near-labels';
   map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
+  // The label of the train under the mouse (a computer), as a close-in bubble; null takes it away.
+  const hoverEl = Object.assign(document.createElement('div'), { className: 'near-label hover' });
+  let hoverId = null;
+  function hoverLabel(f) {
+    const id = f && !f.properties.point_count ? f.properties.id : null;
+    if (!id || id === selected || nearEls.has(id)) { if (hoverId) { hoverEl.remove(); hoverId = null; } return; }
+    if (id !== hoverId) {
+      hoverId = id;
+      const { number, minutes, rest } = splitLabel(f.properties.label ?? '');
+      const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+      hoverEl.classList.toggle('stale', f.properties.stale === true);
+      hoverEl.replaceChildren(el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      if (!hoverEl.isConnected) nearBox.appendChild(hoverEl);
+    }
+    const q = map.project(f.geometry.coordinates);
+    hoverEl.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+  }
   // The stations' names close in, above the trains' labels (Max, 2026-11-13: station names "always on top of other
   // labels"; the map's own names can't be above page elements). A name that would overlap one already placed is
   // left out, as the map does, in the same order every frame so names don't swap.
@@ -1195,7 +1256,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
-      // A smaller station's name, further out than SMALL_UNTIL: small and grey (index.html .station-name.small).
+      // A smaller station's name, further out than SMALL_UNTIL: small and grey (src/css/map.css .station-name.small).
       const { sig, name } = f.properties, pill = onRoute.has(sig), isSmall = smallNow && f.properties.small === 1 && !pill;
       // Its box, guessed from its text (reading the page's sizes would make it lay out again).
       const w = String(name).length * (isSmall ? 6.3 : 7.6) + (pill ? 18 : 6), h = pill ? 22 : isSmall ? 15 : 18;
@@ -1219,7 +1280,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       }
       el.classList.toggle('pill', pill);
       el.classList.toggle('small', isSmall);
-      el.classList.toggle('side', side !== 'up');   // (a pill sits 3 px higher only above its station: index.html)
+      el.classList.toggle('side', side !== 'up');   // (a pill sits 3 px higher only above its station: src/css/map.css)
       el.style.transform = NAME_TF[side](q.x, q.y);
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
@@ -1372,7 +1433,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     window.addEventListener(type, e => pointers.delete(e.pointerId), true);
   window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
   // The card (a train's panel, a board) covers up to 45 % of the screen's bottom, from the left, at most 420 px wide
-  // (index.html). Worked out from the window's size, kept from the last resize: reading the page's own sizes here
+  // (src/css/tokens.css --sheet-w, 10 px from the edges: --sheet-inset; src/layout.js sheetGeometry, read once). Worked out
+  // from the window's size, kept from the last resize: reading the page's own sizes here
   // made the browser lay the page out again, 21 ms on the first frame after a tap (measured 2026-11-15).
   let size = { w: box.clientWidth, h: box.clientHeight };
   // A new size (the phone's keyboard closing, a turned phone, a resized window): a followed train still held where it
@@ -1382,22 +1444,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     size = { w: box.clientWidth, h: box.clientHeight };
     if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
   });
-  const GAP = 10, CARD_W = 420;
-  const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
+  const gap = () => sheetGeometry().inset;
+  const cardRight = () => gap() + Math.min(sheetGeometry().width, size.w - 2 * gap());
   // The one sheet (src/stack.js, 2026-11-22): the map's free part is above it (a phone) or beside and above it (a
   // wider screen, where it floats at the bottom left). sheetH: its resting height (at most half: setSheet). TOP: the
   // live mark at the top; nothing else covers the map's top since the top bar went.
   let sheetH = Math.round(size.h * 0.12);
   const TOP = 48;
-  // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
+  // On a phone (under 440 px wide; src/css/sheet.css) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
   // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
   // needs, so the free map is to its right.
-  const NARROW_PX = 440;
-  const narrow = () => size.w < NARROW_PX;
+  const narrow = () => !isWide();
   // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
   // The sheet's top edge, with a margin.
-  const sheetTop = () => size.h - sheetH - (narrow() ? 0 : GAP);
+  const sheetTop = () => size.h - sheetH - (narrow() ? 0 : gap());
   const panelTop = () => sheetTop() - 20;
   // A wide screen's sheet raised past a third of the screen: the free map is beside it, not above it.
   const sheetSide = () => !narrow() && sheetH > size.h * 0.34;
@@ -1409,7 +1470,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const defaultFocus = () => (!narrow() ? { x: cardInMiddle() ? (cardRight() + size.w) / 2 : size.w / 2, y: size.h / 2 }
     : { x: size.w / 2, y: Math.round((TOP + sheetTop()) / 2) });
   // Is a screen point behind the sheet? (a computer: the box at the top left)
-  const behindCard = (at, margin = 0) => (narrow() ? at.y > sheetTop() - margin : at.x < cardRight() + margin && at.y < GAP + sheetH + margin);
+  const behindCard = (at, margin = 0) => (narrow() ? at.y > sheetTop() - margin : at.x < cardRight() + margin && at.y < gap() + sheetH + margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -1639,6 +1700,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
   // Show the whole of a box ([[west, south], [east, north]]) in the map left free by the panel or card
   // (a train's path; a disruption's stretches: Max, 2026-11-16, "Show everything").
+  // The box round [[lon, lat]]: [[west, south], [east, north]].
+  const boxOf = (pts) => {
+    const lons = pts.map(c => c[0]), lats = pts.map(c => c[1]);
+    return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+  };
   async function fitBox(bounds) {
     await ready;
     const h = map.getContainer().clientHeight;
@@ -1655,7 +1721,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The station a tap at this point of the map would open (its name close in, else its dot from zoom 9), or null
     // (Peek, 2026-11-23: the same stations a tap finds). x, y: in the map's box.
     stationAt(x, y) {
-      if (!map.loaded() || !map.getLayer('station-dots')) return null;
+      // (not map.loaded(): it is false while a paint changes, e.g. the labels hidden by a held press, and a peek then found
+      // nothing; 2026-11-25)
+      if (!map.getLayer('station-dots')) return null;
       const pt = { x, y }, named = stationNameAt(pt);
       if (named && !isAbroad(named)) return named;
       if (map.getZoom() < 9) return null;
@@ -1669,7 +1737,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     fly(place, zoom, ms = 2600) {
       return ready.then(() => new Promise((resolve) => {
         if (following) stopFollowing(false);
-        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const still = reduceMotion();
         map.once('moveend', () => resolve(true));
         const f = defaultFocus(), offset = [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2];
         if (still) map.jumpTo({ center: [place.lon, place.lat], zoom });
@@ -1787,7 +1855,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const centreAt = (X, Y, z) => { const k = 512 * 2 ** z; return [unx(X - ox / k), uny(Y - oy / k)]; };
         const px = total * 512 * 2 ** Math.min(z0, z1);
         const lift = Math.max(0, Math.min(4.4, Math.log2(px / (size.w * 1.3))));
-        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const still = reduceMotion();
         const ms = px < 40 ? 420 : Math.round(800 + 80 * lift), t0 = performance.now();
         const ease = u => (u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2);
         let raf = 0;
@@ -1897,7 +1965,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // The march: a step every 100 ms while a leg is shown and the page is in view; still for less motion.
       clearInterval(marchTimer);
       marchTimer = null;
-      if (shown.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (shown.length && !reduceMotion()) {
         marchTimer = setInterval(() => {
           if (document.hidden || !isReady || !map.getLayer('path-abroad')) return;
           marchStep = (marchStep + 1) % MARCH.length;
@@ -1968,10 +2036,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
       if (!path || path.coords.length < 2) return;
-      const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
-      return fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
+      return fitBox(boxOf(path.coords));
     },
     fitBox,
+    // Places ([{ lon, lat }]) all in view above the sheet (a group's trains, a saved trip's stations).
+    fitPlaces: list => fitBox(boxOf(list.map(p => [p.lon, p.lat]))),
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
     // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").

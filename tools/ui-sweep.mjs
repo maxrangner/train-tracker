@@ -118,7 +118,7 @@ function analyse(rec, kind) {
   }
   // the series of each element seen in the end
   const series = new Map();
-  frames.forEach((f, i) => { for (const e of f.els) { let s = series.get(e[0]); if (!s) series.set(e[0], s = []); s.push({ i, x: e[1], y: e[2], w: e[3], h: e[4], rel: e[2] - f.sheetTop, o: e[5] }); } });
+  frames.forEach((f, i) => { for (const e of f.els) { let s = series.get(e[0]); if (!s) series.set(e[0], s = []); s.push({ i, t: f.t, x: e[1], y: e[2], w: e[3], h: e[4], rel: e[2] - f.sheetTop, o: e[5] }); } });
   for (const [id, s] of series) {
     if (!a.has(id) || s.length < 4) continue;
     if (meta[id].pg === 'screen' && !/status|map-btn|sh-/.test(meta[id].el)) continue;
@@ -140,9 +140,25 @@ function analyse(rec, kind) {
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
       }
     }
+    // fold: a lurch, the same way, at the end of a glide: a step of 3 px or more, three times as fast as the step before,
+    // once the glide had slowed to a quarter of its top speed (a box glided too tall dropped to its height in one frame,
+    // 22 px, still moving 0.7 px a frame: neither a rest nor a turn; Home's filter card until 2026-11-25)
+    if (kind === 'fold' && !jumped) {
+      // (only once the glide is under way, 4 moving frames in: at its start a busy PC's late first frames looked like a
+      // lurch, the round's check 2026-11-25, 'pc home → filter more' at frame 3; alone it never did)
+      let top = 0, prev = 0, going = 0;
+      for (let k = 1; k < s.length && !jumped; k++) {
+        if (s[k].i !== s[k - 1].i + 1) { prev = 0; continue; }
+        const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);
+        if (Math.abs(d) >= 0.5) going++;
+        if (going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
+        top = Math.max(top, v); prev = v;
+      }
+    }
     if (jumped && kind !== 'reveal') finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top
-    if (kind === 'grow' || kind === 'reveal') {
+    // (fold: a card opening or shutting in the page, what is under it moves with it: as reveal, but a jump counts)
+    if (kind === 'grow' || kind === 'reveal' || kind === 'fold') {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
       if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
@@ -150,7 +166,7 @@ function analyse(rec, kind) {
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
         // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
-        if (!pop && (meta[id].btn || kind === 'reveal')) continue;
+        if (!pop && (meta[id].btn || kind === 'reveal' || kind === 'fold')) continue;
         finds.push({ kind: pop ? 'pop' : 'redrawn', id, what: say(id), info: `moved ${lo.toFixed(0)}…${hi.toFixed(0)} px under the sheet's top (start ${rel[0].toFixed(0)}, end ${rel.at(-1).toFixed(0)}, biggest step ${big.toFixed(1)})` });
       }
       const ws = s.map(p => p.w), wd = Math.abs(ws.at(-1) - ws[0]);
@@ -159,6 +175,22 @@ function analyse(rec, kind) {
         for (let k = 1; k < s.length; k++) big = Math.max(big, Math.abs(ws[k] - ws[k - 1]));
         if (big >= wd * 0.8) finds.push({ kind: 'pop', id, what: say(id), info: `width ${ws[0]} → ${ws.at(-1)} in one frame` });
       }
+    }
+  }
+  // fold: the sheet's own edges move once, in one direction, and stand (Max, 2026-11-25: "When expanding and compacting
+  // the filters the bottom jumps a few pixels": a second move after the first had ended, or one turning back)
+  if (kind === 'fold') {
+    for (const [name, at] of [['top', f => f.sheetTop], ['bottom', f => f.sheetTop + f.sheetH]]) {
+      let dir = 0, rest = 0, rested = false, jumped = null, top = 0, prev = 0, going = 0;
+      for (let k = 1; k < frames.length && !jumped; k++) {
+        const d = at(frames[k]) - at(frames[k - 1]), v = Math.abs(d) / Math.max(1, frames[k].t - frames[k - 1].t);
+        if (Math.abs(d) < 0.5) { if (++rest >= 3) rested = true; prev = v; continue; }
+        if (rested && Math.abs(d) >= 1) jumped = `moved again after rest: ${d.toFixed(1)} px at frame ${k}`;
+        else if (dir && Math.sign(d) !== dir && Math.abs(d) >= 1) jumped = `turned back: ${d.toFixed(1)} px at frame ${k}`;
+        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
+        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = v;
+      }
+      if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
     }
   }
   return finds;
@@ -197,6 +229,52 @@ async function padding(page) {
       }
       if (!Number.isFinite(top)) continue;
       out.push({ type: 'inside', el: `${el.tagName.toLowerCase()}.${String(el.className).trim().split(/\s+/).slice(0, 2).join('.')}`, top: Math.round(top - r.top), bottom: Math.round(r.bottom - bottom), left: Math.round(left - r.left) });
+    }
+    return out;
+  });
+}
+
+// ---- empty room and the menu's place, after each transition ----
+// Empty room: the page on top at full ends at most 24 px above where it can end (its bottom when it doesn't scroll, its
+// scroll end when it does). Its content is what shows: text, buttons, pictures, fields; an empty box (a spacer) is not
+// content (Max, 2026-11-25, New trip: "soooo much empty space. I asked you to remove ALL these kinds of issues").
+// The menu's place: open, its card hangs from the box (a computer: under the sheet, right edge with the sheet's; a phone:
+// above the sheet or under the bar, right edge with ☰'s), 6 to 16 px off it (Max, 2026-11-25: "Menu NOT aligned";
+// back from Settings it stood elsewhere).
+// Not counted: a phone's room for its keyboard (data-spacer, and the search, full screen on a phone by design: the
+// keyboard covers its lower half; this browser has none); a scrolled page's end may have up to 32 px (its last card's
+// bottom room and the page's own).
+async function placeChecks(page) {
+  return page.evaluate(() => {
+    const out = [];
+    const sh = document.getElementById('sheet').getBoundingClientRect();
+    const wide = innerWidth >= 440;
+    if (window.__stack.level === 2 && !(window.__stack.searching && !wide)) {
+      const pg = window.__stack.searching ? document.getElementById('search-results') : document.querySelector(`#sheet .pg[data-key="${CSS.escape(window.__stack.top())}"]`);
+      if (pg) {
+        const top = pg.getBoundingClientRect().top - pg.scrollTop;
+        let end = 0;
+        const real = pg.querySelectorAll('button, input, img, svg, canvas, textarea, select');
+        for (const e of real) if (e.offsetHeight) end = Math.max(end, e.getBoundingClientRect().bottom - top);
+        const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          if (!n.textContent.trim() || !n.parentElement.offsetHeight) continue;
+          const r = document.createRange(); r.selectNodeContents(n);
+          for (const q of r.getClientRects()) end = Math.max(end, q.bottom - top);
+        }
+        const scrolls = pg.scrollHeight > pg.clientHeight + 1;
+        const g = document.querySelector('#sheet .sh-grab'), gr = g?.offsetHeight ? g.getBoundingClientRect() : null;
+        const spacers = [...pg.querySelectorAll('[data-spacer]')].reduce((h, e) => h + e.offsetHeight, 0);
+        const limit = scrolls ? pg.scrollHeight - spacers : Math.min(sh.bottom, innerHeight) - (gr && gr.top >= end + top - 1 ? gr.height : 0) - top;
+        if (end && limit - end > (scrolls ? 32 : 24)) out.push({ kind: 'room', what: window.__stack.searching ? 'search' : window.__stack.top(), info: `${Math.round(limit - end)} px empty under its content${scrolls ? ' (scrolled to its end)' : ''} (want 24 at most)` });
+      }
+    }
+    const nav = document.getElementById('nav');
+    if (nav && !nav.hidden && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
+      const r = nav.getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
+      const right = wide ? sh.right : b.right;
+      const off = r.top >= sh.top ? r.top - (wide && window.__stack.level === 0 ? sh.bottom : b.bottom) : sh.top - r.bottom;
+      if (Math.abs(r.right - right) > 1 || off < 6 || off > 16) out.push({ kind: 'place', what: 'menu', info: `its right edge ${Math.round(r.right - right)} px off, ${Math.round(off)} px from the box (want 0 and 6 to 16)` });
     }
     return out;
   });
@@ -246,12 +324,17 @@ const T = [
   { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
   { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
   { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
+  { name: 'menu → arrow', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#sheet .sh-grab') },
+  { name: 'new trip typing', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('newtrip', { go: true })); await until(p, () => Boolean(document.querySelector('#sheet .nt-stop'))); await settle(p); },
+    act: p => p.evaluate(() => { const q = document.querySelector('#sheet .nt-q'); if (q) { q.focus(); return true; } const b = [...document.querySelectorAll('#sheet .nt-stop [data-nt]')].at(-1); b?.click(); return Boolean(b); }) },
   { name: 'menu → rewind', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-day') },
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
   { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
-  // (reveal: what is under the card moves down as it grows and the page scrolls it into view: only strays and pops count)
-  { name: 'home → filter more', kind: 'reveal', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  // (fold: what is under the card moves down as it grows, up as it shuts: strays, pops and jumps count, the sheet's
+  // edges too; Max, 2026-11-25: "When expanding and compacting the filters the bottom jumps a few pixels")
+  { name: 'home → filter more', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  { name: 'home → filter fewer', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); await click(p, `${HOME} [data-act="comore"]`); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
   { name: 'home → all disruptions', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await settle(p); }, act: p => click(p, `${HOME} [data-go="dislist"]`) },
   { name: 'all disruptions → back', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await click(p, `${HOME} [data-go="dislist"]`); await settle(p); }, act: esc },
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
@@ -312,6 +395,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
         const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
         frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `x ${e[1]} y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]} ${meta[e[0]].el}<${e[7]}` : '–'}`); });
       }
+      finds.push(...await placeChecks(page));
       const pad = (await padding(page)).filter(x => x.type === 'gap' ? x.px > 0 : true);
       all.push({ dev, name: tr.name, frames: frames.length, finds, pad, top: after.top });
       console.log(`${dev} ${tr.name}: ${frames.length} frames, ${finds.length} find(s) → ${after.top}`);

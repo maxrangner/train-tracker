@@ -26,7 +26,15 @@ import { groupRow } from './home.js';
 import { brandColour } from './stats.js';
 
 const MAX_ROWS = 200;   // all matches are listed (Max, 2026-11-12: "2" matches 66 trains at rush hour); the list scrolls
-const fold = s => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+// A name as it is matched: "Göteborg" matches "goteborg".
+export const fold = s => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+// The stations whose name holds the text (the search; My trains' station picker), those starting with it first.
+export function stationsMatching(stations, text) {
+  const q = fold(text);
+  return [...stations.values()]
+    .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
+    .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
+}
 
 export function createMenu({ input, list, findTrains, findStations, searchTimetable, groups, findDisruptions, recent, rowOf, starred, remember }) {
   let asked = 0, timer = null;

@@ -1,0 +1,179 @@
+/* The stats (src/stats-page.js): Home's numbers and a group's page. Every class starts with st- so the train card's
+   .tile and the rest stay untouched. */
+@layer app {
+  /* A column of parts at their own height (in a grid of fixed height, a part that clips its inside, as "for fun",
+     was squeezed to 24 px: 2026-11-15). */
+  .stats-body { overflow: auto; min-height: 0; flex: none; display: flex; flex-direction: column; gap: 12px; padding: 12px 0 8px;
+    font-size: 14px; font-variant-numeric: tabular-nums; scrollbar-width: thin; }
+  .stats-body > * { flex: none; }
+  /* Without our own bar (a phone: src/scrollbar.js is for a mouse), the phone's bar is drawn over the scrolling area's
+     right edge, and it covered the numbers (Max, 2026-11-16, his phone's picture). The area reaches 10 px into the
+     sheet's margin and pads them back: the content stays where it was, the bar runs in the margin. */
+  .stats-body:not(.sb-own) { margin-right: -10px; padding-right: 10px; }
+  .stats-body p { margin: 0; }
+  .stats-body button { font-family: inherit; }
+  .stats-body .tag { margin-left: 0; }
+
+  .st-tile { border-radius: 18px; padding: 12px 14px; background: var(--hover); min-width: 0; }
+  .st-lbl { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .st-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+  .st-tile .seg { background: var(--card); }
+  .st-seg button { font-size: 13px; padding: 4px 10px; }
+  .st-sub { color: var(--muted); font-size: 13px; }
+  .st-big { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -0.01em; }
+  .st-go { font: inherit; color: inherit; text-align: left; border: 0; background: none; padding: 0; cursor: pointer; }
+  .st-go:focus-visible, .stats-body button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+  .st-chev { color: var(--muted); }
+  .st-key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex: none; background: var(--k); }
+  .k-moving { --k: var(--accent); } .k-standing { --k: color-mix(in srgb, var(--muted) 60%, var(--hover)); } .k-grey { --k: var(--c-unknown); }
+  .k-ontime { --k: var(--c-ontime); } .k-some { --k: var(--c-some); } .k-late { --k: var(--c-late); } .k-unknown { --k: var(--c-unknown); }
+
+  /* Rings: the arcs glide to their new share. */
+  .st-donut { position: relative; flex: none; display: grid; place-items: center; }
+  .st-donut svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .st-donut .st-arc { fill: none; stroke: var(--k); transition: stroke-dasharray .8s var(--ez-pop), stroke-dashoffset .8s var(--ez-pop); }
+  .st-donut .st-ring { fill: none; stroke: var(--line); }
+  .st-mid { position: relative; text-align: center; line-height: 1.05; }
+  .st-mid b { display: block; font-size: 26px; font-weight: 800; }
+  .st-mid small { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .st-legend { display: grid; gap: 6px; min-width: 0; flex: 1; }
+  .st-legend .st-row { display: flex; align-items: center; font-size: 14px; }
+  .st-legend .st-row b { margin-left: auto; font-weight: 700; padding-left: 10px; }
+  .st-legend .st-row.st-sub { font-size: 14px; }
+
+  /* Sweden as a heatmap (src/stats-sweden.js), the numbers and the switch Trains / Lateness beside it. */
+  .st-se { display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: stretch; }
+  .st-se-map { position: relative; border-radius: 18px; background: var(--hover); padding: 8px; }
+  .st-se-map canvas { display: block; }
+  /* Lateness not in yet (src/stats-sweden.js): "Laddar…" over the map. */
+  .st-se-wait { position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; font-weight: 600; font-size: 14px; color: var(--muted);
+    pointer-events: none; }
+  .st-se-wait::before { content: ''; position: absolute; inset: 0; border-radius: 18px; background: var(--hover); opacity: .55; }
+  .st-se-side { display: grid; align-content: start; gap: 10px; min-width: 0; }
+  .st-se-side .st-big { font-size: 44px; }
+  .st-apart { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+  .st-apart b { color: var(--ink); font-size: 18px; display: block; }
+  .st-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--muted); }
+  .st-keys span { display: inline-flex; align-items: center; }
+  .st-heatseg { justify-self: start; }
+  /* The same height in both views, so nothing below jumps when switching. */
+  .st-heatkey { min-height: 50px; display: grid; align-content: start; gap: 4px; }
+  .st-ramp { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  .st-ramp i { display: block; height: 8px; border-radius: 4px; }
+  .st-ramp > span { display: flex; justify-content: space-between; }
+
+  /* Driven and cancelled. */
+  .st-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .st-duo .st-big { font-size: 28px; }
+  .st-cancel { background: var(--t-late-bg); color: var(--t-late); }
+  .st-cancel .st-lbl, .st-cancel .st-sub { color: inherit; }
+  .st-cancel .st-sub { opacity: .85; }
+  .st-odo { display: inline-flex; align-items: baseline; font-weight: 800; line-height: 1; font-size: 28px; margin-top: 6px; }
+  .st-odo .st-w { display: inline-block; height: 1em; overflow: hidden; }
+  .st-odo .st-w > span { display: flex; flex-direction: column; transition: transform .6s var(--ez-pop); }
+  .st-odo .st-w i { font-style: normal; height: 1em; }
+  .st-odo .st-u { font-size: .5em; margin-left: .25em; color: var(--muted); font-weight: 700; }
+
+  /* Punctuality: the ring, the most late train, today's graph (tap an hour). */
+  .st-punct { display: grid; gap: 10px; }
+  .st-prow { display: flex; gap: 16px; align-items: center; }
+  .st-worst { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--card); width: 100%; box-sizing: border-box; }
+  .st-worst .st-wb { margin-left: auto; color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .st-daybox { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 6px; }
+  .st-day { width: 100%; height: auto; display: block; overflow: visible; touch-action: manipulation; }
+  .st-day .d0 { fill: var(--c-ontime); } .st-day .d1 { fill: var(--c-some); } .st-day .d2 { fill: var(--c-late); }
+  .st-day g { cursor: pointer; transition: opacity .2s; }
+  .st-day .st-hit { fill: transparent; }
+  .st-day.st-sel g:not(.st-on) { opacity: .35; }
+  .st-day line { stroke: var(--line); }
+  .st-day text { fill: var(--muted); font: 600 8px var(--font); }
+  .st-hour { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 13.5px; min-height: 26px; }
+  .st-hour b { font-weight: 800; }
+
+  /* Fastest: the speedometer and the top three. */
+  .st-fast { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
+  .st-gauge { flex: none; }
+  .st-gauge .st-gv { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 1s var(--ez-pop); }
+  .st-gauge .st-gb { fill: none; stroke: var(--line); stroke-linecap: round; }
+  .st-gauge text { fill: var(--muted); font: 600 7.5px var(--font); }
+  .st-gauge .st-hub { fill: var(--ink); }
+  .st-gauge .st-ndl { stroke: var(--ink); stroke-width: 2.5; stroke-linecap: round; }
+  .st-fastlist { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .st-fastrow { display: grid; grid-template-columns: 14px 1fr auto; gap: 6px; align-items: center; padding: 5px 6px; margin: 0 -6px; border-radius: 10px; width: calc(100% + 12px); }
+  button.st-fastrow:hover { background: var(--card); }
+  .st-fastrow .st-rk { font-weight: 800; color: var(--muted); }
+  .st-fastrow .st-who { min-width: 0; }
+  .st-fastrow .st-who small { display: block; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st-fastrow .st-kmh { font-weight: 800; white-space: nowrap; }
+
+  /* Kinds of train and companies: a row is a button (a tap filters the map, src/filter.js); widths glide. */
+  .st-sec-bars { display: grid; gap: 6px; }
+  .st-bars { display: flex; flex-direction: column; gap: 2px; }
+  .st-brow { display: grid; grid-template-columns: minmax(84px, 38%) 1fr 40px; gap: 8px; align-items: center; padding: 4px 6px; margin: 0 -6px; border-radius: 10px;
+    font: inherit; color: inherit; text-align: left; border: 0; background: transparent; cursor: pointer; width: calc(100% + 12px); }
+  .st-brow:hover { background: var(--card); }
+  .st-brow[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+  .st-brow[aria-pressed="true"] .st-nm { font-weight: 700; }
+  .st-brow .st-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st-brow .st-nm i { color: var(--muted); }
+  .st-brow .st-tr { height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--line) 70%, transparent); overflow: hidden; }
+  .st-brow .st-bar { display: block; height: 100%; border-radius: 5px; transition: width .8s var(--ez-pop); }
+  .st-brow .st-n { text-align: right; font-weight: 700; }
+  .st-brow.st-off { opacity: .45; }   /* a filter on: not on the map (still a button) */
+  .st-more { font: inherit; font-weight: 700; color: var(--accent); background: none; border: 0; padding: 6px 0 0; cursor: pointer; justify-self: start; }
+
+  /* Busiest stations: a tap opens the station's board. */
+  /* Max, 2026-11-15: the rows blended together (dark): more room between them and under the title, and in dark a
+     darker fill (the page's colour) so they stand apart from the tile. */
+  .st-rank { display: grid; gap: 8px; margin-top: 8px; }
+  :root[data-theme="dark"] .st-rank .st-go { background: var(--page); }
+  .st-rank .st-go { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: var(--card); width: 100%; box-sizing: border-box; }
+  .st-rank .st-go:hover { box-shadow: inset 0 0 0 1.5px var(--line); }
+  .st-rank .st-pos { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--hover); }
+  .st-rank .st-go:first-child .st-pos { background: var(--accent); color: var(--accent-ink); }
+  .st-rank .st-nm { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st-rank .st-mini { display: block; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--accent); opacity: .5; transition: width .8s; }
+
+  /* For fun: a tap for the next comparison, which slides in. */
+  .st-fun { background: color-mix(in srgb, var(--accent) 13%, var(--card)); cursor: pointer; position: relative; overflow: hidden; }
+  .st-fun:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .st-fun .st-hint { position: absolute; right: 12px; top: 12px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
+  .st-cmp { display: flex; align-items: center; gap: 12px; margin-top: 10px; min-height: 48px; }
+  .st-cmp.st-swap { animation: st-swap .45s var(--ez-pop); }
+  @keyframes st-swap { from { opacity: 0; transform: translateY(14px); } }
+  .st-cmp svg { width: 44px; height: 44px; flex: none; color: var(--accent); }
+  .st-cmp .st-x { font-size: 20px; font-weight: 800; }
+
+  /* The data, a grey line at the end; its dot pulses when fresh data has come. */
+  .st-data { font-size: 12.5px; color: var(--muted); padding-top: 4px; text-align: center; text-wrap: balance; }
+  .st-data .st-live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--c-ontime); margin-right: 6px; vertical-align: 1px; }
+  .st-data.st-beat .st-live { animation: beat 1.1s ease-out; }
+
+  /* Today's graph asking for its numbers (Max, 2026-11-21): "Laddar…" beside its title, also over the numbers saved
+     earlier today. */
+  .st-daylbl { display: flex; align-items: center; gap: 8px; }
+  .st-busy { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .st-busy .spin { width: 12px; height: 12px; border-width: 2px; }
+
+  /* A company's own page (Max, 2026-11-21): "›" at the end of its row opens it; its head: back, name, kind, today. */
+  .st-brow-w { display: flex; align-items: center; gap: 2px; }
+  .st-brow-w > .st-brow { flex: 1; min-width: 0; width: auto; margin-right: 0; }
+  .st-cogo { flex: none; width: 34px; height: 34px; margin-right: -8px; border: 0; border-radius: 10px; background: transparent; color: var(--muted);
+    font: inherit; font-size: 22px; font-weight: 600; line-height: 1; cursor: pointer; }
+  .st-cogo:hover { background: var(--card); color: var(--ink); }
+  .st-cohead { display: grid; gap: 6px; padding-top: 2px; }
+  .st-back { justify-self: start; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 4px 0; font: inherit; font-weight: 700; color: var(--accent); cursor: pointer; }
+  .st-back span { font-size: 22px; line-height: 1; }
+  .st-coname { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .st-coname b { font-size: 26px; font-weight: 800; letter-spacing: -0.01em; }
+  .st-coname small { color: var(--muted); font-size: 14px; }
+  .st-codot { width: 14px; height: 14px; border-radius: 50%; flex: none; align-self: center; }
+
+  /* Home's companies and kinds (src/home.js, groups: true): a row opens its group's page; no sub-line under the bars. */
+  .st-groups .st-sec-bars > .st-sub { display: none; }
+
+  /* (!important: every motion inside, whatever its own rule's weight) */
+  @media (prefers-reduced-motion: reduce) {
+    .stats-body *, .stats-body *::before { transition: none !important; animation: none !important; }
+  }
+}

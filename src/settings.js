@@ -44,11 +44,11 @@ const DEFAULTS = {
   // How a page comes into the sheet (Debug, Max 2026-11-24: "Do A, B and F and put them in debug options"; "Remove the
   // fade on all"; the motion lab https://claude.ai/artifact/EtVxL1BiRBaYbgocQSw7xS): 'side' (A, sideways, as since the
   // push of 2026-11-24), 'rise' (B, a card from the sheet's edge over the page before) or 'strip' (F, one strip along the
-  // sheet). index.html :root[data-motion].
+  // sheet). src/css/sheet.css :root[data-motion].
   pageMotion: 'side',
   // How fast a page change and the sheet's glide go (Debug, Max 2026-11-24: "add setting for animation speed. Use current
   // speed as fast, and add a slower at 75%"): 'fast' (as before) or 'calm' (75 % of the speed: 4/3 of the time).
-  // index.html :root[data-mspeed]; src/stack.js motionK.
+  // src/css/tokens.css :root[data-mspeed]; src/motion.js speed().
   motionSpeed: 'fast',
   // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
@@ -166,7 +166,6 @@ const showTheme = () => {
   if (typeof document === 'undefined') return;
   const root = document.documentElement, dark = isDark();
   root.dataset.theme = dark ? 'dark' : 'light';
-  root.dataset.routeNames = settings.routeNames;   // the open train's station names close in (index.html)
   for (const [k, v] of Object.entries(cssVars(dark, settings.accent, settings.colourBlind))) root.style.setProperty(k, v);
 };
 showTheme();

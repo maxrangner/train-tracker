@@ -1,0 +1,382 @@
+/* The train card (#panel, src/panel.js and src/pages/train.js). Collapsed: the number big with its company and where
+   it goes, two tiles (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line,
+   "More" with a sign (a warning, a state note). Full (.full): ☆, Share, Läget and the timeline instead of the line;
+   "i" (.info) the train's own numbers (src/train-info.js) instead of the notes and stops. */
+@layer app {
+  /* The top line: the number, its company and where it goes, ‹, "i", Share, ☆ and Follow, all one height (40 px). At
+     full it stays at the top while the stops scroll under it; its band below is a shadow, not padding (padding moved
+     the card 6 px down at full). */
+  #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg);
+    box-shadow: 0 -12px 0 var(--bg), 0 6px 0 var(--bg); }
+  #panel .panel-head { position: relative; }
+  #panel .panel-head > .sh-up { width: 40px; height: 40px; }
+  .panel-buttons { display: flex; align-items: center; gap: 6px; }
+  .panel-buttons .sh-btns { gap: 6px; }
+  .panel-info { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
+    border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
+  .panel-info:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .panel-info[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  #panel .panel-head :is(.panel-info, .sh-star, .sh-act) { width: 40px; min-width: 40px; height: 40px; padding: 0; }
+  #panel .panel-head .sh-follow { height: 40px; }
+  #panel .panel-title { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+  #panel .panel-sub { display: flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 100%; }
+  #panel .panel-sub:empty { display: none; }
+  #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
+  .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* (at full Follow is its arrow alone, so the company's name isn't cut, "SJ Snabb…") */
+  #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
+  #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
+
+  /* What shows when: compact, full, "i". Share only on the full card (Max, 2026-11-25); its place in the row given up
+     (display: contents), so a share going shrinks away where it was (src/pages/train.js glideHead). */
+  #sheet[data-page="train"]:not([data-h="2"]) #panel .sh-acts { display: contents; }
+  #sheet[data-page="train"]:not([data-h="2"]) #panel .sh-act { display: none; }
+  #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip,
+  #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
+  #panel:not(.full) .panel-info, #panel:not(.full) .panel-info-box, #panel:not(.info) .panel-info-box, #panel.info .tv-box, #panel.info .panel-table { display: none; }
+  /* Card to card (src/panel.js open, rollIn): the old train's rest dimmed until the new timetable is in; the trip line,
+     and "More" at full strength meanwhile (same weight, later), a .2 s fade on the phone's collapse. */
+  #panel > .busy:not(.cd), #panel > .cd.busy > * { opacity: .45; transition: opacity .15s; }
+  #panel:not(.full) :is(.cd-trip, .panel-more) { opacity: 1; transition: opacity .2s; }
+
+  /* Under the tiles: why it stands, Share, Add my change ("Add a change" only on the full card). */
+  .tr-extras { display: grid; gap: 8px; margin: 4px 0 2px; }
+  .tr-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tr-acts .chip { gap: 7px; }
+  #sheet:not([data-h="2"]) .tr-extras .tr-acts { display: none; }
+  .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
+    background: var(--t-some-bg); color: var(--t-some); font: inherit; }
+  .why.none { background: var(--hover); color: var(--muted); }
+  .why.dis { background: var(--t-late-bg); color: var(--t-late); cursor: pointer; }
+  .why-t { flex: 1; min-width: 0; display: grid; gap: 1px; }
+  .why-t small { font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+  .why-t span { color: var(--ink); font-size: 15px; font-weight: 650; }
+  .tip { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; padding: 9px 12px; border-radius: 12px; background: var(--hover); color: var(--muted); font-size: 13.5px; }
+  .tip .icon { color: var(--accent); }
+  /* Share's note under the card's buttons (src/pages/train.js): the link selectable to copy by hand. */
+  .share-note { display: flex; gap: 8px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--hover);
+    color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.35; }
+  .share-note .icon { flex: none; margin-top: 1px; color: var(--accent); }
+  .share-note .share-url { display: block; font-weight: 500; color: var(--muted); overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+
+  /* The two tiles, the same width (the stop's name fits on one line) */
+  .cd { display: contents; }
+  .cd-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; flex: none; }
+  /* "planned" (no expected time from Trafikverket) as a small tag beside the minutes; no room: under them */
+  .cd-top { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }
+  .cd-plan { flex: none; font: 700 11px/1 var(--font); color: var(--muted); background: var(--card); border-radius: 999px; padding: 4px 7px; }
+  .tile b.long { font-size: 18px; line-height: 1.4; }   /* "≈ 1 h 43 min": smaller, inside its tile */
+  .tile b.wrap { font-size: 18px; line-height: 1.25; white-space: normal; overflow-wrap: anywhere; }   /* "Mot Göteborg C": two lines when it must */
+  .cd-late { position: relative; }
+  .cd-late b { font-size: 34px; line-height: 1; }
+  .cd-late.ontime { background: var(--t-ontime-bg); } .cd-late.ontime, .cd-late.ontime small { color: var(--t-ontime); }
+  .cd-late.some { background: var(--t-some-bg); } .cd-late.some, .cd-late.some small { color: var(--t-some); }
+  .cd-late.late { background: var(--t-late-bg); } .cd-late.late, .cd-late.late small { color: var(--t-late); }
+  .cd-late.unknown { background: var(--t-unknown-bg); } .cd-late.unknown, .cd-late.unknown small { color: var(--t-unknown); }
+  /* Its lateness changed: the tile pulses once, a ring in its colour (src/panel.js). */
+  .cd-late.flash { animation: late-pop .5s var(--ez-pop); }
+  .cd-late.flash::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: late-ring .7s ease-out forwards; }
+  @keyframes late-pop { 30% { scale: 1.06; } }
+  @keyframes late-ring { from { box-shadow: 0 0 0 0 currentColor; opacity: .5; } to { box-shadow: 0 0 0 12px currentColor; opacity: 0; } }
+  button.cd-stop { font: inherit; border: 0; cursor: pointer; }
+  button.cd-stop[aria-expanded="true"] { box-shadow: inset 0 0 0 2.5px var(--accent); }
+  button.cd-stop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  /* "till Malmö C ⌄" framed, so it reads as a button (like a trip's From/To) */
+  button.cd-stop small { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 4px 8px 4px 11px; border-radius: 999px;
+    border: 1.5px solid var(--accent); color: var(--ink); font-weight: 700; max-width: 100%; box-sizing: border-box; }
+  button.cd-stop small span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+  button.cd-stop small svg { width: 18px; height: 18px; flex: none; color: var(--accent); stroke-width: 2.6; }
+
+  /* The stops ahead to count down to: under the tiles, pushing the rest down, sliding open and shut; the list scrolls;
+     the one counted down to in the accent, with ✓. */
+  .cd-pick { display: flex; flex-direction: column; flex: none; overflow: hidden; }
+  .cd-pick.opening { animation: cd-open .22s var(--ez-pop); }
+  .cd-pick.closing { animation: cd-close .18s ease-in forwards; }
+  @keyframes cd-open { from { max-height: 0; opacity: 0; } to { max-height: 46vh; opacity: 1; } }
+  @keyframes cd-close { from { max-height: 46vh; opacity: 1; } to { max-height: 0; opacity: 0; } }
+  .cd-pick > p { margin: 12px 2px 6px; font-size: 13.5px; color: var(--muted); }
+  .cd-list { overflow: auto; min-height: 0; max-height: 40vh; border-radius: 16px; background: var(--hover); padding: 4px; touch-action: pan-y; }
+  .cd-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 12px; background: none;
+    font: inherit; font-size: 15px; color: var(--ink); text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
+  .cd-row:hover { background: var(--bg); }
+  .cd-row .cd-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cd-row .cd-name b { font-weight: 700; } .cd-row small { color: var(--muted); font-size: 13px; }
+  .cd-row .cd-in { font-weight: 700; min-width: 52px; text-align: right; white-space: nowrap; }
+  .cd-row > i, .cd-row > svg { width: 18px; flex: none; }
+  .cd-row.on { background: var(--bg); color: var(--accent); } .cd-row.on .cd-in { color: var(--accent); }
+
+  /* The trip as one line: the first stop, the train (a ring), the end; filled in the accent up to the train. The start
+     and the end as pills above the line, each with an arrow pointing at its circle (the bar's end circles sit 8 px in
+     from each side), the end big in the accent colour; where the train is, under its own dot. */
+  .cd-trip { position: relative; flex: none; margin: 2px 0 0; padding-top: 42px; padding-bottom: 20px; --pill: color-mix(in srgb, var(--ink) 16%, var(--card)); }
+  /* (no line under it for the next stop when that is the end, in its pill already) */
+  .cd-trip.no-at { padding-bottom: 6px; }
+  .cd-bar { position: relative; height: 18px; margin: 0 8px; }
+  .cd-bar::before, .cd-done { content: ''; position: absolute; left: 0; right: 0; top: 7px; height: 4px; border-radius: 2px; background: var(--line); }
+  .cd-done { right: auto; background: var(--accent); }
+  .cd-bar i { position: absolute; top: 2px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; box-sizing: border-box; }
+  .cd-first { left: 0; background: var(--accent); }
+  .cd-end { left: 100%; background: var(--bg); border: 3px solid var(--line); }
+  .cd-end.goal, .cd-goal { border: 3px solid var(--ink); background: var(--bg); }
+  .cd-bar .cd-train { top: 0; width: 18px; height: 18px; margin-left: -9px; background: var(--bg); border: 3.5px solid var(--accent); }
+  .cd-done.moving, .cd-train.moving { transition: width .7s var(--ez-pop), left .7s var(--ez-pop); }
+  .cd-names { display: block; position: static; height: 0; margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .cd-names > * { position: absolute; min-width: 0; overflow: visible; text-overflow: ellipsis; white-space: nowrap; }
+  .cd-names b { text-align: center; color: var(--ink); font-weight: 700; } .cd-names span:last-child { text-align: right; }
+  .cd-names .goal { color: var(--ink); font-weight: 800; }
+  .cd-from, .cd-to { display: flex; align-items: center; border-radius: 12px; box-sizing: border-box; }
+  .cd-from { left: -10px; top: 10px; max-width: 40%; padding: 3px 10px; border-radius: 10px; background: var(--pill); color: var(--muted); font-size: 13px; font-weight: 700; line-height: 16px; }
+  .cd-to { right: -10px; top: -2px; max-width: 58%; padding: 5px 14px; background: var(--accent); color: var(--accent-ink); font-size: 20px; font-weight: 800; line-height: 24px; }
+  .cd-names .cd-to.goal { color: var(--accent-ink); }
+  .cd-from em, .cd-to em { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Each pill's pointer as the map's bubbles draw theirs (.near-label): a 9 px square turned 45°, half out under the
+     pill; each pill reaches 10 px past the card's edge so its pointer sits on the straight bottom edge, right over its
+     circle. */
+  .cd-from::after, .cd-to::after { content: ''; position: absolute; top: calc(100% - 6px); width: 9px; height: 9px; background: inherit;
+    transform: rotate(45deg); border-radius: 0 0 2px 0; }
+  .cd-to::after { right: 13.5px; }
+  .cd-from::after { left: 13.5px; }
+  .cd-names .cd-at { top: 62px; left: clamp(52px, var(--at), calc(100% - 52px)); transform: translateX(-50%); max-width: 46%; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+
+  /* "More ⌃" / "Less": at full always last, under the stops. */
+  .panel-more { display: flex; justify-content: center; margin-top: 10px; padding: 4px; border: 0; background: none; font: inherit; flex: none;
+    font-size: 14px; font-weight: 700; color: var(--accent); cursor: pointer; }
+  .panel-more span { display: inline-flex; align-items: center; gap: 6px; }
+  #panel.full .panel-more { margin: 6px 0 2px; order: 99; }
+  #panel:not(.full) .panel-more { margin-top: 0; padding: 2px 4px; }
+  .panel-note { margin: 4px 0 6px; color: var(--muted); }
+  /* The compact card's sign beside "More" (src/panel.js putLaget; Max, 2026-11-25): a red "!" for a warning (a problem,
+     a cancelled stop), a grey "i" for the train's state or old data; what they say is in Läget on the full card. */
+  .panel-more .more-sign { display: inline-grid; place-items: center; color: var(--muted); }
+  .panel-more .more-sign:empty { display: none; }
+  .panel-more .more-sign.warn { color: var(--late); }
+
+  /* Trafikverket's notes: a yellow line, open or folded (src/panel.js notesBox, a station's look), the notes under it
+     in the page's own scroll; problems in red, where they are muted. */
+  .panel-tvnotes { margin: 2px 0 6px; display: grid; gap: 2px; }
+  .tv-box { flex: none; }
+  #panel .tv-slot { display: contents; }   /* (Läget's place: its box a part of the card of its own, src/panel.js putLaget) */
+  .tv-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 0; border: 0; background: none; cursor: pointer;
+    font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted); text-align: left; }
+  .tv-toggle > span:not(.tv-warn) { flex: 1; }
+  .tv-box.open { position: relative; }
+  .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
+  .tv-fold { position: absolute; top: -4px; right: -8px; width: 44px; height: 38px; padding: 0; justify-content: center; }   /* (a bigger target: 44 × 38) */
+  #panel .tv-box.board-msgs { margin: 4px 0 2px; }
+  #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
+    background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
+  #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #panel .tv-box.open .panel-tvnotes.board-msg-list { padding: 2px 12px; margin: 0; gap: 0; max-height: none; overflow: visible; }
+  .panel-tvnote { margin: 0; }
+  .panel-tvnote.problem { color: var(--late); font-weight: 600; }
+  .panel-tvnote.problem .icon { color: var(--late); vertical-align: -2px; margin-right: 6px; }
+  .panel-tvnote.tv-st { color: var(--muted); font-weight: 500; }
+  #panel .tv-box .tv-state { display: contents; }
+  /* Läget's line: its count beside the name; red (⚠ and count) when it holds a warning. */
+  #panel .tv-box .board-msgs-toggle > .tv-n { flex: none; min-width: 22px; padding: 1px 7px; box-sizing: border-box; border-radius: 999px; text-align: center;
+    font-size: 13px; color: var(--ink); background: color-mix(in srgb, currentColor 14%, transparent); }
+  #panel .tv-box.warn .board-msgs-toggle > .icon:first-child, #panel .tv-box.warn .board-msgs-toggle > .tv-n { color: var(--late); }
+  .panel-tvnote span { color: var(--muted); font-weight: 400; }
+
+  /* "i": the train's own numbers (src/train-info.js): sections in soft tiles, the speedometer, the line-up of moving
+     trains, the speed graph, the trip, the lateness, the day. */
+  .panel-info-box { overflow: auto; min-height: 0; padding: 4px 10px 14px 0; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable;
+    display: flex; flex-direction: column; gap: 10px; }
+  .ti-sec { background: var(--hover); border-radius: 18px; padding: 12px 14px 14px; flex: none; }
+  .ti-sec h3 { margin: 0 0 6px; font-size: 12.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 600;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .ti-sec h3 span { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .ti-sec svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .ti-sec text { font-family: var(--font); fill: var(--muted); font-size: 10.5px; }
+  .ti-sec p { margin: 0; }
+  .ti-gwrap { position: relative; }
+  .ti-read { position: absolute; left: 0; right: 0; top: 44%; text-align: center; pointer-events: none; display: flex; flex-direction: column; }
+  .ti-read b { font-size: 50px; font-weight: 750; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .ti-read span { font-size: 14px; color: var(--muted); }
+  .ti-gauge .ti-arc-bg { fill: none; stroke: var(--line); stroke-width: 16; stroke-linecap: round; }
+  .ti-gauge .ti-arc { fill: none; stroke: url(#tiGrad); stroke-width: 16; stroke-linecap: round; }
+  .ti-g0 { stop-color: var(--accent); stop-opacity: 0.55; } .ti-g1 { stop-color: var(--accent); }
+  .ti-gauge .ti-tick { stroke: var(--muted); stroke-width: 1; stroke-opacity: 0.5; stroke-linecap: round; }
+  .ti-gauge .ti-tick.big { stroke-width: 2; stroke-opacity: 0.9; }
+  .ti-sec .ti-gauge .ti-num { font-size: 12.5px; font-weight: 500; text-anchor: middle; }
+  .ti-mark { fill: var(--ink); }
+  .ti-knob circle:first-child { fill: var(--accent); fill-opacity: 0.25; }
+  .ti-knob circle:last-child { fill: var(--bg); stroke: var(--accent); stroke-width: 4; }
+  .ti-sub { text-align: center; font-size: 13.5px; color: var(--muted); }
+  .ti-sub b { color: var(--ink); font-weight: 650; }
+  .ti-sec .ti-rank { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 12px 0 2px; }
+  .ti-rank b { font-size: 20px; font-weight: 700; }
+  .ti-rank span { color: var(--muted); font-size: 13.5px; text-align: right; }
+  .ti-axis { stroke: var(--line); stroke-width: 2; stroke-linecap: round; }
+  .ti-dot { fill: var(--muted); fill-opacity: 0.55; }
+  .ti-me { fill: var(--accent); stroke: var(--hover); stroke-width: 2.5; }
+  .ti-sec .ti-me-t { fill: var(--accent); font-weight: 650; font-size: 11.5px; text-anchor: middle; }
+  .ti-off { text-align: center; padding: 18px 8px 12px; }
+  .ti-off b { font-size: 40px; font-weight: 700; color: var(--muted); }
+  .ti-sec .ti-off p { margin-top: 6px; color: var(--muted); font-size: 14px; }
+  .ti-grid { stroke: var(--line); stroke-width: 1; }
+  .ti-pass { stroke: var(--muted); stroke-opacity: 0.25; }
+  .ti-sec .ti-pass-t { font-size: 9.5px; }
+  .ti-track { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 4 4; }
+  .ti-a0 { stop-color: var(--accent); stop-opacity: 0.35; } .ti-a1 { stop-color: var(--accent); stop-opacity: 0.02; }
+  .ti-area { fill: url(#tiArea); }
+  .ti-line { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
+  .ti-end { fill: var(--accent); stroke: var(--hover); stroke-width: 2; }
+  .ti-sec .ti-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .ti-legend i { display: inline-block; width: 16px; border-top: 3px solid var(--accent); border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+  .ti-legend i.dash { border-top: 2px dashed var(--muted); }
+  .ti-legend .ti-since { margin-left: auto; }
+  .ti-progress { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .ti-km { font-size: 28px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .ti-km small { font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 4px; letter-spacing: 0; }
+  .ti-of { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+  /* the trip: the line coloured by the track's speed, the rail network faint beneath */
+  .ti-bg { fill: none; stroke: var(--line); stroke-width: 1.2; stroke-linejoin: round; stroke-linecap: round; }
+  .ti-route, .ti-route-case { fill: none; stroke-linejoin: round; }
+  .ti-route { stroke: var(--line); stroke-width: 4.5; }
+  .ti-route-case { stroke: var(--hover); stroke-width: 9; stroke-linecap: round; }
+  .ti-stop { fill: var(--bg); stroke: var(--muted); stroke-width: 2; }
+  .ti-stop.done { fill: var(--accent); stroke: var(--hover); }
+  .ti-sec .ti-stop-t { font-size: 12px; font-weight: 500; }
+  .ti-sec .ti-stop-t.next { fill: var(--ink); font-weight: 700; }
+  .ti-train { fill: var(--accent); stroke: var(--hover); stroke-width: 3; }
+  .ti-train-ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: 0.45; }
+  .ti-next { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+  .ti-next b { font-weight: 650; }
+  .ti-m { color: var(--muted); }
+  .ti-band.ontime { fill: var(--c-ontime); fill-opacity: 0.13; } .ti-band.some { fill: var(--c-some); fill-opacity: 0.13; } .ti-band.late { fill: var(--c-late); fill-opacity: 0.13; }
+  .ti-zero { stroke: var(--muted); stroke-opacity: 0.5; stroke-dasharray: 3 3; }
+  .ti-late-line { fill: none; stroke: var(--ink); stroke-opacity: 0.55; stroke-width: 2; stroke-linejoin: round; }
+  .ti-late-dot { stroke: var(--hover); stroke-width: 2; }
+  .ti-late-dot.ontime { fill: var(--c-ontime); } .ti-late-dot.some { fill: var(--c-some); } .ti-late-dot.late { fill: var(--c-late); }
+  .ti-sec .ti-late-v { fill: var(--ink); font-weight: 650; text-anchor: middle; }
+  .ti-ahead { fill: var(--bg); stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 2 2; }
+  .ti-sec .ti-late-sum { font-size: 14px; color: var(--muted); margin-top: 4px; }
+  .ti-late-sum b { color: var(--ink); font-weight: 650; }
+  .ti-tag { border-radius: 8px; padding: 1px 7px; font-weight: 650; }
+  .ti-tag.ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .ti-tag.some { background: var(--t-some-bg); color: var(--t-some); }
+  .ti-tag.late { background: var(--t-late-bg); color: var(--t-late); } .ti-tag.unknown { background: var(--t-unknown-bg); color: var(--t-unknown); }
+  .ti-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ti-tiles > div { background: var(--bg); border-radius: 14px; padding: 9px 12px; display: flex; flex-direction: column; }
+  .ti-tiles b { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .ti-tiles b small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+  .ti-tiles span { font-size: 12.5px; color: var(--muted); }
+  .ti-sec .ti-avg { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+  /* The trip as a timeline (src/panel.js). Columns: time, the line with its dot, the station, the track. The line is the
+     accent up to the train, then grey. */
+  .panel-table { overflow: auto; min-height: 0; position: relative; padding-right: 10px; margin-right: -6px; scrollbar-width: thin; scrollbar-gutter: stable; }
+  .tl { margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .tl-row, .tl-now { display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; min-height: 44px; }
+  .tl-time { text-align: right; font-weight: 700; font-size: 15px; line-height: 1.15; }
+  .tl-time small, .tl-name small { display: block; font-size: 11.5px; font-weight: 700; }
+  .tl-name small { color: var(--muted); font-weight: 500; }
+  /* A note of Trafikverket's about this stop ("Ingen påstigning"), also in Läget; a problem in red. */
+  .tl-row.canceled .tl-name small.tl-note { display: inline-block; width: 100%; }   /* (inline-block: the stop's line-through stays off it) */
+  .tl-name small.tl-note.problem { color: var(--late); }
+  .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
+  .tl-node::before { content: ''; position: absolute; left: calc(50% - 2px); top: -1px; bottom: -1px; width: 4px; background: var(--line); }
+  .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
+  .tl-row:first-child .tl-node::before, .tl-head + .tl-row .tl-node::before { top: 50%; }
+  .tl-row:last-child .tl-node::before { bottom: 50%; }
+  .tl-dot { position: relative; z-index: 1; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
+  .tl-row.next .tl-dot { width: 18px; height: 18px; box-sizing: border-box; background: var(--bg); border: 3.5px solid var(--accent); box-shadow: none; }
+  /* Passed: filled with the accent, a light ✓; cancelled: filled red, a light ✕. */
+  .tl-row.passed .tl-dot, .tl-row.canceled .tl-dot { width: 22px; height: 22px; box-sizing: border-box; display: grid; place-items: center;
+    background: var(--accent); border: 0; color: var(--accent-ink); box-shadow: none; }
+  .tl-row.canceled .tl-dot { background: var(--c-late); }
+  /* "Track" over the tracks, kept at the top while the stops scroll; "All places" at the row's left, a button like the
+     card's others. */
+  .tl-head .tl-all { grid-column: 1 / 4; display: flex; justify-content: flex-start; align-items: center; }
+  .tl-places { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 13px; border: 0; border-radius: 17px; background: var(--hover); color: var(--ink);
+    font: 700 13.5px var(--font); text-transform: none; letter-spacing: 0; cursor: pointer; }
+  .tl-places:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .tl-places[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .tl-head { position: sticky; top: -4px; z-index: 2; display: grid; grid-template-columns: 50px 30px 1fr auto; column-gap: 10px; align-items: center; padding: 2px 0 6px;
+    background: var(--bg); font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .tl-train { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 40%, transparent); }
+  .tl-now { min-height: 40px; color: var(--accent); font-weight: 700; font-size: 13.5px; }
+  /* The places between the stops ("All places"): soft boxes beside the line, a small dot on the line for each. */
+  .tl-row.place { min-height: 0; }
+  /* (a stop opens its board: a hand and a soft background under the mouse) */
+  .tl-row[data-sig] { cursor: pointer; border-radius: 12px; }
+  .tl-pbox { grid-column: 3 / -1; align-self: stretch; display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; column-gap: 8px; align-items: center;
+    background: var(--hover); padding: 1px 10px; font-size: 13px; line-height: 1.55; color: var(--muted); }
+  .tl-pbox b { font-weight: 600; }
+  .tl-pbox span { min-width: 0; overflow-wrap: anywhere; }
+  .tl-pbox small { font-weight: 700; font-size: 12px; }
+  .tl-row.place.ahead .tl-pbox { grid-template-columns: minmax(0, 1fr); }
+  .tl-row.place.first .tl-pbox { border-top-left-radius: 12px; border-top-right-radius: 12px; padding-top: 5px; margin-top: 3px; }
+  .tl-row.place.last .tl-pbox { border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; padding-bottom: 5px; margin-bottom: 3px; }
+  .tl-row.place.passed .tl-pbox { opacity: 0.8; }
+  .tl-row.place .tl-dot, .tl-row.place.passed .tl-dot { width: 6px; height: 6px; background: var(--muted); box-shadow: 0 0 0 2px var(--bg); }
+  .tl-row.place.passed .tl-dot { background: var(--accent); }
+  .tl-now > span:last-child { grid-column: 3 / -1; }
+  .tl-name { font-size: 15.5px; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .tl-row.passed .tl-time, .tl-row.passed .tl-name, .tl-row.passed .tl-trk { opacity: 0.5; }
+  .tl-row.next .tl-name { font-weight: 800; }
+  .tl-row.canceled .tl-name { text-decoration: line-through; color: var(--late); }
+  .tl-trk { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--hover); padding: 4px 8px; border-radius: 8px; }
+  .tl-trk:empty { visibility: hidden; }
+  /* A trip's end abroad (src/panel.js abroadRow, src/abroad.js): the cuts halfway between the dots, a round flag. The
+     row is taller; its line is the SVG stretch (48 px to the flag); the train out there stands still on it. */
+  .tl-row.abroad { height: 120px; }
+  .tl-row.abroad .tl-node::before { display: none; }
+  .tl-row.abroad .tl-time { color: var(--muted); font-weight: 600; font-size: 13px; }
+  .tl-row.abroad .tl-name { font-weight: 700; }
+  .tl-row.abroad.canceled .tl-name { text-decoration: none; }
+  .tl-row.abroad.canceled .ab-name { text-decoration: line-through; }
+  .ab-stretch { position: absolute; left: 0; width: 30px; height: 48px; overflow: visible; pointer-events: none; }
+  .tl-row.abroad.to .ab-stretch { top: -1px; }
+  .tl-row.abroad.from .ab-stretch { bottom: -1px; }
+  .ab-stretch line { stroke: var(--line); stroke-width: 4; stroke-linecap: round; }
+  .tl-row.abroad.done .ab-stretch .ab-run { stroke: var(--accent); }
+  .ab-stretch .ab-cut { stroke: var(--muted); stroke-width: 2.5; }
+  .tl-flag { position: relative; z-index: 1; width: 24px; height: 24px; border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 3px var(--bg), 0 0 0 4.5px var(--line); }
+  .tl-flag svg { display: block; width: 100%; height: 100%; }
+  .tl-row.abroad.canceled .tl-flag { filter: grayscale(1); opacity: 0.6; }
+  .ab-rider { position: absolute; left: 0; z-index: 2; }
+  .tl-row.abroad.to .ab-rider { top: 3px; }
+  .tl-row.abroad.from .ab-rider { bottom: 3px; }
+
+  @media (hover: hover) {
+    .tl-row[data-sig]:hover { background: var(--hover); }
+  }
+
+  /* A phone, collapsed (h 0): only the number, its company and where it goes, and Follow as its arrow (share, ☆ and ‹
+     come back raised; a long company name gives way before the destination); the rest fades back in as soon as it is
+     pulled up (.cd is display: contents: its own parts fade). */
+  @media (max-width: 439px) {
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow span { display: none; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-co { flex: 0 100 auto; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .ph-to { flex: 0 1 auto; }
+    #panel > :not(.panel-head), #panel .cd > * { transition: opacity .2s; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) :is(#panel > :not(.panel-head):not(.cd), #panel .cd > *) { opacity: 0; pointer-events: none; }
+  }
+
+  /* A computer: the card grows down, so "More ⌄" */
+  @media (min-width: 440px) {
+    .panel-more svg { transform: rotate(180deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #panel:not(.full) :is(.cd-trip, .panel-more) { transition: none; }
+    .cd-late.flash, .cd-late.flash::after { animation: none; }
+    .cd-pick.opening, .cd-pick.closing { animation-duration: 1ms; }
+  }
+}
+
+@layer states {
+  /* Follow narrowing into its icon or widening back (src/pages/train.js glideHead): its words stay, cut off by its edge. */
+  #panel .sh-follow.morph { justify-content: flex-start; overflow: hidden; padding-right: 0; box-sizing: border-box; }
+  #panel .sh-follow.morph span { display: inline; white-space: nowrap; }
+  /* A button leaving the head shrinks away where it was, even when hidden (its hidden attribute too: !important). */
+  #panel .panel-head .leaving { display: grid !important; place-items: center; position: absolute; margin: 0; pointer-events: none; }
+}

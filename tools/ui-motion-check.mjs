@@ -1,5 +1,5 @@
 // The small animations (Max's picks 1, 4, 6, 7, 8, 9 of 2026-11-20; the example page
-// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and index.html "Motion"), on a phone-size page:
+// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and src/css), on a phone-size page:
 //   1 a held button presses in and springs back; 9 the ☰ menu's rows follow it in;
 //   6 search rows arrive, and the same results again move nothing; the card's timeline rows don't arrive as it opens
 //     full (since 2026-11-25: what is shown stays, the edge reveals the rest; tools/ui-sweep.mjs measures it), and its
@@ -54,35 +54,40 @@ try {
   const after = await page.evaluate(() => getComputedStyle(document.getElementById('nav-button')).scale);
   check(held === '0.94' && after === 'none', `1: a held button is pressed in (scale ${held}, after ${after})`);
 
-  // ---- 9: the menu's buttons slide out of ☰ and back into it, sideways only, no fade (Max, 2026-11-24: "it should
-  // animate both in and out, sliding form the hamburger"); the tap above opened it: close and open again ----
+  // ---- 9: ☰'s menu, a card (Max, 2026-11-25: "revert the hamburger menu. Slide out card like before"): it slides out
+  // from the edge it hangs from (under the bar; a phone at rest: out of the sheet's top) and back, up or down only, no
+  // fade, and never shows over the bar or the sheet; the tap above opened it: close and open again ----
   if (await page.evaluate(() => !document.getElementById('nav').hidden)) { await page.click('#nav-button'); await sleep(600); }
-  const slide = () => page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden])')].map((r) => {
-    const m = new DOMMatrixReadOnly(getComputedStyle(r).transform); return { x: Math.round(m.m41), y: Math.round(m.m42), o: Number(getComputedStyle(r).opacity) }; }));
+  // (every frame until done: the card's furthest move up or down and sideways, its lowest opacity, and how far its visible
+  // part ever reached past the edge: the clip-path's inset counted)
+  const watchNav = (ms, untilHidden) => page.evaluate((ms, untilHidden) => new Promise((done) => {
+    let dy = 0, dx = 0, op = 1, past = 0; const t0 = performance.now();
+    const f = () => {
+      const nav = document.getElementById('nav');
+      if (!nav.hidden) {
+        const cs = getComputedStyle(nav), m = new DOMMatrixReadOnly(cs.transform), r = nav.getBoundingClientRect();
+        const sh = document.getElementById('sheet').getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
+        const ins = /inset\(([-\d.]+)px(?: ([-\d.]+)px)?(?: ([-\d.]+)px)?/.exec(cs.clipPath);
+        const it = ins ? Math.max(0, Number(ins[1])) : 0, ib = ins ? Math.max(0, Number(ins[3] ?? ins[1])) : 0;
+        const below = Number(nav.style.top.replace('px', '')) > sh.top;
+        // (since 2026-11-25 it lies under the sheet and slides from behind the box: past = shown out over the map above
+        // the sheet's top on a computer, or not under the sheet at all)
+        const under = Number(cs.zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
+        past = Math.max(past, !under ? 99 : below ? sh.top - (r.top + it) : 0);
+        dy = Math.max(dy, Math.abs(Math.round(m.m42))); dx = Math.max(dx, Math.abs(Math.round(m.m41))); op = Math.min(op, Number(cs.opacity));
+      }
+      if ((untilHidden && nav.hidden) || performance.now() - t0 > ms) done({ dy, dx, op, past: Math.round(past), hidden: nav.hidden }); else requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f); }), ms, untilHidden);
   frames.menu = await pauses(page, async () => {
-    // (every frame for 0.6 s after the tap: each button's furthest sideways and up/down offset, its lowest opacity)
-    const rec = page.evaluate(() => new Promise((done) => {
-      const far = [0, 0, 0], up = [0, 0, 0], op = [1, 1, 1]; const t0 = performance.now();
-      const f = () => { [...document.querySelectorAll('#nav .nav-row:not([hidden])')].forEach((r, i) => { const m = new DOMMatrixReadOnly(getComputedStyle(r).transform);
-        far[i] = Math.max(far[i], Math.round(m.m41)); up[i] = Math.max(up[i], Math.abs(Math.round(m.m42))); op[i] = Math.min(op[i], Number(getComputedStyle(r).opacity)); });
-        if (performance.now() - t0 > 600) done({ far, up, op }); else requestAnimationFrame(f); };
-      requestAnimationFrame(f); }));
+    const rec = watchNav(600, false);
     await page.click('#nav-button');
     const s = await rec;
-    check(s.far.every(x => x > 0) && s.up.every(y => y === 0) && s.op.every(o => o === 1), `9: the menu's 3 buttons slide out of ☰ (furthest ${s.far.join(', ')} px sideways; up/down ${s.up.join(', ')}; lowest opacity ${s.op.join(', ')})`);
+    check(s.dy > 20 && s.dx === 0 && s.op === 1 && s.past <= 1, `9: the menu card slides out (furthest ${s.dy} px up or down, ${s.dx} sideways; lowest opacity ${s.op}; past its edge ${s.past} px, want 0)`);
   });
   await sleep(500);
-  // shut: every frame watched until the menu is gone (a busy PC draws the slide's first frame late: an 80 ms sample read
-  // 0 px under the full check's load, 2026-11-24): it moved sideways towards ☰, never faded, then went
-  const backRec = page.evaluate(() => new Promise((done) => {
-    let maxX = 0, minO = 1; const t0 = performance.now();
-    const f = () => { const nav = document.getElementById('nav');
-      for (const r of nav.querySelectorAll('.nav-row:not([hidden])')) { const m = new DOMMatrixReadOnly(getComputedStyle(r).transform); maxX = Math.max(maxX, Math.round(m.m41)); minO = Math.min(minO, Number(getComputedStyle(r).opacity)); }
-      if (nav.hidden || performance.now() - t0 > 2000) done({ maxX, minO, hidden: nav.hidden }); else requestAnimationFrame(f); };
-    requestAnimationFrame(f); }));
-  await page.click('#nav-button');
-  const back = await backRec;
-  check(back.hidden && back.maxX > 0 && back.minO === 1, `9: shut, they slide back into ☰ (furthest ${back.maxX} px, lowest opacity ${back.minO}, then gone: ${back.hidden})`);
+  const back = await (async () => { const rec = watchNav(2000, true); await page.click('#nav-button'); return rec; })();
+  check(back.hidden && back.dy > 20 && back.op === 1 && back.past <= 1, `9: shut, it slides back (furthest ${back.dy} px, lowest opacity ${back.op}, past its edge ${back.past} px, then gone: ${back.hidden})`);
   await sleep(300);
 
   // ---- 6: search rows ----

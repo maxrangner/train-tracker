@@ -3,7 +3,8 @@
 //     sheet, no Home chip (since 2026-11-23), back (Esc) steps down the stack to Home and nothing is left;
 //   - a page over a train lets its card go; back to it, the card is there again and the train followed (until
 //     2026-11-22 Settings → Debug → "Screen over a train" chose this: the stack decides now);
-//   - ☰'s menu answers at once after a swipe of the sheet (a page swiped away, Home swiped down: ☰ 30 ms later opens);
+//   - ☰'s menu answers at once after a swipe of the sheet (Settings, opened from it, swiped away: the menu is back by
+//     itself and ☰ 30 ms later shuts it; Home swiped down: ☰ 30 ms later opens it);
 //   - the search closed with the keyboard going: the map keeps its height the whole way;
 //   - the Train card setting is gone and the default accent is Azurblå (cerulean);
 //   - the map works with ☰'s menu open (a drag moves it, the menu stays), a plain tap on the map closes the menu and
@@ -86,7 +87,7 @@ try {
   await toRest(page);
 
   // ---- ☰ answers at once after a swipe of the sheet (Max, 2026-11-20: Settings' dimming let taps through as it slid
-  // away, and a tap within ~0.4 s of a swipe got no click: src/sheet.js onTap acts on the finger lifted) ----
+  // away, and a tap within ~0.4 s of a swipe got no click: src/tap.js onTap acts on the finger lifted) ----
   for (const [name, open] of [['Settings swiped away', () => openFromMenu(page, 'settings')], ['Home swiped down', () => setLevel(page, 2)]]) {
     await open();
     await settle();
@@ -95,13 +96,22 @@ try {
     // fits its parts since 2026-11-23 and can lie far below where a 400 px swipe ends)
     const toHalf = await page.evaluate(() => (window.__stack.top() === 'home' ? Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top - window.__stack.heights[1]) : 0));
     await swipe(grab.x, grab.y, toHalf > 0 ? toHalf : Math.min(400, 830 - grab.y), { after: 30 });
+    // (Settings came from the menu: backed out of, the menu opens again by itself (Max, 2026-11-24, src/nav-menu.js
+    // reopenOnHome), so ☰ answering is ☰ shutting it; until 2026-11-25 this step expected ☰ to open it and failed)
+    const reopened = await page.evaluate(() => document.getElementById('nav-button').getAttribute('aria-expanded') === 'true');
     await touchTap('#nav-button');
     await sleep(300);
     const s = await sheetState(page);
-    check(await navShown(), `${name} (now ${s.key} at ${s.level}), ☰ tapped 30 ms later: the menu opens`);
-    // (shut the way a person does, and waited for: its buttons slide back into ☰ first)
-    await page.keyboard.press('Escape');
-    await until(page, () => document.getElementById('nav').hidden, 1500);
+    if (name.startsWith('Settings')) {
+      const shut = await page.evaluate(() => document.getElementById('nav-button').getAttribute('aria-expanded') === 'false')
+        && await until(page, () => document.getElementById('nav').hidden, 1500);
+      check(reopened && shut, `${name} (now ${s.key} at ${s.level}): the menu opened again by itself (${reopened}), ☰ tapped 30 ms later shuts it (${Boolean(shut)})`);
+    } else {
+      check(await navShown(), `${name} (now ${s.key} at ${s.level}), ☰ tapped 30 ms later: the menu opens`);
+      // (shut the way a person does, and waited for: its buttons slide back into ☰ first)
+      await page.keyboard.press('Escape');
+      await until(page, () => document.getElementById('nav').hidden, 1500);
+    }
     await toRest(page);
   }
 
@@ -241,6 +251,11 @@ try {
       .map(e => ({ n: e.classList.contains('cd-tiles') ? 'tiles' : e.classList.contains('why') ? 'why' : 'trip', y: Math.round(e.getBoundingClientRect().top) }))
       .sort((a, b) => a.y - b.y).map(x => x.n).join(' → '));
     check(order === 'tiles → trip' || order === 'tiles → why → trip', `the card at half, top to bottom: ${order} (want the tiles, why, then the trip line)`);
+    // (Max, 2026-11-25: the compact card smaller: no red line or state line under the number, no Share; a sign beside
+    // "More" instead, its words in Läget on the full card)
+    const lean = await page.evaluate(() => ({ rows: [...document.querySelectorAll('#panel :is(.panel-alert, .panel-status, .panel-note)')].length,
+      share: Boolean(document.querySelector('#panel .sh-act[data-act-id="share"]')?.offsetParent), sign: document.querySelector('#panel .more-sign')?.dataset.k ?? '' }));
+    check(!lean.rows && !lean.share, `the card at half: ${lean.rows} lines under the number (want none), Share ${lean.share ? 'SHOWN' : 'hidden'}; the sign by "More": ${lean.sign || 'none'}`);
     // over Home (a train tapped on the map) no ‹ on its card: only when it was opened from another page (Max, 2026-11-24:
     // "only on the situation I mentioned or similar, not always"); its company on a line of its own under the number
     const head = await page.evaluate(() => { const h = document.querySelector('#panel .panel-head'), n = h?.querySelector('.panel-title strong')?.getBoundingClientRect(), c = h?.querySelector('.panel-co')?.getBoundingClientRect();
@@ -249,11 +264,21 @@ try {
     // nor from train to train (Max, 2026-11-24: "Not just tapping between them on the map"): another train opened over it
     const other = await page.evaluate(() => { const cur = window.__stack.top(); return window.__trains.reports().map(r => `train:${r.id}`).find(k => k !== cur); });
     if (other) {
-      await page.evaluate(k => window.__stack.open(k, { go: true }), other); await sleep(1200);
+      await page.evaluate(k => window.__stack.open(k, { go: true, fromMap: true }), other); await sleep(1200);
       const t2 = await page.evaluate(() => ({ below: window.__stack.keys().at(-2), up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent) }));
-      check(!t2.up, `a train over another train (${t2.below}): ‹ ${t2.up ? 'SHOWN' : 'none'}`);
+      check(!t2.up, `a train tapped on the map over another train (${t2.below}): ‹ ${t2.up ? 'SHOWN' : 'none'}`);
       await page.evaluate(() => window.__stack.back()); await sleep(1000);
     }
+    // ‹ by how a page was opened, not by what was open before (Max, 2026-11-25: "Only arrow back when coming from a click on
+    // a previous card or menu etc."): a station tapped on the map over the card: none; a train clicked on its board: ‹
+    await page.evaluate(() => window.__stack.open('station:Cst', { fromMap: true })); await sleep(1500);
+    const st = await page.evaluate(() => ({ top: window.__stack.top(), up: Boolean(document.querySelector('#sheet .sh-up')?.offsetParent) }));
+    await page.evaluate(() => document.querySelector('#board .bd-row:not(.gone)')?.click()); await sleep(2000);
+    const fromRow = await page.evaluate(() => ({ top: window.__stack.top(), up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent) }));
+    check(st.top === 'station:Cst' && !st.up && /^train:/.test(fromRow.top) && fromRow.up,
+      `a station tapped on the map over the card: ‹ ${st.up ? 'SHOWN' : 'none'}; a train clicked on its board (${fromRow.top}): ‹ ${fromRow.up ? 'shown' : 'NONE'}`);
+    await page.evaluate(() => window.__stack.back()); await sleep(800);
+    await page.evaluate(() => window.__stack.back()); await sleep(1000);
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
     // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)
@@ -283,6 +308,11 @@ try {
     const last = await page.evaluate(() => { const more = document.querySelector('#panel .panel-more'), tl = document.querySelector('#panel .panel-table');
       return more && tl ? Math.round(more.getBoundingClientRect().top - tl.getBoundingClientRect().bottom) : null; });
     check(last !== null && last >= 0, `a train at full: "Mindre" ${last ?? '?'} px under the stops (want under them)`);
+    // (at full: Share in the top line; Läget there whenever the compact card had its sign, red with a red sign)
+    const atFull = await page.evaluate(() => ({ share: Boolean(document.querySelector('#panel .sh-act[data-act-id="share"]')?.offsetParent),
+      sign: document.querySelector('#panel .more-sign')?.dataset.k ?? '', laget: document.querySelector('#panel .tv-box')?.offsetParent ? (document.querySelector('#panel .tv-box.warn') ? 'warn' : 'note') : '' }));
+    check(atFull.share && (atFull.sign === '' ? atFull.laget !== 'warn' : atFull.sign === 'warn' ? atFull.laget === 'warn' : Boolean(atFull.laget)),
+      `a train at full: Share ${atFull.share ? 'shown' : 'HIDDEN'}; Läget ${atFull.laget || 'none'} (the sign was ${atFull.sign || 'none'})`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at

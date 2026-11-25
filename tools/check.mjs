@@ -349,8 +349,9 @@ const SCREENS = [
   ['pc', 'tools/pc-check.mjs', 20],                      // a computer's screen and mouse: the map always drags (Max's PC notes, 2026-11-23)
   ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
   ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
+  ['home icons', 'tools/home-icons-check.mjs', 25],        // an icon before every card's title on Home, its number and colour (Max's pick A, 2026-11-25)
   ['page motion', 'tools/page-motion-check.mjs', 40, true], // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24; alone: it reads pages mid-slide)
-  ['ui sweep', 'tools/ui-sweep.mjs', 600, true, true],   // every sheet transition frame by frame: nothing stray, no jump, a growing card keeps what it shows (Max, 2026-11-25); before main only: --round leaves it (about 4 min; Max: "limit when used")
+  ['ui sweep', 'tools/ui-sweep.mjs', 600, true],         // every sheet transition frame by frame, the paths Max used, empty room, the menu's place (in every round's check since 2026-11-25: it catches what he caught; the round's check runs in the background)
 ];
 const screenJobs = [];
 if (!pageUp) {

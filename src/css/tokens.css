@@ -1,0 +1,40 @@
+/* The stylesheet, by part (src/main.js imports each file in this order). Colours are set by src/settings.js as variables
+   on <html> (src/colours.js: --page --bg --card --ink --muted --line --hover --accent --t-ontime …), light or dark by
+   <html data-theme>. The start screen's own look and the font (--font, @font-face) are in index.html: they are needed
+   before this loads.
+   Layers, weakest first: vendor (MapLibre's own CSS), app (every part), states (what the program switches on to
+   override a part's look: [hidden], a button leaving the card's head, the page's own scrollbar…), modes (the shop
+   window). A later layer wins whatever the selectors' weight, so no rule needs !important to beat another. */
+@layer vendor, app, states, modes;
+@import 'maplibre-gl/dist/maplibre-gl.css' layer(vendor);
+
+@layer app {
+  :root {
+    --radius: 22px;        /* the big cards */
+    --radius-s: 16px;      /* small floating things */
+    /* Motion (src/motion.js reads these too: ms(), easing()): how long at Debug → Animation speed Fast; --mk makes the
+       page changes and the glides longer at Calmer. */
+    --t-glide: .36s;       /* the sheet's glide to a height, and what rides on its edge */
+    --t-fold: .26s;        /* a box opening or shutting (a fold, a box's height), ☰'s card sliding */
+    --t-page: .28s;        /* a page change (sideways) */
+    --t-page-long: .3s;    /* the other page changes (Debug → Page change: from the edge, one strip) */
+    --ez: cubic-bezier(.2, .85, .25, 1);      /* the sheet's curve: its glide, its page changes */
+    --ez-pop: cubic-bezier(.2, .9, .25, 1);   /* the small motions: a press, a row arriving, a fold */
+    --ez-ui: cubic-bezier(.2, .8, .2, 1);     /* ☰'s card, a box's height, a train card's buttons */
+    /* The sheet's sizes (src/layout.js sheetGeometry reads them for src/stack.js, src/map.js, src/main.js) */
+    --grab-h: 20px;        /* the handle's row (a phone; a page without a bar has only it) */
+    --grab-h-wide: 28px;   /* a computer's handle band, the arrow in it, at the sheet's bottom */
+    --head-h: 52px;        /* the head: the search bar or a page's bar */
+    --bar-gap: 8px;        /* under the bar when the page shows: a scrolled page goes out of sight there */
+    --bar-edge: 10px;      /* the search bar from the sheet's edge at Home's rest (12 px to the field, as at its sides) */
+    --sheet-inset: 10px;   /* a computer's sheet from the screen's edges; ☰'s card from the bar */
+    --fit-gap: 12px;       /* room under the last part shown when the page shows whole */
+    --fit-gap-phone: 40px; /* a phone's cut page: room for its "More" pill */
+    --top-room: 52px;      /* full height leaves this at the top: the live mark */
+    --sheet-w: 420px;      /* a computer's sheet */
+  }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  /* Debug → Animation speed: Calmer (src/settings.js motionSpeed): every page change and the sheet's glide take --mk
+     times as long. */
+  :root[data-mspeed="calm"] { --mk: 1.3333; }
+}

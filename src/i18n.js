@@ -36,7 +36,7 @@ const EN = {
   // The one sheet (Max's pick A, 2026-11-22): its pages, Home, the search, ☰, the line above the bar.
   home: 'Home', moreBelow: 'More below', moreWord: 'More', cancel: 'Cancel',
   filterHead: 'Filter', coMore: n => `${n} more`, coFewer: 'Fewer',
-  theDay: 'Rewind', daySoon: 'Rewind is coming soon.', aboutApp: 'About Spårat',
+  theDay: 'Rewind', aboutApp: 'About Spårat',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
   dayLastHour: 'The last hour in 20 s', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
   dayNow: 'now', dayDrag: 'Rewind: drag back in time', dayClose: 'Close Rewind', dayThen: c => `at ${c}`, dayLateUnknown: 'lateness not known',
@@ -84,7 +84,7 @@ const EN = {
   allStops: 'More', fewerStops: 'Less',
   allPlaces: 'All places', allPlacesSub: 'On a train\'s page: places passed without stopping',
   notesCount: n => `Notes (${n})`, foldNotes: 'Fold the notes',
-  messagesCount: n => `${n} message${n === 1 ? '' : 's'} from the station`, trainNotesCount: n => `${n} message${n === 1 ? '' : 's'} about the train`,
+  messagesCount: n => `${n} message${n === 1 ? '' : 's'} from the station`, trainStatus: 'Status', trainStatusCount: n => `Status: ${n} item${n === 1 ? '' : 's'}`,
   arrivesIn: s => `In ${s}`, arrivesAbout: s => `In about ${s}`, arrivesNow: 'Arriving now',
   leavesIn: s => `Leaves in ${s}`, leavesAbout: s => `Leaves in about ${s}`, leavesNow: 'Leaving now',
   routeEdge: 'Route white edge', homeLegend: 'Lateness colours on Home',
@@ -345,7 +345,7 @@ const SV = {
   // Det enda bladet (Max val A, 2026-11-22).
   home: 'Hem', moreBelow: 'Mer längre ner', moreWord: 'Mer', cancel: 'Avbryt',
   filterHead: 'Filter', coMore: n => `${n} till`, coFewer: 'Färre',
-  theDay: 'Rewind', daySoon: 'Rewind kommer snart.', aboutApp: 'Om Spårat',
+  theDay: 'Rewind', aboutApp: 'Om Spårat',
   dayLastHour: 'Sista timmen på 20 s', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
   dayNow: 'nu', dayDrag: 'Rewind: dra bakåt i tiden', dayClose: 'Stäng Rewind', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
   dayOnlyLive: 'Bara live. Tillbaka till live?', dayOnlyLiveSub: 'Rewind visar bara kartan: inga kort eller tavlor för en tidigare tid.',
@@ -391,7 +391,7 @@ const SV = {
   allStops: 'Mer', fewerStops: 'Mindre',
   allPlaces: 'Alla platser', allPlacesSub: 'På ett tågs sida: driftplatser och stationer utan stopp',
   notesCount: n => `Meddelanden (${n})`, foldNotes: 'Dölj meddelandena',
-  messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`, trainNotesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} om tåget`,
+  messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`, trainStatus: 'Läget', trainStatusCount: n => `Läget: ${n} sak${n === 1 ? '' : 'er'}`,
   arrivesIn: s => `Om ${s}`, arrivesAbout: s => `Om ca ${s}`, arrivesNow: 'Ankommer nu',
   leavesIn: s => `Avgår om ${s}`, leavesAbout: s => `Avgår om ca ${s}`, leavesNow: 'Avgår nu',
   routeEdge: 'Vit kant på rutten', homeLegend: 'Förseningsfärger på Hem',

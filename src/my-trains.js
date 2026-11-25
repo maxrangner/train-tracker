@@ -23,6 +23,7 @@ import { esc } from './html.js';
 import { icon } from './icons.js';
 import { tagHtml } from './tag.js';
 import { stateHtml } from './state.js';
+import { isWide } from './layout.js';
 
 const FRESH_MS = 60 * 1000;     // a station's day is asked again after this
 const RETRY_MS = 15 * 1000;     // after a failure
@@ -398,13 +399,13 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
       el.innerHTML = `<div class="g-head"><b class="ttl">${esc(t(edit ? 'editTrip' : 'newTrip'))}</b></div><p class="sub">${esc(t(edit ? 'editTripLong' : 'newTripLong'))}</p>` +
         `<div class="nt-route">` +
         st.stops.map((_, i) => stopHtml(i) + (i === 0 && n === 2 ? `<button type="button" class="nt-add" data-nt="addvia">${icon('plus', 16)}${esc(t('addVia'))}</button>` : '')).join('') +
-        `</div><button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" hidden></i>`;
+        `</div><button type="button" class="show-only nt-save" data-nt="save"${can ? '' : ' disabled'}>${icon('check', 18)}<span>${esc(t('saveTrip'))}</span></button><i class="nt-room" data-spacer hidden></i>`;
       line();
       const q = el.querySelector('.nt-q'), room = el.querySelector('.nt-room');
       if (q) {
         q.oninput = () => { el.querySelector('.nt-res').innerHTML = found(q.value.trim()); line(); };
         q.onfocus = () => {
-          room.hidden = false;
+          room.hidden = isWide();   // (only where a phone's keyboard may come up: a computer's sheet showed it as empty room)
           if (stack.level < 2) stack.setLevel(2);
           toTop();
           requestAnimationFrame(toTop);
@@ -482,6 +483,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
     return {
       name: () => t(edit ? 'editTrip' : 'newTrip'), kind: 'newtrip',
       startLevel: 2,   // (opens full: its fields in view, not cut off at half; Max's phone, 2026-11-23)
+      // (a phone typing: the screen's full, the room under the results to scroll the field up; the room itself isn't
+      // content, src/stack.js data-spacer)
+      full: () => (el?.querySelector('.nt-room')?.hidden === false ? Infinity : null),
       mount(page) {
         el = page;
         addEventListener('resize', onResize);

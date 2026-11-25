@@ -283,6 +283,8 @@ try {
     await page.evaluate(() => [...document.querySelectorAll('#panel .tl-row[data-sig]')].at(-1)?.click());
   }, 2500);
   await act('a station over a train: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
+  // (read once the sheet stands: on live data the card's stops can still come in and move it; once failed so, 2026-11-25)
+  await page.evaluate(() => window.__stack.whenSettled());
   const h = await page.evaluate(() => { const s = getComputedStyle(document.documentElement);
     return [s.getPropertyValue('--sheet-h').trim(), `${Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top)}px`, window.__stack.top()]; });
   state(h[0] === h[1], `the map's buttons at ${h[0]}, the sheet (${h[2]}) ${h[1]} tall`);

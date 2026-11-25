@@ -2,7 +2,7 @@
 // had it). Opens every page of the sheet, on a short phone screen (so they scroll) and on a computer screen, and fails
 // when an area that scrolls has less than 8 px between its content and its right edge, where the phone draws its bar,
 // unless it has our own bar (src/scrollbar.js, with a mouse). It looks at every element that scrolls in the sheet and
-// ☰'s menu, not a list, so a new page can't miss it. The rule itself: src/scrollbar.css.
+// ☰'s menu, not a list, so a new page can't miss it. The rule itself: src/css/scrollbar.css.
 // Since the one sheet (2026-11-22) each page scrolls itself at full height (.pg in #sheet[data-h="2"]); Settings, Help
 // and Connection no longer scroll on their own, their page does. Each page is opened the way a person does
 // (tools/lib/screen.mjs) and pulled to full height.

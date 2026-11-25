@@ -3,10 +3,11 @@
 // plugin, @capacitor/share 6.0.4); in a browser navigator.share where there is one; else the link is copied, with a
 // short note. shareLink(number), shareTrain({ number, title, note }) -> Promise of how it went ('app' | 'browser' |
 // 'copied' | 'shown' | 'cancelled').
+import { isNative as native } from './layout.js';
+
 export const SHARE_BASE = 'https://sparat.rangner.com/';
 export const shareLink = number => `${SHARE_BASE}#train=${encodeURIComponent(String(number).replace(/\D/g, ''))}`;
 
-const native = () => Boolean(window.Capacitor?.isNativePlatform?.());
 
 export async function shareTrain({ number, title, text, note }) {
   const url = shareLink(number);

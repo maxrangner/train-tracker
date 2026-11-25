@@ -1,0 +1,35 @@
+/* Disruptions (src/disruptions.js, src/pages/disruptions.js): the list page and a disruption's own page. Rows as soft
+   tiles; problems with ⚠ in their level's colour (yellow, orange, red, as on the map), rail work with a grey cone,
+   folded at the end and gliding open and shut. */
+@layer app {
+  .dis-body { overflow: auto; min-height: 0; display: grid; gap: 6px; align-content: start; margin-top: 8px; }
+  .dis-row { display: flex; gap: 12px; align-items: flex-start; text-align: left; font: inherit; font-size: 14.5px; color: var(--ink);
+    background: var(--hover); border: 0; border-radius: 14px; padding: 11px 12px; cursor: pointer; }
+  .dis-row:hover { box-shadow: inset 0 0 0 1.5px var(--line); }
+  .dis-row b { display: block; font-weight: 700; }
+  .dis-row.dis-all > svg:last-child { margin-left: auto; align-self: center; color: var(--muted); flex: none; }
+  .dis-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .dis-ic { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; }
+  .dis-ic.yellow { color: var(--dis-1); background: color-mix(in srgb, var(--dis-1) 16%, transparent); }
+  .dis-ic.orange { color: var(--dis-2); background: color-mix(in srgb, var(--dis-2) 16%, transparent); }
+  .dis-ic.red { color: var(--dis-3); background: color-mix(in srgb, var(--dis-3) 16%, transparent); }
+  .dis-ic.work { color: var(--muted); background: var(--hover); }
+  .dis-title { display: flex; align-items: center; gap: 8px; }
+  /* (its line above drawn by its ::before: page.css) */
+  .dis-fold { display: flex; align-items: center; gap: 10px; width: 100%; font: inherit; font-weight: 700; font-size: 14.5px; color: var(--ink);
+    background: none; border: 0; border-top: 1px solid transparent; padding: 12px 4px; margin-top: 4px; cursor: pointer; text-align: left; }
+  .dis-fold > span:nth-child(2) { flex: 1; }
+  .dis-fold .icon { color: var(--muted); }
+  .dis-fold > .icon { transition: transform var(--t-fold) var(--ez-pop); }
+  .dis-fold[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+  .dis-works { display: grid; grid-template-rows: 0fr; align-self: start; margin-top: -6px; transition: grid-template-rows var(--t-fold) var(--ez-pop), margin-top var(--t-fold); }
+  .dis-works.open { grid-template-rows: 1fr; margin-top: 0; }
+  .dis-works-in { min-height: 0; overflow: hidden; display: grid; gap: 6px; align-content: start; }
+  #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
+  #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
+  .dis-source { font-size: 12px; margin: 8px 0 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dis-works, .dis-fold > .icon { transition: none; }
+  }
+}

@@ -1,30 +1,31 @@
 // A station's board: the next departures or arrivals (settings.boardRows of them), opened by tapping a station on
 // the map or picking it in the search. It sits where the train panel does; tapping a row opens that train.
 // load(sig, activity) -> Promise of rows (trafikverket.js fetchBoard); stationName(sig) -> name.
-// onPickTrain({ id, operational, date, number }); onClose(). isStarred(sig) / onStar(sig) -> starred now: the ☆.
+// onPickTrain({ id, operational, date, number }); onClose(). (Its ‹ and ☆ are the sheet's: src/stack.js.)
 // messages(sig) -> Promise of the station's own messages [{ text }] (what its monitors show; trafikverket.js
 // fetchStationMessages), shown above the departures; asked when the board opens and every MESSAGES_MS while open.
 // loadDay(sig, activity) -> Promise of the station's whole day (trafikverket.js fetchStationDay): the search beside
 // Departures / Arrivals (Max, 2026-11-21: "Search for all day, numbers, destinations, maybe not time, that the user can
 // scroll to"): the card goes full, the whole day in a list scrolled to now (gone trains dimmed), a train number or a
 // destination (arrivals: where it comes from) typed narrows it; the search button again closes it.
+// onFull(full): the card's classes were set (.full: its messages or its search want room; src/main.js boardFull), told
+// once after the task that set them.
 const time = t => (t ? hhmm(t) : '');
 import { esc } from './html.js';
-import { arrive, reduceMotion } from './motion.js';
+import { arrive, glideHeight } from './motion.js';
 const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
-import { star } from './panel.js';
 import { tagHtml } from './tag.js';
 import { stateHtml } from './state.js';
 import { lateClass } from './lateness.js';
 import { icon } from './icons.js';
 import { hhmm, now } from './clock.js';
 import { t } from './i18n.js';
-import { glide } from './sheet.js';
 
-// onCloseTap(): what its × does in the one sheet (src/stack.js: the page goes; the × is hidden, kept for the tools).
-export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, onCloseTap, isStarred, onStar, messages = null }) {
+export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, messages = null, onFull = null }) {
+  let said = false;
+  const classed = () => { if (said || !onFull) return; said = true; queueMicrotask(() => { said = false; onFull(el.classList.contains('full')); }); };
   let station = null;     // { sig, name }
   let activity = 'Avgang';
   let rowsSeen = new Set();   // the rows shown since the board or its tab opened (their trains' keys)
@@ -50,16 +51,13 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       if (!forced()) ownFull = el.classList.contains('full');
       const full = !msgsOpen || finding || backTo();
       const h0 = el.querySelector('.board-msgs')?.offsetHeight;
-      glide(el, () => { msgsOpen = !msgsOpen; el.classList.toggle('full', full); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); });
+      const was = el.classList.contains('full');
+      msgsOpen = !msgsOpen; el.classList.toggle('full', full); if (full !== was) classed(); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs();
       // (the messages' box glides to its new height, so the timetable under it moves down with it, not in one jump:
       // ui-sweep, 2026-11-25)
       const box = el.querySelector('.board-msgs'), h1 = box?.offsetHeight;
-      // (opening only: closing, the board's own glide shrinks round it; both at once made the board grow 1 px first)
-      if (box && h0 && h1 && h1 > h0 && !reduceMotion()) {
-        box.style.overflow = 'hidden';
-        box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
-          .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
-      }
+      // (opening only: closing, the sheet's glide shrinks round it; both at once made the board grow 1 px first)
+      if (h1 > h0) glideHeight(box, h0);
     };
   }
   async function askMessages() {
@@ -81,7 +79,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     station = null;
     finding = false; dayRows = null;
     hold(false);
-    el.classList.remove('finding');
+    el.classList.remove('finding'); classed();
     msgs = [];
     clearInterval(timer);
     clearInterval(msgTimer);
@@ -93,9 +91,8 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
   function frame(body) {
     const dep = activity === 'Avgang';
     el.innerHTML =
-      `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons">` +
-      (isStarred ? star(isStarred(station.sig)) : '') +
-      `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>` + msgsHtml() +
+      // (the empty .panel-buttons: a flex item between the name and the sheet's ‹ and ☆, its gap part of the look)
+      `<div class="panel-head"><strong>${esc(station.name)}</strong><span class="panel-buttons"></span></div>` + msgsHtml() +
       `<div class="seg board-tabs" role="group" aria-label="${t('depOrArr')}">` +
       `<button type="button" data-act="Avgang" aria-pressed="${dep}">${t('departures')}</button>` +
       `<button type="button" data-act="Ankomst" aria-pressed="${!dep}">${t('arrivals')}</button></div>` + body;
@@ -108,9 +105,6 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       row.append(tabs, el.querySelector('.board-find'));
       el.querySelector('.board-find').onclick = () => (finding ? stopFind() : startFind());
     }
-    el.querySelector('.panel-close').onclick = () => (onCloseTap ? onCloseTap() : close());
-    const s = el.querySelector('.panel-star');
-    if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
     // Departures ⇄ Arrivals: the old rows stay, dimmed, until the new ones are there (Max, 2026-11-15: emptied to
     // "Loading…" and filled again, the card flickered).
     for (const b of el.querySelectorAll('[data-act]')) b.onclick = () => {
@@ -125,11 +119,6 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     wireMsgs();
   }
 
-  function frameWire() {
-    const s = el.querySelector('.panel-star');
-    if (s) s.onclick = () => { const on = onStar(station.sig); s.outerHTML = star(on); frameWire(); };
-  }
-
   // top: start at the top of the list (a switch to the other tab).
   async function refresh(showLoading = false, { top = false } = {}) {
     if (!station) return;
@@ -142,7 +131,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       if (!closingFind) { fn(); return; }
       const { full } = closingFind;
       closingFind = null;
-      glide(el, () => { el.classList.remove('finding'); el.classList.toggle('full', full); fn(); });
+      el.classList.remove('finding'); el.classList.toggle('full', full); classed(); fn();
     };
     let rows;
     try {
@@ -186,7 +175,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     const old = el.querySelector('.bd-head') ? `<div class="busy">${el.querySelector('.bd-head').outerHTML}${el.querySelector('.panel-table')?.outerHTML ?? ''}</div>` : '';
     msgsOpen = false;
     hold(true);
-    glide(el, () => { el.classList.add('full', 'finding'); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind(); });
+    el.classList.add('full', 'finding'); classed(); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind();
     el.querySelector('.board-q')?.focus();
     findRefresh({ toNow: true });
   }
@@ -272,7 +261,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     hold(false);
     // (opened anew it is compact: a 'full' left from the last station's search raised the sheet to full on the way back
     // from a train, and again on any later change of the card's classes, also during a pull down: 2026-11-23)
-    el.classList.remove('finding', 'full');
+    el.classList.remove('finding', 'full'); classed();
     activity = 'Avgang';
     rowsSeen = new Set();
     msgs = [];

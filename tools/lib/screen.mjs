@@ -36,9 +36,16 @@ export async function toRest(page) {
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await until(page, () => document.getElementById('nav').hidden, 1500);
   }
+  const fromMenu = await page.evaluate(() => window.__stack.keys().some(k => k === 'page:settings' || k === 'page:help'));
   await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
   await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0);
   await sleep(300);
+  // (back on Home from a page ☰ opened, the menu comes back by itself (src/nav-menu.js reopenOnHome): shut it too, or
+  // the next tap meets the held-still sheet; 2026-11-25, scroll-check's Disruptions after About)
+  if (fromMenu && await until(page, () => !document.getElementById('nav').hidden, 900)) {
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await until(page, () => document.getElementById('nav').hidden, 1500);
+  }
 }
 
 // The search: Home's field tapped (the sheet rises to full); the results are #search-results.
@@ -86,8 +93,10 @@ export async function openMenu(page) {
   // in a whole check, 2026-11-23)
   if (await page.evaluate(() => { const s = window.__stack.searching; if (s) window.__stack.back(); return s; })) await sleep(500);
   if (await page.evaluate(() => document.getElementById('nav').hidden)) await page.click('#nav-button');
-  await until(page, () => !document.getElementById('nav').hidden);
-  await sleep(200);
+  // (a card since 2026-11-25: until it has slid out and stands, shown; with Home raised it waits for Home to go down
+  // first, hidden: a click on a choice mid-slide or before it showed found "not clickable")
+  await until(page, () => { const n = document.getElementById('nav'); return !n.hidden && n.style.visibility !== 'hidden' && !n.getAnimations().length; }, 4000);
+  await sleep(100);
 }
 // A row of ☰'s menu: 'day', 'settings' or 'help' (or its words as shown). Waits for its page (not for The day).
 const ROWS = { day: '#open-day', settings: '#open-settings', help: '#help-button', about: '#help-button' };
