@@ -1,7 +1,7 @@
 /* The train card (#panel, src/panel.js and src/pages/train.js). Collapsed: the number big with its company and where
    it goes, two tiles (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line,
-   "More". Full (.full): ☆, Trafikverket's notes and the timeline instead of the line; "i" (.info) the train's own
-   numbers (src/train-info.js) instead of the notes and stops. */
+   "More" with a sign (a warning, a state note). Full (.full): ☆, Share, Läget and the timeline instead of the line;
+   "i" (.info) the train's own numbers (src/train-info.js) instead of the notes and stops. */
 @layer app {
   /* The top line: the number, its company and where it goes, ‹, "i", Share, ☆ and Follow, all one height (40 px). At
      full it stays at the top while the stops scroll under it; its band below is a shadow, not padding (padding moved
@@ -28,14 +28,17 @@
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
 
-  /* What shows when: compact, full, "i" */
-  #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
+  /* What shows when: compact, full, "i". Share only on the full card (Max, 2026-11-25); its place in the row given up
+     (display: contents), so a share going shrinks away where it was (src/pages/train.js glideHead). */
+  #sheet[data-page="train"]:not([data-h="2"]) #panel .sh-acts { display: contents; }
+  #sheet[data-page="train"]:not([data-h="2"]) #panel .sh-act { display: none; }
+  #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip,
   #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
   #panel:not(.full) .panel-info, #panel:not(.full) .panel-info-box, #panel:not(.info) .panel-info-box, #panel.info .tv-box, #panel.info .panel-table { display: none; }
   /* Card to card (src/panel.js open, rollIn): the old train's rest dimmed until the new timetable is in; the trip line,
-     red alert and "More" at full strength meanwhile (same weight, later), a .2 s fade on the phone's collapse. */
+     and "More" at full strength meanwhile (same weight, later), a .2 s fade on the phone's collapse. */
   #panel > .busy:not(.cd), #panel > .cd.busy > * { opacity: .45; transition: opacity .15s; }
-  #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: 1; transition: opacity .2s; }
+  #panel:not(.full) :is(.cd-trip, .panel-more) { opacity: 1; transition: opacity .2s; }
 
   /* Under the tiles: why it stands, Share, Add my change ("Add a change" only on the full card). */
   .tr-extras { display: grid; gap: 8px; margin: 4px 0 2px; }
@@ -144,15 +147,17 @@
   #panel.full .panel-more { margin: 6px 0 2px; order: 99; }
   #panel:not(.full) .panel-more { margin-top: 0; padding: 2px 4px; }
   .panel-note { margin: 4px 0 6px; color: var(--muted); }
-  .panel-status { margin: 4px 0 0; color: var(--late); }
-  /* The trip's problems on the small card ("Ändrad väg · Elfel · Alingsås inställt"): at most two lines, never squeezed. */
-  .panel-alert { flex: none; margin: 4px 0 0; color: var(--late); font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2;
-    line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* The compact card's sign beside "More" (src/panel.js putLaget; Max, 2026-11-25): a red "!" for a warning (a problem,
+     a cancelled stop), a grey "i" for the train's state or old data; what they say is in Läget on the full card. */
+  .panel-more .more-sign { display: inline-grid; place-items: center; color: var(--muted); }
+  .panel-more .more-sign:empty { display: none; }
+  .panel-more .more-sign.warn { color: var(--late); }
 
   /* Trafikverket's notes: a yellow line, open or folded (src/panel.js notesBox, a station's look), the notes under it
      in the page's own scroll; problems in red, where they are muted. */
   .panel-tvnotes { margin: 2px 0 6px; display: grid; gap: 2px; }
   .tv-box { flex: none; }
+  #panel .tv-slot { display: contents; }   /* (Läget's place: its box a part of the card of its own, src/panel.js putLaget) */
   .tv-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 0; border: 0; background: none; cursor: pointer;
     font: inherit; font-size: 13.5px; font-weight: 600; color: var(--muted); text-align: left; }
   .tv-toggle > span:not(.tv-warn) { flex: 1; }
@@ -166,6 +171,13 @@
   #panel .tv-box.open .panel-tvnotes.board-msg-list { padding: 2px 12px; margin: 0; gap: 0; max-height: none; overflow: visible; }
   .panel-tvnote { margin: 0; }
   .panel-tvnote.problem { color: var(--late); font-weight: 600; }
+  .panel-tvnote.problem .icon { color: var(--late); vertical-align: -2px; margin-right: 6px; }
+  .panel-tvnote.tv-st { color: var(--muted); font-weight: 500; }
+  #panel .tv-box .tv-state { display: contents; }
+  /* Läget's line: its count beside the name; red (⚠ and count) when it holds a warning. */
+  #panel .tv-box .board-msgs-toggle > .tv-n { flex: none; min-width: 22px; padding: 1px 7px; box-sizing: border-box; border-radius: 999px; text-align: center;
+    font-size: 13px; color: var(--ink); background: color-mix(in srgb, currentColor 14%, transparent); }
+  #panel .tv-box.warn .board-msgs-toggle > .icon:first-child, #panel .tv-box.warn .board-msgs-toggle > .tv-n { color: var(--late); }
   .panel-tvnote span { color: var(--muted); font-weight: 400; }
 
   /* "i": the train's own numbers (src/train-info.js): sections in soft tiles, the speedometer, the line-up of moving
@@ -261,6 +273,9 @@
   .tl-time { text-align: right; font-weight: 700; font-size: 15px; line-height: 1.15; }
   .tl-time small, .tl-name small { display: block; font-size: 11.5px; font-weight: 700; }
   .tl-name small { color: var(--muted); font-weight: 500; }
+  /* A note of Trafikverket's about this stop ("Ingen påstigning"), also in Läget; a problem in red. */
+  .tl-row.canceled .tl-name small.tl-note { display: inline-block; width: 100%; }   /* (inline-block: the stop's line-through stays off it) */
+  .tl-name small.tl-note.problem { color: var(--late); }
   .tl-node { position: relative; align-self: stretch; display: grid; place-items: center; }
   .tl-node::before { content: ''; position: absolute; left: calc(50% - 2px); top: -1px; bottom: -1px; width: 4px; background: var(--line); }
   .tl-row.passed .tl-node::before, .tl-now .tl-node::before { background: var(--accent); }
@@ -352,7 +367,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
+    #panel:not(.full) :is(.cd-trip, .panel-more) { transition: none; }
     .cd-late.flash, .cd-late.flash::after { animation: none; }
     .cd-pick.opening, .cd-pick.closing { animation-duration: 1ms; }
   }
