@@ -93,7 +93,7 @@ try {
   await page.evaluate(() => window.__stack.home(1)); await sleep(1200);
   await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(900);
   const menu = await page.evaluate(() => { const n = document.getElementById('nav'), b = document.getElementById('nav-button').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); if (!n || n.hidden) return null;
-    const r = n.getBoundingClientRect(); return { right: Math.round(r.right - b.right), gap: Math.round(r.top - s.bottom), icons: n.querySelectorAll('.nav-row .nav-ic svg').length,
+    const r = n.getBoundingClientRect(); return { at: Math.round(r.right), right: Math.round(r.right - b.right), gap: Math.round(r.top - s.bottom), icons: n.querySelectorAll('.nav-row .nav-ic svg').length,
       field: Boolean(document.querySelector('#sheet .sh-field').offsetParent), rows: n.querySelectorAll('.nav-row').length }; });
   ok(menu && menu.rows === 3 && menu.icons === 3 && Math.abs(menu.right) <= 1 && menu.gap >= 6 && menu.gap <= 16 && menu.field,
     `☰: a card of ${menu?.rows} choices with ${menu?.icons} icons, ${menu?.gap} px under the box (want 6 to 16), its right edge ${menu?.right} px from ☰'s, the field ${menu?.field ? 'there' : 'gone'}`);
@@ -105,8 +105,15 @@ try {
   await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(1200);
   const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.getElementById('nav').hidden }));
   ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes (${after.open ? 'still open' : 'shut'})`);
-  await page.evaluate(() => window.__stack.home(0)); await sleep(800);
-  await page.keyboard.press('Escape'); await sleep(300);
+  //    back from Settings: the menu open again, placed where the sheet came to rest (src/nav-menu.js reopenOnHome; until
+  //    2026-11-25 it was placed while the sheet still had Settings' size, somewhere else): its right edge where it was
+  //    before Settings, under the box
+  await page.keyboard.press('Escape'); await sleep(1600);
+  const again = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(); if (!n || n.hidden) return null;
+    const r = n.getBoundingClientRect(); return { top: window.__stack.top(), at: Math.round(r.right), gap: Math.round(r.top - s.bottom), moving: n.getAnimations().length }; });
+  ok(again && again.top === 'home' && Math.abs(again.at - menu?.at) <= 1 && again.gap >= 6 && again.gap <= 16 && !again.moving,
+    `back from Settings: the menu ${again ? 'open again' : 'NOT open'} on ${again?.top}, its right edge at ${again?.at} px (before Settings ${menu?.at}), ${again?.gap} px under the box (want 6 to 16)`);
+  await page.keyboard.press('Escape'); await sleep(500);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
   await page.evaluate(() => window.__stack.home(2)); await sleep(1200);

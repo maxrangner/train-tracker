@@ -3,7 +3,7 @@
 // (src/tour.js stops: the fastest train, the most late, a disruption, two trains about to meet), one stop every
 // STOP_MS with one line of text. Any touch or key brings everything back (that touch does nothing else). The screen is
 // kept awake meanwhile (the Wake Lock API, where there is one). Settings → Shop window (on by default).
-// Not while a page or the search is up (the sheet raised), nor while The day shows another time (hooks.dayOther).
+// Not while a page or the search is up (the sheet raised), nor while The day shows another time (its busy()).
 // deps: { map, enabled(), busy(), trains() -> [{ id, number, brand, lon, lat, speed (km/h), bearing, late }],
 //   disruptions() -> [{ id, header, place }], follow(id), unfollow() }
 import { stops, shouldRun, STOP_MS } from './tour.js';

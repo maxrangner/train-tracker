@@ -71,7 +71,7 @@ const STOOD_M = 30, STOOD_MS = 60000; // positions this close over this long bef
 const PASSING_MAX_M = 80000;         // a reported passing is used when its station is this close ahead on the tracks...
 const PASSING_QUIET_MS = 60 * 1000;  // ...and the train's GPS had been quiet this long (passing times are whole minutes)
 const GPS_OVER_PASSING_MS = 120 * 1000;   // a position replaces passings used up to this long before it
-export const STAND_MS = 0.5;         // m/s: slower than this counts as standing (also on the stats page)
+export const STAND_SPEED = 0.5;      // m/s: slower than this counts as standing (also on the stats page)
 
 // The chase. Gaps are measured along the path, in metres.
 const TAU_S = 8;          // close a gap over about this many seconds
@@ -173,7 +173,7 @@ function coastSpeed(h) {
     const said = h.slice(-4, -1).map(e => e.speed).filter(x => x !== null && x !== undefined);
     if (said.length) v = Math.min(v, Math.max(...said) / 3.6 + 5);
   }
-  return v < STAND_MS ? 0 : v;
+  return v < STAND_SPEED ? 0 : v;
 }
 
 // Did train tr stand still at its last report? Its reported speed is under 2 km/h; or, sending no speed, its

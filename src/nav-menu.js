@@ -1,0 +1,111 @@
+// ☰'s menu: a card under the search bar, its right edge in line with the bar's (☰'s), an icon before each choice
+// (The day, Settings, About). It slides out from under the bar and back under it, as fast both ways; where there is no
+// room under the bar (a phone's sheet at rest, its bar at the bottom) it comes out above the sheet. The page behind
+// holds still while it is open (src/stack.js freeze). ☰, a map tap, a page coming up, Esc and the backs close it
+// (src/back.js).
+//
+// One owner of its state: closed -> opening -> open -> closing -> closed. Opening waits for the sheet to stand
+// (stack.whenSettled) when it has to move first: the card is placed from where the sheet comes to rest, never from
+// where it is on its way (Home raised: lowered first; back on Home from a page the menu opened: reopenOnHome).
+//
+// createNavMenu({ stack, mapEl, onDay }) -> { isOpen, shown (not closed: on screen), open(), close(), toggle(),
+//   reopenOnHome(), pageOnTop(key) }; stack is a getter (the sheet is made after the menu).
+import { icon } from './icons.js';
+import { onTap } from './tap.js';
+import { reduceMotion, ms, easing } from './motion.js';
+import { isWide, sheetGeometry } from './layout.js';
+
+export function createNavMenu({ stack, mapEl, onDay }) {
+  const navEl = document.getElementById('nav'), button = document.getElementById('nav-button');
+  const sheetEl = document.getElementById('sheet');
+  for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
+  const gap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (index.html --sheet-inset)
+  let state = 'closed', side = 'below', turn = 0, placed = false;
+  let backHome = false;   // a page the menu opened: back on Home the menu is open again
+
+  // What the state looks like: the only place the card's hidden, ☰'s aria-expanded and the sheet's freeze are written.
+  function enter(next) {
+    state = next;
+    const on = next === 'opening' || next === 'open';
+    navEl.hidden = next === 'closed';
+    button.setAttribute('aria-expanded', String(on));
+    stack().freeze(on);
+    // (opening, not placed yet: not shown, where it was, until it slides out from its place once the sheet stands)
+    navEl.style.visibility = next === 'opening' && !placed ? 'hidden' : '';
+    if (next === 'closed' || next === 'open') navEl.getAnimations().forEach(x => x.cancel());
+  }
+  function place() {
+    const a = button.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
+    const w = navEl.offsetWidth, h = navEl.offsetHeight;
+    navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, a.right - w)))}px`;
+    // (a computer at rest: under the whole box, its arrow band included)
+    const under = isWide() && stack().level === 0 ? s.bottom : a.bottom, g = gap();
+    if (under + g + h <= innerHeight - 10) { side = 'below'; navEl.style.top = `${Math.round(under + g)}px`; }
+    else { side = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`; }
+  }
+  // (out from under the edge it hangs from: it moves its whole height plus the gap, cut where that edge is)
+  function slide(out) {
+    navEl.getAnimations().forEach(x => x.cancel());
+    if (reduceMotion()) return Promise.resolve();
+    const g = gap(), h = navEl.offsetHeight, d = h + g, below = side === 'below';
+    const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${h}px -24px -24px -24px)` }
+      : { transform: `translateY(${d}px)`, clipPath: `inset(-24px -24px ${h}px -24px)` };
+    const shown = below ? { transform: 'none', clipPath: `inset(${-g}px -24px -24px -24px)` }
+      : { transform: 'none', clipPath: `inset(-24px -24px ${-g}px -24px)` };
+    return navEl.animate(out ? [hid, shown] : [shown, hid], { duration: ms('fold'), easing: easing('ui'), fill: 'forwards' }).finished.catch(() => {});
+  }
+
+  // settle: wait for the sheet to stand before placing the card (it is moving, or about to)
+  function open({ settle = false } = {}) {
+    const st = stack();
+    if (st.searching || state === 'opening' || state === 'open') return;
+    // (opened with Home raised: Home goes down to rest first)
+    const lower = st.top() === 'home' && st.level > 0;
+    if (lower) st.setLevel(0);
+    const mine = ++turn;
+    placed = false;
+    enter('opening');
+    st.guard();   // (the browser's back closes it: src/back.js)
+    const go = () => {
+      if (turn !== mine) return;
+      placed = true;
+      navEl.style.visibility = '';
+      place();
+      slide(true).then(() => { if (turn === mine) enter('open'); });
+    };
+    if (lower || settle) st.whenSettled().then(go);
+    else go();
+    navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
+  }
+  // (also when a page comes up from the menu or over it: the card slides back, the page comes meanwhile)
+  function close() {
+    if (state === 'closed' || state === 'closing') return;
+    const mine = ++turn;
+    if (!placed) { enter('closed'); return; }   // (never shown: gone at once)
+    enter('closing');
+    slide(false).then(() => { if (turn === mine) enter('closed'); });
+  }
+  const toggle = () => (state === 'opening' || state === 'open' ? close() : open());
+  // Back on Home from a page the menu opened: open again once the sheet stands (a task later: not inside the stack's
+  // own page change).
+  function reopenOnHome() { if (!backHome) return; backHome = false; queueMicrotask(() => open({ settle: true })); }
+
+  onTap(button, toggle);   // (at once also right after a swipe: src/tap.js)
+  // (a finger on the map leaves it open: a plain map tap closes it through the map's onMapTap; inside the sheet only ☰
+  // does anything while it is open, src/stack.js frozen; elsewhere a press closes it)
+  document.addEventListener('pointerdown', (e) => {
+    if ((state === 'opening' || state === 'open') && !e.target.closest?.('#sheet, #nav') && !mapEl.contains(e.target)) close();
+  }, true);
+  const fromMenu = (key) => { close(); backHome = true; stack().open(key); };
+  document.getElementById('open-day').onclick = () => { close(); onDay(); };
+  document.getElementById('open-settings').onclick = () => fromMenu('page:settings');
+  document.getElementById('help-button').onclick = () => fromMenu('page:help');
+
+  return {
+    get isOpen() { return state === 'opening' || state === 'open'; },
+    get shown() { return state !== 'closed'; },
+    open, close, toggle, reopenOnHome,
+    // A page came on top: the menu is Home's, any other page shuts it (the status pill, the map); Home may reopen it.
+    pageOnTop(key) { if (key === 'home') reopenOnHome(); else close(); },
+  };
+}

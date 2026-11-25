@@ -41,6 +41,18 @@ export function groupRow({ key, name, sub, colour = null }) {
   return `<button type="button" class="row" data-go="${esc(key)}"><span class="r-ic">${colour ? dot(colour) : '<i class="ring sq"></i>'}</span>` +
     `<span class="r-main"><b>${esc(name)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</span>${icon('chevron', 18)}</button>`;
 }
+// The starred trains and stations as rows (Home's Saved, the empty search). onMap(number) -> { id, brand, minutes } of
+// that train on the map, or null: its row then opens its run now, the next one, or the latest (data-act="favtrain").
+export function starredRows({ favourites, stations, onMap }) {
+  const trains = favourites.trains.map((n) => {
+    const x = onMap(n);
+    return x ? trainRow({ id: x.id, number: n, brand: x.brand, minutes: x.minutes, sub: t('onMap') })
+      : `<button type="button" class="row" data-act="favtrain" data-n="${esc(n)}"><b class="r-num">${esc(n)}</b><span class="r-main"><b>${esc(t('train'))}</b><small>${esc(t('notOnMapNow'))}</small></span></button>`;
+  });
+  const places = favourites.stations.map(sig => stations.get(sig)).filter(Boolean)
+    .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' }));
+  return { trains, stations: places };
+}
 // attrs: more attributes for the button (trusted HTML: escape what goes in them)
 export const chip = (key, html, n, attrs = '') => `<button type="button" class="chip" data-go="${esc(key)}"${attrs}>${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
 
@@ -122,13 +134,10 @@ export function homePage(d) {
   // has something.
   function mineHtml(frame) {
     const byNumber = new Map(frame.map(x => [String(d.numberOf(x.id)), x]));
-    const trains = d.favourites.trains.map((n) => {
+    const { trains, stations } = starredRows({ favourites: d.favourites, stations: d.stations(), onMap(n) {
       const x = byNumber.get(n);
-      return x ? trainRow({ id: x.id, number: n, brand: x.brand, minutes: d.lateOf(x.id), sub: t('onMap') })
-        : `<button type="button" class="row" data-act="favtrain" data-n="${esc(n)}"><b class="r-num">${esc(n)}</b><span class="r-main"><b>${esc(t('train'))}</b><small>${esc(t('notOnMapNow'))}</small></span></button>`;
-    });
-    const stations = d.favourites.stations.map(sig => d.stations().get(sig)).filter(Boolean)
-      .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' }));
+      return x ? { id: x.id, brand: x.brand, minutes: d.lateOf(x.id) } : null;
+    } });
     const mt = d.myTrains?.() ?? { rows: [], add: '' };
     const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
     return `<h4 class="lab">${t('mine')}</h4>` + (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +

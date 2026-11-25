@@ -1640,6 +1640,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
 
   // Show the whole of a box ([[west, south], [east, north]]) in the map left free by the panel or card
   // (a train's path; a disruption's stretches: Max, 2026-11-16, "Show everything").
+  // The box round [[lon, lat]]: [[west, south], [east, north]].
+  const boxOf = (pts) => {
+    const lons = pts.map(c => c[0]), lats = pts.map(c => c[1]);
+    return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+  };
   async function fitBox(bounds) {
     await ready;
     const h = map.getContainer().clientHeight;
@@ -1969,10 +1974,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // Show the whole of a path above the panel at the bottom.
     async fitPath(path) {
       if (!path || path.coords.length < 2) return;
-      const lons = path.coords.map(c => c[0]), lats = path.coords.map(c => c[1]);
-      return fitBox([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]);
+      return fitBox(boxOf(path.coords));
     },
     fitBox,
+    // Places ([{ lon, lat }]) all in view above the sheet (a group's trains, a saved trip's stations).
+    fitPlaces: list => fitBox(boxOf(list.map(p => [p.lon, p.lat]))),
     // Fly to a place ({ lon, lat }), zooming in to at least minZoom, so that it lands in the middle of the map above
     // the panel or board (the room kept free for those is no longer changed: in a tilted view that made the map
     // jump, Max 2026-11-13 evening: "when deselecting a train the camera snap zooms out a bit").
