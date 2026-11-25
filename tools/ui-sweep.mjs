@@ -116,20 +116,20 @@ function analyse(rec, kind) {
     if (meta[id].bottom) continue;   // (the sheet's bottom band, "Mer ⌄": it rides the bottom edge)
     // jump: at rest (3 frames within 0.5 px) then moving 1 px or more again; or turning back by 2 px or more
     // (each axis on its own: a page sliding in sideways while the sheet rises is two smooth motions)
-    let rest = 0, rested = false, jumped = null;
-    const dir = { x: 0, y: 0 };
+    // (at rest on one axis while it moves on the other counts: a title sliding in sideways, still in height, then
+    // jumping up 10 px when the slide ends; Settings from ☰ on a computer, 2026-11-25)
+    let jumped = null;
+    const dir = { x: 0, y: 0 }, rest = { x: 0, y: 0 }, rested = { x: false, y: false }, moved = { x: false, y: false };
     for (let k = 1; k < s.length; k++) {
-      if (s[k].i !== s[k - 1].i + 1) { rest = 0; dir.x = 0; dir.y = 0; continue; }
-      const step = { x: s[k].x - s[k - 1].x, y: s[k].y - s[k - 1].y };
-      if (Math.abs(step.x) < 0.5 && Math.abs(step.y) < 0.5) { rest++; if (rest >= 3) rested = true; continue; }
+      if (s[k].i !== s[k - 1].i + 1) { for (const ax of ['x', 'y']) { rest[ax] = 0; dir[ax] = 0; } continue; }
       for (const ax of ['x', 'y']) {
-        const d = step[ax];
-        if (Math.abs(d) < 0.5) continue;
-        if (rested && Math.abs(d) >= 1 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax})` };
+        // (against the sheet's top for y: the sheet itself glides)
+        const d = ax === 'y' ? s[k].rel - s[k - 1].rel : s[k].x - s[k - 1].x;
+        if (Math.abs(d) < 0.5) { rest[ax]++; if (rest[ax] >= 3) rested[ax] = true; continue; }
+        if (rested[ax] && Math.abs(d) >= 1 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax === 'y' ? 'up/down in the sheet' : 'sideways'})` };
         if (dir[ax] && Math.sign(d) !== dir[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `turned back (${ax})` };
-        dir[ax] = Math.sign(d);
+        dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
       }
-      rest = 0;
     }
     if (jumped) finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top

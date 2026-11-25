@@ -930,7 +930,14 @@ function closeNav({ now = false } = {}) {
     document.getElementById('sheet').classList.remove('menu-open');
     stack.refit();
   };
-  if (now) shut(); else slideNav(false).then(shut);
+  if (!now) { slideNav(false).then(shut); return; }
+  // (the search row fades out on the new page: the buttons stay in it as they were, the field stays hidden, until it
+  // has gone; index.html .menu-fading)
+  const sheetEl = document.getElementById('sheet');
+  sheetEl.classList.remove('menu-open');
+  sheetEl.classList.add('menu-fading');
+  stack.refit();
+  setTimeout(() => { sheetEl.classList.remove('menu-fading'); shut(); }, 300);
 }
 onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
@@ -1801,7 +1808,8 @@ stack = createStack({
   onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
     // back on Home from a page the menu opened: the menu open again (navBack, openNav above)
-    if (pg.key === 'home' && navBack) { navBack = false; setTimeout(openNav, 0); }
+    // (before the next frame: a task later, a computer's "Mer ⌄" showed for two frames first)
+    if (pg.key === 'home' && navBack) { navBack = false; queueMicrotask(openNav); }
     // (the menu is Home's: another page coming up, from the status pill or the map, shuts it)
     if (pg.key !== 'home' && navOpen) closeNav({ now: true });
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
