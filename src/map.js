@@ -1721,7 +1721,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     // The station a tap at this point of the map would open (its name close in, else its dot from zoom 9), or null
     // (Peek, 2026-11-23: the same stations a tap finds). x, y: in the map's box.
     stationAt(x, y) {
-      if (!map.loaded() || !map.getLayer('station-dots')) return null;
+      // (not map.loaded(): it is false while a paint changes, e.g. the labels hidden by a held press, and a peek then found
+      // nothing; 2026-11-25)
+      if (!map.getLayer('station-dots')) return null;
       const pt = { x, y }, named = stationNameAt(pt);
       if (named && !isAbroad(named)) return named;
       if (map.getZoom() < 9) return null;

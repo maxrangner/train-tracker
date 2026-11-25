@@ -36,9 +36,16 @@ export async function toRest(page) {
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await until(page, () => document.getElementById('nav').hidden, 1500);
   }
+  const fromMenu = await page.evaluate(() => window.__stack.keys().some(k => k === 'page:settings' || k === 'page:help'));
   await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
   await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0);
   await sleep(300);
+  // (back on Home from a page ☰ opened, the menu comes back by itself (src/nav-menu.js reopenOnHome): shut it too, or
+  // the next tap meets the held-still sheet; 2026-11-25, scroll-check's Disruptions after About)
+  if (fromMenu && await until(page, () => !document.getElementById('nav').hidden, 900)) {
+    await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    await until(page, () => document.getElementById('nav').hidden, 1500);
+  }
 }
 
 // The search: Home's field tapped (the sheet rises to full); the results are #search-results.
