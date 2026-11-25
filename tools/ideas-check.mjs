@@ -1,7 +1,7 @@
 // The sheet's ideas (build plan parts 3 and 6, 2026-11-23) on the phone-size page, on the replay of 17 Nov 16:00-18:00
 // (CARD_HOUR, its routes saved: the boards and cards come from them): My trains (a trip made with the station picker,
 // its page with the next train, "If it fails" and a cancelled train crossed out; the line above the bar and its tap; a
-// trip with a change; Home's Saved and its headings; New/Edit trip as a route (a pill is the search, dragged by its
+// trip with a change; Sparade (the chip's card) and its headings; New/Edit trip as a route (a pill is the search, dragged by its
 // dots with a mouse and a finger, at most one change); a trip's and a change's page: pencil and bin, no star; "Save a trip from here" and the Peek tip on the first board), "Why are we standing?" on 531
 // (Växelfel), Share (the copied-link way: the browser's share sheet taken away), "Add my change" pinned, Peek (a held
 // station, then a plain tap still opens its board), "You seem to be on" (a fake location riding a recorded train:
@@ -11,7 +11,7 @@
 // Run: PAGE=http://localhost:5181/ node tools/ideas-check.mjs [--shots <folder>] [--theme light|dark]
 import { mkdirSync, existsSync } from 'node:fs';
 import { launch, CARD_HOUR, sleep, PAGE, PHONE } from './lib/browser.mjs';
-import { waitForMap, until, openTrainByNumber, openStationByName, toRest, setLevel } from './lib/screen.mjs';
+import { waitForMap, until, openTrainByNumber, openStationByName, toRest, setLevel, openChip } from './lib/screen.mjs';
 import { readPositions } from './lib/records.mjs';
 
 const arg = name => (process.argv.includes(name) ? process.argv[process.argv.indexOf(name) + 1] : null);
@@ -39,24 +39,26 @@ try {
 
   if (part('trips')) {
   // ---- 1. My trains: a trip made in the sheet ----
-  await toRest(page);
-  await setLevel(page, 1);
+  // (Saved is the chip Sparade's card since the start chips, 2026-11-25; on Home until then)
+  await openChip(page, 'saved');
   await until(page, () => Boolean(document.querySelector('[data-go="newtrip"]')));
-  // Home's "Saved" ("Mine" until 2026-11-23): small headings for what it holds, a heading only when it has something;
+  // Sparade ("Mine" until 2026-11-23): small headings for what it holds, a heading only when it has something;
   // "New trip" under Trips
   const saved = () => page.evaluate(() => {
-    const home = document.querySelector('.pg[data-key="home"]');
+    const home = document.querySelector('.pg[data-key="saved"]');
     return { lab: [...home.querySelectorAll('h4.lab')].map(h => h.textContent).find(x => /saved|mine/i.test(x)) ?? null,
       heads: [...home.querySelectorAll('[data-saved]')].map(h => h.dataset.saved),
       newTrip: Boolean(home.querySelector('[data-saved="trips"] + .rows [data-go="newtrip"]')) };
   });
   const s0 = await saved();
-  ok(s0.lab === 'Saved' && s0.newTrip && !s0.heads.includes('trains') && !s0.heads.includes('stations'), `Home's "${s0.lab}": headings ${s0.heads.join(', ')}; "New trip" under Trips: ${s0.newTrip}`);
-  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); window.__stack.home(1); });
-  await until(page, () => document.querySelectorAll('.pg[data-key="home"] [data-saved]').length === 3, 4000);
+  ok(s0.lab === 'Saved' && s0.newTrip && !s0.heads.includes('trains') && !s0.heads.includes('stations'), `Sparade's "${s0.lab}": headings ${s0.heads.join(', ')}; "New trip" under Trips: ${s0.newTrip}`);
+  // (the card draws itself again each second: no reopening needed)
+  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); });
+  await until(page, () => document.querySelectorAll('.pg[data-key="saved"] [data-saved]').length === 3, 4000);
   const s1 = await saved();
   ok(s1.heads.join(',') === 'trips,trains,stations', `a starred train and station: headings ${s1.heads.join(', ')}`);
-  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); window.__stack.home(1); });
+  await page.evaluate(() => { window.__ideas.favourites.toggle('station', 'Lu'); window.__ideas.favourites.toggle('train', '1041'); });
+  await until(page, () => document.querySelectorAll('.pg[data-key="saved"] [data-saved]').length === 1, 4000);
   await page.evaluate(() => document.querySelector('[data-go="newtrip"]').click());
   await until(page, () => window.__stack.top() === 'newtrip');
   // A new trip as a route (Max's pick A, 2026-11-23): From and To pills on a line; the station field is the pill itself,
@@ -195,9 +197,8 @@ try {
   await sleep(500);
   await del();
   ok(await until(page, () => !window.__ideas.favourites.trip('Lu>Hm') && window.__stack.top() !== 'trip:Lu>Hm'), `a second tap deletes it and closes its page (now ${await top(page)})`);
-  await page.evaluate(() => window.__stack.home(1));
-  await sleep(600);
-  ok(!(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go="trip:Lu>Hm"]')))), 'Saved no longer lists it');
+  await openChip(page, 'saved');
+  ok(!(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="saved"] [data-go="trip:Lu>Hm"]')))), 'Saved no longer lists it');
   await page.evaluate(() => window.__ideas.favourites.removeTrip('Cst>U'));
 
   // ---- a trip with a change ----
@@ -367,10 +368,9 @@ try {
   ok(chgPage.ttl === 'My trip' && chgPage.acts === 'edit,del' && !chgPage.star, `the change's page: "${chgPage.ttl}", buttons ${chgPage.acts || 'none'}, star: ${chgPage.star}`);
   await setLevel(page, 2);
   await shot(page, '09-pinned-change');
-  await page.evaluate(() => window.__stack.home(1));
-  await sleep(800);
-  ok(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="home"] [data-go^="change:"]'))), 'Saved lists the pinned change');
-  await page.evaluate(() => document.querySelector('.pg[data-key="home"] .rows [data-go^="trip:"]')?.scrollIntoView({ block: 'center' }));
+  await openChip(page, 'saved');
+  ok(await page.evaluate(() => Boolean(document.querySelector('.pg[data-key="saved"] [data-go^="change:"]'))), 'Saved lists the pinned change');
+  await page.evaluate(() => document.querySelector('.pg[data-key="saved"] .rows [data-go^="trip:"]')?.scrollIntoView({ block: 'center' }));
   await sleep(300);
   await shot(page, '10-mine');
   // Its pencil: the same two steps again from its first train; the new pair takes its place
