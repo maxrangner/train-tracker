@@ -57,6 +57,7 @@
   .sh-up { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--ink); cursor: pointer; }
   .pg :is(.g-head, .panel-head) > .sh-up { margin-right: 10px; }
   .pg .panel-head:has(> .sh-up) { justify-content: flex-start; }
+  .pg .panel-head > .panel-buttons { margin-left: auto; }   /* (with ‹ too, the buttons end where the card's boxes end) */
   .pg :is(.g-head, .panel-head) > .sh-btns { margin-left: auto; padding-left: 10px; }
   /* (a title beside ‹ and buttons wraps rather than being cut: "Lund C → Mal…") */
   .pg .g-head:has(> .sh-up) .ttl { white-space: normal; overflow-wrap: anywhere; }

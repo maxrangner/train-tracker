@@ -658,7 +658,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A drag's click is no tap (the handle's tap: pointerEnd); on the page at low, a tap raises it to half.
   sheet.addEventListener('click', (e) => {
     if (performance.now() < eatUntil) { e.preventDefault(); e.stopPropagation(); return; }
-    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); if (e.target.closest('.sh-grab')) { dismissFrozen?.(); if (cur() === stack[0]) setIndex(1); } return; }   // (and Home rises to half in the same move: Max, 2026-11-25)
+    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); if (e.target.closest('.sh-grab')) Promise.resolve(dismissFrozen?.()).then(() => { if (cur() === stack[0] && idx === 0) setIndex(1); }); return; }   // (the menu slides back, then Home rises to half: Max, 2026-11-25)
     if (e.target.closest('.sh-grab')) return;
     if (idx === 0 && e.target.closest('.pg') && !e.target.closest('button, a, input, [role="button"]')) setIndex(1);
   }, true);

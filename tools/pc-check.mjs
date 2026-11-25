@@ -122,9 +122,11 @@ try {
   // 6b. the sheet's arrow under the bar closes it (Max, 2026-11-25: "With menu is expanded, the little arrow below search
   //     should work and dismiss menu"; then: "should close menu and open main card at once"): Home rises to half
   const grab = await page.evaluate(() => { const g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: g.x + g.width / 2, y: g.y + g.height / 2, lvl: window.__stack.level }; });
-  await page.mouse.click(grab.x, grab.y); await sleep(900);
+  await page.mouse.click(grab.x, grab.y); await sleep(80);
+  const first = await page.evaluate(() => ({ lvl: window.__stack.level, sliding: document.getElementById('nav').getAnimations().length > 0 }));
+  await sleep(900);
   const shut = await page.evaluate(() => ({ open: !document.getElementById('nav').hidden, lvl: window.__stack.level }));
-  ok(!shut.open && shut.lvl === 1, `the menu open, its arrow clicked: the menu ${shut.open ? 'still open' : 'shut'}, Home at ${grab.lvl} -> ${shut.lvl} (want half: Max, 2026-11-25 'close menu and open main card at once')`);
+  ok(first.lvl === 0 && first.sliding && !shut.open && shut.lvl === 1, `the menu open, its arrow clicked: first the menu slides back (Home at ${first.lvl}, sliding ${first.sliding}), then Home at ${shut.lvl} (want half: Max, 2026-11-25 "should first close menu, then expand main card"), the menu ${shut.open ? 'still open' : 'shut'}`);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
   await page.evaluate(() => window.__stack.home(2)); await sleep(1200);
@@ -267,6 +269,14 @@ try {
   const click = await labelOp();
   ok(during.held && during.text === 0 && !after2.held && after2.text !== 0 && !click.held,
     `held on the map: labels ${during.held ? 'hidden' : 'SHOWN'} (station names' opacity ${JSON.stringify(during.text)}); let go: ${after2.held ? 'still hidden' : 'back'}; a plain click: ${click.held ? 'hid them' : 'nothing'}`);
+
+  // 18. A train card with ‹ (opened from a station's board): its top row's buttons end where the boxes under it end (Max,
+  //     2026-11-25: "'följer' button not aligned correctly. Maybe bug in whole row?")
+  await page.evaluate(() => window.__stack.open('station:Cst', { go: true })); await sleep(2500);
+  await page.evaluate(() => document.querySelector('#board .bd-row:not(.gone)')?.click()); await sleep(2500);
+  const row = await page.evaluate(() => { const b = document.querySelector('#panel .panel-head > .panel-buttons'), t = document.querySelector('#panel .cd-tiles, #panel .tile');
+    return b && t ? { up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent), end: Math.round(b.getBoundingClientRect().right), box: Math.round(t.getBoundingClientRect().right) } : null; });
+  ok(row && row.up && Math.abs(row.end - row.box) <= 1, `a train with ‹: its buttons end at ${row?.end} px, the boxes under them at ${row?.box} px`);
 } finally {
   await browser.close();
 }
