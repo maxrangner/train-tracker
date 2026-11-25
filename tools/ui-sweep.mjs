@@ -144,10 +144,14 @@ function analyse(rec, kind) {
     // once the glide had slowed to a quarter of its top speed (a box glided too tall dropped to its height in one frame,
     // 22 px, still moving 0.7 px a frame: neither a rest nor a turn; Home's filter card until 2026-11-25)
     if (kind === 'fold' && !jumped) {
-      let top = 0, prev = 0;
+      // (only once the glide is under way, 4 moving frames in: at its start a busy PC's late first frames looked like a
+      // lurch, the round's check 2026-11-25, 'pc home → filter more' at frame 3; alone it never did)
+      let top = 0, prev = 0, going = 0;
       for (let k = 1; k < s.length && !jumped; k++) {
         if (s[k].i !== s[k - 1].i + 1) { prev = 0; continue; }
-        const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);        if (prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
+        const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);
+        if (Math.abs(d) >= 0.5) going++;
+        if (going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
         top = Math.max(top, v); prev = v;
       }
     }
@@ -177,13 +181,13 @@ function analyse(rec, kind) {
   // the filters the bottom jumps a few pixels": a second move after the first had ended, or one turning back)
   if (kind === 'fold') {
     for (const [name, at] of [['top', f => f.sheetTop], ['bottom', f => f.sheetTop + f.sheetH]]) {
-      let dir = 0, rest = 0, rested = false, jumped = null, top = 0, prev = 0;
+      let dir = 0, rest = 0, rested = false, jumped = null, top = 0, prev = 0, going = 0;
       for (let k = 1; k < frames.length && !jumped; k++) {
         const d = at(frames[k]) - at(frames[k - 1]), v = Math.abs(d) / Math.max(1, frames[k].t - frames[k - 1].t);
         if (Math.abs(d) < 0.5) { if (++rest >= 3) rested = true; prev = v; continue; }
         if (rested && Math.abs(d) >= 1) jumped = `moved again after rest: ${d.toFixed(1)} px at frame ${k}`;
         else if (dir && Math.sign(d) !== dir && Math.abs(d) >= 1) jumped = `turned back: ${d.toFixed(1)} px at frame ${k}`;
-        else if (prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
+        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
         dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = v;
       }
       if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
