@@ -94,7 +94,8 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     enter('closing');
     slide(false).then(() => { if (turn === mine) enter('closed'); });
   }
-  const toggle = () => (state === 'opening' || state === 'open' ? close() : open());
+  // (coming back on Home, parked but shown again: ☰ shuts it, as an open menu)
+  const toggle = () => (state === 'opening' || state === 'open' || (state === 'parked' && !navEl.hidden) ? close() : open());
   // Back on Home from a page the menu opened: open again once the sheet stands (a task later: not inside the stack's
   // own page change).
   function reopenOnHome() {
@@ -104,6 +105,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     // (parked: shown again under the sheet at once, uncovered as the sheet goes down; open once it stands)
     const mine = ++turn;
     navEl.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
     stack().whenSettled().then(() => { if (turn !== mine || state !== 'parked') return; place(); enter('open'); });
   }
 
