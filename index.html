@@ -150,8 +150,10 @@
        pulls it up they show */
     #sheet[data-page="home"][data-h="0"]:not(.dragging):not([data-search]) .sh-pages { visibility: hidden; }
     /* (at full the card's top line stays at the top while its stops scroll under it: its Share, star and Follow in reach) */
-    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg); padding-block: 6px; margin-block: -6px 0;
-      box-shadow: 0 -12px 0 var(--bg); }   /* (the band above it too: the stops showed through there, Max 2026-11-24) */
+    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg);
+      box-shadow: 0 -12px 0 var(--bg), 0 6px 0 var(--bg); }   /* (the band above it too: the stops showed through there, Max 2026-11-24) */
+    /* (its band below a shadow, not padding: padding moved the whole card 6 px down at full; Max 2026-11-25, pics 2-3:
+       "Expanded and non expanded train card does not align vertically. Jumps a few pixels") */
     .sh-btns { display: flex; align-items: center; gap: 8px; flex: none; }
     /* ‹: one page back (Max, 2026-11-23: "With home gone, some screens need a back button like disruptions"); every page
        but a train's (its card's top line is its head: a map tap or a pull closes it) */
@@ -215,9 +217,12 @@
     #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
     .sh-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (min-width: 440px) { .sh-more { bottom: 4px; } }
-    .pg { position: absolute; inset: 0; overflow: hidden; padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
+    .pg { position: absolute; inset: 0; overflow: hidden; overflow-anchor: none; padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
       overscroll-behavior: contain; scrollbar-width: thin; box-sizing: border-box; }
     #sheet[data-h="2"] .pg { overflow-y: auto; touch-action: pan-y; }
+    /* A leaving page's still copy (src/stack.js ghostOf), under the page coming in */
+    .sh-pages > .pg-ghost { z-index: 0; pointer-events: none; }
+    .sh-pages > .pg.in-r, .sh-pages > .pg.in-l { z-index: 1; }
     #sheet[data-search] .pg:not(.res) { display: none; }
     .pg > * { flex: none; }
     .sec { min-width: 0; }
@@ -611,7 +616,7 @@
     .about-top { display: grid; justify-items: center; gap: 6px; padding: 8px 0 4px; }
     .about-logo svg { height: 54px; width: auto; color: var(--ink); }
     .about-top p { margin: 0; color: var(--muted); font-size: 15px; }
-    .about-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .about-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
     .about-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 16px;
       font: inherit; font-size: 15px; font-weight: 700; background: var(--hover); color: var(--ink); cursor: pointer; }
     .about-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -620,7 +625,8 @@
     .about-btn.kofi { background: #72a4f2; color: #16263d; }
     .about-btn.kofi img { height: 20px; width: auto; display: block; }
     .about-soon { margin: 6px 0 0; text-align: center; font-size: 12.5px; color: var(--muted); }
-    .about-credits { list-style: none; margin: 0; padding: 4px 12px; border-radius: 16px; background: var(--hover); }
+    /* (12 px above it, the page's gap between cards: it sat right on the buttons, Max 2026-11-25 "Pic 1: Bad padding") */
+    .about-credits { list-style: none; margin: 12px 0 0; padding: 4px 12px; border-radius: 16px; background: var(--hover); }
     .about-credits li { display: grid; gap: 1px; padding: 9px 0; border-bottom: 1px solid var(--line); }
     .about-credits li:last-child { border-bottom: 0; }
     .about-credits span { color: var(--muted); font-size: 12.5px; }
@@ -852,7 +858,8 @@
        "Revamp hamburger menu... as buttons"). No fade (Max: "Remove the fade on all"). */
     /* (each a pill as wide as its words, the same padding as the filter's chips, no icons; Max, 2026-11-24 "Text has
        horrible padding. Looks strange, not clean like other UI") */
-    .sh-search > .sh-menu { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; margin: 0; padding: 0; }
+    .sh-search > .sh-menu { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; height: 48px; margin: 0; padding: 0;
+      clip-path: inset(-8px 0 -8px -8px); }   /* (cut at its right edge, by ☰: the buttons come out from beside it and go back, never over or past it; Max 2026-11-25) */
     .sh-search > .sh-menu[hidden] { display: none; }
     .sh-search > .sh-menu .nav-row { flex: 0 1 auto; width: auto; min-width: 0; min-height: 0; height: 40px; padding: 0 14px; justify-content: center; border-radius: 20px;
       background: var(--hover); font-size: 14px; font-weight: 600; }
@@ -865,7 +872,7 @@
     /* (a computer: open, the arrow's band goes and the box closes round the bar; Max, 2026-11-24 "Menu should remove the
        arrow and contract to match needed height"; src/stack.js lowOf) */
     @media (min-width: 440px) { #sheet.menu-open .sh-grab { display: none; } #sheet.menu-open .sh-head { margin-bottom: 10px; } }
-    #sheet.menu-open .sh-field { display: none; }
+    #sheet.menu-open .sh-field, #sheet.menu-fading .sh-field { display: none; }
     #sheet.menu-open .sh-pages .pg { overflow: hidden !important; touch-action: none; }
     /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
     .cd-late { position: relative; }
@@ -889,13 +896,8 @@
        src/panel.js). The same with the handle, "All stops" / "Less" and back down. */
     #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: calc(1 - var(--fold, 0)); transition: opacity .2s; }
     #panel.dragging:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
-    #panel.switching.full :is(.tv-box, .panel-table, .panel-info-box, .panel-more),
-    #panel.switching:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { animation: part-in .22s ease-out backwards; }
-    #panel.switching.full :is(.panel-star, .panel-info) { animation: part-pop .26s cubic-bezier(.2, .9, .25, 1) backwards; }
-    @keyframes part-in { from { opacity: 0; } }
-    @keyframes part-pop { from { opacity: 0; scale: .5; } }
+    /* (no fade-in of the parts on the switch itself since 2026-11-25: what is shown stays, the edge reveals the rest) */
     @media (prefers-reduced-motion: reduce) {
-      #panel.switching :is(.cd-trip, .panel-alert, .panel-more, .tv-box, .panel-table, .panel-info-box, .panel-star, .panel-info) { animation: none; }
       #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -939,6 +941,12 @@
        a computer too since its card got ‹: the name was squeezed out) */
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
+    /* (narrowing into its icon or widening back: its words stay and are cut off by its edge; src/main.js glideHead) */
+    /* (important: the expanded card's rule centres its content, and the icon ended 16 px off and snapped) */
+    #panel .sh-follow.morph { justify-content: flex-start !important; overflow: hidden; padding-right: 0 !important; box-sizing: border-box; }
+    #panel .sh-follow.morph span { display: inline !important; white-space: nowrap; }
+    #panel .panel-head { position: relative; }
+    #panel .panel-head .leaving { display: grid !important; place-items: center; position: absolute; margin: 0; pointer-events: none; }
     .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     @media (max-width: 439px) {
       #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }

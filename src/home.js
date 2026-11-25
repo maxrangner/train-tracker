@@ -11,6 +11,7 @@
 // Every row is a door: data-go carries the stack key it opens (src/stack.js); src/main.js listens for them.
 import { t } from './i18n.js';
 import { settings } from './settings.js';
+import { reduceMotion } from './motion.js';
 import { esc } from './html.js';
 import { icon } from './icons.js';
 import { tagHtml } from './tag.js';
@@ -180,8 +181,17 @@ export function homePage(d) {
     // (opened: the sheet grows until the whole card shows; folded: back to where it was; Max, 2026-11-24: "Expanding
     // filters list in main card should expand that card to view all filters")
     toggleCo() {
+      // (the filter card's height glides, so what is under it moves down with it, not in one jump: ui-sweep, 2026-11-25)
+      const card = () => el?.querySelector('.co-filter')?.closest('.sec');
+      const h0 = card()?.offsetHeight;
       coOpen = !coOpen;
       draw();
+      const c = card(), h1 = c?.offsetHeight;
+      if (c && h0 && h1 && h0 !== h1 && !reduceMotion()) {
+        c.style.overflow = 'hidden';
+        c.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260 * (settings.motionSpeed === 'calm' ? 4 / 3 : 1), easing: 'cubic-bezier(.2, .8, .2, 1)' })
+          .finished.catch(() => {}).then(() => { c.style.overflow = ''; });
+      }
       if (coOpen) d.reveal?.(el?.querySelector('.co-filter')?.closest('.sec')); else d.unreveal?.();
     },
   };

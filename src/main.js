@@ -407,6 +407,54 @@ function refitCard() {
 }   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
+// A train card's buttons glide to where the new height puts them (Max, 2026-11-25: "Train cards expanded or
+// nonexpanded top buttons should animate into the new layout, not just pop. Like the big to small tracking button"):
+// each from where it was; Follow narrows into its icon (its words cut off as it goes) and widens back; one that comes
+// (the "i" at full) grows in from nothing. index.html .sh-follow.morph.
+let headWas = null;
+const HEAD_BTNS = '#panel .panel-head :is(.panel-info, .sh-act, .sh-star, .sh-follow)';
+function headPlaces() {
+  const head = panelEl.querySelector('.panel-head');
+  if (!head) return null;
+  const top = head.getBoundingClientRect().top, was = new Map();
+  for (const b of panelEl.querySelectorAll(HEAD_BTNS)) {
+    const r = b.getBoundingClientRect();
+    // (ic: where its icon sits in it, measured: an icon-only Follow is centred with no padding)
+    const ic = b.querySelector('svg')?.getBoundingClientRect().left;
+    if (r.width) was.set(b, { x: r.left, y: r.top - top, w: r.width, ic: ic === undefined ? 0 : ic - r.left });
+  }
+  return was;
+}
+function glideHead(was) {
+  const now = headPlaces();
+  if (!now || reduceMotion()) return;
+  const k = settings.motionSpeed === 'calm' ? 4 / 3 : 1, timing = { duration: 280 * k, easing: 'cubic-bezier(.2, .8, .2, 1)' };
+  // one that goes (the "i" back to compact) shrinks away where it was, out of the row's way
+  const head = panelEl.querySelector('.panel-head'), hb = head.getBoundingClientRect();
+  for (const [b, from] of was) {
+    if (now.has(b) || !b.isConnected) continue;
+    b.classList.add('leaving');
+    b.style.left = `${from.x - hb.left}px`; b.style.top = `${from.y}px`;
+    b.animate([{ scale: 1 }, { scale: 0 }], timing).finished.catch(() => {}).then(() => { b.classList.remove('leaving'); b.style.left = ''; b.style.top = ''; });
+  }
+  for (const [b, to] of now) {
+    const from = was.get(b);
+    b.getAnimations().forEach(a => a.cancel());
+    if (!from) { b.animate([{ scale: 0 }, { scale: 1 }], timing); continue; }
+    const dx = from.x - to.x, dy = from.y - to.y;
+    if (b.classList.contains('sh-follow') && Math.abs(from.w - to.w) > 1) {
+      // (its width changes while its place in the row keeps its new width: the buttons beside it don't move twice)
+      b.classList.add('morph');
+      const a = b.animate([
+        { width: `${from.w}px`, marginLeft: `${to.w - from.w}px`, paddingLeft: `${from.ic}px` },
+        { width: `${to.w}px`, marginLeft: '0px', paddingLeft: `${to.ic}px` },
+      ], timing);
+      a.finished.catch(() => {}).then(() => b.classList.remove('morph'));
+      continue;
+    }
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) b.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], timing);
+  }
+}
 function trainPage(id) {
   const meta = () => {
     const r = trains.get(id);
@@ -449,7 +497,7 @@ function trainPage(id) {
   }
   return {
     name: number, kind: 'train',
-    show(el, { prev, dir, go = false, again = false }) {
+    show(el, { prev, dir, go = false, again = false, level }) {
       myEl = el;
       el.append(panelEl);
       const m = meta() ?? m0;
@@ -458,7 +506,9 @@ function trainPage(id) {
       else if (panel.hidden) panel.show();
       // (a train just opened starts compact, whatever height the sheet had: from the search at full it took that height
       // and measured itself full, then dropped, 2026-11-23)
-      panelEl.classList.toggle('full', dir <= 0 && stack.level === 2);
+      // (back to it: the height it comes back at, not the one the sheet has yet: drawn compact for a frame, its stops
+      // jumped 32 px; ui-sweep, 2026-11-25)
+      panelEl.classList.toggle('full', dir <= 0 && (dir < 0 && level !== undefined ? level : stack.level) === 2);
       if (!m.onMap) { map.unfollow(); return; }
       buzz();
       panel.setFollowing(true);
@@ -477,7 +527,12 @@ function trainPage(id) {
     // and the top took the card from that train's page, which then showed empty; Max's PC and phone, 2026-11-23)
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
-    level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    beforeLevel() { headWas = panel.openId === id ? headPlaces() : null; },
+    level(i) {
+      if (panel.openId !== id) return;
+      panelEl.classList.toggle('full', i === 2);
+      if (headWas) { glideHead(headWas); headWas = null; }
+    },
     // (its content at full, measured with its full look on for that moment: the sheet's full stops under it; src/stack.js
     // fullOf)
     atFull(measure) {
@@ -709,9 +764,9 @@ function pickPage(key) {
 }
 
 // ---- Settings, About, Connection: their parts are in index.html, moved into the page while it is shown ----
-function heldPage(el, { name, kind, onShow, onHide }) {
+function heldPage(el, { name, kind, onShow, onHide, startLevel }) {
   return {
-    name, kind,
+    name, kind, startLevel,
     show(page) { page.append(el); el.hidden = false; onShow?.(); },
     hide() { el.hidden = true; holder.append(el); onHide?.(); },
     unmount() { el.hidden = true; holder.append(el); },
@@ -842,9 +897,11 @@ function slideNav(open) {
   if (reduceMotion()) return Promise.resolve();
   return Promise.all(rows.map((r, i) => {
     const from = { transform: `translateX(${Math.round(b.left - r.getBoundingClientRect().left)}px)` }, to = { transform: 'none' };
-    // (the first button travels furthest: it leaves first and comes back last)
+    // (the first button travels furthest: it leaves first and comes back last; shutting takes as long as opening and
+    // the same curve, Max 2026-11-25: "Should be same speed. Same as opening": it started slowly; they pass behind the
+    // menu's right edge, by ☰, never over it: index.html #nav.sh-menu clip-path)
     const n = rows.length - 1 - i;
-    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: open ? 'cubic-bezier(.2, .8, .2, 1)' : 'cubic-bezier(.4, 0, .8, .4)', fill: 'forwards' }).finished.catch(() => {});
+    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' }).finished.catch(() => {});
   }));
 }
 // (opened with Home pulled up: Home goes down to rest, Max 2026-11-24 "When menu is called while main card is already
@@ -862,17 +919,29 @@ function openNav() {
   slideNav(true).then(() => { if (navOpen) for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel()); });
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
-function closeNav() {
+// at once: a page coming up from the menu (or over it): the search row is hidden on other pages, so no slide back, and
+// the open menu's room under the bar goes before the page comes in (it stayed while the buttons slid home: Settings
+// and About slid in 10 px low and jumped up; Max, 2026-11-25 "Opening settings or about has a vertical jump of a few
+// pixels before settling")
+function closeNav({ now = false } = {}) {
   if (!navOpen) return;
   navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
-  slideNav(false).then(() => {
+  const shut = () => {
     if (navOpen) return;   // (opened again meanwhile)
     navEl.hidden = true;
     for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel());
     document.getElementById('sheet').classList.remove('menu-open');
     stack.refit();
-  });
+  };
+  if (!now) { slideNav(false).then(shut); return; }
+  // (the search row fades out on the new page: the buttons stay in it as they were, the field stays hidden, until it
+  // has gone; index.html .menu-fading)
+  const sheetEl = document.getElementById('sheet');
+  sheetEl.classList.remove('menu-open');
+  sheetEl.classList.add('menu-fading');
+  stack.refit();
+  setTimeout(() => { sheetEl.classList.remove('menu-fading'); shut(); }, 300);
 }
 onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
@@ -958,8 +1027,8 @@ function defineNow(key) {
 }
 
 document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
-document.getElementById('open-settings').onclick = () => { closeNav(); navBack = true; stack.open('page:settings'); };
-document.getElementById('help-button').onclick = () => { closeNav(); navBack = true; stack.open('page:help'); };
+document.getElementById('open-settings').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:settings'); };
+document.getElementById('help-button').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:help'); };
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -1729,7 +1798,9 @@ function define(key) {
     case 'co': case 'kind': case 'late': case 'still': return groupPage(key, pageData);
     case 'page':
       if (v === 'settings') return heldPage(settingsPage, { name: () => t('settings'), kind: 'settings', onShow: () => { foldAccents(false); showSettings(); } });
-      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help' });   // (About Spårat, as before the sheet: Max, 2026-11-24)
+      // (About Spårat, as before the sheet: Max, 2026-11-24; opens full, as tall as it is: Max, 2026-11-25 "'Om spårat'
+      // should be expanded by default")
+      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help', startLevel: 2 });
       if (v === 'conn') return heldPage(connPage, { name: () => t('connTitle'), kind: 'conn', onShow: () => showConn() });
       return null;
     default: return null;
@@ -1741,9 +1812,10 @@ stack = createStack({
   onPad: (h) => { sheetPad = h; padMap(); },
   onChange(pg) {
     // back on Home from a page the menu opened: the menu open again (navBack, openNav above)
-    if (pg.key === 'home' && navBack) { navBack = false; setTimeout(openNav, 0); }
+    // (before the next frame: a task later, a computer's "Mer ⌄" showed for two frames first)
+    if (pg.key === 'home' && navBack) { navBack = false; queueMicrotask(openNav); }
     // (the menu is Home's: another page coming up, from the status pill or the map, shuts it)
-    if (pg.key !== 'home' && navOpen) closeNav();
+    if (pg.key !== 'home' && navOpen) closeNav({ now: true });
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);

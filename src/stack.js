@@ -348,6 +348,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function setIndex(i, { still = false } = {}) {
     // (a page that doesn't rest low: half; closing it is home(), not a height)
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
+    // (the page notes how it looks before the height changes it, to glide from there: a train card's buttons)
+    if (!searching) top()?.def.beforeLevel?.(Math.max(0, Math.min(2, i)));
     idx = Math.max(0, Math.min(2, i));
     // (full measured now, the page as it is: it may have grown since its heights were read)
     if (idx === 2 && !searching) H[2] = Math.max(H[2], fullOf(top(), H[1]));
@@ -609,29 +611,91 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
     sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(own) || !any)));
   }
-  function show(pg, prev, dir, opts = {}) {
-    if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
-    const old = prev?.el;
-    if (old && old !== pg.el) {
-      old.classList.remove('in-r', 'in-l');
-      if (reduceMotion()) old.remove();
-      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300 * motionK()); }
+  // The page leaving shows only what it showed: the sheet growing for the new page would open up its hidden part as it
+  // slides out (Max, 2026-11-25: "I can see a red number element swipe by, that is not present in either relevant
+  // cards": Home's lateness pills, at rest hidden under the bar; tools/ui-sweep.mjs "stray")
+  function clipLeaving(el) {
+    const r = el.getBoundingClientRect(), s = sheet.getBoundingClientRect();
+    const seen = getComputedStyle(el).visibility === 'hidden' ? 0 : Math.max(0, Math.min(r.bottom, s.bottom, innerHeight) - r.top);
+    el.style.clipPath = `inset(0 0 calc(100% - ${Math.floor(seen)}px) 0)`;   // (the page grows with the sheet: from its top)
+    return r.top + seen;   // (where what it shows ends, on the screen)
+  }
+  // The page leaving slides out as a still picture of itself (Max, 2026-11-25: "horrible animation with elements
+  // showing that shouldn't"): its own page lets go of its shared parts at once (a station's timetable, a train's card:
+  // the next page may want them), so it emptied and its lower parts rose into view as it went. Its ids and key stay (its
+  // look hangs on them); it goes after the new page, so a lookup finds the real one first, and under it
+  // (index.html .pg-ghost); untouchable.
+  const FROZEN = ['display', 'visibility', 'opacity', 'boxSizing', 'width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom',
+    'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'position', 'top', 'justifyContent', 'alignItems',
+    'flexDirection', 'gap', 'fontSize', 'lineHeight'];
+  function ghostOf(el, cut = Infinity) {
+    const g = el.cloneNode(true);
+    g.classList.remove('in-r', 'in-l');
+    g.classList.add('pg-ghost');
+    // (each part frozen as it looks now: much of its look hangs on the sheet's page and height, which change as it
+    // leaves: a train card's Follow came back and its stops rose 40 px in the copy; ui-sweep, 2026-11-25)
+    const all = el.getElementsByTagName('*'), copies = g.getElementsByTagName('*');
+    const looks = [];
+    // (what is under the cut isn't shown: hidden, not read; a long timetable has hundreds of parts)
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].getBoundingClientRect().top > cut) { looks.push(null); continue; }
+      const cs = getComputedStyle(all[i]);
+      looks.push(cs.display === 'none' ? null : FROZEN.map(k => cs[k]));
     }
+    for (let i = 0; i < copies.length; i++) {
+      const st = copies[i].style;
+      if (!looks[i]) { st.display = 'none'; continue; }
+      FROZEN.forEach((k, j) => { st[k] = looks[i][j]; });
+    }
+    const from = el.querySelectorAll('canvas'), to = g.querySelectorAll('canvas');
+    from.forEach((c, i) => { try { to[i].getContext('2d')?.drawImage(c, 0, 0); } catch { /* a picture it can't copy: blank */ } });
+    g.inert = true;
+    g.setAttribute('aria-hidden', 'true');
+    return g;
+  }
+  function show(pg, prev, dir, opts = {}) {
+    const old = prev?.el;
+    if (prev) prev.scroll = old.scrollTop;
+    let ghost = null;
+    if (old && old !== pg.el && old.isConnected) {
+      if (!reduceMotion()) {
+        ghost = ghostOf(old, clipLeaving(old));
+        old.style.clipPath = '';
+        ghost.classList.add(dir > 0 ? 'out-l' : 'out-r');
+      }
+      old.remove();
+      old.classList.remove('in-r', 'in-l', 'out-l', 'out-r');
+    }
+    if (prev) prev.def.hide?.();
     pg.el.classList.remove('out-l', 'out-r');
+    pg.el.style.clipPath = '';
     if (prev && !reduceMotion()) {
       pg.el.classList.add(dir > 0 ? 'in-r' : 'in-l');
       const el0 = pg.el;
       setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400 * motionK());
     }
     pagesEl.append(pg.el);
+    // (the copies always after the real pages, an older one still sliding too: a page coming back within its slide went
+    // after it, and a lookup found the copy's bin first; ideas-check, 2026-11-25)
+    for (const g of pagesEl.querySelectorAll(':scope > .pg-ghost')) pagesEl.append(g);
+    if (ghost) {
+      pagesEl.append(ghost);
+      ghost.scrollTop = prev.scroll;
+      setTimeout(() => ghost.remove(), 300 * motionK());
+    }
     syncBar();
     H[0] = lowOf(pg);
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
-    pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, ...opts });
+    // (the height it will have, before the sheet has it: a card drawn for the old page's height first redrew a frame later)
+    pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, level, ...opts });
     syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     [H[0], H[1], H[2]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
-    pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
+    // (back to a scrolled page: on a computer the sheet grows downward as it comes, so a scroll kept from a taller
+    // page was pulled back with every frame and the page slid down the whole way; the one that fits its final height
+    // from the start: what is shown stays, the bottom edge reveals the rest; ui-sweep, 2026-11-25)
+    const room = wide() ? Math.max(0, H[idx] - shownH()) : 0;
+    pg.el.scrollTop = dir < 0 && idx === 2 ? Math.min(pg.scroll ?? 0, Math.max(0, pg.el.scrollHeight - pg.el.clientHeight - room)) : 0;
     syncBar();
     onChange(pg);
     guard();

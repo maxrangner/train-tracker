@@ -390,7 +390,7 @@ try {
   await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
   await sleep(600);
   await page.evaluate(() => document.querySelector('#sheet .sh-acts [data-act-id="del"]')?.click());
-  ok(await until(page, k => !window.__ideas.favourites.change(k) && !window.__stack.top().startsWith('change:'), 5000, edited.top.slice(7)), `its bin, tapped twice, takes it away (now ${await top(page)})`);
+  ok(await until(page, k => !window.__ideas.favourites.change(k) && !window.__stack.top().startsWith('change:'), 5000, edited.top.slice(7)), `its bin, tapped twice, takes it away (now ${await top(page)}; ${await page.evaluate(() => [...document.querySelectorAll('[data-act-id="del"]')].map(b => `${b.closest('.pg')?.dataset.key ?? b.parentElement?.className}${b.closest('.pg-ghost') ? ' copy' : ''}`).join(', '))})`);
 
   }
   if (part('peek')) {

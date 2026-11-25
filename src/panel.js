@@ -9,7 +9,7 @@
 import { fetchRoute } from './trafikverket.js';
 import { lateClass } from './lateness.js';
 import { minutesText } from './tag.js';
-import { roll, arrive, flash, reduceMotion } from './motion.js';
+import { roll, flash, reduceMotion } from './motion.js';
 import { stateHtml } from './state.js';
 import { icon } from './icons.js';
 import { t } from './i18n.js';
@@ -592,7 +592,19 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    foldNow = fold ? () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); } : null;
+    // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
+    foldNow = fold ? () => {
+      const h0 = el.querySelector('.tv-box')?.offsetHeight;
+      notesOpen = !notesOpen; draw(train, route, { keepScroll: true });
+      const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
+      // (the page told first, the box at its new height: it brings the opened messages into view from their real size)
+      onFold?.(notesOpen, box);
+      if (box && h0 && h1 && h0 !== h1 && !reduceMotion()) {
+        box.style.overflow = 'hidden';
+        box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
+          .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
+      }
+    } : null;
     if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
@@ -602,14 +614,6 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (scrolled !== undefined) { const box = el.querySelector('.panel-table'); if (box) box.scrollTop = scrolled; } else toNext();
   }
   // Scroll the timeline (only it) so the train's place is in view; it shows only on the full card.
-  // The timeline's rows in view come in one after another as the card opens full (src/motion.js; Max's pick 6,
-  // 2026-11-20). Its redraw each minute moves nothing (new rows, no .arrive).
-  function rowsIn() {
-    const box = el.querySelector('.panel-table');
-    if (!box) return;
-    const top = box.scrollTop - 60, bottom = box.scrollTop + window.innerHeight;
-    arrive([...box.querySelectorAll('.tl-row, .tl-now')].filter(r => r.offsetTop > top && r.offsetTop < bottom), new Set());
-  }
   function toNext() {
     const box = el.querySelector('.panel-table'), next = el.querySelector('.tl-now') ?? el.querySelector('.tl-row.next');
     if (!box || !next) return;
@@ -623,16 +627,13 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     }
     if (box.clientHeight) box.scrollTop = next.offsetTop - box.clientHeight / 2;
   }
-  let wasFull = el.classList.contains('full'), switchTimer = 0;
+  let wasFull = el.classList.contains('full');
   new MutationObserver(() => {
     const full = el.classList.contains('full');
-    if (full && !wasFull) requestAnimationFrame(() => { if (infoOn) drawInfo(); else { toNext(); rowsIn(); } });
-    // compact ↔ full: the parts that come into view fade in (index.html "switching"; Max, 2026-11-21)
-    if (full !== wasFull && !el.hidden) {
-      el.classList.add('switching');
-      clearTimeout(switchTimer);
-      switchTimer = setTimeout(() => el.classList.remove('switching'), 320);
-    }
+    // compact ↔ full: what is shown stays where it is, the sheet's edge reveals the rest or covers it; nothing scrolls,
+    // fades or arrives (Max, 2026-11-25: "Expanding a train card redraws the portion that is already visible. Only the
+    // new part should be revealed through the expanding card, not all of it slide in. Same in reverse")
+    if (full && !wasFull && infoOn) requestAnimationFrame(drawInfo);
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });
 
