@@ -625,7 +625,10 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     dragMove(y);
   }
   function touchEnd(e) {
-    for (const [type, fn] of [['touchmove', touchMove], ['touchend', touchEnd], ['touchcancel', touchEnd]]) e.currentTarget.removeEventListener(type, fn);
+    // (the sheet's own listener for the moves stays: a touch on the sheet itself, Home's bare edge, took it off, and no
+    // touch after it could pull a page down: its moves came uncancellable; screens-check, 2026-11-25)
+    const own = e.currentTarget === sheet;
+    for (const [type, fn] of [['touchmove', touchMove], ['touchend', touchEnd], ['touchcancel', touchEnd]]) if (!own || type !== 'touchmove') e.currentTarget.removeEventListener(type, fn);
     // A tap whose finger wobbled down a few px: its moves were held for a pull that never came, and the browser then
     // drops the click (Max's phone, 2026-11-23: the card's notes "sometimes needs two clicks to expand"); the click is
     // given here, once (a click the browser sends after all is dropped).
