@@ -1,8 +1,9 @@
 // The small animations (Max's picks 1, 4, 6, 7, 8, 9 of 2026-11-20; the example page
 // https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and index.html "Motion"), on a phone-size page:
 //   1 a held button presses in and springs back; 9 the ☰ menu's rows follow it in;
-//   6 search rows arrive, and the same results again move nothing; the card's timeline rows arrive as it opens full,
-//     and its refresh moves nothing; Störningar opens as one push: no row arriving, no fade (since 2026-11-24; live data,
+//   6 search rows arrive, and the same results again move nothing; the card's timeline rows don't arrive as it opens
+//     full (since 2026-11-25: what is shown stays, the edge reveals the rest; tools/ui-sweep.mjs measures it), and its
+//     refresh moves nothing; Störningar opens as one push: no row arriving, no fade (since 2026-11-24; live data,
 //     skipped without problems);
 //   4 + 7 the card's lateness rolls to new minutes and its tile pulses, ending on the exact text; nothing rolls when a
 //     card opens; Anslutning's numbers roll, not when it opens;
@@ -148,12 +149,12 @@ try {
     check(pulsed, '7: the lateness tile pulses when the minutes change');
     await page.evaluate(() => { window.__lateness.get = window.__realGet; });
     await sleep(1500);
-    // the timeline's rows arrive as the card opens full; the refresh moves nothing
+    // the timeline's rows come with the card as it opens full, none arriving after (Max, 2026-11-25: "Only the new part
+    // should be revealed through the expanding card, not all of it slide in"); the refresh moves nothing
     await page.click('#panel .panel-more');
     await sleep(120);
-    const arriving = await page.evaluate(() => document.querySelectorAll('#panel .tl-row.arrive, #panel .tl-now.arrive').length);
-    if (card.rows > 2) check(arriving >= 2, `6: the timeline's rows arrive as the card opens full (${arriving} of ${card.rows})`);
-    else notes.push(`the timeline not checked (${card.rows} rows)`);
+    const arriving = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
+    check(arriving === 0, `6: nothing arrives as the card opens full (${arriving} arriving)`);
     await sleep(1000);
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));   // (the card asks for its times again at once)
     await sleep(1500);
