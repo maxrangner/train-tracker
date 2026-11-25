@@ -666,6 +666,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400 * motionK());
     }
     pagesEl.append(pg.el);
+    // (the copies always after the real pages, an older one still sliding too: a page coming back within its slide went
+    // after it, and a lookup found the copy's bin first; ideas-check, 2026-11-25)
+    for (const g of pagesEl.querySelectorAll(':scope > .pg-ghost')) pagesEl.append(g);
     if (ghost) {
       pagesEl.append(ghost);
       ghost.scrollTop = prev.scroll;
