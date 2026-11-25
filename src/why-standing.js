@@ -11,7 +11,7 @@
 // 4. 'stop': at a station before its departure: a normal stop, no reason needed.
 // 5. 'none': "No reason reported".
 
-export const STAND_MS = 60 * 1000;   // standing this long before a reason is given
+export const WHY_AFTER_MS = 60 * 1000;   // standing this long before a reason is given
 const NEAR_KM = 1.5, AT_KM = 0.6;
 
 // A problem note that names a cause of standing (Trafikverket's texts, Swedish): faults ("Signalfel", "Växelfel",

@@ -16,7 +16,7 @@
 // from anywhere on the head moves the sheet (Home's field too, with a finger: a tap on it still searches), and a pull
 // down from the head of PULL_PX or more, never up first, lowers it at least one height.
 //
-// createStack({ sheet, define, onPad, onChange }) -> the stack (see the end).
+// createStack({ sheet, define, onPad, onChange, onBack, held }) -> the stack (see the end).
 //   define(key) -> a page, or null when the key names nothing (a train gone, a disruption ended):
 //     { name: string | () => string (its name: stack.names()), kind ('home', 'train', 'station', ... : the sheet's
 //       data-page), low: px (its low height; default the page low) or () -> px (fitted: the height of its content to
@@ -53,6 +53,8 @@
 // says there is more of the page below (Max, 2026-11-23: Home "has no indication that there is more content").
 //   onPad(h): the map's free part is above this many pixels (the sheet's resting height, at most half): src/map.js setSheet.
 //   onChange(top): a page came on top (the map's lit trains, the line above the bar).
+//   onBack() -> bool: the browser's back steps back with this (src/back.js: ☰'s menu, The day, then back() here);
+//   held() -> bool: something outside the stack is open to step back from (the browser's back stays ours: guard()).
 //
 // THE TAP RULES (Max, 2026-11-23: "a lot of FIRST taps did nothing, second closed"). Every part follows them; each has
 // a test in tools/tap-check.mjs.
@@ -105,7 +107,7 @@ const PART_HEAD = 'h2, h3, h4';
 const partHead = c => (c.matches(PART_HEAD) ? c : c.firstElementChild?.matches(PART_HEAD) ? c.firstElementChild : null);
 const partName = h => [...h.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() || h.textContent.trim();
 
-export function createStack({ sheet, define, onPad = () => {}, onChange = () => {} }) {
+export function createStack({ sheet, define, onPad = () => {}, onChange = () => {}, onBack = null, held = () => false }) {
   const root = document.documentElement;
   const pagesEl = sheet.querySelector('.sh-pages');
   const input = sheet.querySelector('#search');
@@ -526,7 +528,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head, .pg-head') && !el.closest(NOT_GRAB));
-  // Frozen (freeze(true): ☰'s menu open, src/main.js openNav): the sheet holds still, no pull, no scroll, no tap on the
+  // Frozen (freeze(true): ☰'s menu open, src/nav-menu.js): the sheet holds still, no pull, no scroll, no tap on the
   // page behind; only ☰ and a map tap do anything then (Max, 2026-11-24: "When hamburger is acativated the normal
   // scroll of the card should not be possible"; "Only tapping search should be normal behavior, or hamburger or tap the
   // map dismisses"). The class .frozen stops the page's scroll (index.html).
@@ -1027,7 +1029,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // ---------- the phone's own back in a browser (Max, 2026-11-23: "swipe back again closes the page, not swipe back")
   // The browser's back (Android's gesture, the back button) left the site. While there is something to step back from
   // (a page, the search, the sheet raised) one history entry of our own stands in front: back takes it and steps one
-  // thing back, as Android's back in the app does (src/main.js, Capacitor); with nothing left it leaves. Not in the app.
+  // thing back, as Android's back in the app does (src/back.js: the same chain); with nothing left it leaves. Not in the app.
   const NATIVE = isNative();
   // (only a step back off our own entry counts: an address followed forward, a #train= link or a changed setting in the
   // address, also brings a popstate, and was taken for a back press that undid it; debug-check, 2026-11-24. A back keeps
@@ -1035,13 +1037,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   let guarded = false, guardLen = 0;
   function guard() {
     if (!ready || NATIVE || guarded) return;
-    if (stack.length > 1 || idx > 0 || srch) { try { history.pushState({ sparat: 1 }, ''); guarded = true; guardLen = history.length; } catch { /* (a sandboxed frame) */ } }
+    if (stack.length > 1 || idx > 0 || srch || held()) { try { history.pushState({ sparat: 1 }, ''); guarded = true; guardLen = history.length; } catch { /* (a sandboxed frame) */ } }
   }
   addEventListener('popstate', (e) => {
     if (NATIVE || !guarded) return;
     guarded = false;
     if (e.state?.sparat || history.length !== guardLen) return;   // (not a step back off our entry)
-    if (back()) guard();
+    if ((onBack ?? back)()) guard();
     else history.back();   // (nothing left to step back from, the pages closed in the app meanwhile: the user meant to leave)
   });
 
@@ -1074,12 +1076,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pageEl: key => stack.find(p => p.key === key)?.el ?? null,
     pageDef: key => stack.find(p => p.key === key)?.def ?? null,
     mapTap, reveal, unreveal, freeze, requestFull, releaseFull,
+    guard,   // (something outside the stack opened: the browser's back is ours until it is stepped back from)
   };
   return api;
 }
-
-// What other parts of the app fill in later (the plan of 2026-11-22): onDay(), ☰ → The day (src/main.js says "soon"
-// until it is set).
-// dayOther(): true while The day shows another time than now (the shop window waits meanwhile, src/shop-window.js);
-// The day's code sets it (until then null: never).
-export const hooks = { onDay: null, dayOther: null };

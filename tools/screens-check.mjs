@@ -3,7 +3,8 @@
 //     sheet, no Home chip (since 2026-11-23), back (Esc) steps down the stack to Home and nothing is left;
 //   - a page over a train lets its card go; back to it, the card is there again and the train followed (until
 //     2026-11-22 Settings → Debug → "Screen over a train" chose this: the stack decides now);
-//   - ☰'s menu answers at once after a swipe of the sheet (a page swiped away, Home swiped down: ☰ 30 ms later opens);
+//   - ☰'s menu answers at once after a swipe of the sheet (Settings, opened from it, swiped away: the menu is back by
+//     itself and ☰ 30 ms later shuts it; Home swiped down: ☰ 30 ms later opens it);
 //   - the search closed with the keyboard going: the map keeps its height the whole way;
 //   - the Train card setting is gone and the default accent is Azurblå (cerulean);
 //   - the map works with ☰'s menu open (a drag moves it, the menu stays), a plain tap on the map closes the menu and
@@ -95,13 +96,22 @@ try {
     // fits its parts since 2026-11-23 and can lie far below where a 400 px swipe ends)
     const toHalf = await page.evaluate(() => (window.__stack.top() === 'home' ? Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top - window.__stack.heights[1]) : 0));
     await swipe(grab.x, grab.y, toHalf > 0 ? toHalf : Math.min(400, 830 - grab.y), { after: 30 });
+    // (Settings came from the menu: backed out of, the menu opens again by itself (Max, 2026-11-24, src/nav-menu.js
+    // reopenOnHome), so ☰ answering is ☰ shutting it; until 2026-11-25 this step expected ☰ to open it and failed)
+    const reopened = await page.evaluate(() => document.getElementById('nav-button').getAttribute('aria-expanded') === 'true');
     await touchTap('#nav-button');
     await sleep(300);
     const s = await sheetState(page);
-    check(await navShown(), `${name} (now ${s.key} at ${s.level}), ☰ tapped 30 ms later: the menu opens`);
-    // (shut the way a person does, and waited for: its buttons slide back into ☰ first)
-    await page.keyboard.press('Escape');
-    await until(page, () => document.getElementById('nav').hidden, 1500);
+    if (name.startsWith('Settings')) {
+      const shut = await page.evaluate(() => document.getElementById('nav-button').getAttribute('aria-expanded') === 'false')
+        && await until(page, () => document.getElementById('nav').hidden, 1500);
+      check(reopened && shut, `${name} (now ${s.key} at ${s.level}): the menu opened again by itself (${reopened}), ☰ tapped 30 ms later shuts it (${Boolean(shut)})`);
+    } else {
+      check(await navShown(), `${name} (now ${s.key} at ${s.level}), ☰ tapped 30 ms later: the menu opens`);
+      // (shut the way a person does, and waited for: its buttons slide back into ☰ first)
+      await page.keyboard.press('Escape');
+      await until(page, () => document.getElementById('nav').hidden, 1500);
+    }
     await toRest(page);
   }
 
