@@ -842,7 +842,7 @@
     /* a computer's search: no handle band under it (its arrow is hidden there: an empty 28 px under the results; Max,
        2026-11-25 "Empty search field has too big empty card") */
     @media (min-width: 440px) { #sheet[data-search] .sh-grab { display: none; } }
-    #sheet.menu-open .sh-pages .pg { overflow: hidden !important; touch-action: none; }
+    #sheet.frozen .sh-pages .pg { overflow: hidden !important; touch-action: none; }
     /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
     .cd-late { position: relative; }
     .cd-late.flash { animation: late-pop .5s var(--ez-pop); }

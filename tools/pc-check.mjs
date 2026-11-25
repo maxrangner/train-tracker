@@ -180,6 +180,38 @@ try {
     return { rows: new Set(shown.map(c => c.offsetTop)).size, chips: shown.filter(c => c.matches('.co-f')).length, total: Number(box.dataset.total), more: more && !more.hidden ? more.textContent.trim() : '' }; });
   ok(co && co.rows === 1 && (co.total - co.chips === 0 ? !co.more : co.more.startsWith(String(co.total - co.chips))),
     `the filter's companies: ${co?.rows} row(s), ${co?.chips} of ${co?.total} shown, "${co?.more}"`);
+
+  // 14. New trip, its To field typed in: the sheet ends under the last real part, the Save button, with only the usual
+  //     room (Max, 2026-11-25: on a computer it grew to the screen's full, empty, the room meant for a phone's keyboard)
+  await page.evaluate(() => window.__stack.home(0)); await sleep(900);
+  await page.evaluate(() => window.__stack.open('newtrip')); await sleep(1500);
+  await page.evaluate(() => document.querySelector('.pg[data-key="newtrip"] .nt-stop.to .nt-pill')?.click()); await sleep(1500);
+  const nt = await page.evaluate(() => { const save = document.querySelector('.pg[data-key="newtrip"] .nt-save')?.getBoundingClientRect(), band = document.querySelector('#sheet .sh-grab').getBoundingClientRect();
+    return save ? { under: Math.round(band.top - save.bottom), typing: Boolean(document.activeElement?.matches('.nt-q')) } : null; });
+  ok(nt && nt.typing && nt.under >= 0 && nt.under <= 20, `New trip, To typed in: the page ends ${nt?.under ?? '?'} px under Save (want 0 to 20; the arrow's band under it not counted), the field ${nt?.typing ? 'focused' : 'not focused'}`);
+
+  // 15. The stack says where the sheet is going and when it stands: target, whenSettled() at the glide's end (at once
+  //     when nothing moves), onSettled once per rest
+  await page.evaluate(() => window.__stack.home(0)); await sleep(1300);
+  const se = await page.evaluate(async () => {
+    const s = window.__stack, el = document.getElementById('sheet');
+    let calls = 0;
+    const off = s.onSettled(() => { calls++; });
+    const t0 = performance.now();
+    s.setLevel(1);
+    const target = s.target, half = s.heights[1];
+    const done = await s.whenSettled();
+    const dt = performance.now() - t0, h = el.getBoundingClientRect().height;
+    const t1 = performance.now();
+    await s.whenSettled();
+    const again = performance.now() - t1;
+    await new Promise(r => setTimeout(r, 300));
+    off();
+    return { target, half, done, dt: Math.round(dt), h: Math.round(h), again: Math.round(again), calls };
+  });
+  ok(se.target.level === 1 && Math.abs(se.target.height - se.half) <= 1 && se.done.height === se.target.height && Math.abs(se.h - se.target.height) <= 1
+    && se.dt >= 200 && se.again < 50 && se.calls === 1,
+  `to half: target ${se.target.level}, ${se.target.height} px (half ${se.half}); settled after ${se.dt} ms at ${se.h} px (want the glide's end, ~360 ms), again at once (${se.again} ms); onSettled ${se.calls}x (want 1)`);
 } finally {
   await browser.close();
 }

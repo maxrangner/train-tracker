@@ -8,6 +8,8 @@
 // Departures / Arrivals (Max, 2026-11-21: "Search for all day, numbers, destinations, maybe not time, that the user can
 // scroll to"): the card goes full, the whole day in a list scrolled to now (gone trains dimmed), a train number or a
 // destination (arrivals: where it comes from) typed narrows it; the search button again closes it.
+// onFull(full): the card's classes were set (.full: its messages or its search want room; src/main.js boardFull), told
+// once after the task that set them.
 const time = t => (t ? hhmm(t) : '');
 import { esc } from './html.js';
 import { arrive, glideHeight } from './motion.js';
@@ -21,7 +23,9 @@ import { icon } from './icons.js';
 import { hhmm, now } from './clock.js';
 import { t } from './i18n.js';
 
-export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, messages = null }) {
+export function createBoard(el, { load, loadDay = null, stationName, onPickTrain, onClose, messages = null, onFull = null }) {
+  let said = false;
+  const classed = () => { if (said || !onFull) return; said = true; queueMicrotask(() => { said = false; onFull(el.classList.contains('full')); }); };
   let station = null;     // { sig, name }
   let activity = 'Avgang';
   let rowsSeen = new Set();   // the rows shown since the board or its tab opened (their trains' keys)
@@ -47,7 +51,8 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       if (!forced()) ownFull = el.classList.contains('full');
       const full = !msgsOpen || finding || backTo();
       const h0 = el.querySelector('.board-msgs')?.offsetHeight;
-      msgsOpen = !msgsOpen; el.classList.toggle('full', full); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs();
+      const was = el.classList.contains('full');
+      msgsOpen = !msgsOpen; el.classList.toggle('full', full); if (full !== was) classed(); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs();
       // (the messages' box glides to its new height, so the timetable under it moves down with it, not in one jump:
       // ui-sweep, 2026-11-25)
       const box = el.querySelector('.board-msgs'), h1 = box?.offsetHeight;
@@ -74,7 +79,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     station = null;
     finding = false; dayRows = null;
     hold(false);
-    el.classList.remove('finding');
+    el.classList.remove('finding'); classed();
     msgs = [];
     clearInterval(timer);
     clearInterval(msgTimer);
@@ -126,7 +131,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       if (!closingFind) { fn(); return; }
       const { full } = closingFind;
       closingFind = null;
-      el.classList.remove('finding'); el.classList.toggle('full', full); fn();
+      el.classList.remove('finding'); el.classList.toggle('full', full); classed(); fn();
     };
     let rows;
     try {
@@ -170,7 +175,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     const old = el.querySelector('.bd-head') ? `<div class="busy">${el.querySelector('.bd-head').outerHTML}${el.querySelector('.panel-table')?.outerHTML ?? ''}</div>` : '';
     msgsOpen = false;
     hold(true);
-    el.classList.add('full', 'finding'); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind();
+    el.classList.add('full', 'finding'); classed(); frame(findHtml(old || stateHtml('loading', t('loading')))); wireFind();
     el.querySelector('.board-q')?.focus();
     findRefresh({ toNow: true });
   }
@@ -256,7 +261,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     hold(false);
     // (opened anew it is compact: a 'full' left from the last station's search raised the sheet to full on the way back
     // from a train, and again on any later change of the card's classes, also during a pull down: 2026-11-23)
-    el.classList.remove('finding', 'full');
+    el.classList.remove('finding', 'full'); classed();
     activity = 'Avgang';
     rowsSeen = new Set();
     msgs = [];
