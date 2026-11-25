@@ -86,8 +86,10 @@ export async function openMenu(page) {
   // in a whole check, 2026-11-23)
   if (await page.evaluate(() => { const s = window.__stack.searching; if (s) window.__stack.back(); return s; })) await sleep(500);
   if (await page.evaluate(() => document.getElementById('nav').hidden)) await page.click('#nav-button');
-  await until(page, () => !document.getElementById('nav').hidden);
-  await sleep(200);
+  // (a card since 2026-11-25: until it has slid out and stands, shown; with Home raised it waits for Home to go down
+  // first, hidden: a click on a choice mid-slide or before it showed found "not clickable")
+  await until(page, () => { const n = document.getElementById('nav'); return !n.hidden && n.style.visibility !== 'hidden' && !n.getAnimations().length; }, 4000);
+  await sleep(100);
 }
 // A row of ☰'s menu: 'day', 'settings' or 'help' (or its words as shown). Waits for its page (not for The day).
 const ROWS = { day: '#open-day', settings: '#open-settings', help: '#help-button', about: '#help-button' };
