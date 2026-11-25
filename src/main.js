@@ -407,6 +407,52 @@ function refitCard() {
 }   // the last train card's half, measured (px from its page's top): a new card's until its own is in
 
 // ---- A train ----
+// A train card's buttons glide to where the new height puts them (Max, 2026-11-25: "Train cards expanded or
+// nonexpanded top buttons should animate into the new layout, not just pop. Like the big to small tracking button"):
+// each from where it was; Follow narrows into its icon (its words cut off as it goes) and widens back; one that comes
+// (the "i" at full) grows in from nothing. index.html .sh-follow.morph.
+let headWas = null;
+const HEAD_BTNS = '#panel .panel-head :is(.panel-info, .sh-act, .sh-star, .sh-follow)';
+function headPlaces() {
+  const head = panelEl.querySelector('.panel-head');
+  if (!head) return null;
+  const top = head.getBoundingClientRect().top, was = new Map();
+  for (const b of panelEl.querySelectorAll(HEAD_BTNS)) {
+    const r = b.getBoundingClientRect();
+    if (r.width) was.set(b, { x: r.left, y: r.top - top, w: r.width, pl: parseFloat(getComputedStyle(b).paddingLeft) });
+  }
+  return was;
+}
+function glideHead(was) {
+  const now = headPlaces();
+  if (!now || reduceMotion()) return;
+  const k = settings.motionSpeed === 'calm' ? 4 / 3 : 1, timing = { duration: 280 * k, easing: 'cubic-bezier(.2, .8, .2, 1)' };
+  // one that goes (the "i" back to compact) shrinks away where it was, out of the row's way
+  const head = panelEl.querySelector('.panel-head'), hb = head.getBoundingClientRect();
+  for (const [b, from] of was) {
+    if (now.has(b) || !b.isConnected) continue;
+    b.classList.add('leaving');
+    b.style.left = `${from.x - hb.left}px`; b.style.top = `${from.y}px`;
+    b.animate([{ scale: 1 }, { scale: 0 }], timing).finished.catch(() => {}).then(() => { b.classList.remove('leaving'); b.style.left = ''; b.style.top = ''; });
+  }
+  for (const [b, to] of now) {
+    const from = was.get(b);
+    b.getAnimations().forEach(a => a.cancel());
+    if (!from) { b.animate([{ scale: 0 }, { scale: 1 }], timing); continue; }
+    const dx = from.x - to.x, dy = from.y - to.y;
+    if (b.classList.contains('sh-follow') && Math.abs(from.w - to.w) > 1) {
+      // (its width changes while its place in the row keeps its new width: the buttons beside it don't move twice)
+      b.classList.add('morph');
+      const a = b.animate([
+        { width: `${from.w}px`, marginLeft: `${to.w - from.w}px`, paddingLeft: `${from.pl}px` },
+        { width: `${to.w}px`, marginLeft: '0px', paddingLeft: `${to.w < from.w ? (to.w - 15) / 2 : to.pl}px` },
+      ], timing);
+      a.finished.catch(() => {}).then(() => b.classList.remove('morph'));
+      continue;
+    }
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) b.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], timing);
+  }
+}
 function trainPage(id) {
   const meta = () => {
     const r = trains.get(id);
@@ -477,7 +523,12 @@ function trainPage(id) {
     // and the top took the card from that train's page, which then showed empty; Max's PC and phone, 2026-11-23)
     hide() { if (shareNote?.id === id) shareNote = null; if (panel.openId === id) { holdPath = true; panel.close(); holdPath = false; } if (panelEl.parentElement === myEl) holder.append(panelEl); },
     unmount() { if (panel.openId === id) panel.close(); if (panelEl.parentElement === myEl && myEl) holder.append(panelEl); },
-    level(i) { if (panel.openId === id) panelEl.classList.toggle('full', i === 2); },
+    beforeLevel() { headWas = panel.openId === id ? headPlaces() : null; },
+    level(i) {
+      if (panel.openId !== id) return;
+      panelEl.classList.toggle('full', i === 2);
+      if (headWas) { glideHead(headWas); headWas = null; }
+    },
     // (its content at full, measured with its full look on for that moment: the sheet's full stops under it; src/stack.js
     // fullOf)
     atFull(measure) {

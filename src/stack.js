@@ -348,6 +348,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function setIndex(i, { still = false } = {}) {
     // (a page that doesn't rest low: half; closing it is home(), not a height)
     if (i <= 0 && !searching && !keepsLow(top())) i = 1;
+    // (the page notes how it looks before the height changes it, to glide from there: a train card's buttons)
+    if (!searching) top()?.def.beforeLevel?.(Math.max(0, Math.min(2, i)));
     idx = Math.max(0, Math.min(2, i));
     // (full measured now, the page as it is: it may have grown since its heights were read)
     if (idx === 2 && !searching) H[2] = Math.max(H[2], fullOf(top(), H[1]));
