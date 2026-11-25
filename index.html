@@ -614,7 +614,7 @@
     .about-top { display: grid; justify-items: center; gap: 6px; padding: 8px 0 4px; }
     .about-logo svg { height: 54px; width: auto; color: var(--ink); }
     .about-top p { margin: 0; color: var(--muted); font-size: 15px; }
-    .about-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+    .about-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
     .about-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 8px 12px; border: 0; border-radius: 16px;
       font: inherit; font-size: 15px; font-weight: 700; background: var(--hover); color: var(--ink); cursor: pointer; }
     .about-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -623,7 +623,8 @@
     .about-btn.kofi { background: #72a4f2; color: #16263d; }
     .about-btn.kofi img { height: 20px; width: auto; display: block; }
     .about-soon { margin: 6px 0 0; text-align: center; font-size: 12.5px; color: var(--muted); }
-    .about-credits { list-style: none; margin: 0; padding: 4px 12px; border-radius: 16px; background: var(--hover); }
+    /* (12 px above it, the page's gap between cards: it sat right on the buttons, Max 2026-11-25 "Pic 1: Bad padding") */
+    .about-credits { list-style: none; margin: 12px 0 0; padding: 4px 12px; border-radius: 16px; background: var(--hover); }
     .about-credits li { display: grid; gap: 1px; padding: 9px 0; border-bottom: 1px solid var(--line); }
     .about-credits li:last-child { border-bottom: 0; }
     .about-credits span { color: var(--muted); font-size: 12.5px; }
