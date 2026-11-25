@@ -915,17 +915,22 @@ function openNav() {
   slideNav(true).then(() => { if (navOpen) for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel()); });
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
-function closeNav() {
+// at once: a page coming up from the menu (or over it): the search row is hidden on other pages, so no slide back, and
+// the open menu's room under the bar goes before the page comes in (it stayed while the buttons slid home: Settings
+// and About slid in 10 px low and jumped up; Max, 2026-11-25 "Opening settings or about has a vertical jump of a few
+// pixels before settling")
+function closeNav({ now = false } = {}) {
   if (!navOpen) return;
   navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
-  slideNav(false).then(() => {
+  const shut = () => {
     if (navOpen) return;   // (opened again meanwhile)
     navEl.hidden = true;
     for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel());
     document.getElementById('sheet').classList.remove('menu-open');
     stack.refit();
-  });
+  };
+  if (now) shut(); else slideNav(false).then(shut);
 }
 onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
@@ -1011,8 +1016,8 @@ function defineNow(key) {
 }
 
 document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
-document.getElementById('open-settings').onclick = () => { closeNav(); navBack = true; stack.open('page:settings'); };
-document.getElementById('help-button').onclick = () => { closeNav(); navBack = true; stack.open('page:help'); };
+document.getElementById('open-settings').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:settings'); };
+document.getElementById('help-button').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:help'); };
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -1798,7 +1803,7 @@ stack = createStack({
     // back on Home from a page the menu opened: the menu open again (navBack, openNav above)
     if (pg.key === 'home' && navBack) { navBack = false; setTimeout(openNav, 0); }
     // (the menu is Home's: another page coming up, from the status pill or the map, shuts it)
-    if (pg.key !== 'home' && navOpen) closeNav();
+    if (pg.key !== 'home' && navOpen) closeNav({ now: true });
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
