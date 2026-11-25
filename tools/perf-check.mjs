@@ -79,7 +79,7 @@ const placeOf = (page, id) => page.evaluate((id) => {
   const x = (window.__last3d ?? []).find(t => t.id === id);
   return x ? [x.lon, x.lat] : null;
 }, id);
-const closePanel = page => page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
+const closePanel = page => page.evaluate(() => { if (window.__stack.top()?.startsWith('train:')) window.__stack.back(); });   // (the train's page off the stack)
 
 if (part('start')) {
   const page = await browser.newPage();

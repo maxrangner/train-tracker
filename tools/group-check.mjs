@@ -18,7 +18,11 @@ try {
     if (await page.evaluate(() => (window.__trains?.count ?? 0) > 0 && Boolean(window.__map?.loaded())).catch(() => false)) break;
   }
   await sleep(3000);
-  const shut = () => page.evaluate(() => { for (const id of ['picker', 'panel']) { const el = document.getElementById(id); el.querySelector('.panel-close')?.click(); el.hidden = true; } });
+  // (the pickers' and the train's pages closed, one step back each, as their × did)
+  const shut = () => page.evaluate(() => {
+    for (let i = 0; i < 12 && /^(pick|train):/.test(window.__stack.top() ?? ''); i++) window.__stack.back();
+    for (const id of ['picker', 'panel']) document.getElementById(id).hidden = true;
+  });
   const state = () => page.evaluate(() => ({ picker: !document.getElementById('picker').hidden, rows: document.querySelectorAll('#picker [data-i]').length,
     card: !document.getElementById('panel').hidden && document.querySelector('#panel .panel-head strong')?.textContent }));
 

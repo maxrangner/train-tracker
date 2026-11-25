@@ -89,7 +89,7 @@ try {
         await sleep(3500);   // the route, then the camera and the path
         const head = await page.evaluate(() => document.querySelector('#panel .panel-head strong')?.textContent ?? '');
         if (kind(head) === k) { t = { ...c, number: head }; break; }
-        await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
+        await page.evaluate(() => { if (window.__stack.top()?.startsWith('train:')) window.__stack.back(); });   // (the card closed: its page off the stack)
         await sleep(600);
       }
       if (!t) { fails.push(`${theme}: no train ${k === 'home' ? 'inside Sweden' : `${k} abroad`} on the map to open`); continue; }
@@ -119,7 +119,7 @@ try {
         await page.screenshot({ path: `shots/abroad/card-${k}-${theme}${cut ? '-cut' : ''}.jpg`, quality: 85 });
         // The map: the card closed, the leg in view.
         if (seen.line) {
-          await page.evaluate(() => { const f = document.querySelector('#panel .panel-follow[aria-pressed="true"]'); if (f) f.click(); });   // the camera stops following
+          await page.evaluate(() => { const f = document.querySelector('#sheet .sh-follow[aria-pressed="true"]'); if (f) f.click(); });   // the camera stops following
           await sleep(400);
           await page.evaluate(line => { const lons = line.map(c => c[0]), lats = line.map(c => c[1]);
             window.__map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: { top: 140, bottom: 140, left: 70, right: 70 }, duration: 0, maxZoom: 9 }); }, seen.line);
@@ -128,7 +128,7 @@ try {
           await page.screenshot({ path: `shots/abroad/map-${k}-${theme}.jpg`, quality: 85 });
         }
       }
-      await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
+      await page.evaluate(() => { if (window.__stack.top()?.startsWith('train:')) window.__stack.back(); });
       await sleep(800);
       const after = await page.evaluate(() => (window.__map.getSource('abroad')?.serialize().data.features ?? []).length);
       if (k !== 'home') expect(after === 0, `${label}: closing the card takes the leg away (${after} left)`);
@@ -166,7 +166,7 @@ try {
     const se = await firstClear([[13.0, 55.609], [13.19, 55.705], [12.70, 56.045], [18.06, 59.33]], false);
     if (se) expect(se.board, `${theme}: a Swedish station (${se.name}) still opens its board`);
     else notes.push(`${theme}: a Swedish station's tap not checked (no station clear of trains in 4 spots)`);
-    await page.evaluate(() => document.querySelector('#board .panel-close')?.click());
+    await page.evaluate(() => { if (window.__stack.top()?.startsWith('station:')) window.__stack.back(); });
     expect(!errors.length, `${theme}: page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
     await page.close();
   }

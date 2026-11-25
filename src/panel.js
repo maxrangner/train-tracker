@@ -1,7 +1,7 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 // Compact (Max, 2026-11-15, sketch C): the number, two tiles (the lateness now; the minutes to a stop, the end station
 // unless another is picked from the stops ahead) and the trip as one line. "All stops", or a drag up on a phone, opens
-// it full (class "full", src/sheet.js): the star, Trafikverket's notes and the timeline of every stop. On the full card
+// it full (class "full", src/stack.js): the star, Trafikverket's notes and the timeline of every stop. On the full card
 // "i" next to the star (class "info"; Max, 2026-11-20) swaps the notes and the stops for the train's own numbers
 // (src/train-info.js, drawn by options.info each second while shown); "i" again brings the stops back.
 // "All places" above the stops on the full card (Max, 2026-11-21, sketch C) puts every place the train passes without
@@ -15,15 +15,11 @@ import { icon } from './icons.js';
 import { t } from './i18n.js';
 import { hhmm, now } from './clock.js';
 import { settings } from './settings.js';
-import { glide } from './sheet.js';
 import { abroadEnds, flagSvg } from './abroad.js';
 
 import { esc } from './html.js';
 
 const time = t => (t ? hhmm(t) : '');
-
-// The favourite star (☆ / ★), used by the train panel and the station board.
-export const star = on => `<button class="panel-star" type="button" aria-pressed="${on}" aria-label="${t(on ? 'starOn' : 'starOff')}">${icon(on ? 'starFilled' : 'star')}</button>`;
 
 // Trafikverket's notes on the full card fold under one line (Max, 2026-11-16: they "sometimes take a lot of space";
 // folded by default (Max, 2026-11-16: "change default to collapsed"), problems fold too, with a red ⚠ and their count on the
@@ -75,9 +71,9 @@ function routeLate(stops) {
   return null;
 }
 
-// onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): the Follow button was pressed.
-// onRoute(id, route): the open train's route has loaded (fetchRoute), e.g. to draw its path.
-// isStarred(number) / onStar(number) -> starred now: the ☆ for favourites.
+// onSelect(id or null): a train was opened, or the panel closed. onFollow(id, on): Follow was pressed (the sheet's
+// Follow, src/stack.js, through toggleFollow). onRoute(id, route): the open train's route has loaded (fetchRoute), e.g.
+// to draw its path.
 // lateOf(id): the train's minutes late now, as on the map (undefined: not on the map; null: not known).
 // station(sig): the station ({ name, lon, lat, country }), for a trip's end abroad (src/abroad.js).
 // What the map draws of a trip (src/main.js onRoute: the line, its stop names, the leg abroad), without the times:
@@ -86,15 +82,14 @@ const tripShape = route => JSON.stringify([route?.from, route?.to, route?.pieces
   (route?.stops ?? []).map(s => `${s.station}|${s.activity}|${s.advertised ? 1 : 0}|${s.canceled ? 1 : 0}`)]);
 
 // places(id, route, stops): the places passed without stopping between the card's stops (src/places-ahead.js tripPlaces).
-// In the one sheet (2026-11-22, src/stack.js): onCloseTap(id) is what its × does (the page goes; the × is hidden and
-// stays for the tools); onMore(full) is what "All stops" / "Fewer" ask for (the sheet to full or half; the page then
-// sets .full); onStop(sig): a stop in the timeline tapped (its station's page); onFold(open, box): its messages opened
-// or shut (box: their part).
-export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, isStarred, onStar, lateOf, info, places, statusOf, onCloseTap, onMore, onStop, onFold, extra = null, onHead }) {
+// In the one sheet (2026-11-22, src/stack.js; its ‹, star and Follow are the sheet's): onMore(full) is what "All
+// stops" / "Fewer" ask for (the sheet to full or half; the page then sets .full); onStop(sig): a stop in the timeline
+// tapped (its station's page); onFold(open, box): its messages opened or shut (box: their part).
+export function createPanel(el, { stationName, station = () => undefined, onSelect, onFollow, onRoute, lateOf, info, places, statusOf, onMore, onStop, onFold, extra = null, onHead }) {
   let openId = null;
   let following = false;
   let canFollow = true;   // false for a train that isn't on the map
-  let number = null;      // the open train's public number (for the star)
+  let number = null;      // the open train's public number (the sheet's star, src/main.js)
   let shown = null;       // { train, route, stops }: what the panel shows, to redraw it in another language
   let target = null;      // the station counted down to (null: the end station); kept while the card is open
   let picking = false;    // the list of stops to count down to is open
@@ -113,23 +108,16 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     foldNow();
   });
 
-  // The top line: the train's number and company, then the star (shown only when full), Follow and × (only on a wide
-  // screen; on a phone a drag down or a tap on the map closes it: Max, 2026-11-15).
+  // The top line: the train's number and company, then "i" (shown only when full); the sheet puts its ‹, share, star
+  // and Follow in it (src/stack.js syncBar, the train page's barIn).
   const head = (train, company) =>
     // (the company on a line of its own under the number, with the destination when collapsed: Max, 2026-11-24, "yes, on
     // pc and phone"; beside the number it was cut short once ‹ came on the line)
     `<div class="panel-head pg-head"><span class="panel-title"><strong>${esc(train.number ?? train.label)}</strong><span class="panel-sub">` +
     (company ? `<span class="panel-co">${esc(company)}</span>` : '') + `</span></span><span class="panel-buttons">` +
     (info ? `<button class="panel-info" type="button" aria-pressed="${infoOn}" aria-label="${t('tiButton')}">${icon('about')}</button>` : '') +
-    (number && isStarred ? star(isStarred(number)) : '') +
-    (canFollow ? `<button class="panel-follow" type="button" aria-pressed="${following}">${icon('follow', 15)}<span>${t(following ? 'following' : 'follow')}</span></button>` : '') +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div>`;
+    `</span></div>`;
   function wireHead() {
-    el.querySelector('.panel-close').onclick = () => (onCloseTap ? onCloseTap(openId) : close());
-    const f = el.querySelector('.panel-follow');
-    if (f) f.onclick = () => { setFollowing(!following); onFollow?.(openId, following); };
-    const s = el.querySelector('.panel-star');
-    if (s) s.onclick = () => { const on = onStar(number); s.outerHTML = star(on); wireHead(); };
     const i = el.querySelector('.panel-info');
     if (i) i.onclick = () => setInfo(!infoOn);
     onHead?.(el.querySelector('.panel-head'));   // (a new head line: the sheet puts the page's buttons in it again)
@@ -145,11 +133,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (!infoOn || !shown?.route || !el.classList.contains('full')) return;
     info?.(el.querySelector('.panel-info-box'), { id: openId, number, stops: shown.stops ?? [], route: shown.route });
   };
-  function setFollowing(on) {
-    following = on;
-    const b = el.querySelector('.panel-follow span');
-    if (b) { b.parentElement.setAttribute('aria-pressed', String(on)); b.textContent = t(on ? 'following' : 'follow'); }
-  }
+  // (the sheet's Follow shows it: src/stack.js syncBar reads `following`)
+  function setFollowing(on) { following = on; }
 
   // While a card is open its times are asked for again every minute (Max, 2026-11-14: they came only once, when
   // it opened, so new actual times never showed). The table keeps where it was scrolled to.
@@ -238,11 +223,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (openId !== train.id) return;   // another train was tapped meanwhile
     onRoute?.(train.id, route);
     shown = { train, route };
-    if (swap) glide(el, () => { draw(train, route); rollIn(swap); });
-    // From "Laddar…" to the timetable in one glide (a step of ~24 px, the map's buttons dipping with it; 2026-11-21's
-    // sweep). Not under a finger: a glide turns the drag's own transitions back on.
-    else if (el.classList.contains('dragging')) draw(train, route);
-    else glide(el, () => draw(train, route));
+    draw(train, route);
+    if (swap) rollIn(swap);
     refreshLater(train);
   }
   // What the card shows now, as numbers (for the swap above): the train number, the minutes late, the minutes to the
@@ -589,7 +571,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const x = stops.length ? extra?.(openId) : null;
     if (x) { const at = el.querySelector('.cd-tb') ?? el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
     const more = el.querySelector('.panel-more');
-    if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
+    if (more) more.onclick = () => onMore(!el.classList.contains('full'));
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
     // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
@@ -630,9 +612,10 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let wasFull = el.classList.contains('full');
   new MutationObserver(() => {
     const full = el.classList.contains('full');
-    // compact ↔ full: what is shown stays where it is, the sheet's edge reveals the rest or covers it; nothing scrolls,
-    // fades or arrives (Max, 2026-11-25: "Expanding a train card redraws the portion that is already visible. Only the
-    // new part should be revealed through the expanding card, not all of it slide in. Same in reverse")
+    // compact → full with "i" on: the train's own numbers drawn (drawInfo draws only on the full card). Nothing else
+    // here: what is shown stays where it is and the sheet's edge reveals the rest or covers it, nothing scrolls, fades
+    // or arrives (Max, 2026-11-25: "Expanding a train card redraws the portion that is already visible. Only the new
+    // part should be revealed through the expanding card, not all of it slide in. Same in reverse")
     if (full && !wasFull && infoOn) requestAnimationFrame(drawInfo);
     wasFull = full;
   }).observe(el, { attributes: true, attributeFilter: ['class'] });

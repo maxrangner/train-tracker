@@ -196,12 +196,12 @@ try {
       const el = document.getElementById('panel'), stop = el.querySelector('.cd-stop');
       return { tiles: el.querySelectorAll('.tile').length, late: el.querySelector('.cd-late b')?.textContent ?? '', stop: stop?.innerText.replace(/\n/g, ' ') ?? '',
         button: stop?.tagName === 'BUTTON', rows: [...el.querySelectorAll('.cd-row .cd-name b')].map(b => b.textContent),
-        full: el.classList.contains('full'), close: el.querySelector('.panel-close')?.getBoundingClientRect().width ?? -1,
+        full: el.classList.contains('full'), close: el.querySelectorAll('.panel-close').length,
         timeline: el.querySelector('.panel-table')?.getBoundingClientRect().height ?? -1, level: window.__stack.level };
     });
     let c = await card();
     expect(c.tiles === 2 && c.late, `the card shows ${c.tiles} tiles, lateness "${c.late}"`);
-    expect(c.close === 0, 'the card shows a × in the sheet');
+    expect(c.close === 0, `the card has ${c.close} × of its own (the sheet's ‹ and a map tap close it)`);
     expect(!c.full && c.timeline === 0 && c.level === 1, `the card opened full (${c.full}), or shows its timeline, or the sheet isn't at half (${c.level})`);
     // With saved routes the replay's card is as at the replay's clock, the stops ahead (as live); a train at its end:
     // "Arrived".

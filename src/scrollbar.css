@@ -11,19 +11,10 @@
 .sb[hidden] { display: none; }
 .sb-arrow { flex: none; width: 12px; height: 12px; padding: 0; border: 0; background: none; color: var(--muted); display: grid; place-items: center;
   cursor: pointer; opacity: 0; transition: opacity .15s; }
-:is(.sheet, #sheet):hover .sb-arrow { opacity: .85; }
+#sheet:hover .sb-arrow { opacity: .85; }
 .sb-arrow:hover { color: var(--ink); }
 .sb-track { position: relative; flex: 1; min-height: 0; cursor: pointer; }
 .sb-thumb { position: absolute; top: 0; left: 50%; width: 5px; margin-left: -2.5px; border-radius: 3px; cursor: grab;
   background: color-mix(in srgb, var(--muted) 50%, transparent); transition: background-color .15s; }
 .sb-thumb:hover, .sb-thumb.sb-drag { background: color-mix(in srgb, var(--muted) 85%, transparent); }
 .sb-thumb.sb-drag { cursor: grabbing; }
-
-/* Every scrolling area in a card gets the Statistics page's room for the bar (Max, 2026-11-19: "ALL should have proper
-   padding"). With a mouse, our own bar (above); on a phone, the phone's bar is drawn over the area's right edge, so the
-   area reaches 10 px into the card's margin and pads its content back: the content stays in line, the bar runs in the
-   margin. Boxes with a background of their own (the countdown list) keep their edge and pad inside instead.
-   tools/scroll-check.mjs fails when a scrolling area anywhere has less than 8 px for the bar, so a new one can't miss it. */
-.sheet :is(#settings, .help-body, #disruptions-body, #conn-body, #search-results, .pick-list, .board-msg-list):not(.sb-own) {
-  margin-right: -10px; padding-right: 10px; scrollbar-width: thin; }
-.sheet .cd-list { padding-right: 10px; }

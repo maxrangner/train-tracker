@@ -125,7 +125,7 @@ await page.screenshot({ path: 'shots/follow-2.png' });
 await page.click('#sheet .sh-follow');
 await watch('after pressing Follow', 4);
 await page.screenshot({ path: 'shots/follow-3.png' });
-await page.evaluate(() => document.querySelector('#panel .panel-close').click());   // the train card's × (hidden on a phone since 2026-11-15: pressed directly)
+await page.evaluate(() => window.__stack.back());   // the train's page closed (one step back: what its × did)
 await sleep(1);
 console.log(`after × : panel ${await page.$eval('#panel', el => el.hidden ? 'hidden' : 'open')}, padding`,
   await page.evaluate(() => JSON.stringify(window.__map.getPadding())));

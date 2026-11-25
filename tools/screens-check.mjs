@@ -86,7 +86,7 @@ try {
   await toRest(page);
 
   // ---- ☰ answers at once after a swipe of the sheet (Max, 2026-11-20: Settings' dimming let taps through as it slid
-  // away, and a tap within ~0.4 s of a swipe got no click: src/sheet.js onTap acts on the finger lifted) ----
+  // away, and a tap within ~0.4 s of a swipe got no click: src/tap.js onTap acts on the finger lifted) ----
   for (const [name, open] of [['Settings swiped away', () => openFromMenu(page, 'settings')], ['Home swiped down', () => setLevel(page, 2)]]) {
     await open();
     await settle();
