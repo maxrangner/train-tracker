@@ -36,7 +36,8 @@ function recorder() {
     let text = '';
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
     text = text.trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('aria-label') || '';
-    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')) };
+    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')),
+      roll: Boolean(el.closest('.cd-late, .roll')) };   // (numbers that roll on purpose, src/motion.js roll)
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
   R.snap = () => {
@@ -101,8 +102,12 @@ function analyse(rec, kind) {
   // its page was shown before)
   const sig = e => `${e[7].replace(/^ghost:/, '')}|${meta[e[0]].el}|${meta[e[0]].text}`;
   const shownBefore = new Set([...b.values()].map(sig));
+  const placeBefore = new Set([...b.values()].map(e => `${e[7]}|${meta[e[0]].el}|${Math.round(e[1] / 4)}|${Math.round(e[2] / 4)}`));
+  const firstAt = new Map();
+  for (const f of frames) for (const e of f.els) if (!firstAt.has(e[0])) firstAt.set(e[0], e);
+  const samePlace = (e) => { const g = firstAt.get(e[0]); return placeBefore.has(`${g[7].replace(/^ghost:/, '')}|${meta[g[0]].el}|${Math.round(g[1] / 4)}|${Math.round(g[2] / 4)}`); };
   const seen = new Map();
-  for (const f of frames) for (const e of f.els) if (!(b.has(e[0]) && !e[7].startsWith('ghost:')) && !a.has(e[0]) && e[7] !== after.top && !(e[7].startsWith('ghost:') && shownBefore.has(sig(e)))) { const s = seen.get(e[0]) ?? { n: 0, at: e }; s.n++; seen.set(e[0], s); }
+  for (const f of frames) for (const e of f.els) if (!(b.has(e[0]) && !e[7].startsWith('ghost:')) && !a.has(e[0]) && e[7] !== after.top && !(e[7].startsWith('ghost:') && (shownBefore.has(sig(e)) || samePlace(e)))) { const s = seen.get(e[0]) ?? { n: 0, at: e }; s.n++; seen.set(e[0], s); }
   for (const [id, s] of seen) {
     if (meta[id].pg === 'screen' && /maplibregl/.test(meta[id].el)) continue;
     finds.push({ kind: 'stray', id, what: `${s.at[7]} ${say(id).replace(/^\S+ /, '')}`, info: `seen in ${s.n} frame(s) at ${Math.round(s.at[1])},${Math.round(s.at[2])} ${Math.round(s.at[3])}×${Math.round(s.at[4])}` });
@@ -113,7 +118,7 @@ function analyse(rec, kind) {
   for (const [id, s] of series) {
     if (!a.has(id) || s.length < 4) continue;
     if (meta[id].pg === 'screen' && !/status|map-btn|sh-/.test(meta[id].el)) continue;
-    if (meta[id].bottom) continue;   // (the sheet's bottom band, "Mer ⌄": it rides the bottom edge)
+    if (meta[id].bottom || meta[id].roll) continue;   // (the sheet's bottom band, "Mer ⌄": it rides the bottom edge; a rolling number)
     // jump: at rest (3 frames within 0.5 px) then moving 1 px or more again; or turning back by 2 px or more
     // (each axis on its own: a page sliding in sideways while the sheet rises is two smooth motions)
     // (at rest on one axis while it moves on the other counts: a title sliding in sideways, still in height, then
@@ -126,7 +131,7 @@ function analyse(rec, kind) {
         // (against the sheet's top for y: the sheet itself glides)
         const d = ax === 'y' ? s[k].rel - s[k - 1].rel : s[k].x - s[k - 1].x;
         if (Math.abs(d) < 0.5) { rest[ax]++; if (rest[ax] >= 3) rested[ax] = true; continue; }
-        if (rested[ax] && Math.abs(d) >= 1 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax === 'y' ? 'up/down in the sheet' : 'sideways'})` };
+        if (rested[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax === 'y' ? 'up/down in the sheet' : 'sideways'})` };
         if (dir[ax] && Math.sign(d) !== dir[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `turned back (${ax})` };
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
       }
@@ -135,7 +140,7 @@ function analyse(rec, kind) {
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top
     if (kind === 'grow') {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
-      if (hi - lo >= 1.5) {
+      if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
         for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
         const total = Math.abs(rel.at(-1) - rel[0]);
