@@ -1,7 +1,8 @@
-// ☰'s menu: a card under the search bar, its right edge in line with the bar's (☰'s), an icon before each choice
+// ☰'s menu: a card under the search bar, an icon before each choice; its right edge in line with the box's outer edge
+// (a computer: the sheet's; a phone, whose sheet is the screen's width: the bar's, ☰'s; Max, 2026-11-25)
 // (The day, Settings, About). It slides out from under the bar and back under it, as fast both ways; where there is no
 // room under the bar (a phone's sheet at rest, its bar at the bottom) it comes out above the sheet. The page behind
-// holds still while it is open (src/stack.js freeze). ☰, a map tap, a page coming up, Esc and the backs close it
+// holds still while it is open (src/stack.js freeze). ☰, the sheet's arrow, a map tap, a page coming up, Esc and the backs close it
 // (src/back.js).
 //
 // One owner of its state: closed -> opening -> open -> closing -> closed. Opening waits for the sheet to stand
@@ -29,7 +30,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     const on = next === 'opening' || next === 'open';
     navEl.hidden = next === 'closed';
     button.setAttribute('aria-expanded', String(on));
-    stack().freeze(on);
+    stack().freeze(on, close);   // (the sheet's arrow/handle closes it too: src/stack.js freeze)
     // (opening, not placed yet: not shown, where it was, until it slides out from its place once the sheet stands)
     navEl.style.visibility = next === 'opening' && !placed ? 'hidden' : '';
     if (next === 'closed' || next === 'open') navEl.getAnimations().forEach(x => x.cancel());
@@ -37,7 +38,8 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   function place() {
     const a = button.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
     const w = navEl.offsetWidth, h = navEl.offsetHeight;
-    navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, a.right - w)))}px`;
+    const right = isWide() ? s.right : a.right;
+    navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)))}px`;
     // (a computer at rest: under the whole box, its arrow band included)
     const under = isWide() && stack().level === 0 ? s.bottom : a.bottom, g = gap();
     if (under + g + h <= innerHeight - 10) { side = 'below'; navEl.style.top = `${Math.round(under + g)}px`; }

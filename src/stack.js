@@ -532,8 +532,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // page behind; only ☰ and a map tap do anything then (Max, 2026-11-24: "When hamburger is acativated the normal
   // scroll of the card should not be possible"; "Only tapping search should be normal behavior, or hamburger or tap the
   // map dismisses"). The class .frozen stops the page's scroll (src/css/sheet.css).
-  let frozen = false;
-  function freeze(on) { frozen = Boolean(on); sheet.classList.toggle('frozen', frozen); }
+  // (dismiss: what the sheet's handle or arrow does meanwhile: closes the menu; Max, 2026-11-25 "With menu is expanded,
+  // the little arrow below search should work and dismiss menu")
+  let frozen = false, dismissFrozen = null;
+  function freeze(on, dismiss = null) { frozen = Boolean(on); dismissFrozen = frozen ? dismiss : null; sheet.classList.toggle('frozen', frozen); }
   function pointerDown(e) {
     touching = true;
     if (frozen) return;
@@ -656,7 +658,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // A drag's click is no tap (the handle's tap: pointerEnd); on the page at low, a tap raises it to half.
   sheet.addEventListener('click', (e) => {
     if (performance.now() < eatUntil) { e.preventDefault(); e.stopPropagation(); return; }
-    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); return; }
+    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); if (e.target.closest('.sh-grab')) dismissFrozen?.(); return; }
     if (e.target.closest('.sh-grab')) return;
     if (idx === 0 && e.target.closest('.pg') && !e.target.closest('button, a, input, [role="button"]')) setIndex(1);
   }, true);
