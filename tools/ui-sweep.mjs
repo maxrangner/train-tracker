@@ -230,6 +230,52 @@ async function padding(page) {
   });
 }
 
+// ---- empty room and the menu's place, after each transition ----
+// Empty room: the page on top at full ends at most 24 px above where it can end (its bottom when it doesn't scroll, its
+// scroll end when it does). Its content is what shows: text, buttons, pictures, fields; an empty box (a spacer) is not
+// content (Max, 2026-11-25, New trip: "soooo much empty space. I asked you to remove ALL these kinds of issues").
+// The menu's place: open, its card hangs from the box (a computer: under the sheet, right edge with the sheet's; a phone:
+// above the sheet or under the bar, right edge with ☰'s), 6 to 16 px off it (Max, 2026-11-25: "Menu NOT aligned";
+// back from Settings it stood elsewhere).
+// Not counted: a phone's room for its keyboard (data-spacer, and the search, full screen on a phone by design: the
+// keyboard covers its lower half; this browser has none); a scrolled page's end may have up to 32 px (its last card's
+// bottom room and the page's own).
+async function placeChecks(page) {
+  return page.evaluate(() => {
+    const out = [];
+    const sh = document.getElementById('sheet').getBoundingClientRect();
+    const wide = innerWidth >= 440;
+    if (window.__stack.level === 2 && !(window.__stack.searching && !wide)) {
+      const pg = window.__stack.searching ? document.getElementById('search-results') : document.querySelector(`#sheet .pg[data-key="${CSS.escape(window.__stack.top())}"]`);
+      if (pg) {
+        const top = pg.getBoundingClientRect().top - pg.scrollTop;
+        let end = 0;
+        const real = pg.querySelectorAll('button, input, img, svg, canvas, textarea, select');
+        for (const e of real) if (e.offsetHeight) end = Math.max(end, e.getBoundingClientRect().bottom - top);
+        const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          if (!n.textContent.trim() || !n.parentElement.offsetHeight) continue;
+          const r = document.createRange(); r.selectNodeContents(n);
+          for (const q of r.getClientRects()) end = Math.max(end, q.bottom - top);
+        }
+        const scrolls = pg.scrollHeight > pg.clientHeight + 1;
+        const g = document.querySelector('#sheet .sh-grab'), gr = g?.offsetHeight ? g.getBoundingClientRect() : null;
+        const spacers = [...pg.querySelectorAll('[data-spacer]')].reduce((h, e) => h + e.offsetHeight, 0);
+        const limit = scrolls ? pg.scrollHeight - spacers : Math.min(sh.bottom, innerHeight) - (gr && gr.top >= end + top - 1 ? gr.height : 0) - top;
+        if (end && limit - end > (scrolls ? 32 : 24)) out.push({ kind: 'room', what: window.__stack.searching ? 'search' : window.__stack.top(), info: `${Math.round(limit - end)} px empty under its content${scrolls ? ' (scrolled to its end)' : ''} (want 24 at most)` });
+      }
+    }
+    const nav = document.getElementById('nav');
+    if (nav && !nav.hidden && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
+      const r = nav.getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
+      const right = wide ? sh.right : b.right;
+      const off = r.top >= sh.top ? r.top - (wide && window.__stack.level === 0 ? sh.bottom : b.bottom) : sh.top - r.bottom;
+      if (Math.abs(r.right - right) > 1 || off < 6 || off > 16) out.push({ kind: 'place', what: 'menu', info: `its right edge ${Math.round(r.right - right)} px off, ${Math.round(off)} px from the box (want 0 and 6 to 16)` });
+    }
+    return out;
+  });
+}
+
 // ---- the transitions ----
 const click = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); e?.click(); return Boolean(e); }, sel);
 const esc = page => page.keyboard.press('Escape');
@@ -274,6 +320,9 @@ const T = [
   { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
   { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
   { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
+  { name: 'menu → arrow', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#sheet .sh-grab') },
+  { name: 'new trip typing', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('newtrip', { go: true })); await until(p, () => Boolean(document.querySelector('#sheet .nt-stop'))); await settle(p); },
+    act: p => p.evaluate(() => { const q = document.querySelector('#sheet .nt-q'); if (q) { q.focus(); return true; } const b = [...document.querySelectorAll('#sheet .nt-stop [data-nt]')].at(-1); b?.click(); return Boolean(b); }) },
   { name: 'menu → rewind', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-day') },
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
@@ -342,6 +391,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
         const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
         frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `x ${e[1]} y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]} ${meta[e[0]].el}<${e[7]}` : '–'}`); });
       }
+      finds.push(...await placeChecks(page));
       const pad = (await padding(page)).filter(x => x.type === 'gap' ? x.px > 0 : true);
       all.push({ dev, name: tr.name, frames: frames.length, finds, pad, top: after.top });
       console.log(`${dev} ${tr.name}: ${frames.length} frames, ${finds.length} find(s) → ${after.top}`);
