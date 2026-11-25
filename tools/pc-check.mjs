@@ -86,17 +86,18 @@ try {
   const stayed = await page.evaluate(() => window.__stack.top());
   ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
 
-  // 6. ☰: a card under the search bar's box, its right edge in line with ☰'s, an icon before each choice, the search field
+  // 6. ☰: a card under the search bar's box, its right edge in line with the box's (Max, 2026-11-25: "Menu NOT aligned",
+  //    his pick: the box's outer edge), an icon before each choice, the search field
   //    still there (Max, 2026-11-25: "revert the hamburger menu. Slide out card like before. Under the hamburger and under
   //    the searchbar, with good padding. Aligned with the right side of the search bar. Add back icons"); the page behind
   //    holds still (a wheel over it moves nothing); a choice opens its page, the menu goes
   await page.evaluate(() => window.__stack.home(1)); await sleep(1200);
   await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(900);
   const menu = await page.evaluate(() => { const n = document.getElementById('nav'), b = document.getElementById('nav-button').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); if (!n || n.hidden) return null;
-    const r = n.getBoundingClientRect(); return { at: Math.round(r.right), right: Math.round(r.right - b.right), gap: Math.round(r.top - s.bottom), icons: n.querySelectorAll('.nav-row .nav-ic svg').length,
+    const r = n.getBoundingClientRect(); return { at: Math.round(r.right), right: Math.round(r.right - s.right), gap: Math.round(r.top - s.bottom), icons: n.querySelectorAll('.nav-row .nav-ic svg').length,
       field: Boolean(document.querySelector('#sheet .sh-field').offsetParent), rows: n.querySelectorAll('.nav-row').length }; });
   ok(menu && menu.rows === 3 && menu.icons === 3 && Math.abs(menu.right) <= 1 && menu.gap >= 6 && menu.gap <= 16 && menu.field,
-    `☰: a card of ${menu?.rows} choices with ${menu?.icons} icons, ${menu?.gap} px under the box (want 6 to 16), its right edge ${menu?.right} px from ☰'s, the field ${menu?.field ? 'there' : 'gone'}`);
+    `☰: a card of ${menu?.rows} choices with ${menu?.icons} icons, ${menu?.gap} px under the box (want 6 to 16), its right edge ${menu?.right} px from the box's, the field ${menu?.field ? 'there' : 'gone'}`);
   const still = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
   const over = await page.evaluate(() => { const r = document.querySelector('.pg[data-key="home"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 120 }; });
   await page.mouse.move(over.x, over.y); await page.mouse.wheel({ deltaY: 400 }); await sleep(700);
@@ -113,7 +114,12 @@ try {
     const r = n.getBoundingClientRect(); return { top: window.__stack.top(), at: Math.round(r.right), gap: Math.round(r.top - s.bottom), moving: n.getAnimations().length }; });
   ok(again && again.top === 'home' && Math.abs(again.at - menu?.at) <= 1 && again.gap >= 6 && again.gap <= 16 && !again.moving,
     `back from Settings: the menu ${again ? 'open again' : 'NOT open'} on ${again?.top}, its right edge at ${again?.at} px (before Settings ${menu?.at}), ${again?.gap} px under the box (want 6 to 16)`);
-  await page.keyboard.press('Escape'); await sleep(500);
+  // 6b. the sheet's arrow under the bar closes it (Max, 2026-11-25: "With menu is expanded, the little arrow below search
+  //     should work and dismiss menu"); Home stays where it was
+  const grab = await page.evaluate(() => { const g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: g.x + g.width / 2, y: g.y + g.height / 2, lvl: window.__stack.level }; });
+  await page.mouse.click(grab.x, grab.y); await sleep(900);
+  const shut = await page.evaluate(() => ({ open: !document.getElementById('nav').hidden, lvl: window.__stack.level }));
+  ok(!shut.open && shut.lvl === grab.lvl, `the menu open, its arrow clicked: the menu ${shut.open ? 'still open' : 'shut'}, Home at ${grab.lvl} -> ${shut.lvl}`);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
   await page.evaluate(() => window.__stack.home(2)); await sleep(1200);
