@@ -1,8 +1,12 @@
 // The check to run before merging a change: the replays (tools/motion-check.mjs on the chosen recordings,
 // tools/recordings.json, held to tools/check-limits.mjs), the offline checks of the fetcher and the file reader, the
 // file formats, and the screens (when the page is running: npm run dev, or PAGE=<its address>).
-// Run: node tools/check.mjs [--full] [--library | --all] [--rebaseline]   exit code 0: all good; 1: something failed
+// Run: node tools/check.mjs [--full] [--round | --failed] [--library | --all] [--rebaseline]   exit code 0: all good; 1: something failed
 //   --full  run every check, also those whose inputs are unchanged (a release always does: SPARAT_RELEASE)
+//   --round  a round's check on its collecting branch: the checks kept for before main (the UI sweep) wait, named;
+//            the check into main runs them (Max, 2026-11-25: "limit when used")
+//   --failed  only the checks that failed in this folder's last run (data/.check-last.json), after a fix of them; the
+//            others stay as they were, so the next plain check runs what has changed (Max, 2026-11-25: "Yes all. Go")
 //   --library  the library recordings too;  --all  every recording in data/, listed or not
 //   --rebaseline  replay and accept the numbers as they are now (tools/baseline.json)
 // Since 2026-11-21 (Max: "even the smallest fixes needs long tests"): each check knows what it reads (its code, found
@@ -30,6 +34,23 @@ const ALL = process.argv.includes('--full') || REBASE || Boolean(process.env.SPA
 // (tools/lib/cpu-cap.mjs), so the PC stays usable; until then two, the only guard. SPARAT_AT_ONCE= to change it.
 const AT_ONCE = Math.max(1, Number(process.env.SPARAT_AT_ONCE) || 4);
 const secs = ms => Math.round(ms / 1000);
+// A round's check and a rerun of what failed (2026-11-25). A release runs everything anyway.
+const RELEASE = Boolean(process.env.SPARAT_RELEASE);
+const ROUND = process.argv.includes('--round') && !RELEASE;
+const LAST = 'data/.check-last.json';   // per working folder: the names that failed in its last run
+const lastRuns = existsSync(LAST) ? JSON.parse(readFileSync(LAST, 'utf8')) : {};
+const FAILED_ONLY = process.argv.includes('--failed') && !RELEASE ? (lastRuns[process.cwd()]?.failed ?? null) : null;
+if (process.argv.includes('--failed') && !RELEASE) {
+  if (!FAILED_ONLY) { console.log('no earlier run recorded in this folder: run node tools/check.mjs'); process.exit(1); }
+  if (!FAILED_ONLY.length) { console.log(`the last check here passed (${lastRuns[process.cwd()].when}): nothing to rerun`); process.exit(0); }
+  console.log(`rerunning only what failed in the last run here (${lastRuns[process.cwd()].when}): ${FAILED_ONLY.join(', ')}`);
+}
+const held = [];        // [name, why]: not run this time though their inputs changed (--round, --failed)
+const wanted = (name, beforeMain) => {
+  if (FAILED_ONLY && !FAILED_ONLY.includes(name)) { held.push([name, 'did not fail']); return false; }
+  if (ROUND && beforeMain) { held.push([name, 'before main only']); return false; }
+  return true;
+};
 
 // ---------- the recordings ----------
 // tools/recordings.json says each kept recording's role. The core is replayed every time the replay runs; --library
@@ -106,10 +127,12 @@ const skipped = [];     // [name, when it last passed]
 const failures = [];
 // A check: its name, the files it reads (null: always run, for checks of a second or ones asking online), and run()
 // -> true when it passed (it prints its own lines). wait: it only waits (runs beside the two, not in their place);
-// alone: it measures smoothness, so it runs after the others, with nothing beside it.
-function check(name, files, run, { wait = false, order = 0, alone = false } = {}) {
+// alone: it measures smoothness, so it runs after the others, with nothing beside it; beforeMain: it waits in a
+// round's check (--round) for the check into main.
+function check(name, files, run, { wait = false, order = 0, alone = false, beforeMain = false } = {}) {
   const stamp = files ? stampOf(files, name) : null;
   if (!ALL && stamp && stamps[name]?.stamp === stamp) { skipped.push([name, stamps[name].when]); return null; }
+  if (!wanted(name, beforeMain)) return null;
   return { name, wait, order, alone, go: async () => {
     const t = Date.now();
     let ok = false;
@@ -198,9 +221,9 @@ const replayDone = (ok) => {
     base.about = 'Accepted replay numbers per recording (tools/check.mjs holds each recording to its own, with a margin). Written by node tools/check.mjs --rebaseline when a change is accepted; why goes in docs/movement.md.';
     writeFileSync('tools/baseline.json', JSON.stringify(base, null, 2) + '\n');
     console.log('baseline written: tools/baseline.json');
-  } else if (!replayFailed) saveStamp(replayKey, replayStamp);
+  } else if (!replayFailed && !FAILED_ONLY) saveStamp(replayKey, replayStamp);   // (--failed: only some recordings ran)
 };
-const replayJob = (name, run, order) => { replayLeft++; return { name, order, go: async () => { const t = Date.now(); let ok = false; try { ok = await run(); } catch (e) { console.log(`FAIL ${name}: ${e.message}`); } times.push([name, secs(Date.now() - t)]); if (!ok) failures.push(name); replayDone(ok); return ok; } }; };
+const replayJob = (name, run, order) => { if (!wanted(name)) return null; replayLeft++; return { name, order, go: async () => { const t = Date.now(); let ok = false; try { ok = await run(); } catch (e) { console.log(`FAIL ${name}: ${e.message}`); } times.push([name, secs(Date.now() - t)]); if (!ok) failures.push(name); replayDone(ok); return ok; } }; };
 if (replaySkip) skipped.push([`replay (${recordings.length} ${MODE} recordings, routes, line follows)`, stamps[replayKey].when]);
 else for (const f of recordings) {
   const short = f.slice(10, 29), name = f.slice('positions-'.length, -'.jsonl'.length), mb = statSync(`data/${f}`).size / 1e6;
@@ -327,14 +350,14 @@ const SCREENS = [
   ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
   ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
   ['page motion', 'tools/page-motion-check.mjs', 40, true], // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24; alone: it reads pages mid-slide)
-  ['ui sweep', 'tools/ui-sweep.mjs', 600, true],         // every sheet transition frame by frame: nothing stray, no jump, a growing card keeps what it shows (Max, 2026-11-25)
+  ['ui sweep', 'tools/ui-sweep.mjs', 600, true, true],   // every sheet transition frame by frame: nothing stray, no jump, a growing card keeps what it shows (Max, 2026-11-25); before main only: --round leaves it (about 4 min; Max: "limit when used")
 ];
 const screenJobs = [];
 if (!pageUp) {
   console.log(`note the screens not checked: no page answering at ${PAGE} (start npm run dev)`);
   if (process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them'); failed++; }
 } else {
-  for (const [name, file, order, alone] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order, alone }));
+  for (const [name, file, order, alone, beforeMain] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order, alone, beforeMain }));
   // The day's ribbon on a recording's history files and a replaying fetcher of its own, the scale slider and the sun's
   // line (build plan parts 2, 4, 5; 2026-11-23).
   screenJobs.push(check('the day', [...PAGE_FILES, ...FETCHER_FILES, ...depsOf('tools/day-check.mjs', 'tools/history-files.mjs')],
@@ -369,6 +392,14 @@ fetcher?.kill();
 times.sort((a, b) => b[1] - a[1]);
 console.log(`\ntimes: ${times.map(([n, s]) => `${n} ${s} s`).join(', ')}`);
 if (skipped.length) console.log(`skipped (unchanged since they passed): ${skipped.map(([n, w]) => `${n} (${w})`).join(', ')}; --full runs them anyway`);
+if (held.length) console.log(`not run this time: ${held.map(([n, w]) => `${n} (${w})`).join(', ')}; a plain node tools/check.mjs runs them`);
 const total = failures.length + failed;
+// What failed, for --failed next time (per folder; written by a plain, --round or --failed run, not by a release).
+if (!RELEASE) {
+  const now = existsSync(LAST) ? JSON.parse(readFileSync(LAST, 'utf8')) : {};
+  now[process.cwd()] = { failed: failures, when: new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }).slice(0, 16) };
+  writeFileSync(`${LAST}.tmp`, JSON.stringify(now, null, 1));
+  renameSync(`${LAST}.tmp`, LAST);
+}
 console.log(total ? `check FAILED: ${[...failures, ...(failed ? [`${failed} recording or page problem(s) above`] : [])].join(', ')} (${secs(Date.now() - T0)} s)` : `check ok (${secs(Date.now() - T0)} s)`);
 process.exit(total ? 1 : 0);
