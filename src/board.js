@@ -54,7 +54,8 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       // (the messages' box glides to its new height, so the timetable under it moves down with it, not in one jump:
       // ui-sweep, 2026-11-25)
       const box = el.querySelector('.board-msgs'), h1 = box?.offsetHeight;
-      if (box && h0 && h1 && h0 !== h1 && !reduceMotion()) {
+      // (opening only: closing, the board's own glide shrinks round it; both at once made the board grow 1 px first)
+      if (box && h0 && h1 && h1 > h0 && !reduceMotion()) {
         box.style.overflow = 'hidden';
         box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
           .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
