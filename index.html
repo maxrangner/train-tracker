@@ -20,6 +20,26 @@
       --radius: 22px;        /* the big cards */
       --radius-s: 16px;      /* small floating things */
       --font: 'Outfit', system-ui, sans-serif;
+      /* Motion (src/motion.js reads these too: ms(), easing()): how long, at Debug → Animation speed Fast; --mk makes
+         the page changes and the glides longer at Calmer. */
+      --t-glide: .36s;       /* the sheet's glide to a height, and what rides on its edge */
+      --t-fold: .26s;        /* a box opening or shutting (a fold, a box's height), ☰'s card sliding */
+      --t-page: .28s;        /* a page change (sideways) */
+      --t-page-long: .3s;    /* the other page changes (Debug → Page change: from the edge, one strip) */
+      --ez: cubic-bezier(.2, .85, .25, 1);      /* the sheet's curve: its glide, its page changes */
+      --ez-pop: cubic-bezier(.2, .9, .25, 1);   /* the small motions: a press, a row arriving, a fold */
+      --ez-ui: cubic-bezier(.2, .8, .2, 1);     /* ☰'s card, a box's height, a train card's buttons */
+      /* The sheet's sizes (src/layout.js sheetGeometry reads them for src/stack.js, src/map.js, src/main.js) */
+      --grab-h: 20px;        /* the handle's row (a phone; a page without a bar has only it) */
+      --grab-h-wide: 28px;   /* a computer's handle band, the arrow in it, at the sheet's bottom */
+      --head-h: 52px;        /* the head: the search bar or a page's bar */
+      --bar-gap: 8px;        /* under the bar when the page shows: a scrolled page goes out of sight there */
+      --bar-edge: 10px;      /* the search bar from the sheet's edge at Home's rest (12 px to the field, as at its sides) */
+      --sheet-inset: 10px;   /* a computer's sheet from the screen's edges; ☰'s card from the bar */
+      --fit-gap: 12px;       /* room under the last part shown when the page shows whole */
+      --fit-gap-phone: 40px; /* a phone's cut page: room for its "More" pill */
+      --top-room: 52px;      /* full height leaves this at the top: the live mark */
+      --sheet-w: 420px;      /* a computer's sheet */
     }
     :root[data-theme="dark"] { color-scheme: dark; }
     body { background: var(--page); }
@@ -61,10 +81,10 @@
     /* (no text selection on the map's marks and the sheet's head: a mouse pull selected text over the map; src/stack.js) */
     #status, #line, #sheet-grip, .sh-head, .maplibregl-ctrl { -webkit-user-select: none; user-select: none; }
 
-    #sheet { --ez: cubic-bezier(.2, .85, .25, 1); position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
+    #sheet { position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
       display: flex; flex-direction: column; overflow: hidden; touch-action: none; will-change: transform;
       background: var(--bg); color: var(--ink); border-radius: var(--radius) var(--radius) 0 0; box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.14);
-      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform calc(.36s * var(--mk, 1)) var(--ez); }
+      padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); transition: transform calc(var(--t-glide) * var(--mk, 1)) var(--ez); }
     #sheet.dragging { transition: none; }
     /* A computer: the sheet hangs from the top left (Max, 2026-11-23: "the main pill should be top right as before... So
        flip it"; "The flip is only for PC! Phone stays as it is"): its search bar at the top, the arrow at its bottom
@@ -72,16 +92,16 @@
     @media (min-width: 440px) {
       #sheet .sh-grab { order: 99; }
       /* (the search field 12 px from the top edge, as from its sides; the arrow's row below it) */
-      #sheet .sh-head { margin-top: 10px; }
-      #sheet .sh-fade { bottom: 28px; height: 32px; }
+      #sheet .sh-head { margin-top: var(--bar-edge); }
+      #sheet .sh-fade { bottom: var(--grab-h-wide); height: 32px; }
       #sheet .sh-more { display: none; }
     }
     /* A computer (440 px wide and up): the same sheet floats at the bottom left, 420 px wide (src/map.js knows it). */
     @media (min-width: 440px) {
-      #sheet { left: calc(10px + env(safe-area-inset-left, 0px)); right: auto; top: calc(10px + env(safe-area-inset-top, 0px)); bottom: auto; width: 420px; border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
-        transition: height calc(.36s * var(--mk, 1)) var(--ez); will-change: height; }
+      #sheet { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; top: calc(var(--sheet-inset) + env(safe-area-inset-top, 0px)); bottom: auto; width: var(--sheet-w); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
+        transition: height calc(var(--t-glide) * var(--mk, 1)) var(--ez); will-change: height; }
     }
-    .sh-grab { height: 20px; flex: none; display: grid; place-items: center; cursor: grab; }
+    .sh-grab { height: var(--grab-h); flex: none; display: grid; place-items: center; cursor: grab; }
     .sh-grab i { width: 40px; height: 5px; border-radius: 3px; background: var(--line); }
     /* A computer: the dash is a small arrow (src/stack.js; Max, 2026-11-23: the dash is a phone thing): ⌃ at rest (a
        tap raises the sheet), ⌄ raised (a tap lowers it). */
@@ -93,7 +113,7 @@
       .sh-pill { display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px; border-radius: 10px; transition: background .15s; }
       /* (a band of its own, the arrow and its word in the middle: as much room under them as above; Max, 2026-11-24
          "'Mer v' still too close to the edge. Or if this is a general UI rule, the padding above needs to be less") */
-      #sheet .sh-grab { height: 28px; align-items: center; }
+      #sheet .sh-grab { height: var(--grab-h-wide); align-items: center; }
       .sh-grab:hover .sh-pill { background: var(--hover); }
       /* (the sheet hangs from the top: ⌄ at rest, a tap lowers its edge; ⌃ raised) */
       #sheet[data-next="more"] .sh-arrow { transform: rotate(180deg); }
@@ -110,10 +130,10 @@
        the grip (src/stack.js) adds 24 px over the map just above the sheet's top, so with the handle's 20 px it is 44 px
        tall; the head's empty parts count as the handle too. A phone only. */
     #sheet-grip { position: fixed; z-index: 4; left: 50%; width: 160px; margin-left: -80px; height: 24px; bottom: var(--sheet-shown, 72px);
-      touch-action: none; transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1); }
+      touch-action: none; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez); }
     #sheet.dragging ~ #sheet-grip { transition: none; }
     @media (min-width: 440px) { #sheet-grip { display: none; } }
-    .sh-head { position: relative; z-index: 2; height: 52px; flex: none; margin: 0 12px; }
+    .sh-head { position: relative; z-index: 2; height: var(--head-h); flex: none; margin: 0 12px; }
     .sh-search, .sh-bar { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; transition: opacity .2s, transform .28s var(--ez); }
     #sheet:not([data-page="home"]) .sh-search { opacity: 0; pointer-events: none; transform: translateY(8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
     #sheet[data-page="home"] .sh-bar { opacity: 0; pointer-events: none; transform: translateY(-8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
@@ -136,7 +156,7 @@
     /* (8 px between the search bar and the page under it: scrolled, the page goes out of sight below that room, not
        right at the bar's edge; Max, 2026-11-24 "When scolling main card the top is cut of kind of ugly... Better just add
        the padding"; src/stack.js BAR_GAP_PX) */
-    #sheet:not(.no-bar):not([data-h="0"]) .sh-head { margin-bottom: 8px; }   /* (not at rest: the bar alone, as tuned) */
+    #sheet:not(.no-bar):not([data-h="0"]) .sh-head { margin-bottom: var(--bar-gap); }   /* (not at rest: the bar alone, as tuned) */
     #sheet.no-bar .sh-bar { visibility: hidden; }
     /* (a card's top line is the head: a finger on it moves the sheet, it never scrolls the page) */
     #sheet .pg-head { touch-action: none; }
@@ -225,10 +245,10 @@
        (Max, 2026-11-24: "the fade/wipe to next screen is very annoying. It's sliding and fading at the same time"; "Most
        transitions between screens on the cards look bad, fade and swipe together"). */
     .sh-pages { overflow: hidden; }
-    .pg.in-r { animation: pg-in-r calc(.28s * var(--mk, 1)) var(--ez) both; }
-    .pg.in-l { animation: pg-in-l calc(.28s * var(--mk, 1)) var(--ez) both; }
-    .pg.out-l { animation: pg-out-l calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
-    .pg.out-r { animation: pg-out-r calc(.28s * var(--mk, 1)) var(--ez) both; pointer-events: none; }
+    .pg.in-r { animation: pg-in-r calc(var(--t-page) * var(--mk, 1)) var(--ez) both; }
+    .pg.in-l { animation: pg-in-l calc(var(--t-page) * var(--mk, 1)) var(--ez) both; }
+    .pg.out-l { animation: pg-out-l calc(var(--t-page) * var(--mk, 1)) var(--ez) both; pointer-events: none; }
+    .pg.out-r { animation: pg-out-r calc(var(--t-page) * var(--mk, 1)) var(--ez) both; pointer-events: none; }
     @keyframes pg-in-r { from { transform: translateX(100%); } }
     @keyframes pg-in-l { from { transform: translateX(-100%); } }
     @keyframes pg-out-l { to { transform: translateX(-100%); } }
@@ -241,13 +261,13 @@
        add a slower at 75%"): every page change and the sheet's glide take --mk times as long. */
     :root[data-mspeed="calm"] { --mk: 1.3333; }
     :root[data-motion="rise"] .sh-pages > .pg { background: var(--bg); }
-    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in calc(.3s * var(--mk, 1)) var(--ez) both; z-index: 2; }
+    :root[data-motion="rise"] .pg.in-r { animation: pg-rise-in calc(var(--t-page-long) * var(--mk, 1)) var(--ez) both; z-index: 2; }
     :root[data-motion="rise"] .pg.out-r { animation: pg-rise-out calc(.26s * var(--mk, 1)) cubic-bezier(.4, 0, .8, .4) both; z-index: 2; }
-    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still calc(.3s * var(--mk, 1)) both; }
-    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r calc(.3s * var(--mk, 1)) var(--ez) both; }
-    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l calc(.3s * var(--mk, 1)) var(--ez) both; }
-    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l calc(.3s * var(--mk, 1)) var(--ez) both; }
-    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r calc(.3s * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="rise"] :is(.pg.out-l, .pg.in-l) { animation: pg-still calc(var(--t-page-long) * var(--mk, 1)) both; }
+    :root[data-motion="strip"] .pg.in-r { animation: pg-strip-in-r calc(var(--t-page-long) * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-l { animation: pg-strip-out-l calc(var(--t-page-long) * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.in-l { animation: pg-strip-in-l calc(var(--t-page-long) * var(--mk, 1)) var(--ez) both; }
+    :root[data-motion="strip"] .pg.out-r { animation: pg-strip-out-r calc(var(--t-page-long) * var(--mk, 1)) var(--ez) both; }
     @keyframes pg-still { to { transform: none; } }
     @keyframes pg-rise-in { from { transform: translateY(var(--edge, 100%)); } }
     @keyframes pg-rise-out { to { transform: translateY(var(--edge, 100%)); } }
@@ -268,16 +288,16 @@
     .pg .tl-head { top: -4px; }
     /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
     @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
-    .maplibregl-ctrl-bottom-right { transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; }
+    .maplibregl-ctrl-bottom-right { transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s; }
 
     /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right. */
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
       max-width: calc(100% - 96px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
-      transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; font: 600 14px/1.2 var(--font); }
+      transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s; font: 600 14px/1.2 var(--font); }
     /* (each pill: the filter's above any other, src/line.js) */
     #line .ln-pill { max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px;
       background: var(--card); color: var(--ink); box-shadow: var(--shadow-s); pointer-events: auto; }
-    @media (min-width: 440px) { #line { left: calc(10px + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); max-width: 420px; } }
+    @media (min-width: 440px) { #line { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); max-width: var(--sheet-w); } }
     .sheet-high #line { opacity: 0; pointer-events: none; }
     #line .line-main { min-width: 0; display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 6px 0 14px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
     #line .line-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -285,7 +305,7 @@
 
     /* The small menu: ☰'s, just above it. */
     .pop { position: fixed; z-index: 9; min-width: 210px; max-width: 290px; box-sizing: border-box; display: grid; gap: 2px; padding: 6px;
-      background: var(--card); color: var(--ink); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px var(--line); animation: pop-in .16s cubic-bezier(.2, .85, .25, 1) both; }
+      background: var(--card); color: var(--ink); border-radius: 18px; box-shadow: var(--shadow), 0 0 0 1px var(--line); animation: pop-in .16s var(--ez) both; }
     @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(.97); } }
     .pop small { padding: 6px 12px 2px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
     .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 14px 6px 8px; border: 0; border-radius: 12px; background: transparent;
@@ -409,8 +429,8 @@
     .set-sub { display: block; color: var(--muted); font-size: 12px; font-weight: 500; }
     /* A note on the map: at the top, under the live mark (2026-11-23: the scale slider took the bottom right). Its bottom
        is never set too: with the line above the bar the note stretched over the whole map ("Link copied", 23 Nov). */
-    #map .map-note { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
-    @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } }
+    #map .map-note { top: calc(var(--top-room) + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
+    @media (min-width: 440px) { #credit { left: calc(var(--sheet-w) + 2 * var(--sheet-inset) + env(safe-area-inset-left, 0px)); } }
 
     /* ---- The sheet's ideas (build plan parts 3 and 6, 2026-11-23) ---- */
     /* A train's page under its tiles: why it stands, Share, Add my change. */
@@ -615,7 +635,7 @@
     /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15);
        src/map.js sets .touch and .turned on the map. */
     .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
-      transition: bottom .26s cubic-bezier(.2, .9, .25, 1); }
+      transition: bottom .26s var(--ez-pop); }
     .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin: 0 12px 12px 0; }
     /* With the scale slider on (Settings → Zoom slider, src/scale-slider.js, 2026-11-23; off by default since Max's
        phone notes the same day): My location at the right, the compass (only while the map is turned or tilted) beside
@@ -782,9 +802,9 @@
     .dis-fold > span:nth-child(2) { flex: 1; }
     .dis-fold .icon { color: var(--muted); }
     /* The rail work under the fold glides open and shut (src/main.js drawDisruptions; Max, 2026-11-20). */
-    .dis-fold > .icon { transition: transform .26s cubic-bezier(.2, .9, .25, 1); }
+    .dis-fold > .icon { transition: transform var(--t-fold) var(--ez-pop); }
     .dis-fold[aria-expanded="true"] > .icon { transform: rotate(180deg); }
-    .dis-works { display: grid; grid-template-rows: 0fr; align-self: start; margin-top: -6px; transition: grid-template-rows .26s cubic-bezier(.2, .9, .25, 1), margin-top .26s; }
+    .dis-works { display: grid; grid-template-rows: 0fr; align-self: start; margin-top: -6px; transition: grid-template-rows var(--t-fold) var(--ez-pop), margin-top var(--t-fold); }
     .dis-works.open { grid-template-rows: 1fr; margin-top: 0; }
     .dis-works-in { min-height: 0; overflow: hidden; display: grid; gap: 6px; align-content: start; }
     @media (prefers-reduced-motion: reduce) { .dis-works, .dis-fold > .icon { transition: none; } }
@@ -809,11 +829,11 @@
     /* Motion (Max, 2026-11-20: "feels a bit static and stiff"; his picks on https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe;
        the code: src/motion.js). Only movement and see-through changes (the graphics chip); none with "reduce motion".
        Buttons give a little while pressed and spring back (the scale property, so a button's own transform stays). */
-    button { transition: scale .14s cubic-bezier(.2, .9, .25, 1); }
+    button { transition: scale .14s var(--ez-pop); }
     button:active { scale: .94; transition-duration: .06s; }
     :is(.nav-row, .dis-row, .dis-fold, .bd-row, #search-results button, .cd-row, .about-btn):active { scale: .98; }
     /* Rows that weren't in a list before come in one after another (motion.js arrive sets --i). */
-    .arrive { animation: row-in .3s cubic-bezier(.2, .9, .25, 1) backwards; animation-delay: calc(40ms + var(--i, 0) * 25ms); }
+    .arrive { animation: row-in .3s var(--ez-pop) backwards; animation-delay: calc(40ms + var(--i, 0) * 25ms); }
     @keyframes row-in { from { opacity: 0; transform: translateY(10px); } }
     /* ☰'s menu: a card under the search bar, right edge in line with ☰'s, an icon before each choice (src/main.js
        openNav; Max, 2026-11-25 "revert the hamburger menu. Slide out card like before ... with good padding ... Add back
@@ -825,20 +845,20 @@
     #sheet.menu-open .sh-pages .pg { overflow: hidden !important; touch-action: none; }
     /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
     .cd-late { position: relative; }
-    .cd-late.flash { animation: late-pop .5s cubic-bezier(.2, .9, .25, 1); }
+    .cd-late.flash { animation: late-pop .5s var(--ez-pop); }
     .cd-late.flash::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; animation: late-ring .7s ease-out forwards; }
     @keyframes late-pop { 30% { scale: 1.06; } }
     @keyframes late-ring { from { box-shadow: 0 0 0 0 currentColor; opacity: .5; } to { box-shadow: 0 0 0 12px currentColor; opacity: 0; } }
     /* A tapped disruption sign or station: a copy of it over it grows and goes back (src/map.js popSign). */
     .sign-pop { pointer-events: none; }
-    .sign-pop > * { display: block; animation: sign-pop .32s cubic-bezier(.2, .9, .25, 1) forwards; }
+    .sign-pop > * { display: block; animation: sign-pop .32s var(--ez-pop) forwards; }
     @keyframes sign-pop { 40% { scale: 1.3; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .22)); } }
     /* Card to card (src/panel.js open, rollIn): the old train's rest dimmed until the new timetable is in; then the
        changed words fade over and the trip bar glides (the numbers roll in code). */
     #panel > .busy:not(.cd), #panel > .cd.busy > * { opacity: .45; transition: opacity .15s; }
     .fresh { animation: fresh-in .3s ease-out; }
     @keyframes fresh-in { from { opacity: 0; } }
-    .cd-done.moving, .cd-train.moving { transition: width .7s cubic-bezier(.2, .9, .25, 1), left .7s cubic-bezier(.2, .9, .25, 1); }
+    .cd-done.moving, .cd-train.moving { transition: width .7s var(--ez-pop), left .7s var(--ez-pop); }
     /* The compact card's trip line, red alert and "All stops": full strength (they stay so while the rest of the old
        card dims on a card-to-card swap, .busy above: same weight, this rule later), a .2 s fade on the phone's collapse.
        What the finger-fold rule (--fold, the sheets' drag before the one sheet) left; kept as it was in the cleanup of
@@ -941,7 +961,7 @@
     /* Under the tiles, pushing the rest down (on the full card the timeline keeps what is left, scrolling); it slides
        open and closed (Max, 2026-11-16: hiding the timeline was "too jerky"). */
     .cd-pick { display: flex; flex-direction: column; flex: none; overflow: hidden; }
-    .cd-pick.opening { animation: cd-open .22s cubic-bezier(.2, .9, .25, 1); }
+    .cd-pick.opening { animation: cd-open .22s var(--ez-pop); }
     .cd-pick.closing { animation: cd-close .18s ease-in forwards; }
     @keyframes cd-open { from { max-height: 0; opacity: 0; } to { max-height: 46vh; opacity: 1; } }
     @keyframes cd-close { from { max-height: 46vh; opacity: 1; } to { max-height: 0; opacity: 0; } }

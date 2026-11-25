@@ -31,7 +31,7 @@
 /* Rings: the arcs glide to their new share. */
 .st-donut { position: relative; flex: none; display: grid; place-items: center; }
 .st-donut svg { position: absolute; inset: 0; transform: rotate(-90deg); }
-.st-donut .st-arc { fill: none; stroke: var(--k); transition: stroke-dasharray .8s cubic-bezier(.2, .9, .25, 1), stroke-dashoffset .8s cubic-bezier(.2, .9, .25, 1); }
+.st-donut .st-arc { fill: none; stroke: var(--k); transition: stroke-dasharray .8s var(--ez-pop), stroke-dashoffset .8s var(--ez-pop); }
 .st-donut .st-ring { fill: none; stroke: var(--line); }
 .st-mid { position: relative; text-align: center; line-height: 1.05; }
 .st-mid b { display: block; font-size: 26px; font-weight: 800; }
@@ -72,7 +72,7 @@
 .st-cancel .st-sub { opacity: .85; }
 .st-odo { display: inline-flex; align-items: baseline; font-weight: 800; line-height: 1; font-size: 28px; margin-top: 6px; }
 .st-odo .st-w { display: inline-block; height: 1em; overflow: hidden; }
-.st-odo .st-w > span { display: flex; flex-direction: column; transition: transform .6s cubic-bezier(.2, .9, .25, 1); }
+.st-odo .st-w > span { display: flex; flex-direction: column; transition: transform .6s var(--ez-pop); }
 .st-odo .st-w i { font-style: normal; height: 1em; }
 .st-odo .st-u { font-size: .5em; margin-left: .25em; color: var(--muted); font-weight: 700; }
 
@@ -95,7 +95,7 @@
 /* Fastest: the speedometer and the top three. */
 .st-fast { display: flex; gap: 12px; align-items: center; margin-top: 6px; }
 .st-gauge { flex: none; }
-.st-gauge .st-gv { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 1s cubic-bezier(.2, .9, .25, 1); }
+.st-gauge .st-gv { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dasharray 1s var(--ez-pop); }
 .st-gauge .st-gb { fill: none; stroke: var(--line); stroke-linecap: round; }
 .st-gauge text { fill: var(--muted); font: 600 7.5px var(--font); }
 .st-gauge .st-hub { fill: var(--ink); }
@@ -119,7 +119,7 @@ button.st-fastrow:hover { background: var(--card); }
 .st-brow .st-nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-brow .st-nm i { color: var(--muted); }
 .st-brow .st-tr { height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--line) 70%, transparent); overflow: hidden; }
-.st-brow .st-bar { display: block; height: 100%; border-radius: 5px; transition: width .8s cubic-bezier(.2, .9, .25, 1); }
+.st-brow .st-bar { display: block; height: 100%; border-radius: 5px; transition: width .8s var(--ez-pop); }
 .st-brow .st-n { text-align: right; font-weight: 700; }
 .st-brow.st-off { opacity: .45; }   /* a filter on: not on the map (still a button) */
 .st-more { font: inherit; font-weight: 700; color: var(--accent); background: none; border: 0; padding: 6px 0 0; cursor: pointer; justify-self: start; }
@@ -141,7 +141,7 @@ button.st-fastrow:hover { background: var(--card); }
 .st-fun:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .st-fun .st-hint { position: absolute; right: 12px; top: 12px; font-size: 11.5px; font-weight: 700; color: var(--accent); }
 .st-cmp { display: flex; align-items: center; gap: 12px; margin-top: 10px; min-height: 48px; }
-.st-cmp.st-swap { animation: st-swap .45s cubic-bezier(.2, .9, .25, 1); }
+.st-cmp.st-swap { animation: st-swap .45s var(--ez-pop); }
 @keyframes st-swap { from { opacity: 0; transform: translateY(14px); } }
 .st-cmp svg { width: 44px; height: 44px; flex: none; color: var(--accent); }
 .st-cmp .st-x { font-size: 20px; font-weight: 800; }

@@ -48,7 +48,7 @@ const DEFAULTS = {
   pageMotion: 'side',
   // How fast a page change and the sheet's glide go (Debug, Max 2026-11-24: "add setting for animation speed. Use current
   // speed as fast, and add a slower at 75%"): 'fast' (as before) or 'calm' (75 % of the speed: 4/3 of the time).
-  // index.html :root[data-mspeed]; src/stack.js motionK.
+  // index.html :root[data-mspeed]; src/motion.js speed().
   motionSpeed: 'fast',
   // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays

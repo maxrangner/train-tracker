@@ -10,7 +10,7 @@
 // destination (arrivals: where it comes from) typed narrows it; the search button again closes it.
 const time = t => (t ? hhmm(t) : '');
 import { esc } from './html.js';
-import { arrive, reduceMotion } from './motion.js';
+import { arrive, glideHeight } from './motion.js';
 const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
@@ -52,11 +52,7 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
       // ui-sweep, 2026-11-25)
       const box = el.querySelector('.board-msgs'), h1 = box?.offsetHeight;
       // (opening only: closing, the sheet's glide shrinks round it; both at once made the board grow 1 px first)
-      if (box && h0 && h1 && h1 > h0 && !reduceMotion()) {
-        box.style.overflow = 'hidden';
-        box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
-          .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
-      }
+      if (h1 > h0) glideHeight(box, h0);
     };
   }
   async function askMessages() {

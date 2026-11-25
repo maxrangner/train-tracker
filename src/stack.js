@@ -64,28 +64,26 @@
 //   R4. Esc and Android's back step back one page (back()); a pull down below low goes home (home()).
 // A part opened inside a page (a fold, the card's messages) is shown at once: reveal(el) (the sheet rises, or at full
 // the page scrolls to it), unreveal() when it is shut again.
-import { reduceMotion } from './motion.js';
+import { reduceMotion, ms, speed } from './motion.js';
+import { isWide, onWideChange, isNative, sheetGeometry } from './layout.js';
 import { icon } from './icons.js';
 import { esc } from './html.js';
 import { t } from './i18n.js';
 
-const NARROW = typeof matchMedia === 'function' ? matchMedia('(max-width: 439px)') : null;
 const MAX_PAGES = 12;          // pages over Home at most (the oldest go)
-const HEAD_PX = 72;            // the handle and the head (search or a page's bar)
-// (the page changes' and the glide's time: 4/3 with Debug → Animation speed → Calmer; index.html --mk)
-const motionK = () => (typeof document !== 'undefined' && document.documentElement.dataset.mspeed === 'calm' ? 4 / 3 : 1);
-const BAR_GAP_PX = 8;          // room between the search bar and the page under it (index.html #sheet:not(.no-bar) .sh-head)
-const GRAB_PX = 20;            // the handle alone (a page without a bar)
-const HOME_LOW_PX = HEAD_PX + 10;   // Home at rest: the search bar 12 px from the sheet edge below, as at its sides (Max, 2026-11-23)
+// The sheet's sizes are index.html's (:root --grab-h, --head-h ...), read in measure() into geo (src/layout.js
+// sheetGeometry): geo.grab the handle alone (a page without a bar), geo.head the search bar's or a page's bar's row,
+// geo.barGap the room between the bar and the page under it, geo.barEdge Home at rest: the search bar 12 px from the
+// sheet edge below, as at its sides (Max, 2026-11-23).
 // Room under the last part shown (Max, 2026-11-24: "Still too much padding in the bottom of some cards. Please remove
-// ALL such cases"): 12 px when the page shows whole (nothing below, no sign); a phone's cut page 40 px (its "More" pill
-// sits in it); a computer's sign has its own band under the page.
-const FIT_GAP_PX = 12;
-// (a phone: room for the "More" pill under it, not over the part's lower edge; Max, 2026-11-24: "Dålig padding på 'mer'
-// pillret"; the pill 24 px tall, 4 px over the bottom bar)
-const FIT_GAP_PHONE_PX = 40;
+// ALL such cases"): geo.fitGap (12 px) when the page shows whole (nothing below, no sign); a phone's cut page
+// geo.fitGapPhone (40 px: room for its "More" pill under it, not over the part's lower edge; Max, 2026-11-24: "Dålig
+// padding på 'mer' pillret"; the pill 24 px tall, 4 px over the bottom bar); a computer's sign has its own band under
+// the page. geo.topRoom: full height leaves this much at the top (the live mark).
 const PAGE_LOW_PX = 140;       // a page resting low: its bar and its first line
-const TOP_ROOM_PX = 52;        // full height leaves this much at the top (the live mark)
+// A page change's end: the longest of them (index.html --t-page-long; Debug → Page change), at the chosen speed (Debug →
+// Animation speed). The leaving page's picture goes then; the page coming in keeps its class 100 ms more (it surely stands).
+const pageDone = () => Math.max(ms('page'), ms('page-long'));
 const TAP_PX = 14;             // a tap on the handle: the finger moved less than this (a real finger wanders)...
 const TAP_MS = 450;            // ...and lifted within this
 const PULL_PX = 48;            // a pull down from the head this long lowers the sheet at least one height
@@ -135,11 +133,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   document.body.append(probe);
   const safe = () => { const s = getComputedStyle(probe); return { top: parseFloat(s.paddingTop) || 0, bottom: parseFloat(s.paddingBottom) || 0 }; };
 
+  let geo = sheetGeometry(true);   // the sheet's sizes (the top of this file); read again in measure()
+  const headRow = () => geo.grab + geo.head;        // the handle and the head (search or a page's bar)
+  const homeLow = () => headRow() + geo.barEdge;    // Home at rest
   const stack = [];          // [{ key, def, el, scroll, lvl }]
   const top = () => stack[stack.length - 1];
-  let idx = 0, H = [HEAD_PX, 400, 800], fullMax = 800, searching = false, preSearch = 0, ready = false;
+  let idx = 0, H = [headRow(), 400, 800], fullMax = 800, searching = false, preSearch = 0, ready = false;
   let drag = null, touching = false, lastScroll = 0, eatUntil = 0;
-  const wide = () => !NARROW?.matches;
+  const wide = isWide;
 
   // ---------- heights ----------
   const fittedLow = pg => typeof pg?.def.low === 'function';
@@ -188,24 +189,25 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const measure = () => { let end = 0; for (const c of el.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight); return end; };
     const end = pg.def.atFull ? pg.def.atFull(measure) : measure();
     if (!end) return fullMax;
-    const need = headPx() + end + FIT_GAP_PX + (wide() ? 0 : safe().bottom);
+    const need = headPx() + end + geo.fitGap + (wide() ? 0 : safe().bottom);
     return Math.round(Math.max(half, Math.min(fullMax, need)));
   }
-  // the handle and the head: on a computer 10 px more (the sheet hangs from the top, room above the search field; index.html);
+  // the handle and the head: on a computer geo.barEdge more (the sheet hangs from the top, room above the search field;
+  // index.html .sh-head's margin-top);
   // a page without a bar: the handle alone
   // (the handle's row read from the page: a computer's train card has a thin one, index.html)
-  const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || GRAB_PX;
+  const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || geo.grab;
   // (with the search bar: 8 px more under it, so a scrolled page goes out of sight below it, not right at its edge;
   // index.html .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
-  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : HEAD_PX - GRAB_PX + BAR_GAP_PX) + grabH() + (wide() ? 10 : 0);
+  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : geo.head + geo.barGap) + grabH() + (wide() ? geo.barEdge : 0);
   function lowOf(pg) {
     const l = pg?.def.low, s = wide() ? 0 : safe().bottom;
     // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
     // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
-    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, fullMax - 40) : PAGE_LOW_PX + s; }
+    if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, homeLow()) + s, fullMax - 40) : PAGE_LOW_PX + s; }
     // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
-    const band = wide() ? Math.max(0, grabH() - GRAB_PX) : 0;
-    return pg?.key === 'home' ? HOME_LOW_PX + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0) + band;
+    const band = wide() ? Math.max(0, grabH() - geo.grab) : 0;
+    return pg?.key === 'home' ? homeLow() + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? geo.barEdge : 0) + band;
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider
   // screen: it floats 10 px above the bottom, so it takes the height shown itself (sliding it down would show its
@@ -302,9 +304,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     }
     if (!boxes.length) return usualHalf;
     // (up to a fifth taller than the usual half when that shows a whole part, never closer than 40 px to full)
-    const hi = Math.min(limit * 1.2, fullMax - base - 40), lo = limit * 0.5, gap = wide() ? FIT_GAP_PX : FIT_GAP_PHONE_PX;
+    const hi = Math.min(limit * 1.2, fullMax - base - 40), lo = limit * 0.5, gap = wide() ? geo.fitGap : geo.fitGapPhone;
     const end = Math.max(...boxes.map(x => x.b));
-    if (end + FIT_GAP_PX <= hi) return Math.round(Math.max(low + 60, base + end + FIT_GAP_PX));
+    if (end + geo.fitGap <= hi) return Math.round(Math.max(low + 60, base + end + geo.fitGap));
     const clean = y => !boxes.some(x => x.h < 220 && x.t < y - 1 && x.b > y + 1);
     // the clean edges' distance from the usual half (above it counts half again: rather a little less than more)
     const off = c => (c <= limit ? limit - c : (c - limit) * 1.5);
@@ -321,8 +323,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     return want ? Math.round(Math.max(low + 60, base + want)) : usualHalf;
   }
   function measure() {
+    geo = sheetGeometry(true);
     const h = innerHeight, s = safe();
-    const full = wide() ? h - 20 : h - TOP_ROOM_PX - s.top;
+    // (a computer's sheet floats geo.inset from the screen's top and bottom)
+    const full = wide() ? h - 2 * geo.inset : h - geo.topRoom - s.top;
     usualHalf = Math.round(Math.min(h * 0.6, Math.max(h * 0.5, 360), full - 40));
     fullMax = Math.round(full);
     H = heightsOf(top());
@@ -332,7 +336,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pad();
   }
   addEventListener('resize', measure);
-  NARROW?.addEventListener('change', measure);
+  onWideChange(measure);
 
   function setIndex(i) {
     // (a page that doesn't rest low: half; closing it is home(), not a height)
@@ -375,7 +379,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (h < H[0] && (searching || keepsLow(top()))) h = H[0] - (H[0] - h) * 0.6;
     // never below Home at rest (a long pull down closes every page and Home rests there: pulled lower, the sheet rose
     // again after the finger let go, a bounce; sheet-moves-check, 2026-11-23)
-    h = Math.max(HOME_LOW_PX + (wide() ? 0 : safe().bottom), h);
+    h = Math.max(homeLow() + (wide() ? 0 : safe().bottom), h);
     const now = performance.now(), dt = now - drag.lt;
     if (dt > 4) { drag.v = 0.65 * ((drag.ly - y) * grow / dt) + 0.35 * drag.v; drag.ly = y; drag.lt = now; }
     drag.h = h;
@@ -661,7 +665,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (prev && !reduceMotion()) {
       pg.el.classList.add(dir > 0 ? 'in-r' : 'in-l');
       const el0 = pg.el;
-      setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400 * motionK());
+      setTimeout(() => el0.classList.remove('in-r', 'in-l'), pageDone() + 100 * speed());
     }
     pagesEl.append(pg.el);
     // (the copies always after the real pages, an older one still sliding too: a page coming back within its slide went
@@ -670,7 +674,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (ghost) {
       pagesEl.append(ghost);
       ghost.scrollTop = prev.scroll;
-      setTimeout(() => ghost.remove(), 300 * motionK());
+      setTimeout(() => ghost.remove(), pageDone());
     }
     syncBar();
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
@@ -716,7 +720,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const prev = top();
     const gone = stack.splice(i + 1);
     show(top(), prev, -1, level === undefined ? {} : { level });
-    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : 300 * motionK()); }
+    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); if (p.el !== top().el) setTimeout(() => p.el.remove(), reduceMotion() ? 0 : pageDone()); }
   }
   // The page on top changed its wanted half height (def.half): read it again; resting at half, the sheet glides there.
   function refit({ grow = false } = {}) {
@@ -847,7 +851,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     let end = 0;
     for (const c of results.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight);
     // (the handle's band at the bottom is hidden while searching, index.html: not counted)
-    return Math.round(Math.min(fullMax, headPx() - grabH() + (grabEl?.offsetHeight ?? 0) + Math.max(end, 24) + FIT_GAP_PX));
+    return Math.round(Math.min(fullMax, headPx() - grabH() + (grabEl?.offsetHeight ?? 0) + Math.max(end, 24) + geo.fitGap));
   }
   new MutationObserver(() => {
     if (!searching || !wide() || drag) return;
@@ -903,7 +907,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // The browser's back (Android's gesture, the back button) left the site. While there is something to step back from
   // (a page, the search, the sheet raised) one history entry of our own stands in front: back takes it and steps one
   // thing back, as Android's back in the app does (src/main.js, Capacitor); with nothing left it leaves. Not in the app.
-  const NATIVE = Boolean(window.Capacitor?.isNativePlatform?.());
+  const NATIVE = isNative();
   // (only a step back off our own entry counts: an address followed forward, a #train= link or a changed setting in the
   // address, also brings a popstate, and was taken for a back press that undid it; debug-check, 2026-11-24. A back keeps
   // the history's length; a new entry changes it or replaces ours.)

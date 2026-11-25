@@ -85,7 +85,7 @@ export function createScaleSlider(map, { around, label, reduce = () => false }) 
 // The slider's look (put into the page once; the Soft look's variables).
 export const SCALE_CSS = `
 .scale { position: absolute; z-index: 3; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + 74px + env(safe-area-inset-bottom, 0px));
-  display: flex; align-items: stretch; gap: 6px; height: 190px; transition: bottom .26s cubic-bezier(.2, .9, .25, 1), opacity .18s; touch-action: none; }
+  display: flex; align-items: stretch; gap: 6px; height: 190px; transition: bottom .26s var(--ez-pop), opacity .18s; touch-action: none; }
 .searching .scale, .scale-squeezed .scale { opacity: 0; pointer-events: none; }
 @media (max-width: 439px) { .sheet-high .scale { opacity: 0; pointer-events: none; } }
 .scale-track { margin-right: 7px; }
