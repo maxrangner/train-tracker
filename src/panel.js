@@ -597,12 +597,13 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       const h0 = el.querySelector('.tv-box')?.offsetHeight;
       notesOpen = !notesOpen; draw(train, route, { keepScroll: true });
       const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
+      // (the page told first, the box at its new height: it brings the opened messages into view from their real size)
+      onFold?.(notesOpen, box);
       if (box && h0 && h1 && h0 !== h1 && !reduceMotion()) {
         box.style.overflow = 'hidden';
         box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
           .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
       }
-      onFold?.(notesOpen, box);
     } : null;
     if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
