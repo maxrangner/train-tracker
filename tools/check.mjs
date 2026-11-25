@@ -325,6 +325,7 @@ const SCREENS = [
   ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
   ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
   ['page motion', 'tools/page-motion-check.mjs', 40],     // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24)
+  ['ui sweep', 'tools/ui-sweep.mjs', 600, true],         // every sheet transition frame by frame: nothing stray, no jump, a growing card keeps what it shows (Max, 2026-11-25)
 ];
 const screenJobs = [];
 if (!pageUp) {
