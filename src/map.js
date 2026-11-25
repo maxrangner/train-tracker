@@ -1027,7 +1027,52 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     window.addEventListener('mouseup', (e) => { if (e.button === 1) middle = null; });
     map.on('render', placeNearLabels);
     map.on('mouseenter', 'train-dots', () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; });
+    map.on('mouseleave', 'train-dots', () => { map.getCanvas().style.cursor = ''; hoverLabel(null); });
+    // A mouse over a train's drop shows its label (Max, 2026-11-25: "Hovering over a drop or train should show it's
+    // label"): where the map leaves labels out (further out, or overlapping) and close in alike; the selected train has
+    // its own. Kept on its train as it moves (re-read under the mouse every frame while it is there).
+    let hoverAt = null;
+    map.on('mousemove', 'train-dots', (e) => { hoverAt = e.point; hoverLabel(e.features[0]); });
+    map.on('render', () => {
+      if (!hoverAt || !hoverEl.isConnected) return;
+      const pad = 6, f = map.queryRenderedFeatures([[hoverAt.x - pad, hoverAt.y - pad], [hoverAt.x + pad, hoverAt.y + pad]], { layers: ['train-dots'] })[0];
+      hoverLabel(f ?? null);
+    });
+    map.getCanvas().addEventListener('mouseleave', () => { hoverAt = null; hoverLabel(null); });
+    // Pressed and held on the map: every label goes while held, back on release (Max, 2026-11-25: "Clicking and holding
+    // on map should just hide all labels when held. Return when released"): the map's own (trains', stations', places')
+    // text and the route's pills, and the page's labels on it. A plain click or tap shows no change (only after HOLD_MS).
+    const HOLD_MS = 180;
+    let holdTimer = 0, held = null;
+    const hideLabels = (on) => {
+      if (on === Boolean(held)) return;
+      if (on) {
+        held = new globalThis.Map();
+        for (const l of map.getStyle().layers) {
+          if (l.type !== 'symbol') continue;
+          const text = l.layout?.['text-field'] !== undefined, pill = l.id === 'route-names';
+          if (!text && !pill) continue;
+          held.set(l.id, { text: text ? map.getPaintProperty(l.id, 'text-opacity') : undefined, icon: pill ? map.getPaintProperty(l.id, 'icon-opacity') : undefined, text0: text, pill });
+          if (text) map.setPaintProperty(l.id, 'text-opacity', 0);
+          if (pill) map.setPaintProperty(l.id, 'icon-opacity', 0);
+        }
+      } else {
+        for (const [id, v] of held) {
+          if (!map.getLayer(id)) continue;
+          if (v.text0) map.setPaintProperty(id, 'text-opacity', v.text ?? 1);
+          if (v.pill) map.setPaintProperty(id, 'icon-opacity', v.icon ?? 1);
+        }
+        held = null;
+      }
+      document.documentElement.classList.toggle('labels-held', on);
+    };
+    map.getCanvasContainer().addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => hideLabels(true), HOLD_MS);
+    });
+    const release = () => { clearTimeout(holdTimer); hideLabels(false); };
+    for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, release);
     resolve();
   }));
 
@@ -1152,6 +1197,23 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const nearBox = document.createElement('div');
   nearBox.className = 'near-labels';
   map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
+  // The label of the train under the mouse (a computer), as a close-in bubble; null takes it away.
+  const hoverEl = Object.assign(document.createElement('div'), { className: 'near-label hover' });
+  let hoverId = null;
+  function hoverLabel(f) {
+    const id = f && !f.properties.point_count ? f.properties.id : null;
+    if (!id || id === selected || nearEls.has(id)) { if (hoverId) { hoverEl.remove(); hoverId = null; } return; }
+    if (id !== hoverId) {
+      hoverId = id;
+      const { number, minutes, rest } = splitLabel(f.properties.label ?? '');
+      const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
+      hoverEl.classList.toggle('stale', f.properties.stale === true);
+      hoverEl.replaceChildren(el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      if (!hoverEl.isConnected) nearBox.appendChild(hoverEl);
+    }
+    const q = map.project(f.geometry.coordinates);
+    hoverEl.style.transform = `translate(${q.x.toFixed(1)}px, ${(q.y + LABEL_DY).toFixed(1)}px) translateX(-50%)`;
+  }
   // The stations' names close in, above the trains' labels (Max, 2026-11-13: station names "always on top of other
   // labels"; the map's own names can't be above page elements). A name that would overlap one already placed is
   // left out, as the map does, in the same order every frame so names don't swap.
