@@ -592,7 +592,18 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (more) more.onclick = () => (onMore ? onMore(!el.classList.contains('full')) : glide(el, () => el.classList.toggle('full')));   // (glides: Max's phone test, 2026-11-17)
     const fold = el.querySelector('.tv-toggle');
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    foldNow = fold ? () => { notesOpen = !notesOpen; draw(train, route, { keepScroll: true }); onFold?.(notesOpen, el.querySelector('.tv-box')); } : null;
+    // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
+    foldNow = fold ? () => {
+      const h0 = el.querySelector('.tv-box')?.offsetHeight;
+      notesOpen = !notesOpen; draw(train, route, { keepScroll: true });
+      const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
+      if (box && h0 && h1 && h0 !== h1 && !reduceMotion()) {
+        box.style.overflow = 'hidden';
+        box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
+          .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
+      }
+      onFold?.(notesOpen, box);
+    } : null;
     if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();

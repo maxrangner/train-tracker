@@ -942,7 +942,8 @@
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
     /* (narrowing into its icon or widening back: its words stay and are cut off by its edge; src/main.js glideHead) */
-    #panel .sh-follow.morph { justify-content: flex-start; overflow: hidden; padding-right: 0; }
+    /* (important: the expanded card's rule centres its content, and the icon ended 16 px off and snapped) */
+    #panel .sh-follow.morph { justify-content: flex-start !important; overflow: hidden; padding-right: 0 !important; box-sizing: border-box; }
     #panel .sh-follow.morph span { display: inline !important; white-space: nowrap; }
     #panel .panel-head { position: relative; }
     #panel .panel-head .leaving { display: grid !important; place-items: center; position: absolute; margin: 0; pointer-events: none; }

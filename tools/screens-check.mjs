@@ -389,7 +389,9 @@ try {
       const f = [...window.__map.queryRenderedFeatures({ layers: ['train-dots'] })].find(x => `train:${x.properties.id}` === window.__stack.top());
       if (!f) return null;
       const p = window.__map.project(f.geometry.coordinates);
-      const named = window.__map.queryRenderedFeatures([[p.x - 10, p.y - 10], [p.x + 10, p.y + 10]], { layers: ['station-names'] }).length > 0;
+      // (station names are page elements over the map, src/map.js stationNameAt: their boxes, 3 px round, as it reads them)
+      const c = document.getElementById('map').getBoundingClientRect(), x = p.x + c.left, y = p.y + c.top;
+      const named = [...document.querySelectorAll('.station-name')].some((el) => { const r = el.getBoundingClientRect(); return r.width && x >= r.left - 6 && x <= r.right + 6 && y >= r.top - 6 && y <= r.bottom + 6; });
       return { x: p.x, y: p.y, named };
     });
     let dot = await dotNow();

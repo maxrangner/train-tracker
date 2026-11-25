@@ -618,24 +618,34 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const r = el.getBoundingClientRect(), s = sheet.getBoundingClientRect();
     const seen = getComputedStyle(el).visibility === 'hidden' ? 0 : Math.max(0, Math.min(r.bottom, s.bottom, innerHeight) - r.top);
     el.style.clipPath = `inset(0 0 calc(100% - ${Math.floor(seen)}px) 0)`;   // (the page grows with the sheet: from its top)
+    return r.top + seen;   // (where what it shows ends, on the screen)
   }
   // The page leaving slides out as a still picture of itself (Max, 2026-11-25: "horrible animation with elements
   // showing that shouldn't"): its own page lets go of its shared parts at once (a station's timetable, a train's card:
   // the next page may want them), so it emptied and its lower parts rose into view as it went. Its ids and key stay (its
   // look hangs on them); it goes after the new page, so a lookup finds the real one first, and under it
   // (index.html .pg-ghost); untouchable.
-  function ghostOf(el) {
+  const FROZEN = ['display', 'visibility', 'opacity', 'boxSizing', 'width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom',
+    'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'position', 'top', 'justifyContent', 'alignItems',
+    'flexDirection', 'gap', 'fontSize', 'lineHeight'];
+  function ghostOf(el, cut = Infinity) {
     const g = el.cloneNode(true);
     g.classList.remove('in-r', 'in-l');
     g.classList.add('pg-ghost');
-    // (what was hidden stays hidden: some of its look hangs on the sheet's page, which changes as it leaves, e.g. a
-    // train card's Follow showing only its icon at full)
+    // (each part frozen as it looks now: much of its look hangs on the sheet's page and height, which change as it
+    // leaves: a train card's Follow came back and its stops rose 40 px in the copy; ui-sweep, 2026-11-25)
     const all = el.getElementsByTagName('*'), copies = g.getElementsByTagName('*');
+    const looks = [];
+    // (what is under the cut isn't shown: hidden, not read; a long timetable has hundreds of parts)
     for (let i = 0; i < all.length; i++) {
+      if (all[i].getBoundingClientRect().top > cut) { looks.push(null); continue; }
       const cs = getComputedStyle(all[i]);
-      if (cs.display === 'none') copies[i].style.display = 'none';
-      // (the top buttons' sizes too: Follow as an icon at full widened by 5 px in the copy)
-      else if (all[i].tagName === 'BUTTON' && all[i].closest('.sh-btns')) Object.assign(copies[i].style, { width: cs.width, padding: cs.padding, justifyContent: cs.justifyContent });
+      looks.push(cs.display === 'none' ? null : FROZEN.map(k => cs[k]));
+    }
+    for (let i = 0; i < copies.length; i++) {
+      const st = copies[i].style;
+      if (!looks[i]) { st.display = 'none'; continue; }
+      FROZEN.forEach((k, j) => { st[k] = looks[i][j]; });
     }
     const from = el.querySelectorAll('canvas'), to = g.querySelectorAll('canvas');
     from.forEach((c, i) => { try { to[i].getContext('2d')?.drawImage(c, 0, 0); } catch { /* a picture it can't copy: blank */ } });
@@ -649,8 +659,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     let ghost = null;
     if (old && old !== pg.el && old.isConnected) {
       if (!reduceMotion()) {
-        clipLeaving(old);
-        ghost = ghostOf(old);
+        ghost = ghostOf(old, clipLeaving(old));
         old.style.clipPath = '';
         ghost.classList.add(dir > 0 ? 'out-l' : 'out-r');
       }
