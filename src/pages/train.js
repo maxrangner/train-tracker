@@ -62,6 +62,7 @@ function glideHead(panelEl, was) {
         { width: `${to.w}px`, marginLeft: '0px', paddingLeft: `${to.ic}px` },
       ], timing);
       a.finished.catch(() => {}).then(() => b.classList.remove('morph'));
+      b.querySelector('span')?.animate(from.w > to.w ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 1 }], timing);
       continue;
     }
     if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) b.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], timing);

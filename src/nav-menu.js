@@ -51,15 +51,18 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     if (under + g + h <= innerHeight - 10) { side = 'below'; navEl.style.top = `${Math.round(under + g)}px`; }
     else { side = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`; }
   }
-  // (out from under the edge it hangs from: it moves its whole height plus the gap, cut where that edge is)
+  // (out from behind the box and back behind it: the card lies under the sheet (src/css/menu.css) and moves its whole
+  // height plus the gap, so it shows in the gap as it goes (Max, 2026-11-25: "Menu should go all the way behind the search
+  // bar"); a computer's card is cut only above the sheet's top, where it would pass out over the map)
   function slide(out) {
     navEl.getAnimations().forEach(x => x.cancel());
     if (reduceMotion()) return Promise.resolve();
     const g = gap(), h = navEl.offsetHeight, d = h + g, below = side === 'below';
-    const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${h}px -24px -24px -24px)` }
-      : { transform: `translateY(${d}px)`, clipPath: `inset(-24px -24px ${h}px -24px)` };
-    const shown = below ? { transform: 'none', clipPath: `inset(${-g}px -24px -24px -24px)` }
-      : { transform: 'none', clipPath: `inset(-24px -24px ${-g}px -24px)` };
+    const edge = below ? sheetEl.getBoundingClientRect().top - navEl.getBoundingClientRect().top : 0;
+    const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${edge + d}px -24px -24px -24px)` }
+      : { transform: `translateY(${d}px)`, clipPath: 'inset(-24px)' };
+    const shown = below ? { transform: 'none', clipPath: `inset(${edge}px -24px -24px -24px)` }
+      : { transform: 'none', clipPath: 'inset(-24px)' };
     return navEl.animate(out ? [hid, shown] : [shown, hid], { duration: ms('fold'), easing: easing('ui'), fill: 'forwards' }).finished.catch(() => {});
   }
 
@@ -92,7 +95,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     const mine = ++turn;
     if (!placed) { enter('closed'); return; }   // (never shown: gone at once)
     enter('closing');
-    slide(false).then(() => { if (turn === mine) enter('closed'); });
+    return slide(false).then(() => { if (turn === mine) enter('closed'); });
   }
   // (coming back on Home, parked but shown again: ☰ shuts it, as an open menu)
   const toggle = () => (state === 'opening' || state === 'open' || (state === 'parked' && !navEl.hidden) ? close() : open());

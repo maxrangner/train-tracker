@@ -7,9 +7,9 @@
   @keyframes pop-in { from { opacity: 0; transform: translateY(6px) scale(.97); } }
   .pop small { padding: 6px 12px 2px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
 
-  #nav.pop { animation: none; min-width: 220px; padding: 8px; }
+  #nav.pop { animation: none; min-width: 220px; padding: 8px; z-index: 5; }   /* (under the sheet: it slides from behind the box) */
   /* parked under the sheet while a page it opened slides over it (src/nav-menu.js) */
-  #nav.under { z-index: 5; pointer-events: none; }
+  #nav.under { pointer-events: none; }
   .nav-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 14px 6px 8px; border: 0; border-radius: 12px; background: transparent;
     color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: pointer; }
   .nav-row:hover, .nav-row:focus-visible { background: var(--hover); outline: none; }

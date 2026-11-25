@@ -70,7 +70,10 @@ try {
         const ins = /inset\(([-\d.]+)px(?: ([-\d.]+)px)?(?: ([-\d.]+)px)?/.exec(cs.clipPath);
         const it = ins ? Math.max(0, Number(ins[1])) : 0, ib = ins ? Math.max(0, Number(ins[3] ?? ins[1])) : 0;
         const below = Number(nav.style.top.replace('px', '')) > sh.top;
-        past = Math.max(past, below ? b.bottom - (r.top + it) : (r.bottom - ib) - sh.top);
+        // (since 2026-11-25 it lies under the sheet and slides from behind the box: past = shown out over the map above
+        // the sheet's top on a computer, or not under the sheet at all)
+        const under = Number(cs.zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
+        past = Math.max(past, !under ? 99 : below ? sh.top - (r.top + it) : 0);
         dy = Math.max(dy, Math.abs(Math.round(m.m42))); dx = Math.max(dx, Math.abs(Math.round(m.m41))); op = Math.min(op, Number(cs.opacity));
       }
       if ((untilHidden && nav.hidden) || performance.now() - t0 > ms) done({ dy, dx, op, past: Math.round(past), hidden: nav.hidden }); else requestAnimationFrame(f);
