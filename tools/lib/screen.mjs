@@ -102,7 +102,10 @@ export async function openFromMenu(page, name) {
   await page.click(sel);
   const want = { '#open-settings': 'page:settings', '#help-button': 'page:help' }[sel];
   if (want) await until(page, k => window.__stack.top() === k, 3000, want);
-  await sleep(400);
+  // until the page has slid in and the one it pushed out is gone (2026-11-25: four checks at a time, a click on
+  // Settings' theme button 400 ms after the tap hit the page mid-slide: "Node is either not clickable")
+  await until(page, () => !document.querySelector('#sheet .pg.in-r, #sheet .pg.in-l, #sheet .pg-ghost'), 4000);
+  await sleep(200);
   return pageKey(page);
 }
 

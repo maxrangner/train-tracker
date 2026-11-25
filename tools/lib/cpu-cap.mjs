@@ -28,20 +28,29 @@ export function capSelf() {
 const LOCK = join(tmpdir(), 'sparat-check.lock');
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
-// Waits (a line every minute) until no other check runs, then holds the PC's check lock until this process ends.
+// Waits (a line every minute) until no other check runs, then holds the PC's check lock until this process ends. The
+// lock is taken in one step only one process can win (the file made only if it isn't there: 'wx'); until 2026-11-23
+// it was read, then written, and two checks waiting on the same one both started when it ended. A lock left by a
+// process that is gone is taken away.
 export async function oneCheckAtATime() {
   let said = 0;
   for (;;) {
+    try {
+      writeFileSync(LOCK, JSON.stringify({ pid: process.pid, cwd: process.cwd(), at: Date.now() }), { flag: 'wx' });
+      break;   // ours
+    } catch (e) {
+      if (e.code !== 'EEXIST') break;   // (no lock possible: run anyway, as before the lock)
+    }
     let other = null;
     try { other = JSON.parse(readFileSync(LOCK, 'utf8')); } catch { other = null; }
-    if (!other || other.pid === process.pid || !alive(other.pid)) break;
+    if (other?.pid === process.pid) break;
+    if (!other || !alive(other.pid)) { try { unlinkSync(LOCK); } catch { /* another took it away first */ } continue; }
     if (Date.now() - said > 60000) {
       console.log(`waiting: another check runs on this PC (process ${other.pid}, in ${other.cwd}, since ${new Date(other.at).toTimeString().slice(0, 5)})`);
       said = Date.now();
     }
-    await new Promise(r => setTimeout(r, 5000));
+    await new Promise(r => setTimeout(r, 2000 + Math.random() * 2000));
   }
-  writeFileSync(LOCK, JSON.stringify({ pid: process.pid, cwd: process.cwd(), at: Date.now() }));
   const free = () => {
     try { if (JSON.parse(readFileSync(LOCK, 'utf8')).pid === process.pid) unlinkSync(LOCK); } catch { /* gone already */ }
   };
