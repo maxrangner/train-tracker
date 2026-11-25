@@ -74,7 +74,7 @@ export function createDisruptionPages(ctx) {
   }
   return {
     list, one,
-    open: id => ctx.stack.open(`dis:${id}`),
+    open: (id, opts) => ctx.stack.open(`dis:${id}`, opts),
     // New data: the list or the disruption on top drawn again (one that ended closes).
     onData() {
       const stack = ctx.stack, top = stack?.top() ?? '';

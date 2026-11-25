@@ -141,12 +141,12 @@ const map = createMap('map', {
   onTrainTap(id) {
     const view = day.view;
     if (view?.past && (id || view.bubbleShown)) { if (id) day.bubble([id]); else view.hideBubble(); return; }
-    if (trainPages.open(id)) return;
+    if (trainPages.open(id, { fromMap: true })) return;
     stack.mapTap();
   },
-  onStationTap(sig) { stationPages.open(sig); },
-  onDisruptionTap(id) { disPages.open(id); },
-  onGroupTap(list) { if (day.past) day.bubble(list.map(x => x.id)); else picker.show(list); },
+  onStationTap(sig) { stationPages.open(sig, { fromMap: true }); },
+  onDisruptionTap(id) { disPages.open(id, { fromMap: true }); },
+  onGroupTap(list) { if (day.past) day.bubble(list.map(x => x.id)); else picker.show(list, { fromMap: true }); },
 });
 const stations = createStationList({ routes, map });
 const follow = id => map.follow(() => frame.placeNow(id), () => panel.setFollowing(false));   // (gone or dragged off: following stops)

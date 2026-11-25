@@ -259,11 +259,21 @@ try {
     // nor from train to train (Max, 2026-11-24: "Not just tapping between them on the map"): another train opened over it
     const other = await page.evaluate(() => { const cur = window.__stack.top(); return window.__trains.reports().map(r => `train:${r.id}`).find(k => k !== cur); });
     if (other) {
-      await page.evaluate(k => window.__stack.open(k, { go: true }), other); await sleep(1200);
+      await page.evaluate(k => window.__stack.open(k, { go: true, fromMap: true }), other); await sleep(1200);
       const t2 = await page.evaluate(() => ({ below: window.__stack.keys().at(-2), up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent) }));
-      check(!t2.up, `a train over another train (${t2.below}): ‹ ${t2.up ? 'SHOWN' : 'none'}`);
+      check(!t2.up, `a train tapped on the map over another train (${t2.below}): ‹ ${t2.up ? 'SHOWN' : 'none'}`);
       await page.evaluate(() => window.__stack.back()); await sleep(1000);
     }
+    // ‹ by how a page was opened, not by what was open before (Max, 2026-11-25: "Only arrow back when coming from a click on
+    // a previous card or menu etc."): a station tapped on the map over the card: none; a train clicked on its board: ‹
+    await page.evaluate(() => window.__stack.open('station:Cst', { fromMap: true })); await sleep(1500);
+    const st = await page.evaluate(() => ({ top: window.__stack.top(), up: Boolean(document.querySelector('#sheet .sh-up')?.offsetParent) }));
+    await page.evaluate(() => document.querySelector('#board .bd-row:not(.gone)')?.click()); await sleep(2000);
+    const fromRow = await page.evaluate(() => ({ top: window.__stack.top(), up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent) }));
+    check(st.top === 'station:Cst' && !st.up && /^train:/.test(fromRow.top) && fromRow.up,
+      `a station tapped on the map over the card: ‹ ${st.up ? 'SHOWN' : 'none'}; a train clicked on its board (${fromRow.top}): ‹ ${fromRow.up ? 'shown' : 'NONE'}`);
+    await page.evaluate(() => window.__stack.back()); await sleep(800);
+    await page.evaluate(() => window.__stack.back()); await sleep(1000);
     // low: the condensed card, its last line with room under it (Max's phone, 2026-11-23: no padding under "Kort tåg")
     await setLevel(page, 0);
     // (Max, 2026-11-23: collapsed "only number, operator and destination", nothing below peeking: the rest is hidden)

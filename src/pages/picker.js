@@ -12,10 +12,10 @@ export function createPicker(ctx) {
   const pickerEl = document.getElementById('picker');
   const lists = new Map();
   let n = 0;
-  function show(list) {
+  function show(list, opts = {}) {
     const key = `pick:${++n}`;
     lists.set(key, [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label))));
-    ctx.stack.open(key);
+    ctx.stack.open(key, opts);
   }
   function define(key) {
     const rows = lists.get(key);

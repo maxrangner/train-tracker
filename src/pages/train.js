@@ -159,8 +159,8 @@ export function createTrainPages(ctx) {
       act: (what) => { if (what === 'share') shareOpen(); },
       // (share, star and Follow in the card's top line beside the number: the sheet has no bar over a train)
       barIn: () => (panel.openId === id && panelEl.parentElement === myEl ? panelEl.querySelector('.panel-buttons') : null),
-      // (‹ only when opened from another page: not over Home, nor from train to train on the map)
-      noUp: () => { const below = ctx.stack.keys().at(-2) ?? 'home'; return below === 'home' || below.startsWith('train:'); },
+      // (no ‹ over Home; from the map never: src/stack.js syncBar)
+      noUp: () => (ctx.stack.keys().at(-2) ?? 'home') === 'home',
       follow: { can: () => panel.openId === id && panel.canFollow, on: () => panel.following, toggle: () => panel.toggleFollow() },
       redraw: () => panel.relabel(),
     };
@@ -224,9 +224,9 @@ export function createTrainPages(ctx) {
   }
 
   // Open a train on the map: its page, the camera follows it. go: also fly there, zoomed in to the toys.
-  function open(id, { go = false } = {}) {
+  function open(id, { go = false, fromMap = false } = {}) {
     if (!id || !trains.get(id)) return false;
-    return ctx.stack.open(`train:${id}`, { go });
+    return ctx.stack.open(`train:${id}`, { go, fromMap });
   }
   // Picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
   function pick(tr) {

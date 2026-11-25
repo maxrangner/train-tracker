@@ -62,6 +62,6 @@ export function createStationPages(ctx) {
   }
   return {
     define: stationPage, board,
-    open(sig, { go = false } = {}) { if (stations.get(sig)) ctx.stack.open(`station:${sig}`, { go }); },
+    open(sig, { go = false, fromMap = false } = {}) { if (stations.get(sig)) ctx.stack.open(`station:${sig}`, { go, fromMap }); },
   };
 }

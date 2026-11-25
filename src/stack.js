@@ -715,8 +715,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
       folBtn.setAttribute('aria-pressed', String(following));
       folBtn.lastElementChild.textContent = t(following ? 'following' : 'follow');
     }
-    // ‹ one page back on every page but those that say noUp (true, or a function: a train's, over Home)
-    const up = !(typeof pg.def.noUp === 'function' ? pg.def.noUp() : pg.def.noUp);
+    // ‹ only on a page opened by a click in the page before it or the menu, never on one the map opened, whatever was
+    // open before (Max, 2026-11-25: "Only arrow back when coming from a click on a previous card or menu etc. Never just
+    // because you had a card open before"); and not where the page says noUp (a train's, over Home)
+    const up = !pg.fromMap && !(typeof pg.def.noUp === 'function' ? pg.def.noUp() : pg.def.noUp);
     if (upBtn.hidden === up) upBtn.hidden = !up;
     const word = t('stepBack');
     if (upBtn.getAttribute('aria-label') !== word) upBtn.setAttribute('aria-label', word);
@@ -837,6 +839,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const def = define(key);
     if (!def) return false;
     const prev = top(), pg = make(key, def);
+    pg.fromMap = Boolean(opts.fromMap);   // (opened by a tap on the map: no ‹, syncBar)
     stack.push(pg);
     while (stack.length > MAX_PAGES + 1) { const gone = stack.splice(1, 1)[0]; gone.def.unmount?.(); gone.el.remove(); }
     recent(key);
