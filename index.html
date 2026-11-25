@@ -218,6 +218,9 @@
     .pg { position: absolute; inset: 0; overflow: hidden; overflow-anchor: none; padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
       overscroll-behavior: contain; scrollbar-width: thin; box-sizing: border-box; }
     #sheet[data-h="2"] .pg { overflow-y: auto; touch-action: pan-y; }
+    /* A leaving page's still copy (src/stack.js ghostOf), under the page coming in */
+    .sh-pages > .pg-ghost { z-index: 0; pointer-events: none; }
+    .sh-pages > .pg.in-r, .sh-pages > .pg.in-l { z-index: 1; }
     #sheet[data-search] .pg:not(.res) { display: none; }
     .pg > * { flex: none; }
     .sec { min-width: 0; }

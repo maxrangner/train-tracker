@@ -609,21 +609,61 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const any = !starBtn.hidden || !folBtn.hidden || !actsEl.hidden;
     sheet.classList.toggle('no-bar', Boolean(head) || (!up && (Boolean(own) || !any)));
   }
+  // The page leaving shows only what it showed: the sheet growing for the new page would open up its hidden part as it
+  // slides out (Max, 2026-11-25: "I can see a red number element swipe by, that is not present in either relevant
+  // cards": Home's lateness pills, at rest hidden under the bar; tools/ui-sweep.mjs "stray")
+  function clipLeaving(el) {
+    const r = el.getBoundingClientRect(), s = sheet.getBoundingClientRect();
+    const seen = getComputedStyle(el).visibility === 'hidden' ? 0 : Math.max(0, Math.min(r.bottom, s.bottom, innerHeight) - r.top);
+    el.style.clipPath = `inset(0 0 calc(100% - ${Math.floor(seen)}px) 0)`;   // (the page grows with the sheet: from its top)
+  }
+  // The page leaving slides out as a still picture of itself (Max, 2026-11-25: "horrible animation with elements
+  // showing that shouldn't"): its own page lets go of its shared parts at once (a station's timetable, a train's card:
+  // the next page may want them), so it emptied and its lower parts rose into view as it went. Its ids and key stay (its
+  // look hangs on them); it goes after the new page, so a lookup finds the real one first, and under it
+  // (index.html .pg-ghost); untouchable.
+  function ghostOf(el) {
+    const g = el.cloneNode(true);
+    g.classList.remove('in-r', 'in-l');
+    g.classList.add('pg-ghost');
+    // (what was hidden stays hidden: some of its look hangs on the sheet's page, which changes as it leaves, e.g. a
+    // train card's Follow showing only its icon at full)
+    const all = el.getElementsByTagName('*'), copies = g.getElementsByTagName('*');
+    for (let i = 0; i < all.length; i++) if (getComputedStyle(all[i]).display === 'none') copies[i].style.display = 'none';
+    const from = el.querySelectorAll('canvas'), to = g.querySelectorAll('canvas');
+    from.forEach((c, i) => { try { to[i].getContext('2d')?.drawImage(c, 0, 0); } catch { /* a picture it can't copy: blank */ } });
+    g.inert = true;
+    g.setAttribute('aria-hidden', 'true');
+    return g;
+  }
   function show(pg, prev, dir, opts = {}) {
-    if (prev) { prev.scroll = prev.el.scrollTop; prev.def.hide?.(); }
     const old = prev?.el;
-    if (old && old !== pg.el) {
-      old.classList.remove('in-r', 'in-l');
-      if (reduceMotion()) old.remove();
-      else { old.classList.add(dir > 0 ? 'out-l' : 'out-r'); setTimeout(() => { if (top()?.el !== old) old.remove(); old.classList.remove('out-l', 'out-r'); }, 300 * motionK()); }
+    if (prev) prev.scroll = old.scrollTop;
+    let ghost = null;
+    if (old && old !== pg.el && old.isConnected) {
+      if (!reduceMotion()) {
+        clipLeaving(old);
+        ghost = ghostOf(old);
+        old.style.clipPath = '';
+        ghost.classList.add(dir > 0 ? 'out-l' : 'out-r');
+      }
+      old.remove();
+      old.classList.remove('in-r', 'in-l', 'out-l', 'out-r');
     }
+    if (prev) prev.def.hide?.();
     pg.el.classList.remove('out-l', 'out-r');
+    pg.el.style.clipPath = '';
     if (prev && !reduceMotion()) {
       pg.el.classList.add(dir > 0 ? 'in-r' : 'in-l');
       const el0 = pg.el;
       setTimeout(() => el0.classList.remove('in-r', 'in-l'), 400 * motionK());
     }
     pagesEl.append(pg.el);
+    if (ghost) {
+      pagesEl.append(ghost);
+      ghost.scrollTop = prev.scroll;
+      setTimeout(() => ghost.remove(), 300 * motionK());
+    }
     syncBar();
     H[0] = lowOf(pg);
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
