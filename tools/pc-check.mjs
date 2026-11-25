@@ -103,7 +103,12 @@ try {
   await page.mouse.move(over.x, over.y); await page.mouse.wheel({ deltaY: 400 }); await sleep(700);
   const still2 = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
   ok(still2.lvl === still.lvl && still2.top === still.top, `the menu open, a wheel over the page: height ${still.lvl} -> ${still2.lvl}, scrolled ${still.top} -> ${still2.top} (want nothing)`);
-  await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(1200);
+  await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(150);
+  // (the card stays where it is, under the sheet, and the page slides over it: no slide back; Max, 2026-11-25 "the hamburger
+  // menu clips through the new card. New card should just slide over with menu under")
+  const parked = await page.evaluate(() => { const n = document.getElementById('nav'); return { shown: !n.hidden, under: Number(getComputedStyle(n).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex), moving: n.getAnimations().length }; });
+  ok(parked.shown && parked.under && !parked.moving, `a choice: the menu stays in place under the sheet as the page comes (shown ${parked.shown}, under ${parked.under}, moving ${parked.moving})`);
+  await sleep(1050);
   const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.getElementById('nav').hidden }));
   ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes (${after.open ? 'still open' : 'shut'})`);
   //    back from Settings: the menu open again, placed where the sheet came to rest (src/nav-menu.js reopenOnHome; until

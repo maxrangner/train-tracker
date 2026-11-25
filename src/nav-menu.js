@@ -5,7 +5,12 @@
 // holds still while it is open (src/stack.js freeze). ☰, the sheet's arrow, a map tap, a page coming up, Esc and the backs close it
 // (src/back.js).
 //
-// One owner of its state: closed -> opening -> open -> closing -> closed. Opening waits for the sheet to stand
+// A choice that opens a page (Settings, About) parks it: it stays where it is, under the sheet, and the page slides over it;
+// hidden once covered; back on Home it is there again as the sheet goes down, and open once the sheet stands (Max,
+// 2026-11-25: "the hamburger menu clips through the new card. New card should just slide over with menu under, since it
+// comes back at the back press anyways").
+//
+// One owner of its state: closed -> opening -> open -> closing -> closed; open -> parked -> open (back) or closed. Opening waits for the sheet to stand
 // (stack.whenSettled) when it has to move first: the card is placed from where the sheet comes to rest, never from
 // where it is on its way (Home raised: lowered first; back on Home from a page the menu opened: reopenOnHome).
 //
@@ -29,6 +34,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     state = next;
     const on = next === 'opening' || next === 'open';
     navEl.hidden = next === 'closed';
+    navEl.classList.toggle('under', next === 'parked');
     button.setAttribute('aria-expanded', String(on));
     stack().freeze(on, close);   // (the sheet's arrow/handle closes it too: src/stack.js freeze)
     // (opening, not placed yet: not shown, where it was, until it slides out from its place once the sheet stands)
@@ -82,6 +88,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   // (also when a page comes up from the menu or over it: the card slides back, the page comes meanwhile)
   function close() {
     if (state === 'closed' || state === 'closing') return;
+    if (state === 'parked') { ++turn; enter('closed'); return; }   // (under a page: gone at once)
     const mine = ++turn;
     if (!placed) { enter('closed'); return; }   // (never shown: gone at once)
     enter('closing');
@@ -90,7 +97,15 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   const toggle = () => (state === 'opening' || state === 'open' ? close() : open());
   // Back on Home from a page the menu opened: open again once the sheet stands (a task later: not inside the stack's
   // own page change).
-  function reopenOnHome() { if (!backHome) return; backHome = false; queueMicrotask(() => open({ settle: true })); }
+  function reopenOnHome() {
+    if (!backHome) return;
+    backHome = false;
+    if (state !== 'parked') { queueMicrotask(() => open({ settle: true })); return; }
+    // (parked: shown again under the sheet at once, uncovered as the sheet goes down; open once it stands)
+    const mine = ++turn;
+    navEl.hidden = false;
+    stack().whenSettled().then(() => { if (turn !== mine || state !== 'parked') return; place(); enter('open'); });
+  }
 
   onTap(button, toggle);   // (at once also right after a swipe: src/tap.js)
   // (a finger on the map leaves it open: a plain map tap closes it through the map's onMapTap; inside the sheet only ☰
@@ -98,16 +113,23 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   document.addEventListener('pointerdown', (e) => {
     if ((state === 'opening' || state === 'open') && !e.target.closest?.('#sheet, #nav') && !mapEl.contains(e.target)) close();
   }, true);
-  const fromMenu = (key) => { close(); backHome = true; stack().open(key); };
+  const fromMenu = (key) => {
+    if (state !== 'open') { close(); backHome = true; stack().open(key); return; }
+    const mine = ++turn;
+    enter('parked');
+    backHome = true;
+    stack().open(key);
+    stack().whenSettled().then(() => { if (turn === mine && state === 'parked') navEl.hidden = true; });
+  };
   document.getElementById('open-day').onclick = () => { close(); onDay(); };
   document.getElementById('open-settings').onclick = () => fromMenu('page:settings');
   document.getElementById('help-button').onclick = () => fromMenu('page:help');
 
   return {
     get isOpen() { return state === 'opening' || state === 'open'; },
-    get shown() { return state !== 'closed'; },
+    get shown() { return state !== 'closed' && state !== 'parked'; },
     open, close, toggle, reopenOnHome,
     // A page came on top: the menu is Home's, any other page shuts it (the status pill, the map); Home may reopen it.
-    pageOnTop(key) { if (key === 'home') reopenOnHome(); else close(); },
+    pageOnTop(key) { if (key === 'home') reopenOnHome(); else if (state !== 'parked') close(); },
   };
 }
