@@ -631,7 +631,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (what was hidden stays hidden: some of its look hangs on the sheet's page, which changes as it leaves, e.g. a
     // train card's Follow showing only its icon at full)
     const all = el.getElementsByTagName('*'), copies = g.getElementsByTagName('*');
-    for (let i = 0; i < all.length; i++) if (getComputedStyle(all[i]).display === 'none') copies[i].style.display = 'none';
+    for (let i = 0; i < all.length; i++) {
+      const cs = getComputedStyle(all[i]);
+      if (cs.display === 'none') copies[i].style.display = 'none';
+      // (the top buttons' sizes too: Follow as an icon at full widened by 5 px in the copy)
+      else if (all[i].tagName === 'BUTTON' && all[i].closest('.sh-btns')) Object.assign(copies[i].style, { width: cs.width, padding: cs.padding, justifyContent: cs.justifyContent });
+    }
     const from = el.querySelectorAll('canvas'), to = g.querySelectorAll('canvas');
     from.forEach((c, i) => { try { to[i].getContext('2d')?.drawImage(c, 0, 0); } catch { /* a picture it can't copy: blank */ } });
     g.inert = true;
@@ -673,7 +678,11 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     [H[0], H[1], H[2]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
-    pg.el.scrollTop = dir < 0 && idx === 2 ? pg.scroll ?? 0 : 0;
+    // (back to a scrolled page: on a computer the sheet grows downward as it comes, so a scroll kept from a taller
+    // page was pulled back with every frame and the page slid down the whole way; the one that fits its final height
+    // from the start: what is shown stays, the bottom edge reveals the rest; ui-sweep, 2026-11-25)
+    const room = wide() ? Math.max(0, H[idx] - shownH()) : 0;
+    pg.el.scrollTop = dir < 0 && idx === 2 ? Math.min(pg.scroll ?? 0, Math.max(0, pg.el.scrollHeight - pg.el.clientHeight - room)) : 0;
     syncBar();
     onChange(pg);
     guard();

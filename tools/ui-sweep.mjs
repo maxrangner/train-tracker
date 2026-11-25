@@ -241,7 +241,7 @@ const T = [
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
   { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
-  { name: 'home → filter more', live: true, kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  { name: 'home → filter more', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
   { name: 'home → all disruptions', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await settle(p); }, act: p => click(p, `${HOME} [data-go="dislist"]`) },
   { name: 'all disruptions → back', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await click(p, `${HOME} [data-go="dislist"]`); await settle(p); }, act: esc },
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
@@ -255,7 +255,7 @@ const T = [
   { name: 'train → station', setup: async (p) => { p.__t = await openTrainFromMap(p); await click(p, moreBtn); await settle(p); }, act: p => p.evaluate(() => { const r = [...document.querySelectorAll('#panel .tl-row[data-sig]')].find(e => e.offsetHeight); r?.click(); return Boolean(r); }) },
   { name: 'station → back to train', setup: async (p) => { p.__t = await openTrainFromMap(p); await click(p, moreBtn); await settle(p); await p.evaluate(() => { const r = [...document.querySelectorAll('#panel .tl-row[data-sig]')].find(e => e.offsetHeight); r?.click(); }); await settle(p); }, act: esc },
   { name: 'station → train', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('station:Cst')); await until(p, () => Boolean(document.querySelector('#board .bd-row')), 20000); await settle(p); }, act: p => p.evaluate(() => { const r = [...document.querySelectorAll('#board .bd-row')].find(e => e.offsetHeight); r?.click(); return Boolean(r); }) },
-  { name: 'station messages fold', kind: 'grow', setup: async (p) => {
+  { name: 'station messages fold', live: true, kind: 'grow', setup: async (p) => {
     await toRest(p);
     for (const sig of ['Cst', 'Sci', 'Sod', 'Flb', 'Sub', 'Upv', 'Kn', 'Sta']) {
       await p.evaluate(k => window.__stack.open(`station:${k}`), sig);
