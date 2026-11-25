@@ -4,13 +4,16 @@
 //   - a company opens its own page (only its trains, its arrivals today), back goes to all of them;
 //   - the search on a station's board: the whole day from the next train, a number or a destination narrows it, the
 //     button again closes it (and the sheet goes back to its height before).
-// Since the one sheet (2026-11-22): Statistik is Home pulled up to full (.pg[data-key="home"]); a filter is a kind's
-// or company's page with "Visa bara" kept (the line above the bar says so, its × ends it); a company's page is
-// co:<brand> (its name, its trains on the map now, its day graph), back is the stack's back chip ("Hem"); Busiest's
+// Since the start chips (2026-11-25): Statistik is the chip Statistik's card (.pg[data-key="stats"]; Home pulled up to
+// full until then); a filter is a kind's or company's page with "Visa bara" kept (the line above the bar says so, its
+// × ends it); a company's page is co:<brand> (its name, its trains on the map now, its day graph), back goes to
+// Statistik; Busiest's
 // rows open the station's board (station:<sig>).
 // node tools/stats-board-check.mjs (with npm run dev; PAGE= for another port). Needs Trafikverket (live data).
 import { launch, sleep } from './lib/browser.mjs';
-import { waitForMap, until, setLevel, toRest, back, sheetState, openStationByName, HOME, pageSel } from './lib/screen.mjs';
+import { waitForMap, until, setLevel, toRest, back, sheetState, openStationByName, pageSel } from './lib/screen.mjs';
+// Statistik: the chip Statistik's card since the start chips (Home pulled up to full until 2026-11-25)
+const HOME = pageSel('stats');
 
 const fails = [], ok = [];
 const check = (cond, what) => (cond ? ok : fails).push(what);
@@ -27,14 +30,16 @@ try {
   await ready();
   const graph = () => page.evaluate(h => Boolean(document.querySelector(`${h} .st-dayin svg`)), HOME);
 
-  // ---- 1. "Laddar…" beside today's graph: the first time Home is pulled up, and over the numbers saved earlier today ----
+  // ---- 1. "Laddar…" beside today's graph: the first time Statistik opens (its chip; Home pulled up until 2026-11-25),
+  // and over the numbers saved earlier today ----
+  // (the sheet watched before the chip is tapped: the tap makes the card, its "Laddar…" can come at once)
   const watchBusy = () => page.evaluate((h) => {
-    window.__busy = []; const t0 = performance.now(), home = document.querySelector(h);
-    const look = () => { const b = home.querySelector('.st-busy'); if (!b) return; const v = b.hidden ? 'hidden' : 'shown';
+    window.__busy = []; const t0 = performance.now();
+    const look = () => { const b = document.querySelector(`${h} .st-busy`); if (!b) return; const v = b.hidden ? 'hidden' : 'shown';
       if (window.__busy.at(-1)?.[1] !== v) window.__busy.push([Math.round(performance.now() - t0), v]); };
-    new MutationObserver(look).observe(home, { subtree: true, attributes: true, childList: true });
+    new MutationObserver(look).observe(document.getElementById('sheet'), { subtree: true, attributes: true, childList: true });
     look();
-    window.__stack.setLevel(2);
+    document.querySelector('#chips [data-chip="stats"]').click();
   }, HOME);
   await watchBusy();
   for (let t0 = Date.now(); Date.now() - t0 < 25000 && !(await graph()); await sleep(300));
@@ -52,7 +57,8 @@ try {
   const rows = () => page.evaluate(h => [...document.querySelectorAll(`${h} .st-brow`)].filter(r => r.offsetParent)
     .map(r => ({ type: r.dataset.filter, v: r.dataset.v, off: r.classList.contains('st-off'), on: r.getAttribute('aria-pressed') === 'true' })), HOME);
   check((await rows()).every(r => !r.off), 'no filter: nothing dimmed');
-  // the biggest kind: its page, "Visa bara", back to Home
+  await setLevel(page, 2);
+  // the biggest kind: its page, "Visa bara", back to Statistik
   const kindV = await page.evaluate(h => { const r = [...document.querySelectorAll(`${h} .st-brow[data-filter="kind"]`)].find(x => x.style.order === '0'); r.click(); return r.dataset.v; }, HOME);
   await until(page, k => window.__stack.top() === `kind:${k}`, 3000, kindV);
   await sleep(500);
@@ -87,7 +93,7 @@ try {
   const backKey = await back(page);
   await sleep(800);
   const homeAgain = await page.evaluate(h => ({ count: Number(document.querySelector(`${h} .st-count`).textContent.replace(/\D/g, '')), companies: Boolean(document.querySelector(`${h} .st-brow[data-filter="brand"]`)) }), HOME);
-  check(s.keys.at(-2) === 'home' && backKey === 'home' && homeAgain.companies && homeAgain.count > co.count, `back from ${s.keys.join(' > ')}: ${backKey}, all trains again (${homeAgain.count})`);
+  check(s.keys.at(-2) === 'stats' && backKey === 'stats' && homeAgain.companies && homeAgain.count > co.count, `back from ${s.keys.join(' > ')}: ${backKey}, all trains again (${homeAgain.count})`);
   // Busiest's rows open the station's board
   const busy = await page.evaluate(h => { const b = document.querySelector(`${h} .st-rank [data-sig]`); b?.click(); return Boolean(b); }, HOME);
   if (busy) {
@@ -138,5 +144,5 @@ try {
 }
 for (const o of ok) console.log(`ok   ${o}`);
 for (const f of fails) console.log(`FAIL ${f}`);
-console.log(fails.length ? `stats-board-check: ${fails.length} failed` : 'stats-board-check ok: Statistik\'s loading on Home, dimming and company pages, the board\'s search');
+console.log(fails.length ? `stats-board-check: ${fails.length} failed` : 'stats-board-check ok: Statistik\'s loading, dimming and company pages, the board\'s search');
 process.exit(fails.length ? 1 : 0);
