@@ -397,14 +397,6 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
-// The open card's height: its first fit once it is in exactly (the sheet then moves once, up or down: no bounce); after
-// that only taller as parts come in, or either way within 1.5 s of the person touching the card (the chooser shut).
-function refitCard() {
-  const def = stack.pageDef(stack.top());
-  const done = Boolean(panelEl.querySelector('.panel-more, .state.empty, .state.error'));
-  if (done && def?.fitted?.() === false) { stack.refit(); return; }
-  stack.refit({ grow: performance.now() - cardTouched > 1500 });
-}
 
 // ---- A train ----
 // A train card's buttons glide to where the new height puts them (Max, 2026-11-25: "Train cards expanded or
@@ -466,25 +458,21 @@ function trainPage(id) {
   if (!m0) return null;
   let myEl = null;   // this train's page (show): the card goes back to the holder only from here
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
-  let fitted = false;              // its whole card measured once (def.fitted: until then refitCard waits)
   const number = () => String(meta()?.number ?? m0.number);
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
-  // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
-  // it is instead of fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check).
+  // under it). Still coming in (no "More" yet, no empty or error state): null (the sheet waits where it is instead of
+  // fitting what is half drawn and moving again when the rest comes: a bounce, sheet-moves-check; src/stack.js).
   const CARD_GAP = 4;   // (under "More": 20, then 10 were too much on Max's phone, 2026-11-23)
+  const cardIn = () => Boolean(panelEl.querySelector('.panel-more, .state.empty, .state.error'));
   function cardTo(whole) {
     const pg = panelEl.parentElement;
     if (panel.openId !== id || !pg?.classList.contains('pg') || panelEl.classList.contains('full')) return whole ? wantHalf : wantLow;
     const top = pg.getBoundingClientRect().top - pg.scrollTop;
     const below = el => el && el.offsetParent ? el.getBoundingClientRect().bottom - top : 0;
     // Still coming in (the last card's parts may still be in it): the sheet waits where it is; once the card is in, it
-    // moves once to fit it exactly, up or down (refitCard). Until 2026-11-23 it took the last card's height and, only
-    // ever growing, kept that empty space under a shorter card (Max's phone: "too much empty space down").
-    if (whole && !panelEl.querySelector('.panel-more, .state.empty, .state.error')) {
-      // (at most half the screen: from Home at full a loading card covered it all until its stops came; the handle is
-      // its head since the bar went, 20 px, 30 on a computer, as src/stack.js counts it)
-      return Math.max(1, Math.round(Math.min(stack.shown, innerHeight * 0.5) - stack.headPx()));
-    }
+    // moves once to fit it exactly, up or down (src/stack.js fit 'card'). Until 2026-11-23 it took the last card's height
+    // and, only ever growing, kept that empty space under a shorter card (Max's phone: "too much empty space down").
+    if (whole && !cardIn()) return null;
     if (!whole) {
       // collapsed: the head line alone (number, operator, destination; the rest is hidden at low: index.html)
       const b = below(panelEl.querySelector('.panel-head'));
@@ -492,7 +480,7 @@ function trainPage(id) {
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
-    if (b > 0) { wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4; fitted = true; }
+    if (b > 0) wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4;
     return wantHalf;
   }
   return {
@@ -551,8 +539,10 @@ function trainPage(id) {
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
     low: () => cardTo(isWide()),
-    every() { if (panel.openId === id) { drawExtras(id); refitCard(); } },
-    fitted: () => fitted,
+    every() { if (panel.openId === id) drawExtras(id); },
+    // The card changed its size (the "to Kallhäll" chooser opened or shut, its stops came in, Share's note): the sheet
+    // follows at once, not at the next second (Max, 2026-11-23: "the card expands after way too long"); src/stack.js
+    fit: { box: panelEl, ready: cardIn },
     // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
     dismiss() { if (panel.openId === id) panel.closePick(); },
     star: { on: () => favourites.has('train', number()), toggle: () => favourites.toggle('train', number()) },
@@ -669,15 +659,15 @@ const board = createBoard(boardEl, {
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
   // The station's own messages (live only).
   messages: live ? sig => fetchStationMessages(sig, now()) : null,
+  onFull: full => boardFull(full),
 });
-// The board's messages or its search want room (it turns .full): the sheet goes to full height; folded or closed again,
-// back to the height it had (2026-11-23, stats-board-check: it stayed at full; a sheet raised by hand stays up).
-let boardLvl = null;
-new MutationObserver(() => {
-  if (!stack?.top()?.startsWith('station:')) { boardLvl = null; return; }
-  if (boardEl.classList.contains('full')) { if (stack.level < 2) { boardLvl = stack.level; stack.setLevel(2); } }
-  else if (boardLvl !== null) { if (stack.level === 2) stack.setLevel(boardLvl); boardLvl = null; }
-}).observe(boardEl, { attributes: true, attributeFilter: ['class'] });
+// The board's messages or its search want room (board.js onFull): the sheet goes to full height; folded or closed
+// again, back to the height it had (2026-11-23, stats-board-check: it stayed at full; a sheet raised by hand stays up).
+function boardFull(full) {
+  if (!stack?.top()?.startsWith('station:')) stack?.releaseFull('board', false);
+  else if (full) stack.requestFull('board');
+  else stack.releaseFull('board');
+}
 function stationPage(sig) {
   const st0 = stations.get(sig);
   if (!st0) return null;
@@ -878,7 +868,7 @@ for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.d
 // back under it, no fade; shutting as fast as opening, the same curve (Max, 2026-11-25: "Should be same speed"); the
 // speed as the page changes' (Debug → Animation speed). Where there is no room under the bar (a phone's sheet at rest,
 // its bar at the bottom) it comes out above the sheet instead. The page behind holds still while it is open (src/stack.js
-// frozen, the sheet's menu-open); ☰, a map tap, Esc or the phone's back close it.
+// freeze); ☰, a map tap, Esc or the phone's back close it.
 const navGap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (index.html --sheet-inset)
 let navOpen = false, navSide = 'below';
 function placeNav() {
@@ -915,7 +905,7 @@ function openNav() {
   navOpen = true;
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
-  document.getElementById('sheet').classList.add('menu-open');
+  stack.freeze(true);
   const go = () => {
     if (!navOpen) return;
     placeNav();
@@ -931,7 +921,7 @@ function closeNav() {
   if (!navOpen) return;
   navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
-  document.getElementById('sheet').classList.remove('menu-open');
+  stack.freeze(false);
   const shut = () => {
     if (navOpen) return;   // (opened again meanwhile)
     navEl.hidden = true;
@@ -1822,16 +1812,6 @@ stack = createStack({
   },
 });
 stack.onSearch((on) => { closeNav(); document.documentElement.classList.toggle('searching', on); if (on) menu.open(); pageBar.follow(on ? document.getElementById('search-results') : stack.pageEl(stack.top())); });
-// A train's card that changed its size (the "to Kallhäll" chooser opened or shut, its stops come in, Share's note):
-// the sheet follows at once, not at the next second's tick (Max, 2026-11-23: "the card expands after way too long").
-// Taller at once; shorter only when the person changed the card within the last 1.5 s (the chooser shut): its own
-// content coming in (its stops, a line under the tiles) never moves the sheet down and up again.
-let cardTouched = 0;
-panelEl.addEventListener('pointerdown', () => { cardTouched = performance.now(); }, true);
-panelEl.addEventListener('click', () => { cardTouched = performance.now(); }, true);
-if (typeof ResizeObserver === 'function') {
-  new ResizeObserver(() => { if (panel.openId && stack.top() === `train:${panel.openId}`) refitCard(); }).observe(panelEl);
-}
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], [data-cofilter], .dis-row[data-id]');
@@ -1862,7 +1842,8 @@ document.getElementById('sheet').addEventListener('click', (e) => {
 // For the tools (tools/lib/screen.mjs): the stack's keys, its top, the sheet's height; opening and going back.
 window.__stack = {
   keys: () => stack.keys(), top: () => stack.top(), names: () => stack.names(), get level() { return stack.level; },
-  get heights() { return stack.heights; }, get searching() { return stack.searching; },
+  get heights() { return stack.heights; }, get searching() { return stack.searching; }, get target() { return stack.target; },
+  whenSettled: () => stack.whenSettled(), onSettled: fn => stack.onSettled(fn),
   open: (key, opts) => stack.open(key, opts), back: () => stack.back(), home: level => stack.home(level), setLevel: i => stack.setLevel(i),
 };
 
