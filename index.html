@@ -150,8 +150,10 @@
        pulls it up they show */
     #sheet[data-page="home"][data-h="0"]:not(.dragging):not([data-search]) .sh-pages { visibility: hidden; }
     /* (at full the card's top line stays at the top while its stops scroll under it: its Share, star and Follow in reach) */
-    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg); padding-block: 6px; margin-block: -6px 0;
-      box-shadow: 0 -12px 0 var(--bg); }   /* (the band above it too: the stops showed through there, Max 2026-11-24) */
+    #sheet[data-h="2"] .pg #panel > .panel-head { position: sticky; top: 0; z-index: 3; background: var(--bg);
+      box-shadow: 0 -12px 0 var(--bg), 0 6px 0 var(--bg); }   /* (the band above it too: the stops showed through there, Max 2026-11-24) */
+    /* (its band below a shadow, not padding: padding moved the whole card 6 px down at full; Max 2026-11-25, pics 2-3:
+       "Expanded and non expanded train card does not align vertically. Jumps a few pixels") */
     .sh-btns { display: flex; align-items: center; gap: 8px; flex: none; }
     /* ‹: one page back (Max, 2026-11-23: "With home gone, some screens need a back button like disruptions"); every page
        but a train's (its card's top line is its head: a map tap or a pull closes it) */
@@ -939,6 +941,11 @@
        a computer too since its card got ‹: the name was squeezed out) */
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
     #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
+    /* (narrowing into its icon or widening back: its words stay and are cut off by its edge; src/main.js glideHead) */
+    #panel .sh-follow.morph { justify-content: flex-start; overflow: hidden; padding-right: 0; }
+    #panel .sh-follow.morph span { display: inline !important; white-space: nowrap; }
+    #panel .panel-head { position: relative; }
+    #panel .panel-head .leaving { display: grid !important; place-items: center; position: absolute; margin: 0; pointer-events: none; }
     .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     @media (max-width: 439px) {
       #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }

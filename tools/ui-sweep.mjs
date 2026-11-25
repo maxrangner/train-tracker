@@ -36,7 +36,7 @@ function recorder() {
     let text = '';
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
     text = text.trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('aria-label') || '';
-    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')) };
+    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')) };
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
   R.snap = () => {
@@ -140,6 +140,8 @@ function analyse(rec, kind) {
         for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
+        // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
+        if (!pop && meta[id].btn) continue;
         finds.push({ kind: pop ? 'pop' : 'redrawn', id, what: say(id), info: `moved ${lo.toFixed(0)}…${hi.toFixed(0)} px under the sheet's top (start ${rel[0].toFixed(0)}, end ${rel.at(-1).toFixed(0)}, biggest step ${big.toFixed(1)})` });
       }
       const ws = s.map(p => p.w), wd = Math.abs(ws.at(-1) - ws[0]);
@@ -295,8 +297,8 @@ for (const [dev, size] of Object.entries(SIZES)) {
       const { frames, meta } = await page.evaluate(() => ({ frames: window.__rec.frames, meta: window.__rec.meta }));
       const finds = analyse({ frames, meta, before, after }, tr.kind);
       if (TRACE) {   // (--trace <words>: the frames of the elements whose text has them)
-        const ids = Object.keys(meta).filter(k => meta[k].text.includes(TRACE)).map(Number);
-        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0])); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]}` : '–'}`); });
+        const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
+        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]}` : '–'}`); });
       }
       const pad = (await padding(page)).filter(x => x.type === 'gap' ? x.px > 0 : true);
       all.push({ dev, name: tr.name, frames: frames.length, finds, pad, top: after.top });
