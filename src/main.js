@@ -40,7 +40,8 @@ import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
-import { arrive, reduceMotion } from './motion.js';
+import { arrive, reduceMotion, ms, easing, speed } from './motion.js';
+import { isWide, isNative, keyboardUp, sheetGeometry } from './layout.js';
 // The sheet's ideas (build plan parts 3 and 6, 2026-11-23): My trains and the change, "You seem to be on", Peek, the
 // shop window, Share, "Why are we standing?".
 import { createMyTrains } from './my-trains.js';
@@ -74,8 +75,10 @@ if (sharedAt) dropShared();
 const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;
-document.documentElement.dataset.motion = settings.pageMotion;   // how a page comes in (index.html :root[data-motion]; Debug)
-document.documentElement.dataset.mspeed = settings.motionSpeed;   // and how fast (Debug)   // index.html reports it on screen if this line is never reached
+// How a page comes in and how fast (Debug → Page change, Animation speed): index.html :root[data-motion] and
+// [data-mspeed]; src/motion.js speed() reads the speed from there. Written here only.
+const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; };
+markMotion();   // index.html reports it on screen if this line is never reached
 translatePage();           // the page's own words in the chosen language (Settings → Language)
 // The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
 // has loaded (or failed: then trains move in straight lines between reports).
@@ -155,8 +158,7 @@ let dayView = null;
 // A short buzz when a train is opened or followed (round 4). In the app through Capacitor's haptics plugin (Max,
 // 2026-11-20: "No haptics in app": the app never had Android's permission to vibrate, so the page's vibrate did
 // nothing; the plugin brings it, and works on iPhones too); on the web page navigator.vibrate (Android browsers only).
-const native = Boolean(window.Capacitor?.isNativePlatform?.());
-const haptics = native ? import('@capacitor/haptics').catch(() => null) : null;
+const haptics = isNative() ? import('@capacitor/haptics').catch(() => null) : null;
 const buzz = () => {
   if (haptics) { haptics.then(h => h?.Haptics.impact({ style: h.ImpactStyle.Light })).catch(() => { /* not here */ }); return; }
   try { navigator.vibrate?.(8); } catch { /* not allowed here */ }
@@ -426,7 +428,7 @@ function headPlaces() {
 function glideHead(was) {
   const now = headPlaces();
   if (!now || reduceMotion()) return;
-  const k = settings.motionSpeed === 'calm' ? 4 / 3 : 1, timing = { duration: 280 * k, easing: 'cubic-bezier(.2, .8, .2, 1)' };
+  const timing = { duration: 280 * speed(), easing: easing('ui') };
   // one that goes (the "i" back to compact) shrinks away where it was, out of the row's way
   const head = panelEl.querySelector('.panel-head'), hb = head.getBoundingClientRect();
   for (const [b, from] of was) {
@@ -548,7 +550,7 @@ function trainPage(id) {
     // Low: on a computer the whole card down to "More" (Max, 2026-11-23: "the most compact view should be including all
     // the way to 'mer'"), so low and half are one; on a phone the condensed card, its number and the line under it, with
     // room under them (his phone: "nice where there is less screen"; "no padding under 'Kort tåg'").
-    low: () => (innerWidth >= 440 ? cardTo(true) : cardTo(false)),
+    low: () => cardTo(isWide()),
     every() { if (panel.openId === id) { drawExtras(id); refitCard(); } },
     fitted: () => fitted,
     // a map tap: the "to …" chooser shuts with it (the tap rules' R1, src/stack.js)
@@ -854,14 +856,8 @@ document.addEventListener('keydown', (e) => {
 // at Home with the sheet up it goes down; at rest the app goes to the background (as Android's own back does since
 // Android 12: the map stays loaded). Only inside the app: Capacitor's bridge is there; the web page never loads this.
 // With the keyboard open, back only hides the keyboard (Max's phone test, 2026-11-17: one swipe closed both it and the
-// search). Open = a text field has focus and the page is clearly lower than the tallest seen at this width (the
-// viewport line's interactive-widget=resizes-content: the keyboard shrinks the page).
-if (window.Capacitor?.isNativePlatform?.()) {
-  let tallest = { w: 0, h: 0 };
-  const seen = () => { if (innerWidth !== tallest.w) tallest = { w: innerWidth, h: 0 }; tallest.h = Math.max(tallest.h, innerHeight); };
-  seen();
-  addEventListener('resize', seen);
-  const keyboardUp = () => Boolean(document.activeElement?.matches?.('input, textarea')) && innerHeight < tallest.h - 150;
+// search). Open: src/layout.js keyboardUp.
+if (isNative()) {
   import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
     if (keyboardUp()) { document.activeElement.blur(); return; }
     if (navOpen) { closeNav(); return; }
@@ -883,7 +879,7 @@ for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.d
 // speed as the page changes' (Debug → Animation speed). Where there is no room under the bar (a phone's sheet at rest,
 // its bar at the bottom) it comes out above the sheet instead. The page behind holds still while it is open (src/stack.js
 // frozen, the sheet's menu-open); ☰, a map tap, Esc or the phone's back close it.
-const NAV_GAP = 10;   // between the bar (or the sheet's edge) and the card
+const navGap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (index.html --sheet-inset)
 let navOpen = false, navSide = 'below';
 function placeNav() {
   const a = navButton.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
@@ -891,22 +887,22 @@ function placeNav() {
   navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, a.right - w)))}px`;
   // (a computer at rest: under the whole box, its arrow band included; Max, 2026-11-24 "Menu still not below the whole
   // search pill")
-  const under = innerWidth >= 440 && stack.level === 0 ? s.bottom : a.bottom;
-  if (under + NAV_GAP + h <= innerHeight - 10) { navSide = 'below'; navEl.style.top = `${Math.round(under + NAV_GAP)}px`; }
-  else { navSide = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - NAV_GAP - h))}px`; }
+  const under = isWide() && stack.level === 0 ? s.bottom : a.bottom, gap = navGap();
+  if (under + gap + h <= innerHeight - 10) { navSide = 'below'; navEl.style.top = `${Math.round(under + gap)}px`; }
+  else { navSide = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - gap - h))}px`; }
 }
 // (out from under the edge it hangs from: the card moves its whole height plus the gap, cut where that edge is, so it
 // shows only on its own side of it; the shadow keeps its room at the other sides)
 function slideNav(open) {
   navEl.getAnimations().forEach(x => x.cancel());
   if (reduceMotion()) return Promise.resolve();
-  const k = settings.motionSpeed === 'calm' ? 4 / 3 : 1, h = navEl.offsetHeight, d = h + NAV_GAP;
+  const gap = navGap(), h = navEl.offsetHeight, d = h + gap;
   const below = navSide === 'below';
   const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${h}px -24px -24px -24px)` }
     : { transform: `translateY(${d}px)`, clipPath: `inset(-24px -24px ${h}px -24px)` };
-  const shown = below ? { transform: 'none', clipPath: `inset(${-NAV_GAP}px -24px -24px -24px)` }
-    : { transform: 'none', clipPath: `inset(-24px -24px ${-NAV_GAP}px -24px)` };
-  return navEl.animate(open ? [hid, shown] : [shown, hid], { duration: 260 * k, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' }).finished.catch(() => {});
+  const shown = below ? { transform: 'none', clipPath: `inset(${-gap}px -24px -24px -24px)` }
+    : { transform: 'none', clipPath: `inset(-24px -24px ${-gap}px -24px)` };
+  return navEl.animate(open ? [hid, shown] : [shown, hid], { duration: ms('fold'), easing: easing('ui'), fill: 'forwards' }).finished.catch(() => {});
 }
 // (opened with Home pulled up: Home goes down to rest, Max 2026-11-24 "When menu is called while main card is already
 // opened it should close"; a page opened from it and backed out of: Home with the menu open again, "When menu option is
@@ -926,7 +922,7 @@ function openNav() {
     slideNav(true).then(() => { if (navOpen) navEl.getAnimations().forEach(x => x.cancel()); });
   };
   // (Home lowered first: placed once the sheet is down, hidden meanwhile)
-  if (lower && !reduceMotion()) { navEl.style.visibility = 'hidden'; setTimeout(() => { navEl.style.visibility = ''; go(); }, 300 * (settings.motionSpeed === 'calm' ? 4 / 3 : 1)); }
+  if (lower && !reduceMotion()) { navEl.style.visibility = 'hidden'; setTimeout(() => { navEl.style.visibility = ''; go(); }, 300 * speed()); }
   else go();
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
@@ -972,18 +968,17 @@ document.addEventListener('pointerdown', (e) => {
 // The day (build plan part 4, src/day-view.js): the ribbon above the search bar, the sheet down to rest. Only the page
 // reading the server's files has the day's history; the dev page with the key (or a replay) says so. Again: closes it.
 document.head.append(Object.assign(document.createElement('style'), { textContent: DAY_CSS }));
-const NARROW = matchMedia('(max-width: 439px)');
 let sheetPad = 0;
 // The map's free part: above the sheet, and above the ribbon while it is open (the slider and the buttons ride on it).
 function padMap() {
   const h = dayView?.isOpen ? dayView.el.offsetHeight + 10 : 0, root = document.documentElement;
-  root.style.setProperty('--ribbon-h', NARROW.matches && h ? `${h}px` : '0px');
+  root.style.setProperty('--ribbon-h', !isWide() && h ? `${h}px` : '0px');
   // (not while the card's "till …" chooser is open: it shuts back to the same height, and the map stays still; Max,
   // 2026-11-24: it "jumps the map around... Should not change map at all")
   const choosing = panelEl.classList.contains('picking') && panel.openId && !panel.hidden && stack?.top() === `train:${panel.openId}`;
   if (!choosing) map.setSheet(sheetPad + h);
   // The scale slider (74 px over the sheet and the ribbon, 190 tall) goes when it would reach the live mark at the top.
-  root.classList.toggle('scale-squeezed', innerHeight - (NARROW.matches ? sheetPad + h : 0) - 74 - 190 < 52);
+  root.classList.toggle('scale-squeezed', innerHeight - (!isWide() ? sheetPad + h : 0) - 74 - 190 < 52);
 }
 addEventListener('resize', () => { if (dayView?.isOpen) { padMap(); dayView.draw(); } });
 // The shop window waits while The day's ribbon is open (at an earlier moment or about to be).
@@ -1261,8 +1256,7 @@ onSettingChange((key) => {
   if (key === 'boardRows') board.relabel();
   if (key === 'allPlaces') panel.relabel();   // Settings → All places (on the card until 2026-11-22)
   if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); homeDef.redraw(); }   // Debug → Lateness colours on Home
-  if (key === 'pageMotion') document.documentElement.dataset.motion = settings.pageMotion;   // Debug → Page change
-  if (key === 'motionSpeed') document.documentElement.dataset.mspeed = settings.motionSpeed;   // Debug → Animation speed
+  if (key === 'pageMotion' || key === 'motionSpeed') markMotion();   // Debug → Page change, Animation speed
   if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
   if (key === 'dayNight') { map.sunShow(); frameAll = []; lastDraw = 0; dayDrawn = null; }   // the sun's line, the glow and the lit windows
   if (key === 'scaleSlider') map.sliderShow();   // Settings → Zoom slider (off by default, Max 2026-11-23)

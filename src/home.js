@@ -11,7 +11,8 @@
 // Every row is a door: data-go carries the stack key it opens (src/stack.js); src/main.js listens for them.
 import { t } from './i18n.js';
 import { settings } from './settings.js';
-import { reduceMotion } from './motion.js';
+import { glideHeight } from './motion.js';
+import { isWide } from './layout.js';
 import { esc } from './html.js';
 import { icon } from './icons.js';
 import { tagHtml } from './tag.js';
@@ -86,10 +87,9 @@ export function homePage(d) {
   // A computer: the companies and "N more" on one row (Max, 2026-11-25: "Filter operators including 'n till' should only
   // be one row"): the last companies that don't fit go into "N more" (a picked one always stays). Measured when the
   // card's words or width changed.
-  const WIDE = matchMedia('(min-width: 440px)');
   function fitCoRow(sec) {
     const box = sec?.querySelector('.co-filter');
-    if (!box || coOpen || !WIDE.matches || !sec.offsetParent || !box.clientWidth) return;
+    if (!box || coOpen || !isWide() || !sec.offsetParent || !box.clientWidth) return;
     if (sec._fit === sec._h && sec._fitW === box.clientWidth) return;
     sec._fit = sec._h; sec._fitW = box.clientWidth;
     const chips = [...box.querySelectorAll('.co-f')], more = box.querySelector('.co-more');
@@ -208,12 +208,7 @@ export function homePage(d) {
       const h0 = card()?.offsetHeight;
       coOpen = !coOpen;
       draw();
-      const c = card(), h1 = c?.offsetHeight;
-      if (c && h0 && h1 && h0 !== h1 && !reduceMotion()) {
-        c.style.overflow = 'hidden';
-        c.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260 * (settings.motionSpeed === 'calm' ? 4 / 3 : 1), easing: 'cubic-bezier(.2, .8, .2, 1)' })
-          .finished.catch(() => {}).then(() => { c.style.overflow = ''; });
-      }
+      glideHeight(card(), h0);
       if (coOpen) d.reveal?.(el?.querySelector('.co-filter')?.closest('.sec')); else d.unreveal?.();
     },
   };

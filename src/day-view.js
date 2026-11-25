@@ -365,8 +365,8 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
 export const DAY_CSS = `
 #day { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
   bottom: calc(var(--sheet-shown, 80px) + 10px); box-sizing: border-box; padding: 8px 10px 6px; border-radius: 20px; background: var(--card); color: var(--ink);
-  box-shadow: var(--shadow); display: grid; gap: 6px; transition: bottom .36s cubic-bezier(.2, .85, .25, 1), opacity .18s; touch-action: none; font: 600 13px/1.2 var(--font); }
-@media (min-width: 440px) { #day { right: auto; width: 420px; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); } }
+  box-shadow: var(--shadow); display: grid; gap: 6px; transition: bottom var(--t-glide) var(--ez), opacity .18s; touch-action: none; font: 600 13px/1.2 var(--font); }
+@media (min-width: 440px) { #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); } }
 .sheet-high #day { opacity: 0; pointer-events: none; }
 .day-open #line { display: none !important; }
 .day-row { display: flex; align-items: center; gap: 6px; }

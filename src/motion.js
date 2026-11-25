@@ -7,6 +7,37 @@ import { lang } from './i18n.js';
 
 export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// The one source for how long and how a movement goes. The times and curves are on index.html's :root (--t-glide the
+// sheet's glide, --t-fold a box opening or shutting and ☰'s card, --t-page a page change, --t-page-long the other page
+// changes' (Debug → Page change); --ez the sheet's curve, --ez-pop the small motions', --ez-ui the menu's and the boxes');
+// CSS uses them there, the code here.
+// speed(): every page change and glide takes this many times as long (Debug → Animation speed → Calmer: 4/3; index.html
+// --mk). Read from <html data-mspeed> (src/main.js markMotion writes it).
+export const speed = () => (typeof document !== 'undefined' && document.documentElement.dataset.mspeed === 'calm' ? 4 / 3 : 1);
+const tokens = new Map();
+function token(prop) {
+  let v = tokens.get(prop);
+  if (!v) { v = getComputedStyle(document.documentElement).getPropertyValue(prop).trim(); if (v) tokens.set(prop, v); }
+  return v;
+}
+// A time token in ms, at the chosen speed: ms('fold') is --t-fold.
+export function ms(name) {
+  const v = token(`--t-${name}`), n = parseFloat(v);
+  return (v.endsWith('ms') ? n : n * 1000) * speed();
+}
+// A curve token: easing('ui') is --ez-ui; easing() the sheet's --ez.
+export const easing = (name = '') => token(name ? `--ez-${name}` : '--ez');
+
+// A box's height glides from `from` (px, measured before it changed) to its height now, so what is under it moves with
+// it, not in one jump (a station's messages, a train's notes, Home's filter card; ui-sweep, 2026-11-25); to: its new
+// height when measured already. Nothing with "reduce motion" or when the height is the same. Returns a promise of its end.
+export function glideHeight(el, from, to = el?.offsetHeight) {
+  if (!el || !from || !to || from === to || reduceMotion()) return Promise.resolve();
+  el.style.overflow = 'hidden';
+  return el.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: ms('fold'), easing: easing('ui') })
+    .finished.catch(() => {}).then(() => { el.style.overflow = ''; });
+}
+
 // A number that rolls from its last value to the new one (0.7 s, easing out; first in Statistik, src/stats-page.js).
 // The first value is shown at once; so is any value while the page is hidden or with "reduce motion".
 // fmt(n, end): the text for n (end: the last step, e.g. "I tid" where the steps say "0 min"); the default: the

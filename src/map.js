@@ -12,6 +12,7 @@ import { progressAlong } from './path.js';
 import { drawFlag, hasFlag, isAbroad } from './abroad.js';
 import { restyleBase } from './map-look.js';
 import { reduceMotion } from './motion.js';
+import { isWide, sheetGeometry } from './layout.js';
 import { lateSet, tagSet, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
 import stationSizes from './big-stations.json';
 import { createScaleSlider, SCALE_CSS } from './scale-slider.js';
@@ -1372,7 +1373,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     window.addEventListener(type, e => pointers.delete(e.pointerId), true);
   window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
   // The card (a train's panel, a board) covers up to 45 % of the screen's bottom, from the left, at most 420 px wide
-  // (index.html). Worked out from the window's size, kept from the last resize: reading the page's own sizes here
+  // (index.html --sheet-w, 10 px from the edges: --sheet-inset; src/layout.js sheetGeometry, read once). Worked out
+  // from the window's size, kept from the last resize: reading the page's own sizes here
   // made the browser lay the page out again, 21 ms on the first frame after a tap (measured 2026-11-15).
   let size = { w: box.clientWidth, h: box.clientHeight };
   // A new size (the phone's keyboard closing, a turned phone, a resized window): a followed train still held where it
@@ -1382,8 +1384,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     size = { w: box.clientWidth, h: box.clientHeight };
     if (following && !following.moved) { following.focus = defaultFocus(); following.locked = false; }
   });
-  const GAP = 10, CARD_W = 420;
-  const cardRight = () => GAP + Math.min(CARD_W, size.w - 2 * GAP);
+  const gap = () => sheetGeometry().inset;
+  const cardRight = () => gap() + Math.min(sheetGeometry().width, size.w - 2 * gap());
   // The one sheet (src/stack.js, 2026-11-22): the map's free part is above it (a phone) or beside and above it (a
   // wider screen, where it floats at the bottom left). sheetH: its resting height (at most half: setSheet). TOP: the
   // live mark at the top; nothing else covers the map's top since the top bar went.
@@ -1392,12 +1394,11 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
   // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
   // needs, so the free map is to its right.
-  const NARROW_PX = 440;
-  const narrow = () => size.w < NARROW_PX;
+  const narrow = () => !isWide();
   // Does the card reach the screen's middle, or leave it free?
   const cardInMiddle = () => cardRight() + 40 > size.w / 2;
   // The sheet's top edge, with a margin.
-  const sheetTop = () => size.h - sheetH - (narrow() ? 0 : GAP);
+  const sheetTop = () => size.h - sheetH - (narrow() ? 0 : gap());
   const panelTop = () => sheetTop() - 20;
   // A wide screen's sheet raised past a third of the screen: the free map is beside it, not above it.
   const sheetSide = () => !narrow() && sheetH > size.h * 0.34;
@@ -1409,7 +1410,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   const defaultFocus = () => (!narrow() ? { x: cardInMiddle() ? (cardRight() + size.w) / 2 : size.w / 2, y: size.h / 2 }
     : { x: size.w / 2, y: Math.round((TOP + sheetTop()) / 2) });
   // Is a screen point behind the sheet? (a computer: the box at the top left)
-  const behindCard = (at, margin = 0) => (narrow() ? at.y > sheetTop() - margin : at.x < cardRight() + margin && at.y < GAP + sheetH + margin);
+  const behindCard = (at, margin = 0) => (narrow() ? at.y > sheetTop() - margin : at.x < cardRight() + margin && at.y < gap() + sheetH + margin);
   // How far (in screen pixels) a place is from the point the train is held at.
   const offFocus = (p) => {
     const at = map.project([p.lon, p.lat]);
@@ -1669,7 +1670,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     fly(place, zoom, ms = 2600) {
       return ready.then(() => new Promise((resolve) => {
         if (following) stopFollowing(false);
-        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const still = reduceMotion();
         map.once('moveend', () => resolve(true));
         const f = defaultFocus(), offset = [f.x - box.clientWidth / 2, f.y - box.clientHeight / 2];
         if (still) map.jumpTo({ center: [place.lon, place.lat], zoom });
@@ -1787,7 +1788,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
         const centreAt = (X, Y, z) => { const k = 512 * 2 ** z; return [unx(X - ox / k), uny(Y - oy / k)]; };
         const px = total * 512 * 2 ** Math.min(z0, z1);
         const lift = Math.max(0, Math.min(4.4, Math.log2(px / (size.w * 1.3))));
-        const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const still = reduceMotion();
         const ms = px < 40 ? 420 : Math.round(800 + 80 * lift), t0 = performance.now();
         const ease = u => (u < 0.5 ? 4 * u * u * u : 1 - (-2 * u + 2) ** 3 / 2);
         let raf = 0;
@@ -1897,7 +1898,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // The march: a step every 100 ms while a leg is shown and the page is in view; still for less motion.
       clearInterval(marchTimer);
       marchTimer = null;
-      if (shown.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (shown.length && !reduceMotion()) {
         marchTimer = setInterval(() => {
           if (document.hidden || !isReady || !map.getLayer('path-abroad')) return;
           marchStep = (marchStep + 1) % MARCH.length;

@@ -4,10 +4,11 @@
 // placed in the sheet's own margin so it never covers what is shown. Phones keep their own (they show it only while
 // scrolling). A browser only lets a page change its own scrollbar's colour and thin/normal (Firefox), so this is drawn.
 import './scrollbar.css';
+import { reduceMotion } from './motion.js';
 
 const ARROW = 12, MIN_THUMB = 28, STEP = 60, REPEAT_MS = 70, HOLD_MS = 320;
 const mouse = matchMedia('(hover: hover) and (pointer: fine)');
-const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+const smooth = () => (reduceMotion() ? 'auto' : 'smooth');
 const arrow = d => `<svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="true"><path d="${d}" fill="currentColor"/></svg>`;
 
 // scroller: the element that scrolls; its offset parent (a positioned sheet) holds the bar.
