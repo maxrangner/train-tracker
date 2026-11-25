@@ -4,7 +4,11 @@
 //   - a page over a train lets its card go; back to it, the card is there again and the train followed (until
 //     2026-11-22 Settings → Debug → "Screen over a train" chose this: the stack decides now);
 //   - ☰'s menu answers at once after a swipe of the sheet (Settings, opened from it, swiped away: the menu is back by
-//     itself and ☰ 30 ms later shuts it; Home swiped down: ☰ 30 ms later opens it);
+//     itself and ☰ 30 ms later shuts it; a chip's card swiped away: ☰ 30 ms later opens it);
+//   - the start (Max's pick C, 2026-11-25): Home the search bar alone, no handle, a pull on it does nothing; the chips
+//     above it open their cards (the chips in the card's head, the lit one marked; another chip replaces the card, the
+//     lit one or Esc closes it); a chip's card at half cuts no row and says there is more; the same on a computer
+//     (the chips under the search box, no arrow band under the bar alone);
 //   - the search closed with the keyboard going: the map keeps its height the whole way;
 //   - the Train card setting is gone and the default accent is Azurblå (cerulean);
 //   - the map works with ☰'s menu open (a drag moves it, the menu stays), a plain tap on the map closes the menu and
@@ -21,7 +25,7 @@
 // node tools/screens-check.mjs (with npm run dev; PAGE= for another port). Not seen here: the phone's keyboard, the
 // real smoothness of the moves.
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, until, toRest, setLevel, openSearch, typeSearch, openTrainByNumber, openMenu, openFromMenu, back, sheetState } from './lib/screen.mjs';
+import { waitForMap, until, toRest, setLevel, openSearch, typeSearch, openTrainByNumber, openMenu, openFromMenu, openChip, back, sheetState } from './lib/screen.mjs';
 
 const browser = await launch();
 const fails = [];
@@ -88,14 +92,11 @@ try {
 
   // ---- ☰ answers at once after a swipe of the sheet (Max, 2026-11-20: Settings' dimming let taps through as it slid
   // away, and a tap within ~0.4 s of a swipe got no click: src/tap.js onTap acts on the finger lifted) ----
-  for (const [name, open] of [['Settings swiped away', () => openFromMenu(page, 'settings')], ['Home swiped down', () => setLevel(page, 2)]]) {
+  for (const [name, open] of [['Settings swiped away', () => openFromMenu(page, 'settings')], ['Sparade (a chip) swiped away', () => openChip(page, 'saved')]]) {
     await open();
     await settle();
     const grab = await page.evaluate(() => { const r = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
-    // (Home: let go at its half, so ☰ is where it rests and the tap tests the tap, not a moving target: Home's half
-    // fits its parts since 2026-11-23 and can lie far below where a 400 px swipe ends)
-    const toHalf = await page.evaluate(() => (window.__stack.top() === 'home' ? Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top - window.__stack.heights[1]) : 0));
-    await swipe(grab.x, grab.y, toHalf > 0 ? toHalf : Math.min(400, 830 - grab.y), { after: 30 });
+    await swipe(grab.x, grab.y, Math.min(400, 830 - grab.y), { after: 30 });
     // (Settings came from the menu: backed out of, the menu opens again by itself (Max, 2026-11-24, src/nav-menu.js
     // reopenOnHome), so ☰ answering is ☰ shutting it; until 2026-11-25 this step expected ☰ to open it and failed)
     const reopened = await page.evaluate(() => document.getElementById('nav-button').getAttribute('aria-expanded') === 'true');
@@ -315,37 +316,90 @@ try {
       `a train at full: Share ${atFull.share ? 'shown' : 'HIDDEN'}; Läget ${atFull.laget || 'none'} (the sign was ${atFull.sign || 'none'})`);
     await setLevel(page, 1);
   }
-  // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at
-  // half no row cut through, and a mark that there is more below ----
-  const homeCuts = (p) => p.evaluate(() => {
-    const sheet = document.getElementById('sheet'), bottom = Math.min(innerHeight, sheet.getBoundingClientRect().bottom);
-    const pg = document.querySelector('#sheet .pg[data-key="home"]');
+  // ---- the start (Max's pick C, 2026-11-25: "Search bar strict for searching. Remove its line indicating you can swipe
+  // it up"): Home at rest is the search bar alone, the field as far from the sheet's edges as from its sides, no
+  // handle; a pull on it does nothing; the chips above it open their cards ----
+  // A page at half: no row cut through, a mark that there is more below (Max, 2026-11-23, on Home until 2026-11-25)
+  const cutsOf = (p, key) => p.evaluate((k) => {
+    // (where the page shows to: a computer's arrow band under it hides what is below)
+    const sheet = document.getElementById('sheet'), bottom = Math.min(innerHeight, sheet.querySelector('.sh-pages').getBoundingClientRect().bottom);
+    const pg = document.querySelector(`#sheet .pg[data-key="${k}"]`);
     const cut = [...pg.querySelectorAll(':scope > *, :scope > * > *, :scope > * > * > *')].filter((e) => { const r = e.getBoundingClientRect(); return r.height > 0 && r.height < 220 && r.top < bottom - 20 && r.bottom > bottom + 1; });   // (under the fade's solid lower 20 px nothing shows)
     const more = document.querySelector('#sheet .sh-more').getBoundingClientRect();
-    // (its word: "More", not a heading's name: Home has several parts below; Max, 2026-11-24)
+    // (its word: "More" when several parts are below; Max, 2026-11-24)
     const word = [...sheet.querySelectorAll('.sh-word')].filter(e => e.offsetParent && getComputedStyle(e).display !== 'none').map(e => e.textContent).join('|');
     // (the pill in a band of its own: 8 px or more under the card above, no card's edge behind it where the fade is not
     // yet solid; Max, 2026-11-24 "Dålig padding på 'mer' pillret")
     const fade = document.querySelector('#sheet .sh-fade').getBoundingClientRect(), solid = innerWidth >= 440 ? fade.top + fade.height * 0.4 : fade.top + 12;
-    const secs = [...pg.children].map(c => c.getBoundingClientRect()).filter(r => r.height);
+    const secs = [...pg.querySelectorAll(':scope > *, :scope > .sec > *')].map(c => c.getBoundingClientRect()).filter(r => r.height);
     const above = secs.filter(r => r.bottom <= more.top + 1).at(-1);
     const pillGap = above ? Math.round(more.top - above.bottom) : null;
-    const behind = secs.some(r => r.top < solid - 1 && r.top > (above?.bottom ?? 0) + 1);
+    const behind = secs.some(r => r.top < solid - 1 && r.top > (above?.bottom ?? 0) + 1 && r.top < more.top);
     return { cut: cut.map(e => e.className || e.tagName).slice(0, 3), fade: sheet.classList.contains('more-below'), chevron: more.bottom <= bottom + 1 && more.top >= bottom - 40, word, pillGap, behind };
-  });
+  }, key);
   const fieldGap = p => p.evaluate(() => { const f = document.querySelector('#sheet .sh-field').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
     return { below: Math.round(Math.min(innerHeight, s.bottom) - f.bottom), above: Math.round(f.top - s.top), side: Math.round(f.left - s.left) }; });
+  // the bar alone: no handle row, no grip; the chips over it (Störningar only with live data: a replay has none)
+  const bare = p => p.evaluate(() => {
+    const g = document.querySelector('#sheet .sh-grab'), grip = document.getElementById('sheet-grip'), c = document.getElementById('chips');
+    const s = document.getElementById('sheet').getBoundingClientRect(), r = [...c.querySelectorAll('.sc')].map(b => b.getBoundingClientRect());
+    const cs = getComputedStyle(c);
+    return { grab: g.offsetHeight, grip: grip?.offsetHeight ?? 0, chips: [...c.querySelectorAll('[data-chip]')].map(b => b.dataset.chip).join(' '),
+      shown: cs.visibility === 'visible' && Number(cs.opacity) > 0.9,
+      // (a phone: over the sheet's top; a computer: under the box)
+      gap: r.length ? Math.round(innerWidth >= 440 ? Math.min(...r.map(x => x.top)) - s.bottom : s.top - Math.max(...r.map(x => x.bottom))) : null,
+      inside: r.every(x => x.left >= s.left - 1 && x.right <= s.right + 1) };
+  });
+  // a chip's card: the keys, the lit chip, the chips in its head and not over the map, no ‹
+  const card = p => p.evaluate(() => {
+    const head = document.querySelector('#sheet .sh-chips'), hs = getComputedStyle(head), fs = getComputedStyle(document.getElementById('chips'));
+    return { keys: window.__stack.keys().join(' > '), level: window.__stack.level, lit: [...head.querySelectorAll('[aria-pressed="true"]')].map(b => b.dataset.chip).join(','),
+      head: head.getBoundingClientRect().height > 0 && hs.visibility === 'visible' && Number(hs.opacity) > 0.9, float: fs.visibility !== 'hidden',
+      up: Boolean(document.querySelector('#sheet .sh-up')?.offsetParent),
+      // (a computer: the search field stays, the chips under it)
+      field: Boolean(document.querySelector('#sheet .sh-field')?.offsetParent) && getComputedStyle(document.querySelector('#sheet .sh-search')).visibility === 'visible',
+      under: document.querySelector('#sheet .sh-chips .sc').getBoundingClientRect().top >= document.querySelector('#sheet .sh-field').getBoundingClientRect().bottom };
+  });
   await toRest(page);
   await sleep(500);   // (the glide down ends)
   const fg = await fieldGap(page);
-  check(Math.abs(fg.below - fg.side) <= 2, `Home at rest: the search field ${fg.below} px from the sheet's bottom, ${fg.side} px from its side`);
-  await setLevel(page, 1);
-  await sleep(400);
-  const hc = await homeCuts(page);
-  check(!hc.cut.length && hc.fade && hc.chevron && /^(More|Mer)$/.test(hc.word), `Home at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}, its word "${hc.word}" (want More)`);
-  check(hc.pillGap >= 8 && !hc.behind, `Home at half: the "More" pill ${hc.pillGap} px under the card above (want 8 or more), a card's edge behind it: ${hc.behind}`);
+  check(Math.abs(fg.below - fg.side) <= 2 && Math.abs(fg.above - fg.side) <= 2, `Home at rest: the search field ${fg.above} px from the sheet's top, ${fg.below} px from its bottom, ${fg.side} px from its side`);
+  const b0 = await bare(page);
+  check(!b0.grab && !b0.grip, `Home at rest: no handle (its row ${b0.grab} px, the grip ${b0.grip} px)`);
+  check(b0.shown && b0.chips === 'saved stats' && b0.gap >= 6 && b0.gap <= 14 && b0.inside, `Home at rest: the chips over the bar (${b0.chips}; shown ${b0.shown}, ${b0.gap} px over it, within its width ${b0.inside})`);
+  // a pull up from the bar's edge (not the field: its tap searches) moves nothing
+  const rest0 = await shownH(), edge = await page.evaluate(() => { const s = document.getElementById('sheet').getBoundingClientRect(), f = document.querySelector('#sheet .sh-field').getBoundingClientRect(); return { x: s.left + 5, y: f.top + f.height / 2 }; });
+  await page.touchscreen.touchStart(edge.x, edge.y);
+  for (let k = 1; k <= 10; k++) { await page.touchscreen.touchMove(edge.x, edge.y - k * 30); await sleep(16); }
+  const mid = await shownH();
+  await page.touchscreen.touchEnd();
+  await sleep(600);
+  const pulled = { mid, end: await shownH(), ...(await sheetState(page)), searching: await page.evaluate(() => window.__stack.searching) };
+  check(pulled.mid === rest0 && pulled.end === rest0 && pulled.key === 'home' && pulled.level === 0 && !pulled.searching, `Home: a pull up on the bar moves nothing (${rest0} → ${pulled.mid} → ${pulled.end} px, ${pulled.key} at ${pulled.level}${pulled.searching ? ', SEARCHING' : ''})`);
+  // a chip: its card, the chips in its head, the lit one marked; at half no row cut, "More" below
+  await openChip(page, 'stats');
+  await sleep(600);
+  const cs1 = await card(page);
+  check(cs1.keys === 'home > stats' && cs1.level === 1 && cs1.lit === 'stats' && cs1.head && !cs1.float && !cs1.up,
+    `the chip Statistik: ${cs1.keys} at ${cs1.level}, lit ${cs1.lit || 'none'}, the chips in its head ${cs1.head}, over the map ${cs1.float}, ‹ ${cs1.up ? 'SHOWN' : 'none'}`);
+  const hc = await cutsOf(page, 'stats');
+  check(!hc.cut.length && hc.fade && hc.chevron && /^(More|Mer)$/.test(hc.word), `Statistik at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}, its word "${hc.word}" (want More)`);
+  check(hc.pillGap >= 8 && !hc.behind, `Statistik at half: the "More" pill ${hc.pillGap} px under the part above (want 8 or more), a part's edge behind it: ${hc.behind}`);
+  // another chip replaces the card (no stack, no ‹); the lit one closes it; Esc too
+  await openChip(page, 'saved');
+  const cs2 = await card(page);
+  check(cs2.keys === 'home > saved' && cs2.lit === 'saved' && !cs2.up, `then Sparade: ${cs2.keys} (want it in Statistik's place), lit ${cs2.lit || 'none'}, ‹ ${cs2.up ? 'SHOWN' : 'none'}`);
+  await page.click('#sheet .sh-chips [data-chip="saved"]');
+  await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0, 3000);
+  await sleep(500);
+  const shut = { ...(await sheetState(page)), ...(await bare(page)) };
+  check(shut.key === 'home' && shut.keys.length === 1 && shut.level === 0 && shut.shown, `the lit chip tapped: ${shut.keys.join(' > ')} at ${shut.level}, the chips over the bar again ${shut.shown}`);
+  await openChip(page, 'saved');
+  const kEsc = await back(page);
+  check(kEsc === 'home', `a chip's card, Esc: ${kEsc}`);
   await toRest(page);
-  // ---- a computer (Max, 2026-11-23): a train's lowest height is the whole card down to "More", nothing under it ----
+  // ---- a computer (Max, 2026-11-23): a train's lowest height is the whole card down to "More", nothing under it; the
+  // start mirrored: the chips under the search box, no arrow band under the bar alone, a chip's card under them ----
   if (t2) {
     const pc = await waitForMap(browser, { ...base, size: { width: 1500, height: 1000, deviceScaleFactor: 1 } });
     if (await openTrainByNumber(pc, t2.number)) {
@@ -358,12 +412,16 @@ try {
       await pc.evaluate(() => window.__stack.home(0));
       await sleep(600);
       const pfg = await fieldGap(pc);
-      // (hanging from the top: the field as far from the top edge as from its side; the arrow's row under it)
-      check(Math.abs(pfg.above - pfg.side) <= 3, `a computer, Home at rest: the search field ${pfg.above} px from the sheet's top, ${pfg.side} px from its side`);
-      await pc.evaluate(() => window.__stack.setLevel(1));
+      check(Math.abs(pfg.above - pfg.side) <= 3 && Math.abs(pfg.below - pfg.side) <= 3, `a computer, Home at rest: the search field ${pfg.above} px from the sheet's top, ${pfg.below} px from its bottom (no arrow band), ${pfg.side} px from its side`);
+      const pb = await bare(pc);
+      check(pb.shown && pb.chips === 'saved stats' && pb.gap >= 6 && pb.gap <= 14 && pb.inside, `a computer, Home at rest: the chips under the box (${pb.chips}; shown ${pb.shown}, ${pb.gap} px under it, within its width ${pb.inside})`);
+      await openChip(pc, 'stats');
       await sleep(900);
-      const pcut = await homeCuts(pc);
-      check(!pcut.cut.length && /^(More|Mer)$/.test(pcut.word), `a computer, Home at half: cut through: ${pcut.cut.join(', ') || 'nothing'}; the arrow's word "${pcut.word}" (want More)`);
+      const pcard = await card(pc);
+      check(pcard.keys === 'home > stats' && pcard.lit === 'stats' && pcard.head && pcard.field && pcard.under && !pcard.float,
+        `a computer, the chip Statistik: ${pcard.keys}, lit ${pcard.lit || 'none'}, the search field kept ${pcard.field}, the chips under it ${pcard.under}`);
+      const pcut = await cutsOf(pc, 'stats');
+      check(!pcut.cut.length && /^(More|Mer)$/.test(pcut.word), `a computer, Statistik at half: cut through: ${pcut.cut.join(', ') || 'nothing'}; the arrow's word "${pcut.word}" (want More)`);
     } else fails.push(`a computer: train ${t2.number} could not be opened`);
     errors.push(...pc.errors);
     await pc.close();

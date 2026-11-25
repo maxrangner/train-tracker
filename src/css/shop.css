@@ -14,5 +14,5 @@
 
 /* (a mode over every part's own look: the last layer) */
 @layer modes {
-  html.shop :is(#sheet, #sheet-grip, #line, #status, #nav, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0; pointer-events: none; transition: opacity .8s ease; }
+  html.shop :is(#sheet, #sheet-grip, #line, #chips, #status, #nav, .scale, .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-top-right, #map .map-note) { opacity: 0; pointer-events: none; transition: opacity .8s ease; }
 }

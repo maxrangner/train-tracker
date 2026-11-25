@@ -1,6 +1,6 @@
 /* The scale slider on the map's right edge (Settings → Zoom slider; src/scale-slider.js): Sweden – Town – Trackside. */
 @layer app {
-  .scale { position: absolute; z-index: 3; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + 74px + env(safe-area-inset-bottom, 0px));
+  .scale { position: absolute; z-index: 3; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-h, 0px) + var(--chips-low, 0px) + var(--ribbon-h, 0px) + 74px + env(safe-area-inset-bottom, 0px));
     display: flex; align-items: stretch; gap: 6px; height: 190px; transition: bottom .26s var(--ez-pop), opacity .18s; touch-action: none; }
   .searching .scale, .scale-squeezed .scale { opacity: 0; pointer-events: none; }
   .scale-names { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 0; }

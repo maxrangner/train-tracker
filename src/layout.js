@@ -27,10 +27,11 @@ export const keyboardUp = () => Boolean(document.activeElement?.matches?.('input
 // From src/css/tokens.css's :root (px): grab (the handle's row on a phone; a computer's band is grabWide), head (the search bar's
 // or a page's bar's row), barGap (under the bar when the page shows), barEdge (the search bar from the sheet's edge at
 // rest), inset (a computer's sheet from the screen's edges), fitGap and fitGapPhone (room under the last part shown),
-// topRoom (full height leaves this at the top: the live mark), width (a computer's sheet).
+// topRoom (full height leaves this at the top: the live mark), width (a computer's sheet), chipsRow (a computer's root
+// page: the chips' row under the search box, src/start-chips.js).
 // Read once and kept (they don't change with the screen); again with fresh (src/stack.js measure).
 const GEO = { grab: '--grab-h', grabWide: '--grab-h-wide', head: '--head-h', barGap: '--bar-gap', barEdge: '--bar-edge', inset: '--sheet-inset',
-  fitGap: '--fit-gap', fitGapPhone: '--fit-gap-phone', topRoom: '--top-room', width: '--sheet-w' };
+  fitGap: '--fit-gap', fitGapPhone: '--fit-gap-phone', topRoom: '--top-room', width: '--sheet-w', chipsRow: '--chips-row' };
 let geo = null;
 export function sheetGeometry(fresh = false) {
   if (geo && !fresh) return geo;

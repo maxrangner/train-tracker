@@ -120,8 +120,8 @@
   <button id="status" type="button" aria-controls="sheet"><span class="live"></span><span class="count" data-t="connecting">connecting…</span></button>
   <!-- The line above the bar (src/line.js): shows only when it has something to say. -->
   <div id="line" hidden></div>
-  <!-- The one sheet (Max's pick A, "One sheet", 2026-11-22; src/stack.js): the handle, the head (at Home the search
-       and ☰; on a page the back chip naming the page under it, ☆ and Follow), the pages. -->
+  <!-- The one sheet (Max's pick A, "One sheet", 2026-11-22; src/stack.js): the handle (not at Home), the head (at
+       Home the search and ☰; on a chip's card the chips, src/start-chips.js; on a page ‹, ☆ and Follow), the pages. -->
   <div id="sheet" data-page="home" data-h="0">
     <div class="sh-grab" aria-hidden="true"><i></i></div>
     <div class="sh-head">
@@ -144,6 +144,7 @@
   </div>
   <!-- ☰ (Max, 2026-11-22): a small menu just above itself: The day, Settings, Help & About. -->
   <nav id="nav" class="pop" hidden aria-label="Menu" data-t-aria="navAria">
+    <button id="open-filter" class="nav-row" type="button"><span class="nav-ic" data-icon="funnel"></span><span class="nav-t" data-t="filterHead">Filter</span></button>
     <button id="open-day" class="nav-row" type="button"><span class="nav-ic" data-icon="day"></span><span class="nav-t" data-t="theDay">Rewind</span></button>
     <button id="open-settings" class="nav-row" type="button"><span class="nav-ic" data-icon="settings"></span><span class="nav-t" data-t="settings">Settings</span></button>
     <button id="help-button" class="nav-row" type="button"><span class="nav-ic" data-icon="about"></span><span class="nav-t" data-t="aboutApp">About Spårat</span></button>

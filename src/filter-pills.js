@@ -22,7 +22,7 @@ export function createFilterPills(ctx) {
     if (!late) line.clear('filter-late');
     else {
       line.set('filter-late', { priority: 9, always: true, html: `<span>${esc(t('filterShowing', t('filtLate')[late]))}</span>`,
-        onTap: () => ctx.stack.home(1),   // (Home with its lateness bar)
+        onTap: () => ctx.stack.open('filter'),   // (the Filter page with its lateness bar)
         onClose: () => { filter.setLate(null); redraw(); }, closeLabel: t('filterClear') });
     }
   }

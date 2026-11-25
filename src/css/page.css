@@ -1,4 +1,4 @@
-/* What the sheet's pages hold: Home's parts, cards, rows, headings, chips, the lateness bar, a group's page (a company,
+/* What the sheet's pages hold: the start's pages (Sparade, Statistik, Filter), cards, rows, headings, chips, the lateness bar, a group's page (a company,
    a kind, the late ones), and the small shared pieces (dots, lateness tags, tiles, loading messages). */
 @layer app {
   /* A page's title line (src/stack.js puts ‹ and the page's buttons in it). */
@@ -80,19 +80,19 @@
     background: color-mix(in srgb, var(--ink) 5%, transparent); border: 0; border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
   .pg #settings { padding: 8px 14px; }
   .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair { padding: 4px 12px; }
-  .pg:not([data-key="home"]) > .sec:first-child { margin-top: 0; }
-  /* (Home's numbers: their right side too, which the pages' no-own-scrolling rule set to 0: sheet.css) */
-  #sheet .pg[data-key="home"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
+  .pg > .sec:first-child { margin-top: 0; }
+  /* (Statistik's numbers: their right side too, which the pages' no-own-scrolling rule set to 0: sheet.css) */
+  #sheet .pg[data-key="stats"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
   .home-stats > .big { margin: 2px 2px 10px; }
+  /* (Statistik at half ends under Sweden right now: room there for a phone's "More" pill, src/home.js statsPage half) */
+  .home-stats > .st-se { margin-bottom: 8px; }
   .most-late { display: grid; }
-  .dis-list { display: grid; gap: 6px; margin-top: 6px; }
-  /* Home's filter card: the lateness bar, the companies under it (src/home.js companiesHtml), small and tight; a picked
+  /* The Filter page's card: the lateness bar, the companies under it (src/home.js companiesHtml), small and tight; a picked
      company ringed, "N more ⌄" in the accent colour; in dark the buttons a step lighter than the card. */
   .co-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
   .co-filter .chip { min-height: 26px; font-size: 13px; padding: 0 9px; gap: 5px; }
   .co-filter .chip .dot { width: 8px; height: 8px; }
-  #sheet .pg[data-key="home"] > .sec.filter-card:not([hidden]) { padding: 10px 12px 12px; }
-  #sheet .pg[data-key="home"] > .sec.filter-card > h4.lab { margin: 0 0 6px; font-size: 15px; }
+  #sheet .pg[data-key="filter"] > .sec.filter-card:not([hidden]) { padding: 10px 12px 12px; margin-top: 4px; }
   .filter-card .lg { height: 34px; }
   .filter-card .lg-p { font-size: 14px; }
   .filter-card .lg-p span { font-size: 13px; }
@@ -100,7 +100,7 @@
   .co-filter .chip.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--hover)); }
   .co-filter .co-more { color: var(--accent); font-weight: 700; gap: 2px; padding-right: 9px; }
 
-  /* The lateness bar you can tap (Home). */
+  /* The lateness bar you can tap (Filter). */
   .lg { display: flex; gap: 3px; height: 46px; }
   .lg-p { flex: 1 1 0; min-width: 50px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 6px; white-space: nowrap; overflow: hidden;
     font: 800 16px var(--font); font-variant-numeric: tabular-nums; cursor: pointer; transition: opacity .2s, box-shadow .2s; }

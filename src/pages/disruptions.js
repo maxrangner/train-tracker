@@ -1,4 +1,5 @@
-// The disruptions' pages (live only; the data: src/disruptions.js): the list (the problems, then the rail work folded
+// The disruptions' pages (live only; the data: src/disruptions.js): the list (the start's chip Störningar, a root page:
+// src/start-chips.js; the problems, then the rail work folded
 // under "Rail work (n)", ending soonest first; open or folded remembered on this device) and one disruption (its words;
 // opened, the map shows all of its stretches).
 //
@@ -48,7 +49,7 @@ export function createDisruptionPages(ctx) {
         else ctx.stack.unreveal();
       };
     }
-    return { name: () => t('disruptions'), kind: 'dislist', startLevel: 2 /* (opens full) */, mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
+    return { name: () => t('disruptions'), kind: 'dislist', mount(page) { el = page; }, show(page, { dir }) { if (dir > 0) seen = new Set(); draw(); }, redraw: () => draw() };
   }
   function one(id) {
     if (!disruptions.byId(id)) return null;
