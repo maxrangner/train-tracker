@@ -77,10 +77,32 @@ export function homePage(d) {
     const on = b => d.filter.has('brand', b);
     const shown = coOpen ? all : all.filter((b, i) => i < CO_SHOWN || on(b));
     const rest = all.length - shown.length;
+    // (folded, "N more" is always there, hidden when nothing is left over: on a computer fitCoRow may leave some out)
     const more = coOpen ? `<button type="button" class="chip co-more" data-act="comore" aria-expanded="true">${esc(t('coFewer'))}${icon('chevronUp', 16)}</button>`
-      : rest > 0 ? `<button type="button" class="chip co-more" data-act="comore" aria-expanded="false">${esc(t('coMore', rest))}${icon('chevronDown', 16)}</button>` : '';
-    return `<div class="co-filter">${shown.map(b => `<button type="button" class="chip co-f${on(b) ? ' on' : ''}" data-cofilter="${esc(b)}" aria-pressed="${on(b)}">` +
+      : `<button type="button" class="chip co-more" data-act="comore" aria-expanded="false"${rest > 0 ? '' : ' hidden'}>${esc(t('coMore', rest))}${icon('chevronDown', 16)}</button>`;
+    return `<div class="co-filter" data-total="${all.length}">${shown.map(b => `<button type="button" class="chip co-f${on(b) ? ' on' : ''}" data-cofilter="${esc(b)}" aria-pressed="${on(b)}">` +
       `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}</button>`).join('')}${more}</div>`;
+  }
+  // A computer: the companies and "N more" on one row (Max, 2026-11-25: "Filter operators including 'n till' should only
+  // be one row"): the last companies that don't fit go into "N more" (a picked one always stays). Measured when the
+  // card's words or width changed.
+  const WIDE = matchMedia('(min-width: 440px)');
+  function fitCoRow(sec) {
+    const box = sec?.querySelector('.co-filter');
+    if (!box || coOpen || !WIDE.matches || !sec.offsetParent || !box.clientWidth) return;
+    if (sec._fit === sec._h && sec._fitW === box.clientWidth) return;
+    sec._fit = sec._h; sec._fitW = box.clientWidth;
+    const chips = [...box.querySelectorAll('.co-f')], more = box.querySelector('.co-more');
+    const top0 = (chips[0] ?? more).offsetTop;
+    const wraps = () => [...box.children].some(c => !c.hidden && c.offsetTop > top0 + 2);
+    let gone = 0;
+    for (let i = chips.length - 1; i >= 0 && wraps(); i--) {
+      if (chips[i].classList.contains('on')) continue;
+      chips[i].hidden = true; gone++;
+      const rest = Number(box.dataset.total) - (chips.length - gone);
+      more.hidden = false;
+      more.innerHTML = `${esc(t('coMore', rest))}${icon('chevronDown', 16)}`;
+    }
   }
   function filterHtml(frame) {
     const co = companiesHtml(frame), lg = settings.homeLegend ? legendHtml(counts(frame)) : '';
@@ -145,7 +167,7 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    put('legend', filterHtml(frame), 'filter-card');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
+    fitCoRow(put('legend', filterHtml(frame), 'filter-card'));   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
