@@ -383,20 +383,25 @@ try {
     await click('#panel .panel-more');   // compact again
     await settle();
     // Max, 2026-11-21: a tap on the train already open "reloads the card and flickers it once": the card stays as it is
-    const dot = await page.evaluate(() => {
+    // (clear of a station's name: a name drawn over the dot takes the tap by design, src/map.js; the replay's train drove
+    // under "Stockholm C", 2026-11-25: waited for, up to 15 s)
+    const dotNow = () => page.evaluate(() => {
       const f = [...window.__map.queryRenderedFeatures({ layers: ['train-dots'] })].find(x => `train:${x.properties.id}` === window.__stack.top());
       if (!f) return null;
       const p = window.__map.project(f.geometry.coordinates);
-      return { x: p.x, y: p.y };
+      const named = window.__map.queryRenderedFeatures([[p.x - 10, p.y - 10], [p.x + 10, p.y + 10]], { layers: ['station-names'] }).length > 0;
+      return { x: p.x, y: p.y, named };
     });
+    let dot = await dotNow();
+    for (let i = 0; i < 30 && dot?.named; i++) { await sleep(500); dot = await dotNow(); }
     if (!dot) fails.push('tap on the open train: its dot not found on the map');
     else {
       await page.evaluate(() => { window.__emptied = false; const el = document.getElementById('panel');
         new MutationObserver(() => { if (el.querySelector('.state')) window.__emptied = true; }).observe(el, { childList: true, subtree: true }); });
       await page.touchscreen.tap(dot.x, dot.y);
       await sleep(1500);
-      const r = await page.evaluate(k => ({ emptied: window.__emptied, open: window.__stack.top() === k }), t2.key);
-      check(r.open && !r.emptied, `a tap on the train already open keeps its card as it is (open ${r.open}, emptied ${r.emptied})`);
+      const r = await page.evaluate(k => ({ emptied: window.__emptied, open: window.__stack.top() === k, keys: window.__stack.keys().join(' > ') }), t2.key);
+      check(r.open && !r.emptied, `a tap on the train already open keeps its card as it is (open ${r.open}, emptied ${r.emptied}; pages ${r.keys}, tapped at ${Math.round(dot.x)},${Math.round(dot.y)})`);
     }
     // Max, 2026-11-21: swiped away from a button, the card stayed open below the screen with the map's buttons up where
     // it was: a long swipe down from "All stops" on the compact card: the map's buttons end where the sheet ends up

@@ -102,10 +102,11 @@ function analyse(rec, kind) {
   // its page was shown before)
   const sig = e => `${e[7].replace(/^ghost:/, '')}|${meta[e[0]].el}|${meta[e[0]].text}`;
   const shownBefore = new Set([...b.values()].map(sig));
-  const placeBefore = new Set([...b.values()].map(e => `${e[7]}|${meta[e[0]].el}|${Math.round(e[1] / 4)}|${Math.round(e[2] / 4)}`));
+  // (by height only: the copy is already sliding sideways in its first frame)
+  const placeBefore = new Set([...b.values()].map(e => `${e[7]}|${meta[e[0]].el}|${Math.round(e[2] / 4)}`));
   const firstAt = new Map();
   for (const f of frames) for (const e of f.els) if (!firstAt.has(e[0])) firstAt.set(e[0], e);
-  const samePlace = (e) => { const g = firstAt.get(e[0]); return placeBefore.has(`${g[7].replace(/^ghost:/, '')}|${meta[g[0]].el}|${Math.round(g[1] / 4)}|${Math.round(g[2] / 4)}`); };
+  const samePlace = (e) => { const g = firstAt.get(e[0]); return placeBefore.has(`${g[7].replace(/^ghost:/, '')}|${meta[g[0]].el}|${Math.round(g[2] / 4)}`); };
   const seen = new Map();
   for (const f of frames) for (const e of f.els) if (!(b.has(e[0]) && !e[7].startsWith('ghost:')) && !a.has(e[0]) && e[7] !== after.top && !(e[7].startsWith('ghost:') && (shownBefore.has(sig(e)) || samePlace(e)))) { const s = seen.get(e[0]) ?? { n: 0, at: e }; s.n++; seen.set(e[0], s); }
   for (const [id, s] of seen) {
@@ -136,9 +137,9 @@ function analyse(rec, kind) {
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
       }
     }
-    if (jumped) finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
+    if (jumped && kind !== 'reveal') finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top
-    if (kind === 'grow') {
+    if (kind === 'grow' || kind === 'reveal') {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
       if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
@@ -146,7 +147,7 @@ function analyse(rec, kind) {
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
         // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
-        if (!pop && meta[id].btn) continue;
+        if (!pop && (meta[id].btn || kind === 'reveal')) continue;
         finds.push({ kind: pop ? 'pop' : 'redrawn', id, what: say(id), info: `moved ${lo.toFixed(0)}…${hi.toFixed(0)} px under the sheet's top (start ${rel[0].toFixed(0)}, end ${rel.at(-1).toFixed(0)}, biggest step ${big.toFixed(1)})` });
       }
       const ws = s.map(p => p.w), wd = Math.abs(ws.at(-1) - ws[0]);
@@ -246,7 +247,8 @@ const T = [
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
   { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
-  { name: 'home → filter more', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  // (reveal: what is under the card moves down as it grows and the page scrolls it into view: only strays and pops count)
+  { name: 'home → filter more', kind: 'reveal', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
   { name: 'home → all disruptions', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await settle(p); }, act: p => click(p, `${HOME} [data-go="dislist"]`) },
   { name: 'all disruptions → back', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await click(p, `${HOME} [data-go="dislist"]`); await settle(p); }, act: esc },
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
@@ -303,7 +305,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
       const finds = analyse({ frames, meta, before, after }, tr.kind);
       if (TRACE) {   // (--trace <words>: the frames of the elements whose text has them)
         const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
-        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]}` : '–'}`); });
+        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `x ${e[1]} y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]} ${meta[e[0]].el}<${e[7]}` : '–'}`); });
       }
       const pad = (await padding(page)).filter(x => x.type === 'gap' ? x.px > 0 : true);
       all.push({ dev, name: tr.name, frames: frames.length, finds, pad, top: after.top });
