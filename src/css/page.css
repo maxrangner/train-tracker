@@ -85,7 +85,6 @@
   #sheet .pg[data-key="stats"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
   .home-stats > .big { margin: 2px 2px 10px; }
   .most-late { display: grid; }
-  .dis-list { display: grid; gap: 6px; margin-top: 6px; }
   /* The Filter page's card: the lateness bar, the companies under it (src/home.js companiesHtml), small and tight; a picked
      company ringed, "N more ⌄" in the accent colour; in dark the buttons a step lighter than the card. */
   .co-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

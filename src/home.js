@@ -54,8 +54,6 @@ export function starredRows({ favourites, stations, onMap }) {
     .map(st => stationRow({ sig: st.sig, name: st.name, lead: icon('starFilled', 18), cls: 'star' }));
   return { trains, stations: places };
 }
-// attrs: more attributes for the button (trusted HTML: escape what goes in them)
-export const chip = (key, html, n, attrs = '') => `<button type="button" class="chip" data-go="${esc(key)}"${attrs}>${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
 
 // An element's inside drawn again only when its words changed; true when it was. (What a draw changes after this, as
 // the filter's one-row fit, is done again by its caller after every redraw: the words kept here are only what was put.)
