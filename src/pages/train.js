@@ -37,7 +37,7 @@ function headPlaces(panelEl) {
   return was;
 }
 // The head's buttons glide to where the new height puts them: each from where it was; Follow narrows into its icon and
-// widens back (index.html .sh-follow.morph); one that comes grows in, one that goes shrinks away where it was.
+// widens back (src/css/train-card.css .sh-follow.morph); one that comes grows in, one that goes shrinks away where it was.
 function glideHead(panelEl, was) {
   const now = headPlaces(panelEl);
   if (!now || reduceMotion()) return;
@@ -209,7 +209,7 @@ export function createTrainPages(ctx) {
   function drawExtras(id) {
     const r = panel.openId === id ? panel.route : null;
     const ahead = (r?.stops ?? []).some((s, i) => i > 0 && s.advertised && s.activity === 'Ankomst' && !s.canceled && !s.actual);
-    // ("Add a change" only on the expanded card, index.html)
+    // ("Add a change" only on the expanded card, src/css/train-card.css)
     const html = whyHtml(whyFor(id)) + '<div class="tr-acts">' +
       (ahead ? `<button type="button" class="chip" data-go="addchange:${esc(id)}">${icon('change', 17)}${esc(t('addChange'))}</button>` : '') + '</div>' + shareNoteHtml(id);
     if (extrasEl._h !== html) { extrasEl.innerHTML = html; extrasEl._h = html; }

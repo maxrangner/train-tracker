@@ -81,24 +81,3 @@ export function createScaleSlider(map, { around, label, reduce = () => false }) 
   relabel();
   return { el, relabel, get place() { return f; }, go };
 }
-
-// The slider's look (put into the page once; the Soft look's variables).
-export const SCALE_CSS = `
-.scale { position: absolute; z-index: 3; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + 74px + env(safe-area-inset-bottom, 0px));
-  display: flex; align-items: stretch; gap: 6px; height: 190px; transition: bottom .26s var(--ez-pop), opacity .18s; touch-action: none; }
-.searching .scale, .scale-squeezed .scale { opacity: 0; pointer-events: none; }
-@media (max-width: 439px) { .sheet-high .scale { opacity: 0; pointer-events: none; } }
-.scale-track { margin-right: 7px; }
-.scale-names { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 0; }
-.scale-name { border: 0; border-radius: 999px; padding: 3px 9px; font: 600 12px/1.2 var(--font); color: var(--ink); cursor: pointer;
-  background: color-mix(in srgb, var(--card) 82%, transparent); box-shadow: var(--shadow-s); opacity: .9; }
-.scale-name[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); opacity: 1; }
-.scale-track { position: relative; width: 34px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow-s); cursor: ns-resize; }
-.scale-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.scale-tilt { position: absolute; left: 6px; right: 6px; top: 6px; height: calc((100% - 12px) / 3); border-radius: 999px; background: var(--hover); }
-.scale-fill { position: absolute; left: 13px; right: 13px; bottom: 8px; height: calc((100% - 16px) * var(--f, 0)); border-radius: 999px; background: var(--accent); opacity: .55; }
-.scale-thumb { position: absolute; left: 4px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); box-shadow: var(--shadow-s);
-  bottom: calc(4px + (100% - 34px) * var(--f, 0)); transition: transform .12s; }
-.scale.held .scale-thumb { transform: scale(1.15); }
-.sheet-tall .scale { visibility: hidden; }
-`;

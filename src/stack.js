@@ -78,7 +78,7 @@ import { esc } from './html.js';
 import { t } from './i18n.js';
 
 const MAX_PAGES = 12;          // pages over Home at most (the oldest go)
-// The sheet's sizes are index.html's (:root --grab-h, --head-h ...), read in measure() into geo (src/layout.js
+// The sheet's sizes are src/css/tokens.css's (:root --grab-h, --head-h ...), read in measure() into geo (src/layout.js
 // sheetGeometry): geo.grab the handle alone (a page without a bar), geo.head the search bar's or a page's bar's row,
 // geo.barGap the room between the bar and the page under it, geo.barEdge Home at rest: the search bar 12 px from the
 // sheet edge below, as at its sides (Max, 2026-11-23).
@@ -88,7 +88,7 @@ const MAX_PAGES = 12;          // pages over Home at most (the oldest go)
 // padding på 'mer' pillret"; the pill 24 px tall, 4 px over the bottom bar); a computer's sign has its own band under
 // the page. geo.topRoom: full height leaves this much at the top (the live mark).
 const PAGE_LOW_PX = 140;       // a page resting low: its bar and its first line
-// A page change's end: the longest of them (index.html --t-page-long; Debug → Page change), at the chosen speed (Debug →
+// A page change's end: the longest of them (src/css/tokens.css --t-page-long; Debug → Page change), at the chosen speed (Debug →
 // Animation speed). The leaving page's picture goes then; the page coming in keeps its class 100 ms more (it surely stands).
 const pageDone = () => Math.max(ms('page'), ms('page-long'));
 const TAP_PX = 14;             // a tap on the handle: the finger moved less than this (a real finger wanders)...
@@ -114,7 +114,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const results = sheet.querySelector('#search-results');
   const barEl = sheet.querySelector('.sh-bar'), btnsEl = sheet.querySelector('.sh-btns'), upBtn = sheet.querySelector('.sh-up');
   const starBtn = sheet.querySelector('.sh-star'), folBtn = sheet.querySelector('.sh-follow'), actsEl = sheet.querySelector('.sh-acts');
-  // the handle's grip over the map, just above the sheet (index.html #sheet-grip; a phone only)
+  // the handle's grip over the map, just above the sheet (src/css/sheet.css #sheet-grip; a phone only)
   const grip = Object.assign(document.createElement('div'), { id: 'sheet-grip' });
   grip.setAttribute('aria-hidden', 'true');
   sheet.after(grip);
@@ -126,7 +126,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   fadeEl.innerHTML = `<button type="button" class="sh-more" tabindex="-1" aria-label="${esc(t('moreBelow'))}"><span class="sh-word"></span>${icon('chevronDown', 18)}</button>`;
   sheet.append(fadeEl);
   // A computer (440 px wide and up): the handle's dash becomes a small arrow (Max, 2026-11-23: the dash is a phone
-  // thing): ⌃ at rest (a tap raises the sheet), ⌄ raised (a tap lowers it); index.html .sh-arrow. A phone keeps the dash.
+  // thing): ⌃ at rest (a tap raises the sheet), ⌄ raised (a tap lowers it); src/css/sheet.css .sh-arrow. A phone keeps the dash.
   // With more below, the same word as the phone's sign beside it.
   // (the word and the arrow one pill, lit together under the mouse: Max, 2026-11-24 "v-pill background blocks 'mer'")
   sheet.querySelector('.sh-grab')?.insertAdjacentHTML('beforeend', `<span class="sh-pill"><span class="sh-word"></span><span class="sh-arrow">${icon('chevronUp', 18)}</span></span>`);
@@ -189,12 +189,12 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     return Math.round(Math.max(half, Math.min(fullMax, need)));
   }
   // the handle and the head: on a computer geo.barEdge more (the sheet hangs from the top, room above the search field;
-  // index.html .sh-head's margin-top);
+  // src/css/sheet.css .sh-head's margin-top);
   // a page without a bar: the handle alone
-  // (the handle's row read from the page: a computer's train card has a thin one, index.html)
+  // (the handle's row read from the page: a computer's train card has a thin one, src/css/sheet.css)
   const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || geo.grab;
   // (with the search bar: 8 px more under it, so a scrolled page goes out of sight below it, not right at its edge;
-  // index.html .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
+  // src/css/sheet.css .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
   const headPx = () => (sheet.classList.contains('no-bar') ? 0 : geo.head + geo.barGap) + grabH() + (wide() ? geo.barEdge : 0);
   // A page whose content is still coming (its half() or low() null): where the sheet is now, at most half the screen
   // (from Home at full a loading card covered it all until its stops came), measured as half() is
@@ -204,7 +204,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     // (never under Home at rest: a long pull down from a train's collapsed card, 76 px, closed it to Home at 82 and the sheet
     // rose 6 px after the finger let go; sheet-moves-check, 2026-11-24)
     if (typeof l === 'function') { const c = l() ?? waiting(); return c > 0 ? Math.min(Math.max(headPx() + c, homeLow()) + s, fullMax - 40) : PAGE_LOW_PX + s; }
-    // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
+    // (a computer's handle band taller than the phone's handle: its extra room too, src/css/sheet.css #sheet .sh-grab)
     const band = wide() ? Math.max(0, grabH() - geo.grab) : 0;
     return pg?.key === 'home' ? homeLow() + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? geo.barEdge : 0) + band;
   }
@@ -423,7 +423,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     for (const el of sheet.querySelectorAll('.sh-word')) el.textContent = w;
     fadeEl.firstChild.setAttribute('aria-label', w === t('moreWord') ? t('moreBelow') : `${t('moreBelow')}: ${w}`);
   }
-  // Which way a tap on the handle moves the sheet (a computer's arrow points that way, index.html): up to show more only
+  // Which way a tap on the handle moves the sheet (a computer's arrow points that way, src/css/sheet.css): up to show more only
   // when more is hidden (Max, 2026-11-24: the arrow "just expands the card to show more empty space"; Home at half gave
   // no sign of more below); else down (a page without a low: closed).
   function syncNext(below = hiddenBelow().below) {
@@ -531,7 +531,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // Frozen (freeze(true): ☰'s menu open, src/nav-menu.js): the sheet holds still, no pull, no scroll, no tap on the
   // page behind; only ☰ and a map tap do anything then (Max, 2026-11-24: "When hamburger is acativated the normal
   // scroll of the card should not be possible"; "Only tapping search should be normal behavior, or hamburger or tap the
-  // map dismisses"). The class .frozen stops the page's scroll (index.html).
+  // map dismisses"). The class .frozen stops the page's scroll (src/css/sheet.css).
   let frozen = false;
   function freeze(on) { frozen = Boolean(on); sheet.classList.toggle('frozen', frozen); }
   function pointerDown(e) {
@@ -741,7 +741,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // showing that shouldn't"): its own page lets go of its shared parts at once (a station's timetable, a train's card:
   // the next page may want them), so it emptied and its lower parts rose into view as it went. Its ids and key stay (its
   // look hangs on them); it goes after the new page, so a lookup finds the real one first, and under it
-  // (index.html .pg-ghost); untouchable.
+  // (src/css/sheet.css .pg-ghost); untouchable.
   const FROZEN = ['display', 'visibility', 'opacity', 'boxSizing', 'width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom',
     'paddingLeft', 'marginTop', 'marginRight', 'marginBottom', 'marginLeft', 'position', 'top', 'justifyContent', 'alignItems',
     'flexDirection', 'gap', 'fontSize', 'lineHeight'];
@@ -977,7 +977,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // card": a floor of 120 px under the bar left ~100 px empty)
   function searchFull() {
     if (!wide()) return fullMax;
-    // (the handle's band at the bottom is hidden while searching, index.html: not counted)
+    // (the handle's band at the bottom is hidden while searching, src/css/sheet.css: not counted)
     return Math.round(Math.min(fullMax, headPx() - grabH() + (grabEl?.offsetHeight ?? 0) + Math.max(contentEnd(results), 24) + geo.fitGap));
   }
   new MutationObserver(() => { if (srch) fit('results'); }).observe(results, { childList: true, subtree: true, characterData: true });

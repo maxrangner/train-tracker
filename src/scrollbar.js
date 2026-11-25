@@ -3,7 +3,6 @@
 // slider you can drag, always the same thickness, no background, small arrows while the mouse is over the sheet, and
 // placed in the sheet's own margin so it never covers what is shown. Phones keep their own (they show it only while
 // scrolling). A browser only lets a page change its own scrollbar's colour and thin/normal (Firefox), so this is drawn.
-import './scrollbar.css';
 import { reduceMotion } from './motion.js';
 
 const ARROW = 12, MIN_THUMB = 28, STEP = 60, REPEAT_MS = 70, HOLD_MS = 320;
@@ -19,7 +18,7 @@ const arrow = d => `<svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="tru
 // Returns { follow } (nothing to follow on a phone).
 export function addScrollbar(scroller, { host = null } = {}) {
   if (!mouse.matches) return { follow() {} };
-  const own = host ? 'sb-page' : 'sb-own';   // (a page keeps its padding: index.html .pg; only the browser's bar goes)
+  const own = host ? 'sb-page' : 'sb-own';   // (a page keeps its padding: src/css/sheet.css .pg; only the browser's bar goes)
   const bar = document.createElement('div');
   bar.className = 'sb';
   bar.setAttribute('aria-hidden', 'true');

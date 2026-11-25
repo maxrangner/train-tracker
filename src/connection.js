@@ -16,7 +16,6 @@ import { now, hhmmss } from './clock.js';   // (Swedish time on the page's clock
 import { roll, forgetRoll, reduceMotion as still } from './motion.js';
 import { icon } from './icons.js';
 import OUTLINE from './sweden-outline.json';
-import './connection.css';
 
 const BLINK_MS = 900;          // a train's blink when its new position comes
 const ECG_SPAN_MS = 60 * 1000; // the heartbeat shows the last minute

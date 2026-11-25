@@ -22,7 +22,7 @@ export function buzz() {
 }
 
 export function startChrome({ map, mapEl }) {
-  // Buttons press in while held (index.html "Motion"): an iPhone shows :active on a touch only when the page listens.
+  // Buttons press in while held (src/css/base.css): an iPhone shows :active on a touch only when the page listens.
   document.addEventListener('touchstart', () => {}, { passive: true });
   document.querySelector('#sheet .sh-logo').innerHTML = logoSvg({ small: true });
 

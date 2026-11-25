@@ -19,7 +19,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   const navEl = document.getElementById('nav'), button = document.getElementById('nav-button');
   const sheetEl = document.getElementById('sheet');
   for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
-  const gap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (index.html --sheet-inset)
+  const gap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (src/css/tokens.css --sheet-inset)
   let state = 'closed', side = 'below', turn = 0, placed = false;
   let backHome = false;   // a page the menu opened: back on Home the menu is open again
 

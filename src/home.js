@@ -190,7 +190,7 @@ export function homePage(d) {
     mount(page) {
       el = page;
       put = parts(el);
-      // (the filter card's class at once: index.html .sec.filter-card; a part's class is given when it is made)
+      // (the filter card's class at once: src/css/page.css .sec.filter-card; a part's class is given when it is made)
       put('legend', '', 'filter-card');
       for (const k of ['mine', 'near', 'dis']) put(k, '');
       const box = document.createElement('div');

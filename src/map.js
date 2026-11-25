@@ -15,10 +15,9 @@ import { reduceMotion } from './motion.js';
 import { isWide, sheetGeometry } from './layout.js';
 import { lateSet, tagSet, ACCENTS, DEFAULT_ACCENT, DISRUPTION, MAP, PAGE, STATION_SMALL } from './colours.js';
 import stationSizes from './big-stations.json';
-import { createScaleSlider, SCALE_CSS } from './scale-slider.js';
+import { createScaleSlider } from './scale-slider.js';
 import { createSun } from './sun.js';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import 'maplibre-gl/dist/maplibre-gl.css';
 
 setWorkerUrl(workerUrl);
 
@@ -375,7 +374,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   });
   // Zoom buttons and a compass: tap the compass to turn north up and the view flat again; it leans with the tilt.
   map.addControl(new NavigationControl({ visualizePitch: true }), 'bottom-right');   // Max, 2026-11-15: bottom right
-  // + and − only with a mouse (index.html, the Soft look 2026-11-15). Without the scale slider (Settings → Zoom slider,
+  // + and − only with a mouse (src/css/map.css, the Soft look 2026-11-15). Without the scale slider (Settings → Zoom slider,
   // off by default: Max, 2026-11-23) the compass button is always there (Max, 2026-11-20: "when view is at default
   // position it should say "3d" and tilt the camera so the 3d trains show"): flat and north up it says "3D" and a tap
   // tilts the view to TILT_3D (zoom and place kept); turned or tilted it is the compass (a tap: flat, north up). With
@@ -457,14 +456,13 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // The scale slider (Max's idea 10, 2026-11-22: "the whole bar with the thumb drag"; src/scale-slider.js): on the
   // right edge above the sheet, Sweden – Town – Trackside; it zooms round the middle of the free map above the sheet
   // (a followed train is held there by the camera hook below, so it stays in place); its top third tilts the view.
-  if (!document.getElementById('scale-css')) document.head.append(Object.assign(document.createElement('style'), { id: 'scale-css', textContent: SCALE_CSS }));
   const slider = createScaleSlider(map, {
     around: () => { const f = following?.focus ?? defaultFocus(); return [f.x, f.y]; },
     label: key => t(`scale_${key}`),
     reduce: reduceMotion,
   });
   map.getContainer().appendChild(slider.el);
-  // Settings → Zoom slider (off by default): the slider and its look of the map's buttons (index.html .slider-on)
+  // Settings → Zoom slider (off by default): the slider and its look of the map's buttons (src/css/map.css .slider-on)
   const sliderShow = () => { slider.el.hidden = !settings.scaleSlider; map.getContainer().classList.toggle('slider-on', Boolean(settings.scaleSlider)); };
   sliderShow();
 
@@ -929,7 +927,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (nearest) return tapTrain(nearest.properties.id, e.point);
       onTrainTap?.(null);
     });
-    // A tapped disruption sign or station answers: a copy of it over it grows to 130% and back (index.html .sign-pop;
+    // A tapped disruption sign or station answers: a copy of it over it grows to 130% and back (src/css/map.css .sign-pop;
     // Max's pick 8, 2026-11-20). A page element riding on the map (a Marker), so the map itself doesn't draw again;
     // drawn as the map draws them (disruption-icons, station-dots: the same sizes at this zoom).
     const atZoom = (stops) => { const z = map.getZoom(); let i = 0; while (i < stops.length - 2 && z > stops[i + 1][0]) i++;
@@ -1196,7 +1194,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     for (const f of order) {
       const q = map.project(f.geometry.coordinates);
       if (q.x < -120 || q.x > W + 120 || q.y < -20 || q.y > H + 60) continue;
-      // A smaller station's name, further out than SMALL_UNTIL: small and grey (index.html .station-name.small).
+      // A smaller station's name, further out than SMALL_UNTIL: small and grey (src/css/map.css .station-name.small).
       const { sig, name } = f.properties, pill = onRoute.has(sig), isSmall = smallNow && f.properties.small === 1 && !pill;
       // Its box, guessed from its text (reading the page's sizes would make it lay out again).
       const w = String(name).length * (isSmall ? 6.3 : 7.6) + (pill ? 18 : 6), h = pill ? 22 : isSmall ? 15 : 18;
@@ -1220,7 +1218,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       }
       el.classList.toggle('pill', pill);
       el.classList.toggle('small', isSmall);
-      el.classList.toggle('side', side !== 'up');   // (a pill sits 3 px higher only above its station: index.html)
+      el.classList.toggle('side', side !== 'up');   // (a pill sits 3 px higher only above its station: src/css/map.css)
       el.style.transform = NAME_TF[side](q.x, q.y);
     }
     for (const [sig, el] of nameEls) if (!keep.has(sig)) { el.remove(); nameEls.delete(sig); }
@@ -1373,7 +1371,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     window.addEventListener(type, e => pointers.delete(e.pointerId), true);
   window.addEventListener('blur', () => pointers.clear());   // a release outside the window is never seen
   // The card (a train's panel, a board) covers up to 45 % of the screen's bottom, from the left, at most 420 px wide
-  // (index.html --sheet-w, 10 px from the edges: --sheet-inset; src/layout.js sheetGeometry, read once). Worked out
+  // (src/css/tokens.css --sheet-w, 10 px from the edges: --sheet-inset; src/layout.js sheetGeometry, read once). Worked out
   // from the window's size, kept from the last resize: reading the page's own sizes here
   // made the browser lay the page out again, 21 ms on the first frame after a tap (measured 2026-11-15).
   let size = { w: box.clientWidth, h: box.clientHeight };
@@ -1391,7 +1389,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // live mark at the top; nothing else covers the map's top since the top bar went.
   let sheetH = Math.round(size.h * 0.12);
   const TOP = 48;
-  // On a phone (under 440 px wide; index.html) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
+  // On a phone (under 440 px wide; src/css/sheet.css) the card is a sheet at the bottom, at most 45 % high; wider, it hangs
   // at the left under the search bar (Max, 2026-11-15: "on pc it should slide or expand from the top"), as tall as it
   // needs, so the free map is to its right.
   const narrow = () => !isWide();
