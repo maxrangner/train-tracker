@@ -115,11 +115,11 @@ try {
   ok(again && again.top === 'home' && Math.abs(again.at - menu?.at) <= 1 && again.gap >= 6 && again.gap <= 16 && !again.moving,
     `back from Settings: the menu ${again ? 'open again' : 'NOT open'} on ${again?.top}, its right edge at ${again?.at} px (before Settings ${menu?.at}), ${again?.gap} px under the box (want 6 to 16)`);
   // 6b. the sheet's arrow under the bar closes it (Max, 2026-11-25: "With menu is expanded, the little arrow below search
-  //     should work and dismiss menu"); Home stays where it was
+  //     should work and dismiss menu"; then: "should close menu and open main card at once"): Home rises to half
   const grab = await page.evaluate(() => { const g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return { x: g.x + g.width / 2, y: g.y + g.height / 2, lvl: window.__stack.level }; });
   await page.mouse.click(grab.x, grab.y); await sleep(900);
   const shut = await page.evaluate(() => ({ open: !document.getElementById('nav').hidden, lvl: window.__stack.level }));
-  ok(!shut.open && shut.lvl === grab.lvl, `the menu open, its arrow clicked: the menu ${shut.open ? 'still open' : 'shut'}, Home at ${grab.lvl} -> ${shut.lvl}`);
+  ok(!shut.open && shut.lvl === 1, `the menu open, its arrow clicked: the menu ${shut.open ? 'still open' : 'shut'}, Home at ${grab.lvl} -> ${shut.lvl} (want half: Max, 2026-11-25 'close menu and open main card at once')`);
 
   // 7. Home at full, its arrow clicked: one step down to half, then rest (Max, 2026-11-24: "it should compact, not close it")
   await page.evaluate(() => window.__stack.home(2)); await sleep(1200);
