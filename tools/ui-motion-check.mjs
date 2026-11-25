@@ -1,5 +1,5 @@
 // The small animations (Max's picks 1, 4, 6, 7, 8, 9 of 2026-11-20; the example page
-// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and index.html "Motion"), on a phone-size page:
+// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and src/css), on a phone-size page:
 //   1 a held button presses in and springs back; 9 the ☰ menu's rows follow it in;
 //   6 search rows arrive, and the same results again move nothing; the card's timeline rows don't arrive as it opens
 //     full (since 2026-11-25: what is shown stays, the edge reveals the rest; tools/ui-sweep.mjs measures it), and its

@@ -1,17 +1,17 @@
 // Small animations (Max, 2026-11-20: "The app feels a bit static and stiff now"; his picks on the example page
 // https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe: numbers roll, rows arrive, the lateness flashes, map signs
-// answer a tap). The looks are in index.html ("Motion"); here the parts that need code. Nothing here makes the map
+// answer a tap). The looks are in src/css; here the parts that need code. Nothing here makes the map
 // draw again: only page elements move, mostly by CSS (the graphics chip). None of it with "reduce motion".
 
 import { lang } from './i18n.js';
 
 export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// The one source for how long and how a movement goes. The times and curves are on index.html's :root (--t-glide the
+// The one source for how long and how a movement goes. The times and curves are on src/css/tokens.css's :root (--t-glide the
 // sheet's glide, --t-fold a box opening or shutting and ☰'s card, --t-page a page change, --t-page-long the other page
 // changes' (Debug → Page change); --ez the sheet's curve, --ez-pop the small motions', --ez-ui the menu's and the boxes');
 // CSS uses them there, the code here.
-// speed(): every page change and glide takes this many times as long (Debug → Animation speed → Calmer: 4/3; index.html
+// speed(): every page change and glide takes this many times as long (Debug → Animation speed → Calmer: 4/3; src/css/tokens.css
 // --mk). Read from <html data-mspeed> (src/main.js markMotion writes it).
 export const speed = () => (typeof document !== 'undefined' && document.documentElement.dataset.mspeed === 'calm' ? 4 / 3 : 1);
 const tokens = new Map();
@@ -61,7 +61,7 @@ export function roll(el, v, digits = 0, suffix = '', fmt = null) {
 // Forget a number's last value (a screen opening shows its numbers at once; only a change after that rolls).
 export function forgetRoll(el) { if (!el) return; cancelAnimationFrame(el._raf); el._v = undefined; }
 
-// Rows that weren't in this list before come in one after another (index.html .arrive): 25 ms apart, at most 9
+// Rows that weren't in this list before come in one after another (src/css/base.css .arrive): 25 ms apart, at most 9
 // steps, so a long list doesn't wait. seen: the keys already shown (a Set, kept by the list's owner and emptied when
 // the list starts again); key(row): what makes a row the same row (default: its text).
 // Only the first 16 new rows move (a screenful; the rest just show): 105 search rows, each animated, cost about 120 ms

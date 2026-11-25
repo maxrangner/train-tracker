@@ -393,7 +393,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const g = glance(stops, nextOf(stops));
     const late = lateNow(stops);
     // "→ Destination" in the head line, shown only when the card rests collapsed on a phone (Max, 2026-11-23: "only
-    // number, operator and destination"; index.html)
+    // number, operator and destination"; src/css/train-card.css)
     const title = el.querySelector('.panel-title'), dest = `→ ${stationName(stops.at(-1).station)}`;
     let to = title?.querySelector('.ph-to');
     if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); (title.querySelector('.panel-sub') ?? title).append(to); }

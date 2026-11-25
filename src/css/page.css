@@ -1,0 +1,132 @@
+/* What the sheet's pages hold: Home's parts, cards, rows, headings, chips, the lateness bar, a group's page (a company,
+   a kind, the late ones), and the small shared pieces (dots, lateness tags, tiles, loading messages). */
+@layer app {
+  /* A page's title line (src/stack.js puts ‹ and the page's buttons in it). */
+  .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 36px; font-size: 17px; }
+  .panel-head strong { font-size: 22px; font-weight: 800; }
+
+  /* Rows: every one is a door (data-go). */
+  .rows { display: grid; }
+  .row { display: flex; align-items: center; gap: 10px; min-height: 54px; width: 100%; padding: 0; border: 0; border-top: 1px solid transparent; background: none;
+    color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .rows > .row:first-child { border-top: 0; }
+  /* Hover, focus and press follow the rounded shapes; so the lines between them are drawn apart, straight (a border
+     on a rounded box curls at its ends): the border keeps its room, see-through. */
+  :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more) { border-radius: 12px; }
+  :is(.row, .pick-list button, .bd-row, .dis-fold) { position: relative; }
+  :is(.row, .dis-fold)::before, :is(.pick-list button, .bd-row)::after { content: ''; position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
+  :is(.row, .dis-fold)::before { top: -1px; border-top: 1px solid var(--line); }
+  :is(.pick-list button, .bd-row)::after { bottom: -1px; border-bottom: 1px solid var(--line); }
+  .rows > .row:first-child::before, .bd-row:last-child::after, .trip-pair .bd-row::after { border: 0; }
+  :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  /* (a tap on a row's arrow is a tap on its row) */
+  :is(.tv-toggle, .dis-fold, .panel-more, .row, .cd-stop) .icon { pointer-events: none; }
+  .row > .icon { flex: none; color: var(--muted); }
+  .r-num { font-size: 18px; font-weight: 800; min-width: 52px; flex: none; font-variant-numeric: tabular-nums; }
+  .r-main { flex: 1; min-width: 0; display: grid; }
+  .r-main b { font-size: 15.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r-main small { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .tag { margin-left: 0; flex: none; }
+  .r-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--hover); flex: none; color: var(--muted); }
+  .r-ic .dot { margin: 0; width: 14px; height: 14px; }
+  .r-ic.warn { background: var(--t-some-bg); color: var(--t-some); }
+  .r-ic.star { color: var(--c-some); }
+  .r-ic.here { color: #3d8bfd; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; margin-right: 6px; box-shadow: 0 0 0 1px var(--line); vertical-align: 0; }
+  .ring { display: block; width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--muted); box-sizing: border-box; }
+  .ring.sq { border-radius: 4px; }
+
+  /* Headings: a part's, big and plain, the same on every page; Saved's small ones (Trips, Trains, Stations). */
+  .lab, .big { margin: 2px 0 10px; font-size: 17px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .lab2 { margin: 10px 0 0; font-size: 14px; font-weight: 700; color: var(--ink); }
+  .empty { margin: 4px 0; color: var(--muted); font-size: 14px; }
+  /* Loading, empty and error messages (src/state.js): a soft tile, centred, with a turning ring, (i) or ⚠. */
+  .state { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 0 4px; padding: 14px 12px; border-radius: 14px;
+    background: var(--hover); color: var(--muted); font-size: 14px; text-align: center; list-style: none; flex: none; }
+  .state svg { flex: none; }
+  .state.error { color: var(--late); background: var(--t-late-bg); }
+  .state.error span { color: var(--ink); }
+  .spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 13px; border: 0; border-radius: 20px; background: var(--hover); color: var(--ink);
+    font: 600 14.5px var(--font); white-space: nowrap; cursor: pointer; }
+  .chip b { font-weight: 800; }
+  .chip .dot { margin: 0; }
+  /* Lateness tags (src/tag.js): the card's heading, boards, the picker. */
+  .tag { display: inline-flex; align-items: center; margin-left: 8px; padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+    font: 700 12.5px/1 var(--font); font-variant-numeric: tabular-nums; vertical-align: 1px; }
+  .tag.ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .tag.some { background: var(--t-some-bg); color: var(--t-some); }
+  .tag.late { background: var(--t-late-bg); color: var(--t-late); } .tag.unknown { background: var(--t-unknown-bg); color: var(--t-unknown); }
+  /* Minutes late in their colour */
+  .m.ontime { color: var(--t-ontime); } .m.some { color: var(--t-some); } .m.late { color: var(--t-late); } .m.unknown { color: var(--t-unknown); }
+
+  /* Parts as cards: each of a page's parts a soft card of its own, its heading inside (Home's, a company's or a kind's
+     parts, Settings, a board's list, a trip's lists). */
+  .sec { min-width: 0; }
+  .sec:empty { display: none; }
+  .pg > .sec:not([hidden]), .pg #settings, .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair {
+    background: color-mix(in srgb, var(--ink) 5%, transparent); border: 0; border-radius: 18px; padding: 12px 14px 14px; margin-top: 12px; }
+  .pg #settings { padding: 8px 14px; }
+  .pg #board > .panel-table, .pg .bd.trip-list, .pg .trip-pair { padding: 4px 12px; }
+  .pg:not([data-key="home"]) > .sec:first-child { margin-top: 0; }
+  /* (Home's numbers: their right side too, which the pages' no-own-scrolling rule set to 0: sheet.css) */
+  #sheet .pg[data-key="home"] > .sec.home-stats.stats-body:not([hidden]) { padding: 12px 14px 14px; }
+  .home-stats > .big { margin: 2px 2px 10px; }
+  .most-late { display: grid; }
+  .dis-list { display: grid; gap: 6px; margin-top: 6px; }
+  /* Home's filter card: the lateness bar, the companies under it (src/home.js companiesHtml), small and tight; a picked
+     company ringed, "N more ⌄" in the accent colour; in dark the buttons a step lighter than the card. */
+  .co-filter { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .co-filter .chip { min-height: 26px; font-size: 13px; padding: 0 9px; gap: 5px; }
+  .co-filter .chip .dot { width: 8px; height: 8px; }
+  #sheet .pg[data-key="home"] > .sec.filter-card:not([hidden]) { padding: 10px 12px 12px; }
+  #sheet .pg[data-key="home"] > .sec.filter-card > h4.lab { margin: 0 0 6px; font-size: 15px; }
+  .filter-card .lg { height: 34px; }
+  .filter-card .lg-p { font-size: 14px; }
+  .filter-card .lg-p span { font-size: 13px; }
+  :root[data-theme="dark"] .co-filter .chip:not(.on) { background: color-mix(in srgb, var(--ink) 12%, var(--bg)); }
+  .co-filter .chip.on { box-shadow: inset 0 0 0 2px var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--hover)); }
+  .co-filter .co-more { color: var(--accent); font-weight: 700; gap: 2px; padding-right: 9px; }
+
+  /* The lateness bar you can tap (Home). */
+  .lg { display: flex; gap: 3px; height: 46px; }
+  .lg-p { flex: 1 1 0; min-width: 50px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 6px; white-space: nowrap; overflow: hidden;
+    font: 800 16px var(--font); font-variant-numeric: tabular-nums; cursor: pointer; transition: opacity .2s, box-shadow .2s; }
+  .lg-p:first-child { border-radius: 16px 6px 6px 16px; justify-content: flex-start; padding-left: 14px; }
+  .lg-p:last-child { border-radius: 6px 16px 16px 6px; }
+  .lg-p:only-child { border-radius: 16px; }
+  .lg-p i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .lg-p span { font-weight: 600; font-size: 14px; }
+  .lg-p.t-ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .lg-p.t-ontime i { background: var(--c-ontime); }
+  .lg-p.t-some { background: var(--t-some-bg); color: var(--t-some); } .lg-p.t-some i { background: var(--c-some); }
+  .lg-p.t-late { background: var(--t-late-bg); color: var(--t-late); } .lg-p.t-late i { background: var(--c-late); }
+  .lg-p.t-unknown { background: var(--t-unknown-bg); color: var(--t-unknown); } .lg-p.t-unknown i { background: var(--c-unknown); }
+  .lg[data-on] .lg-p:not(.on) { opacity: .32; }
+  .lg-p.on { box-shadow: inset 0 0 0 2.5px currentColor; }
+
+  /* A group's page: its head, "Show only", the tiles, its trains. */
+  .g-head { display: flex; align-items: center; min-width: 0; }
+  .g-head .dot, .g-head .ring { width: 14px; height: 14px; margin-right: 10px; }
+  .g-head > .r-ic { margin-right: 12px; }
+  .ttl { font-size: 22px; font-weight: 800; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub { margin: 2px 0 0; color: var(--muted); font-size: 14.5px; }
+  .show-only { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; min-height: 42px; padding: 0 16px 0 12px; border: 0; border-radius: 21px;
+    background: var(--hover); color: var(--ink); font: 700 14.5px var(--font); cursor: pointer; }
+  .show-only[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { border-radius: 16px; padding: 10px 12px; background: var(--hover); color: var(--ink); text-align: left; min-width: 0; }
+  .tile b { display: block; font-size: 22px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* (its words up to two lines, never "…") */
+  .tile small { display: flex; align-items: flex-start; gap: 2px; font-size: 13.5px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .tile small span { min-width: 0; overflow-wrap: anywhere; }
+  .tile.t-ontime { background: var(--t-ontime-bg); color: var(--t-ontime); } .tile.t-some { background: var(--t-some-bg); color: var(--t-some); } .tile.t-late { background: var(--t-late-bg); color: var(--t-late); }
+  .tile.t-ontime small, .tile.t-some small, .tile.t-late small { color: inherit; }
+  .mini { display: flex; gap: 2px; height: 8px; margin-top: 10px; border-radius: 4px; overflow: hidden; }
+  .mini i { min-width: 4px; flex-basis: 0; }
+  .m-ontime { background: var(--c-ontime); } .m-some { background: var(--c-some); } .m-late { background: var(--c-late); } .m-unknown { background: var(--c-unknown); }
+  .src { margin: 8px 2px 0; color: var(--muted); font-size: 12.5px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spin { animation-duration: 2.4s; }
+  }
+}

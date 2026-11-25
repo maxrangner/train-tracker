@@ -5,8 +5,7 @@
 // Built once (and again when the language changes); after that, once a second, only what changed moves: numbers
 // roll to their new value, rings and bars glide (CSS), the comparison slides in. Taps go somewhere: a train opens its
 // card on the map, a station its board, an hour in the graph shows its numbers. Nothing moves for a phone set to
-// reduce motion. Numbers: src/stats.js snapshot(); styles: src/stats.css.
-import './stats.css';
+// reduce motion. Numbers: src/stats.js snapshot(); styles: src/css/stats.css.
 import { t, lang } from './i18n.js';
 import { brandColour } from './stats.js';
 import { kindOf } from './train-kinds.js';

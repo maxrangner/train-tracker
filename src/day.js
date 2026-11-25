@@ -5,14 +5,13 @@
 // createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay }) -> { view (null until
 //   opened), past, toggle(), back() (Esc's step: its bubble, then the ribbon at Home at rest), held(), pad(h) (the
 //   sheet's resting height came) }; stack and feeds are getters.
-import { createDayView, DAY_CSS } from './day-view.js';
+import { createDayView } from './day-view.js';
 import { isWide } from './layout.js';
 import { t } from './i18n.js';
 
 const SQUEEZE = { over: 74, slider: 190, room: 52 };   // the scale slider (74 px over the sheet, 190 tall) goes when it would reach the live mark
 
 export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay }) {
-  document.head.append(Object.assign(document.createElement('style'), { textContent: DAY_CSS }));
   let view = null, sheetPad = 0;
 
   function pad() {

@@ -1,5 +1,24 @@
 // Spårat's page: wires the parts together. Each feature lives in its own module with its own state; this file makes
 // them in order and hands each what it needs.
+// The stylesheet by part, in this order, first (so the look's variables are there before any part starts; the layers:
+// src/css/tokens.css).
+import './css/tokens.css';
+import './css/base.css';
+import './css/sheet.css';
+import './css/page.css';
+import './css/train-card.css';
+import './css/board.css';
+import './css/menu.css';
+import './css/map.css';
+import './css/settings-about.css';
+import './css/my-trains.css';
+import './css/disruptions.css';
+import './css/shop.css';
+import './css/stats.css';
+import './css/scrollbar.css';
+import './css/connection.css';
+import './css/scale.css';
+import './css/day.css';
 import { createTrains, STAND_SPEED } from './trains.js';
 import { createLateness, label } from './lateness.js';
 import { createMap } from './map.js';
@@ -66,7 +85,7 @@ if (sharedAt) dropShared();
 const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;
-// How a page comes in and how fast (Debug → Page change, Animation speed): index.html :root[data-motion], [data-mspeed].
+// How a page comes in and how fast (Debug → Page change, Animation speed): src/css/sheet.css :root[data-motion], src/css/tokens.css [data-mspeed].
 const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; };
 markMotion();   // (index.html reports it on screen if this line is never reached)
 translatePage();
