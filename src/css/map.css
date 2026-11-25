@@ -21,7 +21,7 @@
 
   /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right; each pill
      (the filter's above any other). */
-  #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
+  #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px + var(--chips-h, 0px));
     max-width: calc(100% - 96px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
     transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s; font: 600 14px/1.2 var(--font); -webkit-user-select: none; user-select: none; }
   #line .ln-pill { max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 0; border-radius: 18px;
@@ -39,7 +39,7 @@
      + and − only with a mouse (src/map.js sets .touch and .turned on the map). In dark: dark buttons, light icons
      (My location's own blue and red states stay). */
   .maplibregl-ctrl { -webkit-user-select: none; user-select: none; }
-  .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + var(--ribbon-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
+  .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h, 0px) + var(--chips-low, 0px) + var(--ribbon-h, 0px) + env(safe-area-inset-bottom, 0px)); right: env(safe-area-inset-right, 0px);
     transition: bottom .26s var(--ez-pop); }
   .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
   .maplibregl-ctrl-group { overflow: hidden; }
@@ -83,7 +83,7 @@
   /* The map credit: one small see-through line at the bottom left, above the sheet, shown at start and faded on the
      first touch of the map or after 5 s (src/main.js; OpenStreetMap's attribution guidelines allow both; the full
      credits are in About). */
-  #credit { position: absolute; z-index: 3; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-h, 0px) + 10px + env(safe-area-inset-bottom, 0px));
+  #credit { position: absolute; z-index: 3; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-h, 0px) + var(--chips-low, 0px) + 10px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100% - 96px); padding: 2px 8px; border-radius: 999px; font: 500 11px/1.4 var(--font); color: var(--muted);
     background: color-mix(in srgb, var(--bg) 60%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .6s; }
   #credit a { color: inherit; text-decoration: none; }
@@ -171,12 +171,12 @@
   @media (max-width: 439px) {
     .sheet-high #status { opacity: 0; pointer-events: none; }
     .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; }
-    #credit { bottom: calc(var(--sheet-h, 0px) + 30px + env(safe-area-inset-bottom, 0px)); }
+    #credit { bottom: calc(var(--sheet-h, 0px) + var(--chips-low, 0px) + 30px + env(safe-area-inset-bottom, 0px)); }
   }
 
   /* A computer: the line under the sheet (the credit stays at the bottom left: the sheet hangs from the top) */
   @media (min-width: 440px) {
-    #line { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); max-width: var(--sheet-w); }
+    #line { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + var(--chips-h, 0px) + env(safe-area-inset-top, 0px)); max-width: var(--sheet-w); }
   }
 
   @media (prefers-reduced-motion: reduce) {

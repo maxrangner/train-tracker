@@ -2,7 +2,7 @@
    the sheet), the frame and clock while the map shows an earlier moment, the bubble over a tapped train then. */
 @layer app {
   #day { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px));
-    bottom: calc(var(--sheet-shown, 80px) + 10px); box-sizing: border-box; padding: 8px 10px 6px; border-radius: 20px; background: var(--card); color: var(--ink);
+    bottom: calc(var(--sheet-shown, 80px) + 10px + var(--chips-h, 0px)); box-sizing: border-box; padding: 8px 10px 6px; border-radius: 20px; background: var(--card); color: var(--ink);
     box-shadow: var(--shadow); display: grid; gap: 6px; transition: bottom var(--t-glide) var(--ez), opacity .18s; touch-action: none; font: 600 13px/1.2 var(--font); }
   .sheet-high #day { opacity: 0; pointer-events: none; }
   .day-open #line { display: none; }
@@ -55,7 +55,7 @@
 
   /* A computer: above the sheet at the left, as wide as it */
   @media (min-width: 440px) {
-    #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + env(safe-area-inset-top, 0px)); }
+    #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + var(--chips-h, 0px) + env(safe-area-inset-top, 0px)); }
   }
 
   @media (prefers-reduced-motion: reduce) {

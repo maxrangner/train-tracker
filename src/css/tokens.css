@@ -32,6 +32,8 @@
     --fit-gap-phone: 40px; /* a phone's cut page: room for its "More" pill */
     --top-room: 52px;      /* full height leaves this at the top: the live mark */
     --sheet-w: 420px;      /* a computer's sheet */
+    --chip-h: 38px;        /* the start's chips (src/start-chips.js) */
+    --chips-row: 46px;     /* a computer's chip card: their row under the search box */
   }
   :root[data-theme="dark"] { color-scheme: dark; }
   /* Debug → Animation speed: Calmer (src/settings.js motionSpeed): every page change and the sheet's glide take --mk

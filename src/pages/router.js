@@ -1,5 +1,6 @@
 // Which page a stack key names (src/stack.js define): 'home', 'train:<id>', 'station:<sig>', 'pick:<n>', 'dis:<id>',
-// 'dislist', 'co:' 'kind:' 'late' 'still' (a group), 'page:settings|help|conn', and My trains' and the ride page's own.
+// 'dislist', 'co:' 'kind:' 'late' 'still' (a group), 'page:settings|help|conn', and the start's ('saved', 'stats',
+// 'filter': src/home.js), My trains' and the ride page's own (own).
 // At an earlier moment (The day) a page showing live data says "Only live. Back to live?" in its place.
 //
 // createRouter({ home, own, train, station, picker, dis, group, held, live, day, stack }) -> defineNow(key); stack is a getter

@@ -7,16 +7,21 @@
 // button"; a map tap or a pull down goes home, Esc and Android's back step back). This replaces the ten sheets that each showed and hid
 // themselves (src/sheet.js before 2026-11-22): there is one screen state, the stack.
 //
-// Three resting heights: low (at Home only the search bar and ☰; a page: its bar and its first line), half and full.
+// Home is the search bar and ☰ alone (Max's pick C, 2026-11-25: "Search bar strict for searching. Remove its line
+// indicating you can swipe it up"): no handle, no pull, no height but its rest; a tap on the field searches.
+// Three resting heights for a page: low (its bar and its first line), half and full.
 // The finger moves the sheet from anywhere on it; at full a finger scrolls the page, and a pull down from the page's
 // top moves the sheet. A long pull down below low closes every page (back to Home).
 // The head (Max's phone, 2026-11-23: the handle "seems to hit it but doesn't respond", the sheet hard to lower): the
 // handle, the grip over the map just above it (#sheet-grip, 24 px: with the handle 44 px to hit) and the head's parts
 // that aren't buttons or the field are one handle: a tap there (the finger may wander TAP_PX) toggles low ↔ half; a pull
-// from anywhere on the head moves the sheet (Home's field too, with a finger: a tap on it still searches), and a pull
-// down from the head of PULL_PX or more, never up first, lowers it at least one height.
+// from anywhere on the head moves the sheet, and a pull down from the head of PULL_PX or more, never up first, lowers
+// it at least one height.
+// The root pages (roots: the start chips' cards, src/start-chips.js, in the chips' order): opened, one stands over Home
+// alone (what was above Home goes) and a root page on top is replaced by it, sliding the way its chip lies, at the
+// height it had; no ‹. Their head holds the chips (src/css/sheet.css .sh-chips; a computer: under the search box).
 //
-// createStack({ sheet, define, onPad, onChange, onBack, held }) -> the stack (see the end).
+// createStack({ sheet, define, roots, onPad, onChange, onBack, held }) -> the stack (see the end).
 //   define(key) -> a page, or null when the key names nothing (a train gone, a disruption ended):
 //     { name: string | () => string (its name: stack.names()), kind ('home', 'train', 'station', ... : the sheet's
 //       data-page), low: px (its low height; default the page low) or () -> px (fitted: the height of its content to
@@ -107,7 +112,8 @@ const PART_HEAD = 'h2, h3, h4';
 const partHead = c => (c.matches(PART_HEAD) ? c : c.firstElementChild?.matches(PART_HEAD) ? c.firstElementChild : null);
 const partName = h => [...h.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() || h.textContent.trim();
 
-export function createStack({ sheet, define, onPad = () => {}, onChange = () => {}, onBack = null, held = () => false }) {
+export function createStack({ sheet, define, roots = [], onPad = () => {}, onChange = () => {}, onBack = null, held = () => false }) {
+  const isRoot = pg => Boolean(pg) && roots.includes(pg.key);
   const root = document.documentElement;
   const pagesEl = sheet.querySelector('.sh-pages');
   const input = sheet.querySelector('#search');
@@ -141,11 +147,10 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const safe = () => { const s = getComputedStyle(probe); return { top: parseFloat(s.paddingTop) || 0, bottom: parseFloat(s.paddingBottom) || 0 }; };
 
   let geo = sheetGeometry(true);   // the sheet's sizes (the top of this file); read again in measure()
-  const headRow = () => geo.grab + geo.head;        // the handle and the head (search or a page's bar)
-  const homeLow = () => headRow() + geo.barEdge;    // Home at rest
+  const homeLow = () => geo.head + 2 * geo.barEdge;    // Home at rest: the search bar, as much room above it as under it
   const stack = [];          // [{ key, def, el, scroll, lvl }]
   const top = () => stack[stack.length - 1];
-  let idx = 0, H = [headRow(), 400, 800], fullMax = 800, preSearch = 0, ready = false;
+  let idx = 0, H = [homeLow(), 400, 800], fullMax = 800, preSearch = 0, ready = false;
   let drag = null, touching = false, lastScroll = 0, eatUntil = 0;
   const wide = isWide;
   // The search (in the sheet's head) is a page-like entry over Home while it is open, never on the stack: its results
@@ -188,14 +193,16 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const need = headPx() + end + geo.fitGap + (wide() ? 0 : safe().bottom);
     return Math.round(Math.max(half, Math.min(fullMax, need)));
   }
-  // the handle and the head: on a computer geo.barEdge more (the sheet hangs from the top, room above the search field;
-  // src/css/sheet.css .sh-head's margin-top);
+  // the handle and the head: on a computer and at Home geo.barEdge more (room above the search field; src/css/sheet.css
+  // .sh-head's margin-top); a computer's root page its chips' row under the search box too (geo.chipsRow);
   // a page without a bar: the handle alone
-  // (the handle's row read from the page: a computer's train card has a thin one, src/css/sheet.css)
-  const grabEl = sheet.querySelector('.sh-grab'), grabH = () => grabEl?.offsetHeight || geo.grab;
+  // (the handle's row read from the page: a computer's train card has a thin one, src/css/sheet.css; Home has none)
+  const atHome = () => sheet.dataset.page === 'home';
+  const grabEl = sheet.querySelector('.sh-grab'), grabH = () => (atHome() ? 0 : grabEl?.offsetHeight || geo.grab);
   // (with the search bar: 8 px more under it, so a scrolled page goes out of sight below it, not right at its edge;
   // src/css/sheet.css .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
-  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : geo.head + geo.barGap) + grabH() + (wide() ? geo.barEdge : 0);
+  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : geo.head + geo.barGap + (wide() && sheet.hasAttribute('data-root') ? geo.chipsRow : 0))
+    + grabH() + (wide() || atHome() ? geo.barEdge : 0);
   // A page whose content is still coming (its half() or low() null): where the sheet is now, at most half the screen
   // (from Home at full a loading card covered it all until its stops came), measured as half() is
   const waiting = () => Math.max(1, Math.round(Math.min(shownTo, innerHeight * 0.5) - headPx()));
@@ -206,7 +213,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (typeof l === 'function') { const c = l() ?? waiting(); return c > 0 ? Math.min(Math.max(headPx() + c, homeLow()) + s, fullMax - 40) : PAGE_LOW_PX + s; }
     // (a computer's handle band taller than the phone's handle: its extra room too, src/css/sheet.css #sheet .sh-grab)
     const band = wide() ? Math.max(0, grabH() - geo.grab) : 0;
-    return pg?.key === 'home' ? homeLow() + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? geo.barEdge : 0) + band;
+    return pg?.key === 'home' ? homeLow() + s : (l ?? PAGE_LOW_PX) + s + (wide() ? geo.barEdge : 0) + band;
   }
   // Half: the page's own (def.half, see the top), else the usual half.
   let usualHalf = 400;
@@ -406,8 +413,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // heading first, no other heading after it, nothing of a shown part cut off), else "More".
   function moreWord(visible) {
     const c = cur(), pg = c?.el;
-    // (Home always "More": Max, 2026-11-24 "main should say 'mer'")
-    if (!pg || c.key === 'home') return t('moreWord');
+    if (!pg) return t('moreWord');
     const kids = parts(pg);
     const at = k => k.offsetTop - pg.scrollTop;
     const hidden = kids.filter(k => at(k) >= visible - 4);
@@ -451,6 +457,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   function setIndex(i) {
     // (a page that doesn't rest low: half; closing it is home(), not a height)
     if (i <= 0 && !keepsLow(cur())) i = 1;
+    // (Home, the bar alone, has only its rest)
+    if (cur() === stack[0]) i = 0;
     // (the page notes how it looks before the height changes it, to glide from there: a train card's buttons)
     cur()?.def.beforeLevel?.(Math.max(0, Math.min(2, i)));
     idx = Math.max(0, Math.min(2, i));
@@ -540,14 +548,13 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     touching = true;
     if (frozen) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    // Home's field: a finger's pull moves the sheet, its tap still searches (not while searching; not a mouse: its
-    // press focuses the field at once)
-    const field = e.target.closest('label.sh-field');
+    // (Home: strictly the search, nothing to pull; the search's own field: it types)
+    if (cur() === stack[0] || e.target.closest('label.sh-field')) return;
     // (a finger on a text field not being typed in moves the sheet like the rest, its tap still types: Max, 2026-11-23,
-    // "Swiping down on a text entry field should also swipe the card"; Home's search field the same since before)
+    // "Swiping down on a text entry field should also swipe the card")
     const typing = el => el.matches('select') || el === document.activeElement || e.pointerType !== 'touch';
     const input = e.target.closest('input, select, textarea');
-    if (field ? e.pointerType !== 'touch' || srch : input && typing(input)) return;
+    if (input && typing(input)) return;
     const head = e.target === grip || e.target.closest(HEAD), full = idx === 2;
     if (!head && full && e.pointerType !== 'mouse') return;   // at full a finger scrolls the page; touchmove below takes a pull down from its top
     dragBegin(e.clientY, e.pointerId);
@@ -651,14 +658,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   let wheelAt = 0;
   sheet.addEventListener('wheel', (e) => {
     if (frozen) { e.preventDefault(); return; }
-    if (idx === 2 || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    if (idx === 2 || cur() === stack[0] || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
     if (e.deltaY > 0 && performance.now() - wheelAt > 450) { wheelAt = performance.now(); setIndex(idx === 0 && !hasOwnHalf() ? 2 : idx + 1); }
   }, { passive: false });
   // A drag's click is no tap (the handle's tap: pointerEnd); on the page at low, a tap raises it to half.
   sheet.addEventListener('click', (e) => {
     if (performance.now() < eatUntil) { e.preventDefault(); e.stopPropagation(); return; }
-    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); if (e.target.closest('.sh-grab')) Promise.resolve(dismissFrozen?.()).then(() => { if (cur() === stack[0] && idx === 0) setIndex(1); }); return; }   // (the menu slides back, then Home rises to half: Max, 2026-11-25)
+    if (frozen && !e.target.closest('.sh-search')) { e.preventDefault(); e.stopPropagation(); if (e.target.closest('.sh-grab')) dismissFrozen?.(); return; }
     if (e.target.closest('.sh-grab')) return;
     if (idx === 0 && e.target.closest('.pg') && !e.target.closest('button, a, input, [role="button"]')) setIndex(1);
   }, true);
@@ -694,7 +701,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     const pg = top();
     if (!pg) return;
     sheet.dataset.page = pg.def.kind ?? pg.key.split(':')[0];
-    if (pg.key === 'home') { sheet.classList.remove('no-bar'); return; }
+    sheet.toggleAttribute('data-root', isRoot(pg));
+    // Home's head is the search bar, a root page's the chips (src/css/sheet.css): ‹ and the buttons back in the bar, unseen
+    if (pg.key === 'home' || isRoot(pg)) {
+      sheet.classList.remove('no-bar');
+      if (upBtn.parentElement !== barEl) barEl.prepend(upBtn);
+      if (btnsEl.parentElement !== barEl) barEl.append(btnsEl);
+      return;
+    }
     // the page's own buttons beside the star (def.acts(): [{ id, icon, label, armed? }], def.act(id))
     const acts = pg.def.acts?.() ?? [], actsKey = acts.map(a => `${a.id}${a.armed ? '!' : ''}${a.label}`).join('|');
     if (actsEl.dataset.k !== actsKey) {
@@ -813,7 +827,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, level, ...opts });
     syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     fit('page');   // (once its content is in)
-    setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
+    setIndex(level);
     // (back to a scrolled page: on a computer the sheet grows downward as it comes, so a scroll kept from a taller
     // page was pulled back with every frame and the page slid down the whole way; the one that fits its final height
     // from the start: what is shown stays, the bottom edge reveals the rest; ui-sweep, 2026-11-25)
@@ -840,11 +854,22 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (!def) return false;
     const prev = top(), pg = make(key, def);
     pg.fromMap = Boolean(opts.fromMap);   // (opened by a tap on the map: no ‹, syncBar)
+    if (isRoot(pg)) { openRoot(pg, prev, opts); return true; }
     stack.push(pg);
     while (stack.length > MAX_PAGES + 1) { const gone = stack.splice(1, 1)[0]; gone.def.unmount?.(); gone.el.remove(); }
     recent(key);
     show(pg, prev, 1, opts);
     return true;
+  }
+  // A root page over Home alone (the top of this file): what was above Home goes; a root page on top is replaced,
+  // the new one sliding in from the side its chip is on, at the height the old one had.
+  function openRoot(pg, prev, opts) {
+    const gone = stack.splice(1);
+    stack.push(pg);
+    const swap = isRoot(prev);
+    const dir = swap ? Math.sign(roots.indexOf(pg.key) - roots.indexOf(prev.key)) : 1;
+    show(pg, prev, dir, swap && opts.level === undefined ? { ...opts, level: Math.max(1, idx) } : opts);
+    for (const p of gone) { if (p !== prev) p.def.hide?.(); p.def.unmount?.(); }
   }
   // Back to the page at i (everything above it goes).
   function backTo(i, level) {
@@ -962,7 +987,9 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   const searchPg = { key: 'search', el: results, def: { kind: 'search', full: () => searchFull() }, lvl: 2 };
   // (straight to full, not through setIndex: the map keeps the room it had under the sheet, pad)
   function openSearch() {
-    if (srch || top()?.key !== 'home') return;
+    if (srch) return;
+    if (isRoot(top())) home(0);   // (a computer's chip card under the search box: the search over Home instead)
+    if (top()?.key !== 'home') return;
     preSearch = idx;
     srch = searchPg;
     guard();
@@ -1067,6 +1094,7 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     keys: () => stack.map(p => p.key),
     names: () => stack.map(nameOf),
     has: key => stack.some(p => p.key === key),
+    isRoot: key => roots.includes(key),
     setLevel: i => setIndex(i),
     get level() { return idx; },
     get heights() { return [...H]; },

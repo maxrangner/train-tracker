@@ -1,11 +1,13 @@
-// Home, the sheet's bottom page (Max's pick A, 2026-11-22, without the chips): pulled up, one scroll of
-//   1. the lateness bar: a tap on a colour lights only those trains (the others leave the map until tapped again),
-//   2. Saved (Mine until 2026-11-23): the saved trips and changes, the starred trains and stations,
-//   3. Near you: only while My location is on,
-//   4. Disruptions (the problems; all of them, rail work too, one tap further),
-//   5. Sweden right now: Statistik's Sweden, its tiles and today's graph (src/stats-page.js),
-//   6. Kinds of train and Companies: a tap opens the group's page,
-//   7. Most late and Fastest, then the busiest stations and "for fun" (Statistik's, kept).
+// The start (Max's pick C, 2026-11-25: "C. With störningar, started and stats pills. Rest under the Hamburger menu.
+// Search bar strict for searching"): Home is the search bar alone, the sheet's bottom page with nothing in it; what it
+// held until then is in pages of its own (createStart), opened by the chips above the bar (src/start-chips.js) or ☰:
+//   'saved'   Sparade (a chip): the saved trips and changes, the starred trains and stations; under it Near you, only
+//             while My location is on,
+//   'stats'   Statistik (a chip): Sweden right now, its tiles and today's graph (src/stats-page.js), the kinds of train
+//             and the companies (a tap opens the group's page), most late, fastest, the busiest stations, "for fun",
+//   'filter'  Filter (☰): the lateness bar (a tap on a colour lights only those trains, the others leave the map until
+//             tapped again) and the companies on the map.
+// The chip Störningar opens the list of disruptions (src/pages/disruptions.js; its count and colour: disChip here).
 // Also the group pages (a company, a kind, "late now", "standing still": only its trains on the map while it is
 // open; "Show only" keeps that after it closes, through src/filter.js) and the rows every page and the search share.
 // Every row is a door: data-go carries the stack key it opens (src/stack.js); src/main.js listens for them.
@@ -20,10 +22,9 @@ import { lateClass } from './lateness.js';
 import { brandColour } from './stats.js';
 import { kindOf, KINDS } from './train-kinds.js';
 import { createStatsPage } from './stats-page.js';
-import { rowHtml as disRowHtml, isWork, levelName } from './disruptions.js';
+import { isWork, levelName } from './disruptions.js';
 
 const dot = c => `<i class="dot" style="background:${c}"></i>`;
-const plural = (n, one, many) => (n === 1 ? one : many);
 export const groupName = (type, v) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'));
 
 // ---------- rows ----------
@@ -78,20 +79,142 @@ export function parts(el) {
   };
 }
 
-// ---------- Home ----------
+// ---------- the start: Home and its pages ----------
 // d: { frame() -> the trains drawn now ([{ id, lon, lat, v, stale, brand }]), lateOf(id) -> minutes or null,
 //   numberOf(id), favourites, stations() -> Map, location() -> { lon, lat } or null, disruptions() -> list or null,
 //   stationName(sig), snapshot() -> src/stats.js snapshot of all trains, legend: { get(), set(k) }, statsActions,
-//   filter, still (m/s under which a train stands) }
-export function homePage(d) {
-  let put = null, stats = null, mostLate = null, el = null, up = 0;   // up: the height Home last rested at
-  let coOpen = false;   // the filter card's companies all shown ("N more" tapped)
-  const LG = ['ontime', 'some', 'late', 'unknown'];
-  // The filter card (Max, 2026-11-24: "Sektions titel: Filter. Ett sätt att expandera för att se alla andra
-  // operatörer"; until then "Show only" in the search, which looked like it filtered the search): the lateness bar, and
-  // under it the companies on the map now, most trains first: the first CO_SHOWN and any picked one, "N more ⌄" for the
-  // rest. A tap turns a company on or off right here (src/filter.js; its pill above the bar, src/main.js data-cofilter).
-  const CO_SHOWN = 5;
+//   filter, myTrains() -> { rows, add }, reveal(el), unreveal(), onShow() (Statistik shown: its day's numbers asked) }
+// createStart(d) -> { home (Home's page: nothing in it), define(key) (a start page: 'saved', 'stats', 'filter'; else
+//   null), page(key) (that page's def while it is made, else null: Filter's toggleCo), redraw() (each start page that
+//   is made), savedCount(), disChip() -> { n, colour } }
+export function createStart(d) {
+  const made = new Map();   // key -> the def of that page while it is made (mount .. unmount)
+  const kinds = { saved: savedPage, stats: statsPage, filter: filterPage };
+  function define(key) {
+    const make = kinds[key];
+    if (!make) return null;
+    const def = make(d);
+    const { mount, unmount } = def;
+    def.mount = (el, pg) => { made.set(key, def); mount(el, pg); };
+    def.unmount = () => { if (made.get(key) === def) made.delete(key); unmount?.(); };
+    return def;
+  }
+  return {
+    home: { name: () => t('home'), kind: 'home' },
+    define,
+    page: key => made.get(key) ?? null,
+    redraw() { for (const def of made.values()) def.redraw(); },
+    savedCount: () => savedCount(d),
+    disChip: () => disChip(d.disruptions()),
+  };
+}
+
+// Sparade's number: what is saved, the trips and today's changes, the trains, the stations (its title's chip and the
+// start's chip)
+function savedCount(d) {
+  const mt = d.myTrains?.() ?? { rows: [] }, stations = d.stations();
+  return mt.rows.length + d.favourites.trains.length + d.favourites.stations.filter(sig => stations.get(sig)).length;
+}
+// Störningar's number and colour: all of them, as the list counts; the colour of the worst problem shown first (the
+// list comes worst first), rail work alone or nothing grey. null: not loaded.
+export function disChip(list) {
+  if (!list) return null;
+  const problems = list.filter(x => !isWork(x));
+  return { n: list.length, problems: problems.length,
+    colour: problems.length ? `var(--dis-${{ red: 3, orange: 2, yellow: 1 }[levelName(problems[0].level)]})` : 'var(--muted)' };
+}
+
+// Sparade ("Mina" until 2026-11-23, Max: "Sparade", with small headings for what it holds): Trips (the saved trips and
+// pinned changes, src/my-trains.js, then "+ New trip"), Trains (starred), Stations (starred); a heading only when it
+// has something. Under it Near you.
+function savedPage(d) {
+  let put = null;
+  function mineHtml(frame) {
+    const byNumber = new Map(frame.map(x => [String(d.numberOf(x.id)), x]));
+    const { trains, stations } = starredRows({ favourites: d.favourites, stations: d.stations(), onMap(n) {
+      const x = byNumber.get(n);
+      return x ? { id: x.id, brand: x.brand, minutes: d.lateOf(x.id) } : null;
+    } });
+    const mt = d.myTrains?.() ?? { rows: [], add: '' };
+    const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
+    return `<h4 ${titleAttrs('lab')}>${titleIcon('star')}${t('mine')}${titleChip(savedCount(d))}</h4>` +
+      (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +
+      `${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}`;
+  }
+  function nearHtml() {
+    const here = d.location();
+    if (!here) return '';
+    const k = Math.cos(here.lat * Math.PI / 180);
+    const near = [...d.stations().values()].filter(st => st.advertised && st.lon !== null)
+      .map(st => ({ st, km: Math.hypot((st.lon - here.lon) * k, st.lat - here.lat) * 111.2 })).sort((a, b) => a.km - b.km).slice(0, 3);
+    if (!near.length) return '';
+    return `<h4 ${titleAttrs('lab')}>${titleIcon('locate')}${t('nearYou')}</h4><div class="rows">${near.map(({ st, km }) => stationRow({ sig: st.sig, name: st.name,
+      sub: km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 10 ? 1 : 0)} km`, lead: icon('locate', 18), cls: 'here' })).join('')}</div>`;
+  }
+  function draw() {
+    if (!put) return;
+    put('mine', mineHtml(d.frame()));
+    put('near', nearHtml());
+  }
+  return {
+    name: () => t('mine'), kind: 'saved',
+    mount(el) { put = parts(el); put('mine', ''); put('near', ''); },
+    unmount() { put = null; },
+    show: () => draw(), every: () => draw(), redraw: () => draw(),
+  };
+}
+
+// Statistik: Sweden right now and the statistics' cards (src/stats-page.js), Most late among them. Its day's numbers
+// and the cancelled trains are asked for while it shows (d.onShow; src/main.js statsShown).
+function statsPage(d) {
+  let stats = null, mostLate = null, page = null;
+  function mostLateHtml(frame) {
+    const late = frame.map(x => ({ x, m: d.lateOf(x.id) })).filter(o => o.m > 0).sort((a, b) => b.m - a.m).slice(0, 5);
+    return `<h4 ${titleAttrs('lab', 'var(--c-late)')}>${titleIcon('day')}${t('mostLate')}${titleChip(late.length ? `+${late[0].m}` : '')}</h4><div class="rows">${late.map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
+      sub: t(`kind_${kindOf(x.brand)}`) })).join('') || `<p class="empty">${t('stNoneYet')}</p>`}</div>`;
+  }
+  function draw(first = false) {
+    if (!stats) return;
+    swap(mostLate, mostLateHtml(d.frame()));
+    stats.update(d.snapshot(), { first });
+  }
+  return {
+    name: () => t('navStats'), kind: 'stats',
+    // Its half: its title and Sweden right now whole (src/stack.js half(); without it the half stopped under the title:
+    // no clean edge between a third and a half of the screen, Sweden's map is taller than that)
+    half() {
+      const se = page?.querySelector('.home-stats > .st-se');
+      if (!se?.offsetHeight) return null;
+      return Math.round(se.getBoundingClientRect().bottom - page.getBoundingClientRect().top + page.scrollTop + 14 + (isWide() ? 12 : 40));
+    },
+    mount(el) {
+      page = el;
+      const box = document.createElement('div');
+      box.className = 'sec home-stats';
+      el.append(box);
+      // (its words in a span of their own: a change of language writes them, src/i18n.js data-t, the icon stays)
+      const head = Object.assign(document.createElement('h3'), { className: 'big ct' });
+      head.innerHTML = `${titleIcon('train')}<span data-t="swedenNow">${esc(t('swedenNow'))}</span>`;
+      mostLate = Object.assign(document.createElement('section'), { className: 'st-sec most-late' });
+      stats = createStatsPage(box, { ...d.statsActions, filter: d.filter, redraw: () => draw(), groups: true, icons: true,
+        parts: [head, 'sweden', 'duo', 'punctuality', 'kinds', 'companies', mostLate, 'fastest', 'busiest', 'fun', 'data'] });
+    },
+    unmount() { stats = null; mostLate = null; page = null; },
+    show() { draw(true); d.onShow?.(); },
+    every: () => draw(),
+    redraw: () => draw(true),
+  };
+}
+
+// Filter (Max, 2026-11-24: "Sektions titel: Filter. Ett sätt att expandera för att se alla andra operatörer"; a page of
+// ☰'s since 2026-11-25): the lateness bar, and under it the companies on the map now, most trains first: the first
+// CO_SHOWN and any picked one, "N more ⌄" for the rest. A tap turns a company on or off right here (src/filter.js; its
+// pill above the bar, src/main.js data-cofilter).
+const LG = ['ontime', 'some', 'late', 'unknown'];
+const CO_SHOWN = 5;
+function filterPage(d) {
+  let put = null, el = null;
+  let coOpen = false;   // the companies all shown ("N more" tapped)
   function companiesHtml(frame) {
     const n = new Map();
     for (const x of frame) if (x.brand) n.set(x.brand, (n.get(x.brand) ?? 0) + 1);
@@ -136,10 +259,10 @@ export function homePage(d) {
       say(++gone);
     }
   }
-  function filterHtml(frame) {
-    const co = companiesHtml(frame), lg = settings.homeLegend ? legendHtml(counts(frame)) : '';
-    // (its number: the filters on now, the companies and kinds picked and a lateness colour lit; src/filter.js)
-    return co || lg ? `<h4 ${titleAttrs('lab')}>${titleIcon('funnel')}${esc(t('filterHead'))}${titleChip(d.filter.list().length)}</h4>${lg}${co}` : '';
+  function counts(frame) {
+    const c = { ontime: 0, some: 0, late: 0, unknown: 0 };
+    for (const x of frame) c[x.stale ? 'unknown' : lateClass(d.lateOf(x.id))]++;
+    return c;
   }
   function legendHtml(c) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
@@ -150,90 +273,31 @@ export function homePage(d) {
       `style="flex-grow:${c[k]}" data-legend="${k}" aria-pressed="${on === k}" aria-label="${esc(`${c[k]} · ${words[k]}`)}"><i></i>` +
       `${k === 'ontime' ? `<span>${esc(words.ontime)}</span>` : ''}<b>${c[k]}</b></button>`).join('')}</div>`;
   }
-  // Saved ("Mina" until 2026-11-23, Max: "Sparade", with small headings for what it holds): Trips (the saved trips and
-  // pinned changes, src/my-trains.js, then "+ New trip"), Trains (starred), Stations (starred); a heading only when it
-  // has something.
-  function mineHtml(frame) {
-    const byNumber = new Map(frame.map(x => [String(d.numberOf(x.id)), x]));
-    const { trains, stations } = starredRows({ favourites: d.favourites, stations: d.stations(), onMap(n) {
-      const x = byNumber.get(n);
-      return x ? { id: x.id, brand: x.brand, minutes: d.lateOf(x.id) } : null;
-    } });
-    const mt = d.myTrains?.() ?? { rows: [], add: '' };
-    const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
-    // (its number: what is saved, the trips and today's changes, the trains, the stations)
-    return `<h4 ${titleAttrs('lab')}>${titleIcon('star')}${t('mine')}${titleChip(mt.rows.length + trains.length + stations.length)}</h4>` +
-      (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +
-      `${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}`;
+  function filterHtml(frame) {
+    const co = companiesHtml(frame), lg = settings.homeLegend ? legendHtml(counts(frame)) : '';
+    return co || lg ? `${lg}${co}` : `<p class="empty">${esc(t('noneOnMap'))}</p>`;
   }
-  function nearHtml() {
-    const here = d.location();
-    if (!here) return '';
-    const k = Math.cos(here.lat * Math.PI / 180);
-    const near = [...d.stations().values()].filter(st => st.advertised && st.lon !== null)
-      .map(st => ({ st, km: Math.hypot((st.lon - here.lon) * k, st.lat - here.lat) * 111.2 })).sort((a, b) => a.km - b.km).slice(0, 3);
-    if (!near.length) return '';
-    return `<h4 ${titleAttrs('lab')}>${titleIcon('locate')}${t('nearYou')}</h4><div class="rows">${near.map(({ st, km }) => stationRow({ sig: st.sig, name: st.name,
-      sub: km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 10 ? 1 : 0)} km`, lead: icon('locate', 18), cls: 'here' })).join('')}</div>`;
-  }
-  function disHtml() {
-    const list = d.disruptions();
-    if (!list) return '';
-    const problems = list.filter(x => !isWork(x));
-    // (its triangle in the colour of the worst shown, as its row's icon box (the list comes worst first); rail work alone
-    // or nothing: grey; its number: all of them, as "All disruptions" counts)
-    const colour = problems.length ? `var(--dis-${{ red: 3, orange: 2, yellow: 1 }[levelName(problems[0].level)]})` : 'var(--muted)';
-    return `<h4 ${titleAttrs('lab', colour)}>${titleIcon('warning')}${t('disruptions')}${titleChip(list.length)}</h4><div class="dis-list">${problems.slice(0, 3).map(x => disRowHtml(x, d.stationName, Date.now())).join('')}` +
-      (!problems.length ? `<p class="empty">${t(list.length ? 'noProblemsNow' : 'noDisruptions')}</p>` : '') +
-      // ("All disruptions" a row of the same list: its icon box the same size, in the same column, grey (a way on, not a
-      // disruption), its › at the end; Max, 2026-11-24: "The icons dont align")
-      (list.length ? `<button type="button" class="dis-row dis-all" data-go="dislist"><span class="dis-ic work" aria-hidden="true">${icon('warning', 16)}</span>` +
-        `<span><b>${t('allDisruptions')}</b><span class="dis-sub">${esc(t('disCount', problems.length, list.length - problems.length))}</span></span>${icon('chevron', 18)}</button>` : '') + '</div>';
-  }
-  function mostLateHtml(frame) {
-    const late = frame.map(x => ({ x, m: d.lateOf(x.id) })).filter(o => o.m > 0).sort((a, b) => b.m - a.m).slice(0, 5);
-    return `<h4 ${titleAttrs('lab', 'var(--c-late)')}>${titleIcon('day')}${t('mostLate')}${titleChip(late.length ? `+${late[0].m}` : '')}</h4><div class="rows">${late.map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
-      sub: t(`kind_${kindOf(x.brand)}`) })).join('') || `<p class="empty">${t('stNoneYet')}</p>`}</div>`;
-  }
-  function counts(frame) {
-    const c = { ontime: 0, some: 0, late: 0, unknown: 0 };
-    for (const x of frame) c[x.stale ? 'unknown' : lateClass(d.lateOf(x.id))]++;
-    return c;
-  }
-  function draw(first = false) {
-    const frame = d.frame();
-    const f = put('legend', filterHtml(frame), 'filter-card');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
+  let head = null;
+  function draw() {
+    if (!put) return;
+    // (the title as Settings' and About's, the page's ‹ beside it (src/stack.js headOf); its number: the filters on now,
+    // the companies and kinds picked and a lateness colour lit, src/filter.js)
+    swap(head, `<strong ${titleAttrs('')}>${titleIcon('funnel')}${esc(t('filterHead'))}${titleChip(d.filter.list().length)}</strong>`);
+    const f = put('filter', filterHtml(d.frame()), 'filter-card');
     fitCoRow(f.sec.querySelector('.co-filter'), f.drew);
-    put('mine', mineHtml(frame));
-    put('near', nearHtml());
-    put('dis', disHtml());
-    swap(mostLate, mostLateHtml(frame));
-    stats.update(d.snapshot(), { first });
   }
   return {
-    name: () => t('home'), kind: 'home',
+    name: () => t('filterHead'), kind: 'filter',
+    // (the card's class at once: src/css/page.css .sec.filter-card; a part's class is given when it is made)
     mount(page) {
       el = page;
+      head = Object.assign(document.createElement('div'), { className: 'panel-head' });
+      el.append(head);
       put = parts(el);
-      // (the filter card's class at once: src/css/page.css .sec.filter-card; a part's class is given when it is made)
-      put('legend', '', 'filter-card');
-      for (const k of ['mine', 'near', 'dis']) put(k, '');
-      const box = document.createElement('div');
-      box.className = 'sec home-stats';
-      el.append(box);
-      // (its words in a span of their own: a change of language writes them, src/i18n.js data-t, the icon stays)
-      const head = Object.assign(document.createElement('h3'), { className: 'big ct' });
-      head.innerHTML = `${titleIcon('train')}<span data-t="swedenNow">${esc(t('swedenNow'))}</span>`;
-      mostLate = Object.assign(document.createElement('section'), { className: 'st-sec most-late' });
-      stats = createStatsPage(box, { ...d.statsActions, filter: d.filter, redraw: () => draw(), groups: true, icons: true,
-        parts: [head, 'sweden', 'duo', 'punctuality', 'kinds', 'companies', mostLate, 'fastest', 'busiest', 'fun', 'data'] });
+      put('filter', '', 'filter-card');
     },
-    // Statistik's day and cancelled numbers are asked for once Home is pulled up from rest, not while it rests as the
-    // search bar alone (2026-11-23, stats-board-check: they were asked at every start, and "Laddar…" never showed).
-    show() { up = 0; draw(true); },
-    level(i) { if (i > 0 && !up) d.onShow?.(); up = i; if (i > 0) draw(); },
-    every(i) { if (i > 0) draw(); },
-    redraw: () => draw(true),
+    unmount() { put = null; el = null; head = null; },
+    show: () => draw(), every: () => draw(), redraw: () => draw(),
     // (opened: the sheet grows until the whole card shows; folded: back to where it was; Max, 2026-11-24: "Expanding
     // filters list in main card should expand that card to view all filters")
     toggleCo() {

@@ -1,6 +1,6 @@
 // ☰'s menu: a card under the search bar, an icon before each choice; its right edge in line with the box's outer edge
 // (a computer: the sheet's; a phone, whose sheet is the screen's width: the bar's, ☰'s; Max, 2026-11-25)
-// (The day, Settings, About). It slides out from under the bar and back under it, as fast both ways; where there is no
+// (Filter, The day, Settings, About; Max's pick C, 2026-11-25: the start's chips hold the rest, src/start-chips.js). It slides out from under the bar and back under it, as fast both ways; where there is no
 // room under the bar (a phone's sheet at rest, its bar at the bottom) it comes out above the sheet. The page behind
 // holds still while it is open (src/stack.js freeze). ☰, the sheet's arrow, a map tap, a page coming up, Esc and the backs close it
 // (src/back.js).
@@ -12,16 +12,17 @@
 //
 // One owner of its state: closed -> opening -> open -> closing -> closed; open -> parked -> open (back) or closed. Opening waits for the sheet to stand
 // (stack.whenSettled) when it has to move first: the card is placed from where the sheet comes to rest, never from
-// where it is on its way (Home raised: lowered first; back on Home from a page the menu opened: reopenOnHome).
+// where it is on its way (a computer's chip card: closed first; back on Home from a page the menu opened: reopenOnHome).
 //
-// createNavMenu({ stack, mapEl, onDay }) -> { isOpen, shown (not closed: on screen), open(), close(), toggle(),
-//   reopenOnHome(), pageOnTop(key) }; stack is a getter (the sheet is made after the menu).
+// createNavMenu({ stack, mapEl, onDay, onState }) -> { isOpen, shown (not closed: on screen), open(), close(), toggle(),
+//   reopenOnHome(), pageOnTop(key) }; stack is a getter (the sheet is made after the menu); onState(): its state changed
+//   (the start's chips step aside while it shows).
 import { icon } from './icons.js';
 import { onTap } from './tap.js';
 import { reduceMotion, ms, easing } from './motion.js';
 import { isWide, sheetGeometry } from './layout.js';
 
-export function createNavMenu({ stack, mapEl, onDay }) {
+export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   const navEl = document.getElementById('nav'), button = document.getElementById('nav-button');
   const sheetEl = document.getElementById('sheet');
   for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
@@ -40,6 +41,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     // (opening, not placed yet: not shown, where it was, until it slides out from its place once the sheet stands)
     navEl.style.visibility = next === 'opening' && !placed ? 'hidden' : '';
     if (next === 'closed' || next === 'open') navEl.getAnimations().forEach(x => x.cancel());
+    onState();
   }
   function place() {
     const a = button.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
@@ -70,9 +72,9 @@ export function createNavMenu({ stack, mapEl, onDay }) {
   function open({ settle = false } = {}) {
     const st = stack();
     if (st.searching || state === 'opening' || state === 'open') return;
-    // (opened with Home raised: Home goes down to rest first)
-    const lower = st.top() === 'home' && st.level > 0;
-    if (lower) st.setLevel(0);
+    // (opened over a chip's card, a computer's: the card closes first, the menu comes out from under the box at rest)
+    const lower = st.isRoot(st.top());
+    if (lower) st.home(0);
     const mine = ++turn;
     placed = false;
     enter('opening');
@@ -126,6 +128,7 @@ export function createNavMenu({ stack, mapEl, onDay }) {
     stack().open(key);
     stack().whenSettled().then(() => { if (turn === mine && state === 'parked') navEl.hidden = true; });
   };
+  document.getElementById('open-filter').onclick = () => fromMenu('filter');
   document.getElementById('open-day').onclick = () => { close(); onDay(); };
   document.getElementById('open-settings').onclick = () => fromMenu('page:settings');
   document.getElementById('help-button').onclick = () => fromMenu('page:help');

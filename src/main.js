@@ -31,7 +31,8 @@ import { t, translatePage } from './i18n.js';
 import { onTap } from './tap.js';
 import { createStack } from './stack.js';
 import { createLine } from './line.js';
-import { homePage, groupPage } from './home.js';
+import { createStart, groupPage } from './home.js';
+import { createStartChips, START_KEYS } from './start-chips.js';
 import { fetchBoard, fetchDisruptions, fetchDayArrivals, hasKey } from './trafikverket.js';
 import { createDisruptions, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
@@ -197,15 +198,15 @@ const about = createAbout({ map, panel, trains, lateness, mode: modeName, debugA
 
 // ---- ☰'s menu, The day, the way back ----
 const day = createDay({ map, panel, panelEl, stack: () => stack, frame, feeds: () => feeds, net: () => net, fromFiles, now, drawDelay: DRAW_DELAY_MS });
-const nav = createNavMenu({ stack: () => stack, mapEl, onDay: () => day.toggle() });
+const nav = createNavMenu({ stack: () => stack, mapEl, onDay: () => day.toggle(), onState: () => chips?.sync() });
 const back = createBack({ nav, day, stack: () => stack });
 
 // ---- The search; Home and the group pages ----
 const search = createSearch({ get stack() { return stack; }, trains, lateness, lateOf, stations, frame, disruptions, trainPages, favourites });
 const snapshot = (brand = null) => stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frame.all, lateness, stations: stations.all,
   trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand });
-// (Home raised or a company's page: the stats' cancelled trains and today's arrivals are asked for)
-const statsShown = () => { const top = stack?.top(); return (top === 'home' && stack.level > 0) || Boolean(top?.startsWith('co:')); };
+// (Statistik or a company's page: the stats' cancelled trains and today's arrivals are asked for)
+const statsShown = () => { const top = stack?.top(); return top === 'stats' || Boolean(top?.startsWith('co:')); };
 function wantStats() { if (live) stats.wantCancelled(feeds.askCancelled, now()); dayStats?.open(); }
 const pageData = {
   frame: () => frame.all, lateOf, numberOf: id => trains.get(id)?.number ?? '?',
@@ -215,7 +216,7 @@ const pageData = {
   snapshot, filter, still: STAND_SPEED,
   reveal: el => stack.reveal(el), unreveal: () => stack.unreveal(),
   // the lateness bar's colour: a filter with its pill, held on every page
-  legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); homeDef.redraw(); } },
+  legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); start.redraw(); } },
   statsActions: {
     openTrain: id => trainPages.open(id, { go: true }),
     openStation: sig => stationPages.open(sig, { go: true }),
@@ -225,10 +226,12 @@ const pageData = {
   onLight: fn => frame.light(fn),
   fit(list) { if (list.length) map.fitPlaces(list); },   // (a group's trains, all of them in view)
 };
-const homeDef = homePage(pageData);
+// Home (the search bar alone) and its pages: Sparade, Statistik, Filter (src/home.js); the chips (made with the sheet)
+const start = createStart(pageData);
+let chips = null;
 const line = createLine(document.getElementById('line'));
 window.__line = line;   // (for the tools: set(id, { html, onTap, onClose, priority }), clear(id))
-const pills = createFilterPills({ get stack() { return stack; }, filter, line, home: homeDef, frame });
+const pills = createFilterPills({ get stack() { return stack; }, filter, line, home: start, frame });
 map.showRail('trv');
 
 // ---- The live data and how it is doing ----
@@ -236,13 +239,14 @@ const feeds = createFeeds({ mode: { replay, fromFiles, filesBase }, trains, rout
   onBatch: n => status.onBatch(n), wake: () => { stationPages.board.wake?.(); panel.wake?.(); } });
 const status = createStatus({ feeds, trains, stations, stats, panel, frame, mode: { replay, fromFiles }, drawDelay: DRAW_DELAY_MS, now });
 onTap(document.getElementById('status'), () => (stack.top() === 'page:conn' ? stack.back() : stack.open('page:conn')));
-const settingsPage = createSettingsPage({ get stack() { return stack; }, map, day, search, panel, status, pills, home: homeDef, board: stationPages.board, filter, frame, markMotion });
+const settingsPage = createSettingsPage({ get stack() { return stack; }, map, day, search, panel, status, pills, home: start, board: stationPages.board, filter, frame, markMotion });
 setInterval(() => {
   const tNow = now();
   feeds.tick(tNow);
   trainPages.handover();
   if (!day.past) map.sunUpdate();   // (the sun's line moves on once a minute; The day's moment: its own frame)
   status.tick(tNow);
+  chips?.draw();   // (their numbers)
   stats.tick(frame.all, tNow, id => trains.get(id));
   if (statsShown()) {   // (Home's and a company's page draw themselves: src/stack.js every)
     if (live) stats.wantCancelled(feeds.askCancelled, tNow);
@@ -256,7 +260,7 @@ const held = createHeldPages({ holder, pages: {
   help: { el: about.el, name: () => t('aboutApp'), kind: 'help', startLevel: 2 },   // (opens full, as tall as it is)
   conn: { el: status.connPage, name: () => t('connTitle'), kind: 'conn', onShow: () => status.showConn() },
 } });
-const defineNow = createRouter({ home: homeDef, own: key => myTrains?.define(key) ?? ride?.define(key), train: id => trainPages.define(id),
+const defineNow = createRouter({ home: start.home, own: key => start.define(key) ?? myTrains?.define(key) ?? ride?.define(key), train: id => trainPages.define(id),
   station: sig => stationPages.define(sig), picker: key => picker.define(key), dis: disPages, group: key => groupPage(key, pageData),
   held, live, day, stack: () => stack });
 // The sheet's pages scroll themselves at full: with a mouse, our own thin bar for whichever is on top (src/scrollbar.js).
@@ -264,6 +268,7 @@ const pageBar = addScrollbar(null, { host: document.querySelector('#sheet .sh-pa
 stack = createStack({
   sheet: document.getElementById('sheet'),
   define: defineNow,
+  roots: START_KEYS,   // (the chips' cards)
   onPad: h => day.pad(h),
   onChange(pg) {
     nav.pageOnTop(pg.key);
@@ -271,6 +276,7 @@ stack = createStack({
     if (pg.key === 'home' || (pg.def.kind !== 'group' && pg.def.kind !== 'trip')) frame.light(null);
     route.pageOnTop(pg.def.kind);
     pageBar.follow(pg.el);
+    chips?.sync();
   },
   onBack: () => back.step(),
   held: () => back.held(),
@@ -280,14 +286,18 @@ stack.onSearch((on) => {
   document.documentElement.classList.toggle('searching', on);
   if (on) search.open();
   pageBar.follow(on ? document.getElementById('search-results') : stack.pageEl(stack.top()));
+  chips.sync();
 });
+chips = createStartChips({ stack: () => stack, held: () => nav.shown,
+  counts: { dis: () => (live && disruptions.loaded ? start.disChip() : null), saved: () => start.savedCount() } });
+chips.sync();
 // Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
 document.getElementById('sheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], [data-cofilter], .dis-row[data-id]');
   if (!b) return;
   // (a company in Home's filter card: on or off right there, Home stays)
   if (b.dataset.cofilter !== undefined) { filter.toggle('brand', b.dataset.cofilter); return; }
-  if (b.dataset.act === 'comore') { homeDef.toggleCo(); return; }
+  if (b.dataset.act === 'comore') { start.page('filter')?.toggleCo(); return; }
   // (any row opening a company's or a kind's page filters too, as Home's do: its pill stays after a map tap)
   const grp = /^(co|kind):(.*)$/.exec(b.dataset.go ?? '');
   if (grp) { const type = grp[1] === 'kind' ? 'kind' : 'brand'; if (!filter.has(type, grp[2])) filter.toggle(type, grp[2]); }
@@ -319,7 +329,7 @@ const followOnly = id => map.follow(() => frame.placeNow(id), () => {});
 myTrains = createMyTrains({ stack, line, stationName: stations.name, findStations: text => stationsMatching(stations.all, text), openTrain: openTrainRow,
   trainInfo: id => trainPages.trainInfo(id),
   showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(stations.shownAt(st), Math.max(12, map.camera().z)); },
-  redrawHome: () => { if (stack.top() === 'home') homeDef.redraw(); },
+  redrawHome: () => { start.redraw(); chips.draw(); },
   // A saved trip on the map: all its stations in view with their names, only its next train(s) lit while on the map.
   showTrip({ sigs, trains: ids }) {
     const pts = sigs.map(s => stations.get(s)).filter(Boolean).map(stations.shownAt).filter(p => Number.isFinite(p.lon));

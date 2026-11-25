@@ -1,5 +1,5 @@
-/* The one sheet (src/stack.js): the handle, the head (at Home the search and ☰; on a page ‹ and its buttons), the
-   pages. A phone: at the bottom, pulled up it grows up. A computer (440 px and up): it hangs from the top left, 420 px
+/* The one sheet (src/stack.js): the handle (not at Home), the head (at Home the search and ☰; on a chip's card the
+   chips; on a page ‹ and its buttons), the pages; the start's chips (src/start-chips.js). A phone: at the bottom, pulled up it grows up. A computer (440 px and up): it hangs from the top left, 420 px
    wide, pulled down it grows down (src/stack.js turns the drag round). */
 @layer app {
   #sheet { position: fixed; z-index: 6; left: 0; right: 0; bottom: 0; box-sizing: border-box;
@@ -20,12 +20,19 @@
   #sheet-grip { position: fixed; z-index: 4; left: 50%; width: 160px; margin-left: -80px; height: 24px; bottom: var(--sheet-shown, 72px);
     touch-action: none; -webkit-user-select: none; user-select: none; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez); }
   #sheet.dragging ~ #sheet-grip { transition: none; }
+  /* Home: the search bar alone, nothing to pull (Max, 2026-11-25: "Remove its line indicating you can swipe it up"), as
+     much room above the field as under it and at its sides */
+  #sheet[data-page="home"] .sh-grab, #sheet[data-page="home"] ~ #sheet-grip { display: none; }
+  #sheet[data-page="home"] .sh-head { margin-top: var(--bar-edge); }
 
   /* The head: the search bar at Home, a page's bar elsewhere (no text selection: a mouse pull selected text). */
   .sh-head { position: relative; z-index: 2; height: var(--head-h); flex: none; margin: 0 12px; -webkit-user-select: none; user-select: none; }
   .sh-search, .sh-bar { position: absolute; inset: 0; display: flex; align-items: center; gap: 8px; transition: opacity .2s, transform .28s var(--ez); }
   #sheet:not([data-page="home"]) .sh-search { opacity: 0; pointer-events: none; transform: translateY(8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
-  #sheet[data-page="home"] .sh-bar { opacity: 0; pointer-events: none; transform: translateY(-8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
+  #sheet:is([data-page="home"], [data-root]) .sh-bar { opacity: 0; pointer-events: none; transform: translateY(-8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
+  /* A chip's card (src/stack.js roots): the chips in the head, the lit one marked (a computer: under the search box) */
+  .sh-chips { position: absolute; inset: 0; transition: opacity .2s, transform .28s var(--ez); }
+  #sheet:not([data-root]) .sh-chips { opacity: 0; pointer-events: none; transform: translateY(8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
   .sh-field { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; border-radius: 24px; background: var(--hover); display: flex; align-items: center; gap: 8px;
     padding: 0 14px; color: var(--muted); cursor: text; }
   .sh-field:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
@@ -137,11 +144,35 @@
   @keyframes pg-strip-in-l { from { transform: translateY(calc(-1 * var(--edge, 100%))); } }
   @keyframes pg-strip-out-r { to { transform: translateY(var(--edge, 100%)); } }
 
+  /* The start's chips (src/start-chips.js): a row of named buttons, an icon and a number each (as Home's card titles
+     were: src/css/page.css .ct-ic, .ct-n); floating over the map just above the bar at rest, in the card's head while
+     one's card is open. A row too wide scrolls sideways. */
+  .sc-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-user-select: none; user-select: none; }
+  .sc-row::-webkit-scrollbar { display: none; }
+  .sc { flex: none; display: inline-flex; align-items: center; gap: 6px; height: var(--chip-h); padding: 0 12px 0 10px; border: 0; border-radius: calc(var(--chip-h) / 2);
+    background: var(--hover); color: var(--ink); font: 650 14px var(--font); white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }
+  .sc .ct-ic { margin-block: 0; }
+  .sc[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .sc[aria-pressed="true"] :is(.ct-ic, .ct-n) { color: var(--accent-ink); }
+  .sc[aria-pressed="true"] .ct-n { background: color-mix(in srgb, var(--accent-ink) 18%, transparent); }
+  .sc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #chips { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-shown, 72px) + 10px);
+    padding: 6px 0; margin: -6px 0; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s; }
+  #chips .sc { background: var(--card); box-shadow: var(--shadow-s); }
+  /* (stepped aside: a page, the search or ☰'s menu open) */
+  .chips-off #chips { opacity: 0; visibility: hidden; pointer-events: none; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s .18s; }
+
   /* A computer */
   @media (min-width: 440px) {
     #sheet { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; top: calc(var(--sheet-inset) + env(safe-area-inset-top, 0px)); bottom: auto; width: var(--sheet-w); border-radius: var(--radius); box-shadow: var(--shadow); padding: 0;
       transition: height calc(var(--t-glide) * var(--mk, 1)) var(--ez); will-change: height; }
     #sheet-grip { display: none; }
+    /* (the chips under the search box at rest; in a chip's card the box keeps its search field, the chips under it) */
+    #chips { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; max-width: var(--sheet-w); bottom: auto; top: calc(var(--sheet-shown, 72px) + 20px + env(safe-area-inset-top, 0px));
+      transition: top calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s; }
+    #sheet[data-root] .sh-head { height: calc(var(--head-h) + var(--chips-row)); }
+    #sheet[data-root] .sh-search { bottom: auto; height: var(--head-h); opacity: 1; pointer-events: auto; transform: none; visibility: visible; transition: opacity .2s, transform .28s var(--ez); }
+    #sheet[data-root] .sh-chips { top: var(--head-h); }
     /* (the search field 12 px from the top edge, as from its sides) */
     #sheet .sh-head { margin-top: var(--bar-edge); }
     /* The handle band at the bottom, the arrow and its word in the middle: as much room under them as above. */
