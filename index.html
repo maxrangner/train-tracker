@@ -17,7 +17,6 @@
       src: url('/fonts/outfit-latin-ext.woff2') format('woff2');
       unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
     :root {
-      --gap: 10px;
       --radius: 22px;        /* the big cards */
       --radius-s: 16px;      /* small floating things */
       --font: 'Outfit', system-ui, sans-serif;
@@ -41,11 +40,6 @@
     .icon { display: inline-block; vertical-align: -0.18em; flex: none; }
     #map { position: fixed; inset: 0; }
 
-    .card {
-      background: var(--card);
-      border-radius: var(--radius-s);
-      box-shadow: var(--shadow-s);
-    }
     /* ---- The one sheet (Max's pick A, "One sheet", 2026-11-22; src/stack.js; the sketch's dir-a-sheet.css in the
        Soft look). Everything pressed is at the bottom; the top only tells (the live mark). ---- */
     /* The live mark (the pill until 2026-11-22: its words and colours, src/connection.js pillText): a word at the top
@@ -263,11 +257,10 @@
     @keyframes pg-strip-out-r { to { transform: translateY(var(--edge, 100%)); } }
     @media (min-width: 440px) { .sh-pages { --edge: -100%; } }
     @media (prefers-reduced-motion: reduce) { #sheet, #sheet-grip, .sh-search, .sh-bar { transition: none; } .pg.in-r, .pg.in-l, .pg.out-l, .pg.out-r { animation: none; } }
-    /* What the pages hold: no own close buttons (back belongs to the stack: kept, hidden, for the tools), no own
-       scrolling, no own height limits (the sheet has them). */
-    .pg :is(.panel-close, .panel-follow, .panel-star, .menu-close) { display: none !important; }
+    /* What the pages hold: no own close buttons (back belongs to the stack), no own scrolling, no own height limits
+       (the sheet has them). */
     .pg :is(.panel-table, .panel-info-box, .help-body, #settings, #conn-body, .pick-list, .dis-text, .stats-body) { overflow: visible; max-height: none; min-height: 0; margin-right: 0; padding-right: 0; }
-    .pg :is(#panel, #board, #picker, #disruption, #settings-page, #help, #conn-page) { max-height: none !important; height: auto !important; display: flex; flex-direction: column; gap: 6px; }
+    .pg :is(#panel, #board, #picker, #disruption, #settings-page, #help, #conn-page) { display: flex; flex-direction: column; gap: 6px; }
     .pg #disruption { gap: 0; }
     .pg .stats-body { flex: none; }
     .pg .panel-head strong { font-size: 22px; }
@@ -276,7 +269,6 @@
     /* The live map's buttons ride on the sheet's top edge; hidden when it is high on a phone (index.html .sheet-tall). */
     @media (max-width: 439px) { .sheet-high .maplibregl-ctrl-bottom-right, .sheet-high .map-note { opacity: 0; pointer-events: none; } }
     .maplibregl-ctrl-bottom-right { transition: bottom calc(.36s * var(--mk, 1)) cubic-bezier(.2, .85, .25, 1), opacity .18s; }
-    #sheet.dragging ~ #map .maplibregl-ctrl-bottom-right, .sheet-dragging .maplibregl-ctrl-bottom-right { transition: none; }
 
     /* The line above the bar (src/line.js): on the sheet's top edge, clear of the map's buttons at the right. */
     #line { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(var(--sheet-shown, 80px) + 10px);
@@ -309,7 +301,7 @@
       color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
     .rows > .row:first-child { border-top: 0; }
     /* Hover, focus and press follow the rounded shapes (Max, 2026-11-23: a square highlight inside Home's rounded parts) */
-    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more, .menu-link) { border-radius: 12px; }
+    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more) { border-radius: 12px; }
     /* (their lines between them drawn apart, straight: a border on a rounded box curls at its ends) */
     :is(.row, .pick-list button, .bd-row, .dis-fold) { position: relative; }
     html :is(.row, .dis-fold) { border-top-color: transparent; }
@@ -318,7 +310,7 @@
     :is(.row, .dis-fold)::before { top: -1px; border-top: 1px solid var(--line); }
     :is(.pick-list button, .bd-row)::after { bottom: -1px; border-bottom: 1px solid var(--line); }
     .rows > .row:first-child::before, .bd-row:last-child::after, .trip-pair .bd-row::after { border: 0; }
-    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more, .menu-link):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    :is(.row, .pick-list button, .bd-row, .st-brow, .tv-toggle, .dis-fold, .panel-more):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
     /* (a tap on a row's arrow is a tap on its row: Max, 2026-11-23, the card's messages "tapping the arrow did nothing") */
     :is(.tv-toggle, .dis-fold, .panel-more, .row, .cd-stop) .icon { pointer-events: none; }
     .row > .icon { flex: none; color: var(--muted); }
@@ -343,7 +335,6 @@
       font: 600 14.5px var(--font); white-space: nowrap; cursor: pointer; }
     .chip b { font-weight: 800; }
     .chip .dot { margin: 0; }
-    .scopes { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 6px; }
     /* Home's filter card: the companies under the lateness bar (src/home.js companiesHtml; Max, 2026-11-24), a picked one
        ringed, "N more ⌄" in the accent colour */
     /* (tight: Max, 2026-11-24 "Way too much padding between the filters"; a dark card's buttons a step lighter than it,
@@ -420,9 +411,6 @@
        is never set too: with the line above the bar the note stretched over the whole map ("Link copied", 23 Nov). */
     #map .map-note { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; right: calc(10px + env(safe-area-inset-right, 0px)); }
     @media (min-width: 440px) { #credit { left: calc(440px + env(safe-area-inset-left, 0px)); } }
-        .panel-star[aria-pressed="true"] { color: var(--c-some); }
-    .panel-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    .menu-text { margin: 0; color: var(--ink); }
 
     /* ---- The sheet's ideas (build plan parts 3 and 6, 2026-11-23) ---- */
     /* A train's page under its tiles: why it stands, Share, Add my change. */
@@ -485,7 +473,6 @@
     .trip-chg.rescue { background: var(--t-ontime-bg); color: var(--t-ontime); margin-top: 4px; }   /* a lost change: the later train that works */
     /* A new trip as a route (Max's pick A, 2026-11-23): the stations on a line with dots, each a pill (From grey, a
        Change yellow with its ×, To big in the accent colour), six dots to drag it; a tapped pill is the search. */
-    .nt-hint { margin-top: -6px; font-size: 13.5px; }
     .nt-route { position: relative; display: grid; gap: 0; }
     .nt-route::before { content: ''; position: absolute; left: 15.5px; width: 3px; border-radius: 2px; background: var(--line);
       top: var(--l0, 30px); height: calc(var(--l1, 90px) - var(--l0, 30px)); }
@@ -524,10 +511,6 @@
     .nt-stop.lifted .nt-pill { box-shadow: 0 10px 28px rgba(0, 0, 0, .35), inset 0 0 0 2px var(--accent); transform: rotate(-1deg); }
     .nt-gap { margin-left: 40px; border: 2px dashed var(--accent); border-radius: 14px; opacity: .7; box-sizing: border-box; }
     .nt-save { justify-self: start; align-self: flex-start; background: var(--accent); color: var(--accent-ink); }   /* (as wide as its words) */
-    /* a saved trip's Edit and Delete; Delete armed by a first tap: red, "Tap again to delete" */
-    .trip-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: -4px; }
-    .trip-acts .chip { min-height: 38px; font-size: 14px; }
-    .trip-acts .trip-del.armed { background: var(--t-late-bg); color: var(--t-late); font-weight: 800; }
     .nt-save:disabled { opacity: .45; cursor: default; }
     /* The line above the bar's own mark (a trip, a change, a train you seem to be on). */
     #line .ln-ic { flex: none; display: grid; color: var(--accent); }
@@ -563,7 +546,6 @@
     .shop-line.in { animation: shop-in .6s ease both; }
     @keyframes shop-in { from { opacity: 0; transform: translate(-50%, 8px); } }
     @media (prefers-reduced-motion: reduce) { .shop-line.in { animation: none; } }
-    .help-tips { margin: 0; padding: 0 0 0 18px; display: grid; gap: 8px; font-size: 14.5px; line-height: 1.4; }
     .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
     .set-row > span:first-child, .set-row > label { font-size: 14px; }
     .seg { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--hover); }
@@ -605,10 +587,6 @@
     #settings { overflow: auto; min-height: 0; display: grid; gap: 4px; }
     .set-data { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
     /* The stats page's own look: src/stats.css (loaded by src/stats-page.js). */
-    .menu-link { font: inherit; font-size: 15px; text-align: left; border: 0; background: transparent; color: var(--ink);
-      padding: 10px 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-radius: 12px; }
-    .menu-link:hover, .menu-link:focus-visible { background: var(--hover); outline: none; }
-    .menu-link > span { color: var(--muted); display: flex; align-items: center; }
     .help-body { overflow: auto; min-height: 0; font-size: 14px; line-height: 1.45; }
     .help-body h3 { font-size: 13px; margin: 18px 2px 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
     .help-body a { color: var(--accent); text-decoration: none; font-weight: 600; }
@@ -633,7 +611,6 @@
     .about-credits b { font-weight: 600; }
     .about-note { margin: 12px 2px 4px; color: var(--muted); font-size: 12.5px; }
     .about-version { margin: 4px 2px 0; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; user-select: text; }
-    .menu-section { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
     .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
     /* The map's buttons (Soft): round white groups. + and − only with a mouse (a pinch zooms on a phone; Max, 2026-11-15);
        src/map.js sets .touch and .turned on the map. */
@@ -656,7 +633,6 @@
     .maplibregl-map:not(.turned) .maplibregl-ctrl-compass .maplibregl-ctrl-icon { display: none; }
     .maplibregl-map.turned .maplibregl-ctrl-compass .ctrl-3d { display: none; }
     .sheet-tall .maplibregl-ctrl-bottom-right { visibility: hidden; }
-    .sheet-jump .maplibregl-ctrl-bottom-right { transition: none; }   /* (out from behind a tall sheet: in place at once; src/sheet.js) */
     .maplibregl-ctrl-group { border-radius: 16px; background: var(--card); box-shadow: var(--shadow-s); overflow: hidden; }
     .maplibregl-ctrl-group:not(:empty) { box-shadow: var(--shadow-s); }
     .maplibregl-ctrl.maplibregl-ctrl-group button { width: 46px; height: 46px; }
@@ -794,8 +770,6 @@
     .dis-row b { display: block; font-weight: 700; }
     .dis-row.dis-all > svg:last-child { margin-left: auto; align-self: center; color: var(--muted); flex: none; }
     .dis-sub { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
-    .dis-dot { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 50%; margin-top: 4px; }
-    .dis-dot.yellow { background: var(--dis-1); } .dis-dot.orange { background: var(--dis-2); } .dis-dot.red { background: var(--dis-3); }
     /* Rail work vs problems (Max, 2026-11-18): ⚠ in the level's colour, a cone in grey; rail work folded at the end. */
     .dis-ic { flex: none; width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center; }
     .dis-ic.yellow { color: var(--dis-1); background: color-mix(in srgb, var(--dis-1) 16%, transparent); }
@@ -814,12 +788,6 @@
     .dis-works.open { grid-template-rows: 1fr; margin-top: 0; }
     .dis-works-in { min-height: 0; overflow: hidden; display: grid; gap: 6px; align-content: start; }
     @media (prefers-reduced-motion: reduce) { .dis-works, .dis-fold > .icon { transition: none; } }
-    /* A disruption opened from the list: the back arrow before its title (src/main.js drawDisruption). */
-    .panel-back { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; margin-right: 2px;
-      border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
-    .panel-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-    #disruption .panel-head:has(.panel-back) { justify-content: flex-start; }
-    #disruption .panel-head:has(.panel-back) > strong { flex: 1; min-width: 0; }
     #disruption .panel-head strong { display: flex; align-items: baseline; gap: 10px; font-size: 19px; line-height: 1.25; }
     #disruption .dis-text { overflow: auto; min-height: 0; white-space: pre-line; font-size: 15px; line-height: 1.5; padding: 12px 14px; border-radius: 14px; background: var(--hover); }
     .dis-source { font-size: 12px; margin: 8px 0 0; }
@@ -871,13 +839,12 @@
     .fresh { animation: fresh-in .3s ease-out; }
     @keyframes fresh-in { from { opacity: 0; } }
     .cd-done.moving, .cd-train.moving { transition: width .7s cubic-bezier(.2, .9, .25, 1), left .7s cubic-bezier(.2, .9, .25, 1); }
-    /* Compact ↔ full (Max, 2026-11-21: on a slow drag the trip line "quickly disappears and the i and star button
-       appears ... Should be animated and smooth"): dragged up, the compact card's own parts fade with the finger
-       (--fold, src/sheet.js); then the parts that come into view fade in, "i" and the star grow in (.switching,
-       src/panel.js). The same with the handle, "All stops" / "Less" and back down. */
-    #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: calc(1 - var(--fold, 0)); transition: opacity .2s; }
-    #panel.dragging:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
-    /* (no fade-in of the parts on the switch itself since 2026-11-25: what is shown stays, the edge reveals the rest) */
+    /* The compact card's trip line, red alert and "All stops": full strength (they stay so while the rest of the old
+       card dims on a card-to-card swap, .busy above: same weight, this rule later), a .2 s fade on the phone's collapse.
+       What the finger-fold rule (--fold, the sheets' drag before the one sheet) left; kept as it was in the cleanup of
+       2026-11-25. (No fade-in of the parts on the switch itself since 2026-11-25: what is shown stays, the edge reveals
+       the rest.) */
+    #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { opacity: 1; transition: opacity .2s; }
     @media (prefers-reduced-motion: reduce) {
       #panel:not(.full) :is(.cd-trip, .panel-alert, .panel-more) { transition: none; }
     }
@@ -890,23 +857,16 @@
     .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 17px; }
     .panel-head strong { font-weight: 800; }
     .panel-buttons { display: flex; align-items: center; gap: 6px; }
-    .panel-follow {
-      font: inherit; font-size: 14px; font-weight: 600;
-      border: 1.5px solid var(--line); border-radius: 999px; padding: 7px 14px;
-      background: var(--bg); color: var(--ink); cursor: pointer;
-    }
-    .panel-follow[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-    .panel-close, .panel-star, .panel-info, .menu-close {
+    .panel-info {
       width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none;
       border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0;
     }
-    .panel-close:focus-visible, .panel-info:focus-visible, .menu-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .panel-info:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     /* (the card's top line: "i", Share, ☆ and Follow one height, 40 px; Max, 2026-11-24: "'i' pill is smaller than the
        others") */
     #panel .panel-head :is(.panel-info, .sh-star, .sh-act) { width: 40px; min-width: 40px; height: 40px; padding: 0; }
     #panel .panel-head .sh-follow { height: 40px; }
     #panel .panel-buttons { gap: 6px; }
-    .panel-follow { display: inline-flex; align-items: center; gap: 6px; }
     /* The train card (src/panel.js; Max, 2026-11-15, sketch C). Compact: the number big with its company, two tiles
        (the lateness now; the minutes to a stop, which opens the stops ahead), the trip as one line, "All stops".
        Full (.full): the star, Trafikverket's notes and the timeline instead of the line. No × on a phone. */
@@ -944,19 +904,12 @@
       #panel > :not(.panel-head), #panel .cd > * { transition: opacity .2s; }
       #sheet[data-page="train"][data-h="0"]:not(.dragging) :is(#panel > :not(.panel-head):not(.cd), #panel .cd > *) { opacity: 0; pointer-events: none; }
     }
-    #panel:not(.full) .panel-star, #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
+    #panel:not(.full) .tv-box, #panel:not(.full) .panel-table, #panel.full .cd-trip, #panel.full .panel-alert,
     #panel:not(.full) .panel-more .less, #panel.full .panel-more .more { display: none; }
     /* "i" (src/train-info.js; Max, 2026-11-20): on the full card, the train's own numbers instead of the notes and stops. */
     #panel:not(.full) .panel-info, #panel:not(.full) .panel-info-box, #panel:not(.info) .panel-info-box, #panel.info .tv-box, #panel.info .panel-table { display: none; }
-    #panel:not(.full) .tl-switch, #panel.info .tl-switch { display: none; }
     .panel-info[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
 
-    /* No × on a phone (a drag down or a tap on the map closes): the train card (Max, 2026-11-15), the board and a
-       disruption's card too (his answer 2A). */
-    @media (max-width: 439px) { #panel .panel-close, #board .panel-close, #disruption .panel-close { display: none; } }
-    /* The small card may grow past 45 % when its content needs it (a two-line status and a red line: Max, 2026-11-16),
-       up to 60 %: the followed train is held about 27 % from the top (src/map.js defaultFocus), still above it. */
-    @media (max-width: 439px) { #panel:not(.full):not(.picking) { max-height: 60vh; } }
     .cd { display: contents; }
     /* The two tiles the same width (Max, 2026-11-21, option l C; 3 : 2 before): the stop's name fits on one line. */
     .cd-tiles { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 12px; flex: none; }
@@ -994,7 +947,6 @@
     @keyframes cd-close { from { max-height: 46vh; opacity: 1; } to { max-height: 0; opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .cd-pick.opening, .cd-pick.closing { animation-duration: 1ms; } }
     .cd-pick > p { margin: 12px 2px 6px; font-size: 13.5px; color: var(--muted); }
-    #panel.picking { max-height: calc(100% - 78px - env(safe-area-inset-top, 0px)); }
     .cd-list { overflow: auto; min-height: 0; max-height: 40vh; border-radius: 16px; background: var(--hover); padding: 4px; touch-action: pan-y; }
     .cd-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 12px; background: none;
       font: inherit; font-size: 15px; color: var(--ink); text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; }
@@ -1084,18 +1036,6 @@
       background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
     #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #panel .tv-box.open .panel-tvnotes.board-msg-list { padding: 2px 12px; margin: 0; gap: 0; max-height: none; overflow: visible; }
-    /* "All places" (src/panel.js; Max, 2026-11-21, sketch C): the switch above the stops. */
-    .tl-switch { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 4px 2px 0; padding: 7px 12px;
-      background: var(--hover); border-radius: 14px; font-weight: 650; }
-    .tl-switch small { display: block; color: var(--muted); font-weight: 500; font-size: 12.5px; }
-    .tl-switch-btn { position: relative; flex: none; width: 50px; height: 30px; padding: 0; border: 0; border-radius: 999px; background: var(--line); cursor: pointer; }
-    .tl-switch-btn::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--bg);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25); transition: transform .18s; }
-    .tl-switch-btn[aria-checked="true"] { background: var(--accent); }
-    .tl-switch-btn[aria-checked="true"]::after { transform: translateX(20px); }
-    .tl-switch-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    @media (prefers-reduced-motion: reduce) { .tl-switch-btn::after { transition: none; } }
-    .tv-warn { display: inline-flex; align-items: center; gap: 3px; color: var(--late); font-weight: 700; }
     .panel-tvnote { margin: 0; }
     .panel-tvnote.problem { color: var(--late); font-weight: 600; }
     .panel-tvnote span { color: var(--muted); font-weight: 400; }
@@ -1261,16 +1201,6 @@
     .ab-rider { position: absolute; left: 0; z-index: 2; }
     .tl-row.abroad.to .ab-rider { top: 3px; }
     .tl-row.abroad.from .ab-rider { bottom: 3px; }
-    table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
-    th { text-align: left; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--bg); }
-    th, td { padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-    td.st { white-space: normal; }
-    tr.passed td { color: var(--muted); }
-    tr.next td { font-weight: 600; }
-    tr.canceled td { color: var(--late); text-decoration: line-through; }
-    td.dev { color: var(--late); text-align: right; }
-    #panel .trk { text-align: right; padding-right: 0; font-weight: 600; }
-    .est { color: var(--muted); font-weight: 400; }
     /* Picking one of several trains standing close together ("3 trains") */
     .pick-list { list-style: none; margin: 6px 0 0; padding: 0; overflow: auto; min-height: 0; }
     .pick-list button { width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 9px 4px; border: 0; border-bottom: 1px solid var(--line);
@@ -1295,7 +1225,6 @@
       background: var(--hover); color: var(--ink); }
     .board-q:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
     .board-found { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
-    #board.finding { height: 100vh; }   /* as tall as a full sheet may be (its max-height), from the start: no jump when the day comes */
     .board-q::-webkit-search-cancel-button { display: none; }   /* (one × only: the button beside the tabs closes the search) */
     .bd-row.gone { opacity: .5; }
     .bd-head { display: grid; grid-template-columns: 50px 1fr auto; column-gap: 10px; padding: 4px 10px 4px 0; font-size: 12px; font-weight: 600;
@@ -1314,13 +1243,6 @@
     .bd-tag .tag { margin-left: 0; }
     .bd-row.canceled .bd-time, .bd-row.canceled .bd-name b { text-decoration: line-through; color: var(--muted); }
     .bd-row .tl-trk { min-width: 22px; text-align: center; }
-    table.board td { vertical-align: top; padding: 5px 6px 5px 0; }
-    table.board tbody tr { cursor: pointer; }
-    table.board tbody tr:hover td { background: var(--hover); }
-    table.board .sub { color: var(--muted); font-size: 12px; }
-    table.board .late { color: var(--late); font-weight: 600; }
-    table.board td.trk { text-align: right; font-weight: 600; }
-    table.board td.st { width: 100%; }
 
     /* The start screen (Max, 2026-11-13): over everything from the first moment until the map shows only Sweden
        (src/map.js: shown), then it fades. The logo is a placeholder until the real one exists. Its colours follow
@@ -1441,7 +1363,7 @@
   <div id="line" hidden></div>
   <!-- The one sheet (Max's pick A, "One sheet", 2026-11-22; src/stack.js): the handle, the head (at Home the search
        and ☰; on a page the back chip naming the page under it, ☆ and Follow), the pages. -->
-  <div id="sheet" data-page="home" data-h="0" data-lvl="low">
+  <div id="sheet" data-page="home" data-h="0">
     <div class="sh-grab" aria-hidden="true"><i></i></div>
     <div class="sh-head">
       <div class="sh-search">
@@ -1470,8 +1392,7 @@
   <!-- What the pages show, waiting here while not shown (src/main.js moves each into its page). -->
   <div id="page-holder" hidden>
   <div id="settings-page" hidden>
-    <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong>
-      <button class="panel-close" type="button" aria-label="Close settings" data-t-aria="closeSettings"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+    <div class="panel-head"><strong id="settings-title" data-t="settings">Settings</strong></div>
     <div id="settings">
       <div class="set-row"><span data-t="trains">Trains</span>
         <div class="seg" data-key="trainStyle" role="group" aria-label="Trains" data-t-aria="trains"><button type="button" data-v="toy" data-t="toys">Compact</button><button type="button" data-v="real" data-t="realSize">Realistic</button><button type="button" data-v="symbol" data-t="symbolOnly">Symbol</button></div></div>
@@ -1524,16 +1445,14 @@
   </div>
   <!-- The connection screen (Max's pick Y, 2026-11-18), from the live mark: src/connection.js draws it. -->
   <div id="conn-page" hidden>
-    <div class="panel-head"><strong id="conn-title" data-t="connTitle">Connection</strong>
-      <button class="panel-close" type="button" aria-label="Close" data-t-aria="close"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+    <div class="panel-head"><strong id="conn-title" data-t="connTitle">Connection</strong></div>
     <div id="conn-body"></div>
   </div>
   <!-- About (round 4, Max 2026-11-15: "Skip the tutorial text. Main point here is credits, a buy me coffee link, and a
        button to submit bugs"). The coffee button waits for his Ko-fi link (src/main.js KOFI_URL); the bug button does
        nothing yet ("Leave non functional for now"). The ids stay #help, #help-title, #help-button (tools). -->
   <div id="help" hidden>
-    <div class="panel-head"><strong id="help-title" data-t="aboutApp">About Spårat</strong>
-      <button class="panel-close" type="button" aria-label="Close" data-t-aria="closeHelp"><svg class="icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button></div>
+    <div class="panel-head"><strong id="help-title" data-t="aboutApp">About Spårat</strong></div>
     <div class="help-body">
       <div class="about-top"><span class="about-logo"></span><p data-t="aboutLine">A live map of Sweden's trains</p></div>
       <div class="about-buttons">

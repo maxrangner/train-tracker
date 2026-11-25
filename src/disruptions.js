@@ -134,8 +134,7 @@ export function rowHtml(d, stationName, now) {
 
 // The card's contents.
 export function cardHtml(d, stationName, now) {
-  return `<div class="panel-head"><strong class="dis-title">${kindIcon(d)} ${esc(d.header)}</strong>` +
-    `<button class="panel-close" type="button" aria-label="${esc(t('close'))}">${icon('close')}</button></div>` +
+  return `<div class="panel-head"><strong class="dis-title">${kindIcon(d)} ${esc(d.header)}</strong></div>` +
     `<p class="panel-note">${esc(d.kind)} · ${esc(placesText(d, stationName))}<br>${esc(timesText(d, now))}</p>` +
     `<div class="dis-text">${esc(d.text)}</div><p class="panel-note dis-source">${esc(t('disruptionSource'))}</p>`;
 }

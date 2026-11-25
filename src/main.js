@@ -17,7 +17,7 @@ import { favourites } from './favourites.js';
 import { settings, setSetting, onSettingChange } from './settings.js';
 import { t, translatePage, lang } from './i18n.js';
 import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
-import { onTap } from './sheet.js';
+import { onTap } from './tap.js';
 import { createStack, hooks } from './stack.js';
 import { createLine } from './line.js';
 import { homePage, groupPage, groupOf, trainRow, stationRow, groupRow } from './home.js';
@@ -40,7 +40,7 @@ import kofiCup from './kofi-cup.png';
 import { abroadEnds } from './abroad.js';
 import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
-import { roll, arrive, reduceMotion } from './motion.js';
+import { arrive, reduceMotion } from './motion.js';
 // The sheet's ideas (build plan parts 3 and 6, 2026-11-23): My trains and the change, "You seem to be on", Peek, the
 // shop window, Share, "Why are we standing?".
 import { createMyTrains } from './my-trains.js';
@@ -171,8 +171,7 @@ let myTrains = null, ride = null, peek = null, shop = null;   // the sheet's ide
 const panelEl = document.getElementById('panel');
 const panel = createPanel(panelEl, {
   stationName,
-  // In the sheet: its × takes its page away, "All stops" raises the sheet, a stop opens its station's page.
-  onCloseTap: id => stack.close(`train:${id}`),
+  // In the sheet: "All stops" raises the sheet, a stop opens its station's page.
   onMore: full => stack.setLevel(full ? 2 : 1),
   // its messages opened (shown at once: the sheet rises or the page scrolls to them; Max, 2026-11-23) or shut
   onFold: (open, box) => (open ? stack.reveal(box) : stack.unreveal()),
@@ -396,7 +395,6 @@ function along(c, from, to) {
   return pts;
 }
 const rideZoom = z => Math.min(14, Math.max(z, 12.5));
-let lastCardHalf = 0;
 // The open card's height: its first fit once it is in exactly (the sheet then moves once, up or down: no bounce); after
 // that only taller as parts come in, or either way within 1.5 s of the person touching the card (the chooser shut).
 function refitCard() {
@@ -404,7 +402,7 @@ function refitCard() {
   const done = Boolean(panelEl.querySelector('.panel-more, .state.empty, .state.error'));
   if (done && def?.fitted?.() === false) { stack.refit(); return; }
   stack.refit({ grow: performance.now() - cardTouched > 1500 });
-}   // the last train card's half, measured (px from its page's top): a new card's until its own is in
+}
 
 // ---- A train ----
 // A train card's buttons glide to where the new height puts them (Max, 2026-11-25: "Train cards expanded or
@@ -466,7 +464,7 @@ function trainPage(id) {
   if (!m0) return null;
   let myEl = null;   // this train's page (show): the card goes back to the holder only from here
   let wantHalf = 0, wantLow = 0;   // the card's half and low, last measured while compact (half(), low() below)
-  let fitted = false;              // its whole card measured once (its first fit: stack.refit's settle)
+  let fitted = false;              // its whole card measured once (def.fitted: until then refitCard waits)
   const number = () => String(meta()?.number ?? m0.number);
   // How far down the card goes (px from the page's top edge): whole, to "More", or condensed (its head and the line
   // under it). Still coming in (no "More" yet, no empty or error state): the last train card's (the sheet waits where
@@ -492,7 +490,7 @@ function trainPage(id) {
       return wantLow;
     }
     const b = below(panelEl.querySelector('.panel-more')) || below(panelEl);
-    if (b > 0) { lastCardHalf = wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4; fitted = true; }
+    if (b > 0) { wantHalf = Math.ceil((b + CARD_GAP) / 4) * 4; fitted = true; }
     return wantHalf;
   }
   return {
@@ -667,7 +665,6 @@ const board = createBoard(boardEl, {
   loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
   stationName,
   onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
-  onCloseTap: () => board.openSig && stack.close(`station:${board.openSig}`),
   // The station's own messages (live only).
   messages: live ? sig => fetchStationMessages(sig, now()) : null,
 });
@@ -742,12 +739,11 @@ function pickPage(key) {
     name: () => t('trainsHere', rows.length), kind: 'pick',
     show(el) {
       mine = el;
-      pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
-        `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
+      // (the empty .panel-buttons: a flex item before the sheet's ‹ and buttons, its gap part of the look)
+      pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons"></span></div><ul class="pick-list">` +
         rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
       pickerEl.hidden = false;
       el.append(pickerEl);
-      pickerEl.querySelector('.panel-close').onclick = () => stack.close(key);
       for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => openTrain(rows[Number(b.dataset.i)].id);
     },
     // Half: all its rows, up to about half the screen (Max's phone, 2026-11-23: "2 trains" opened showing one row and
@@ -777,8 +773,7 @@ function heldPage(el, { name, kind, onShow, onHide, startLevel }) {
 // (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
 // attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
 const helpEl = document.getElementById('help');
-// Help & About: a page in the sheet from ☰ (2026-11-22). Its × is hidden (back belongs to the stack) and kept for the tools.
-helpEl.querySelector('.panel-close').onclick = () => stack.close('page:help');
+// Help & About: a page in the sheet from ☰ (2026-11-22); back belongs to the stack.
 // About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
 // "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
 // filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
@@ -889,7 +884,7 @@ for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.d
 // its bar at the bottom) it comes out above the sheet instead. The page behind holds still while it is open (src/stack.js
 // frozen, the sheet's menu-open); ☰, a map tap, Esc or the phone's back close it.
 const NAV_GAP = 10;   // between the bar (or the sheet's edge) and the card
-let navOpen = false, navSide = 'below', navEdge = 0;
+let navOpen = false, navSide = 'below';
 function placeNav() {
   const a = navButton.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
   const w = navEl.offsetWidth, h = navEl.offsetHeight;
@@ -897,8 +892,8 @@ function placeNav() {
   // (a computer at rest: under the whole box, its arrow band included; Max, 2026-11-24 "Menu still not below the whole
   // search pill")
   const under = innerWidth >= 440 && stack.level === 0 ? s.bottom : a.bottom;
-  if (under + NAV_GAP + h <= innerHeight - 10) { navSide = 'below'; navEdge = under; navEl.style.top = `${Math.round(under + NAV_GAP)}px`; }
-  else { navSide = 'above'; navEdge = s.top; navEl.style.top = `${Math.round(Math.max(10, s.top - NAV_GAP - h))}px`; }
+  if (under + NAV_GAP + h <= innerHeight - 10) { navSide = 'below'; navEl.style.top = `${Math.round(under + NAV_GAP)}px`; }
+  else { navSide = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - NAV_GAP - h))}px`; }
 }
 // (out from under the edge it hangs from: the card moves its whole height plus the gap, cut where that edge is, so it
 // shows only on its own side of it; the shadow keeps its room at the other sides)
@@ -935,8 +930,8 @@ function openNav() {
   else go();
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
-// (now: a page coming up from the menu or over it; the card slides back as when shut by ☰, the page comes meanwhile)
-function closeNav({ now = false } = {}) {
+// (also when a page comes up from the menu or over it: the card slides back as when shut by ☰, the page comes meanwhile)
+function closeNav() {
   if (!navOpen) return;
   navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
@@ -947,10 +942,9 @@ function closeNav({ now = false } = {}) {
     navEl.getAnimations().forEach(x => x.cancel());
   };
   if (navEl.style.visibility === 'hidden') { navEl.style.visibility = ''; shut(); return; }
-  void now;
   slideNav(false).then(shut);
 }
-onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
+onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: tap.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
 // map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
 // (inside the sheet only ☰ does anything while it is open: src/stack.js frozen; the card's choices do. Outside them and the
@@ -1034,8 +1028,8 @@ function defineNow(key) {
 }
 
 document.getElementById('open-day').onclick = () => { closeNav(); if (hooks.onDay) hooks.onDay(); else map.note(t('daySoon')); };
-document.getElementById('open-settings').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:settings'); };
-document.getElementById('help-button').onclick = () => { closeNav({ now: true }); navBack = true; stack.open('page:help'); };
+document.getElementById('open-settings').onclick = () => { closeNav(); navBack = true; stack.open('page:settings'); };
+document.getElementById('help-button').onclick = () => { closeNav(); navBack = true; stack.open('page:help'); };
 
 // ---- The search: a train number or a station ----
 const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
@@ -1246,7 +1240,6 @@ requestAnimationFrame(frame);
 const settingsPage = document.getElementById('settings-page');
 const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
 const settingsEl = document.getElementById('settings');
-settingsPage.querySelector('.panel-close').onclick = () => stack.close('page:settings');
 // A change (also Look on Auto when the phone switches between light and dark): each part shows it.
 onSettingChange((key) => {
   if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
@@ -1366,7 +1359,6 @@ const conn = createConnection(connPage, {
 });
 let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
 onTap(document.getElementById('status'), () => (stack.top() === 'page:conn' ? stack.back() : stack.open('page:conn')));
-connPage.querySelector('.panel-close').onclick = () => stack.close('page:conn');
 // The line above the bar while the map shows only some trains (src/filter.js; until 2026-11-22 a bar under the top
 // bar): what is shown, a tap opens that group's page, × shows every train again.
 const line = createLine(document.getElementById('line'));
@@ -1454,7 +1446,6 @@ function disPage(id) {
     const d = disruptions.byId(id);
     if (!d) return;
     el.innerHTML = `<div id="disruption">${cardHtml(d, stationName, now())}</div>`;
-    el.querySelector('.panel-close').onclick = () => stack.close(`dis:${id}`);
   };
   return {
     name: () => disruptions.byId(id)?.header ?? t('disruptions'), kind: 'dis',
@@ -1825,7 +1816,7 @@ stack = createStack({
     // (before the next frame: a task later, a computer's "Mer ⌄" showed for two frames first)
     if (pg.key === 'home' && navBack) { navBack = false; queueMicrotask(openNav); }
     // (the menu is Home's: another page coming up, from the status pill or the map, shuts it)
-    if (pg.key !== 'home' && navOpen) closeNav({ now: true });
+    if (pg.key !== 'home' && navOpen) closeNav();
     // Home: the lateness bar's colour lit (a group's page lights its own trains itself, src/home.js)
     if (pg.key === 'home') light(null);
     else if (pg.def.kind !== 'group' && pg.def.kind !== 'trip') light(null);
