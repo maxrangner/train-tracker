@@ -31,10 +31,14 @@ export const easing = (name = '') => token(name ? `--ez-${name}` : '--ez');
 // A box's height glides from `from` (px, measured before it changed) to its height now, so what is under it moves with
 // it, not in one jump (a station's messages, a train's notes, Home's filter card; ui-sweep, 2026-11-25); to: its new
 // height when measured already. Nothing with "reduce motion" or when the height is the same. Returns a promise of its end.
-export function glideHeight(el, from, to = el?.offsetHeight) {
+// from and to are its whole height (offsetHeight), so the glide counts its padding in them too (border-box): until
+// 2026-11-25 a box with padding glided that much too tall and dropped by it at the end (Home's filter card: 22 px,
+// Max: "the bottom jumps a few pixels"). time, curve: the tokens' names (default a fold's; 'glide' and '' when the
+// sheet moves with it, so the two are one move).
+export function glideHeight(el, from, to = el?.offsetHeight, { time = 'fold', curve = 'ui' } = {}) {
   if (!el || !from || !to || from === to || reduceMotion()) return Promise.resolve();
   el.style.overflow = 'hidden';
-  return el.animate([{ height: `${from}px` }, { height: `${to}px` }], { duration: ms('fold'), easing: easing('ui') })
+  return el.animate([{ height: `${from}px`, boxSizing: 'border-box' }, { height: `${to}px`, boxSizing: 'border-box' }], { duration: ms(time), easing: easing(curve) })
     .finished.catch(() => {}).then(() => { el.style.overflow = ''; });
 }
 

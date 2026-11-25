@@ -14,13 +14,13 @@ import { settings } from './settings.js';
 import { glideHeight } from './motion.js';
 import { isWide } from './layout.js';
 import { esc } from './html.js';
-import { icon } from './icons.js';
+import { icon, titleIcon, titleChip, titleAttrs } from './icons.js';
 import { tagHtml } from './tag.js';
 import { lateClass } from './lateness.js';
 import { brandColour } from './stats.js';
 import { kindOf, KINDS } from './train-kinds.js';
 import { createStatsPage } from './stats-page.js';
-import { rowHtml as disRowHtml, isWork } from './disruptions.js';
+import { rowHtml as disRowHtml, isWork, levelName } from './disruptions.js';
 
 const dot = c => `<i class="dot" style="background:${c}"></i>`;
 const plural = (n, one, many) => (n === 1 ? one : many);
@@ -56,15 +56,25 @@ export function starredRows({ favourites, stations, onMap }) {
 // attrs: more attributes for the button (trusted HTML: escape what goes in them)
 export const chip = (key, html, n, attrs = '') => `<button type="button" class="chip" data-go="${esc(key)}"${attrs}>${html}${n === undefined ? '' : ` <b>${n}</b>`}</button>`;
 
+// An element's inside drawn again only when its words changed; true when it was. (What a draw changes after this, as
+// the filter's one-row fit, is done again by its caller after every redraw: the words kept here are only what was put.)
+const drawnHtml = new WeakMap();
+export function swap(el, html) {
+  if (drawnHtml.get(el) === html) return false;
+  el.innerHTML = html;
+  drawnHtml.set(el, html);
+  return true;
+}
 // A small helper for a page made of parts: each part is a div drawn again only when its words changed.
+// put(key, html, cls) -> { sec: the part, drew: it was drawn again now }
 export function parts(el) {
   const secs = new Map();
   return (key, html, cls = '') => {
     let s = secs.get(key);
     if (!s) { s = document.createElement('div'); s.className = `sec ${cls}`; secs.set(key, s); el.append(s); }
-    if (s._h !== html) { s.innerHTML = html; s._h = html; }
+    const drew = swap(s, html);
     s.hidden = !html;
-    return s;
+    return { sec: s, drew };
   };
 }
 
@@ -97,28 +107,39 @@ export function homePage(d) {
       `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}</button>`).join('')}${more}</div>`;
   }
   // A computer: the companies and "N more" on one row (Max, 2026-11-25: "Filter operators including 'n till' should only
-  // be one row"): the last companies that don't fit go into "N more" (a picked one always stays). Measured when the
-  // card's words or width changed.
-  function fitCoRow(sec) {
-    const box = sec?.querySelector('.co-filter');
-    if (!box || coOpen || !isWide() || !sec.offsetParent || !box.clientWidth) return;
-    if (sec._fit === sec._h && sec._fitW === box.clientWidth) return;
-    sec._fit = sec._h; sec._fitW = box.clientWidth;
-    const chips = [...box.querySelectorAll('.co-f')], more = box.querySelector('.co-more');
+  // be one row"): the last companies that don't fit go into "N more" (a picked one always stays). Part of drawing the
+  // card: every time it is drawn again (drew), and when its width changed, all its candidates are shown, measured once
+  // and the last ones hidden, in the same task (nothing shows in between). A phone: all candidates, no fitting.
+  // fitAt: a row of companies -> the width it was fitted at (a redrawn row is a new element; nothing else is kept).
+  const fitAt = new WeakMap();
+  function fitCoRow(box, drew) {
+    if (!box || coOpen) return;
+    const w = isWide() ? box.clientWidth : -1;
+    if (w === 0) return;   // (not laid out now: fitted by the draw that shows it)
+    if (!drew && fitAt.get(box) === w) return;
+    fitAt.set(box, w);
+    const chips = [...box.querySelectorAll('.co-f')], more = box.querySelector('.co-more'), total = Number(box.dataset.total);
+    const say = (gone) => {
+      const rest = total - (chips.length - gone);
+      more.hidden = rest <= 0;
+      more.innerHTML = `${esc(t('coMore', rest))}${icon('chevronDown', 16)}`;
+    };
+    for (const c of chips) c.hidden = false;
+    say(0);
+    if (w < 0) return;
     const top0 = (chips[0] ?? more).offsetTop;
     const wraps = () => [...box.children].some(c => !c.hidden && c.offsetTop > top0 + 2);
     let gone = 0;
     for (let i = chips.length - 1; i >= 0 && wraps(); i--) {
       if (chips[i].classList.contains('on')) continue;
-      chips[i].hidden = true; gone++;
-      const rest = Number(box.dataset.total) - (chips.length - gone);
-      more.hidden = false;
-      more.innerHTML = `${esc(t('coMore', rest))}${icon('chevronDown', 16)}`;
+      chips[i].hidden = true;
+      say(++gone);
     }
   }
   function filterHtml(frame) {
     const co = companiesHtml(frame), lg = settings.homeLegend ? legendHtml(counts(frame)) : '';
-    return co || lg ? `<h4 class="lab">${esc(t('filterHead'))}</h4>${lg}${co}` : '';
+    // (its number: the filters on now, the companies and kinds picked and a lateness colour lit; src/filter.js)
+    return co || lg ? `<h4 ${titleAttrs('lab')}>${titleIcon('funnel')}${esc(t('filterHead'))}${titleChip(d.filter.list().length)}</h4>${lg}${co}` : '';
   }
   function legendHtml(c) {
     const on = d.legend.get(), total = LG.reduce((a, k) => a + c[k], 0);
@@ -140,7 +161,9 @@ export function homePage(d) {
     } });
     const mt = d.myTrains?.() ?? { rows: [], add: '' };
     const group = (k, rows) => (rows.length ? `<h5 class="lab2" data-saved="${k}">${t({ trips: 'savedTrips', trains: 'savedTrains', stations: 'savedStations' }[k])}</h5><div class="rows">${rows.join('')}</div>` : '');
-    return `<h4 class="lab">${t('mine')}</h4>` + (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +
+    // (its number: what is saved, the trips and today's changes, the trains, the stations)
+    return `<h4 ${titleAttrs('lab')}>${titleIcon('star')}${t('mine')}${titleChip(mt.rows.length + trains.length + stations.length)}</h4>` +
+      (trains.length || stations.length ? '' : `<p class="empty">${t('favouritesHint')}</p>`) +
       `${group('trips', [...mt.rows, mt.add].filter(Boolean))}${group('trains', trains)}${group('stations', stations)}`;
   }
   function nearHtml() {
@@ -150,14 +173,17 @@ export function homePage(d) {
     const near = [...d.stations().values()].filter(st => st.advertised && st.lon !== null)
       .map(st => ({ st, km: Math.hypot((st.lon - here.lon) * k, st.lat - here.lat) * 111.2 })).sort((a, b) => a.km - b.km).slice(0, 3);
     if (!near.length) return '';
-    return `<h4 class="lab">${t('nearYou')}</h4><div class="rows">${near.map(({ st, km }) => stationRow({ sig: st.sig, name: st.name,
+    return `<h4 ${titleAttrs('lab')}>${titleIcon('locate')}${t('nearYou')}</h4><div class="rows">${near.map(({ st, km }) => stationRow({ sig: st.sig, name: st.name,
       sub: km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(km < 10 ? 1 : 0)} km`, lead: icon('locate', 18), cls: 'here' })).join('')}</div>`;
   }
   function disHtml() {
     const list = d.disruptions();
     if (!list) return '';
     const problems = list.filter(x => !isWork(x));
-    return `<h4 class="lab">${t('disruptions')}</h4><div class="dis-list">${problems.slice(0, 3).map(x => disRowHtml(x, d.stationName, Date.now())).join('')}` +
+    // (its triangle in the colour of the worst shown, as its row's icon box (the list comes worst first); rail work alone
+    // or nothing: grey; its number: all of them, as "All disruptions" counts)
+    const colour = problems.length ? `var(--dis-${{ red: 3, orange: 2, yellow: 1 }[levelName(problems[0].level)]})` : 'var(--muted)';
+    return `<h4 ${titleAttrs('lab', colour)}>${titleIcon('warning')}${t('disruptions')}${titleChip(list.length)}</h4><div class="dis-list">${problems.slice(0, 3).map(x => disRowHtml(x, d.stationName, Date.now())).join('')}` +
       (!problems.length ? `<p class="empty">${t(list.length ? 'noProblemsNow' : 'noDisruptions')}</p>` : '') +
       // ("All disruptions" a row of the same list: its icon box the same size, in the same column, grey (a way on, not a
       // disruption), its › at the end; Max, 2026-11-24: "The icons dont align")
@@ -166,7 +192,7 @@ export function homePage(d) {
   }
   function mostLateHtml(frame) {
     const late = frame.map(x => ({ x, m: d.lateOf(x.id) })).filter(o => o.m > 0).sort((a, b) => b.m - a.m).slice(0, 5);
-    return `<h4 class="lab">${t('mostLate')}</h4><div class="rows">${late.map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
+    return `<h4 ${titleAttrs('lab', 'var(--c-late)')}>${titleIcon('day')}${t('mostLate')}${titleChip(late.length ? `+${late[0].m}` : '')}</h4><div class="rows">${late.map(({ x, m }) => trainRow({ id: x.id, number: d.numberOf(x.id), brand: x.brand, minutes: m,
       sub: t(`kind_${kindOf(x.brand)}`) })).join('') || `<p class="empty">${t('stNoneYet')}</p>`}</div>`;
   }
   function counts(frame) {
@@ -176,13 +202,12 @@ export function homePage(d) {
   }
   function draw(first = false) {
     const frame = d.frame();
-    fitCoRow(put('legend', filterHtml(frame), 'filter-card'));   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
+    const f = put('legend', filterHtml(frame), 'filter-card');   // (the lateness bar: Debug can turn it off, Max 2026-11-23)
+    fitCoRow(f.sec.querySelector('.co-filter'), f.drew);
     put('mine', mineHtml(frame));
     put('near', nearHtml());
     put('dis', disHtml());
-    const ml = mostLate;
-    const html = mostLateHtml(frame);
-    if (ml._h !== html) { ml.innerHTML = html; ml._h = html; }
+    swap(mostLate, mostLateHtml(frame));
     stats.update(d.snapshot(), { first });
   }
   return {
@@ -196,11 +221,11 @@ export function homePage(d) {
       const box = document.createElement('div');
       box.className = 'sec home-stats';
       el.append(box);
-      const head = Object.assign(document.createElement('h3'), { className: 'big' });
-      head.dataset.t = 'swedenNow';
-      head.textContent = t('swedenNow');
+      // (its words in a span of their own: a change of language writes them, src/i18n.js data-t, the icon stays)
+      const head = Object.assign(document.createElement('h3'), { className: 'big ct' });
+      head.innerHTML = `${titleIcon('train')}<span data-t="swedenNow">${esc(t('swedenNow'))}</span>`;
       mostLate = Object.assign(document.createElement('section'), { className: 'st-sec most-late' });
-      stats = createStatsPage(box, { ...d.statsActions, filter: d.filter, redraw: () => draw(), groups: true,
+      stats = createStatsPage(box, { ...d.statsActions, filter: d.filter, redraw: () => draw(), groups: true, icons: true,
         parts: [head, 'sweden', 'duo', 'punctuality', 'kinds', 'companies', mostLate, 'fastest', 'busiest', 'fun', 'data'] });
     },
     // Statistik's day and cancelled numbers are asked for once Home is pulled up from rest, not while it rests as the
@@ -212,13 +237,17 @@ export function homePage(d) {
     // (opened: the sheet grows until the whole card shows; folded: back to where it was; Max, 2026-11-24: "Expanding
     // filters list in main card should expand that card to view all filters")
     toggleCo() {
-      // (the filter card's height glides, so what is under it moves down with it, not in one jump: ui-sweep, 2026-11-25)
       const card = () => el?.querySelector('.co-filter')?.closest('.sec');
       const h0 = card()?.offsetHeight;
       coOpen = !coOpen;
-      draw();
-      glideHeight(card(), h0);
-      if (coOpen) d.reveal?.(el?.querySelector('.co-filter')?.closest('.sec')); else d.unreveal?.();
+      draw();   // (the card now stands in its new look and height: its one-row fit is part of drawing it)
+      const c = card();
+      if (!c) return;
+      // The sheet first, its heights measured from the page as it will stand; then the card's height glides from where
+      // it was, in the sheet's time and curve: the card and the sheet's edge one move, what is under the card moving
+      // with it (ui-sweep 'filter more' and 'filter fewer', 2026-11-25; Max: "the bottom jumps a few pixels")
+      if (coOpen) d.reveal?.(c); else d.unreveal?.();
+      glideHeight(c, h0, c.offsetHeight, { time: 'glide', curve: '' });
     },
   };
 }

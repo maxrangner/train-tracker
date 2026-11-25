@@ -118,7 +118,7 @@ function analyse(rec, kind) {
   }
   // the series of each element seen in the end
   const series = new Map();
-  frames.forEach((f, i) => { for (const e of f.els) { let s = series.get(e[0]); if (!s) series.set(e[0], s = []); s.push({ i, x: e[1], y: e[2], w: e[3], h: e[4], rel: e[2] - f.sheetTop, o: e[5] }); } });
+  frames.forEach((f, i) => { for (const e of f.els) { let s = series.get(e[0]); if (!s) series.set(e[0], s = []); s.push({ i, t: f.t, x: e[1], y: e[2], w: e[3], h: e[4], rel: e[2] - f.sheetTop, o: e[5] }); } });
   for (const [id, s] of series) {
     if (!a.has(id) || s.length < 4) continue;
     if (meta[id].pg === 'screen' && !/status|map-btn|sh-/.test(meta[id].el)) continue;
@@ -140,9 +140,21 @@ function analyse(rec, kind) {
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
       }
     }
+    // fold: a lurch, the same way, at the end of a glide: a step of 3 px or more, three times as fast as the step before,
+    // once the glide had slowed to a quarter of its top speed (a box glided too tall dropped to its height in one frame,
+    // 22 px, still moving 0.7 px a frame: neither a rest nor a turn; Home's filter card until 2026-11-25)
+    if (kind === 'fold' && !jumped) {
+      let top = 0, prev = 0;
+      for (let k = 1; k < s.length && !jumped; k++) {
+        if (s[k].i !== s[k - 1].i + 1) { prev = 0; continue; }
+        const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);        if (prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
+        top = Math.max(top, v); prev = v;
+      }
+    }
     if (jumped && kind !== 'reveal') finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top
-    if (kind === 'grow' || kind === 'reveal') {
+    // (fold: a card opening or shutting in the page, what is under it moves with it: as reveal, but a jump counts)
+    if (kind === 'grow' || kind === 'reveal' || kind === 'fold') {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
       if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
@@ -150,7 +162,7 @@ function analyse(rec, kind) {
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
         // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
-        if (!pop && (meta[id].btn || kind === 'reveal')) continue;
+        if (!pop && (meta[id].btn || kind === 'reveal' || kind === 'fold')) continue;
         finds.push({ kind: pop ? 'pop' : 'redrawn', id, what: say(id), info: `moved ${lo.toFixed(0)}…${hi.toFixed(0)} px under the sheet's top (start ${rel[0].toFixed(0)}, end ${rel.at(-1).toFixed(0)}, biggest step ${big.toFixed(1)})` });
       }
       const ws = s.map(p => p.w), wd = Math.abs(ws.at(-1) - ws[0]);
@@ -159,6 +171,22 @@ function analyse(rec, kind) {
         for (let k = 1; k < s.length; k++) big = Math.max(big, Math.abs(ws[k] - ws[k - 1]));
         if (big >= wd * 0.8) finds.push({ kind: 'pop', id, what: say(id), info: `width ${ws[0]} → ${ws.at(-1)} in one frame` });
       }
+    }
+  }
+  // fold: the sheet's own edges move once, in one direction, and stand (Max, 2026-11-25: "When expanding and compacting
+  // the filters the bottom jumps a few pixels": a second move after the first had ended, or one turning back)
+  if (kind === 'fold') {
+    for (const [name, at] of [['top', f => f.sheetTop], ['bottom', f => f.sheetTop + f.sheetH]]) {
+      let dir = 0, rest = 0, rested = false, jumped = null, top = 0, prev = 0;
+      for (let k = 1; k < frames.length && !jumped; k++) {
+        const d = at(frames[k]) - at(frames[k - 1]), v = Math.abs(d) / Math.max(1, frames[k].t - frames[k - 1].t);
+        if (Math.abs(d) < 0.5) { if (++rest >= 3) rested = true; prev = v; continue; }
+        if (rested && Math.abs(d) >= 1) jumped = `moved again after rest: ${d.toFixed(1)} px at frame ${k}`;
+        else if (dir && Math.sign(d) !== dir && Math.abs(d) >= 1) jumped = `turned back: ${d.toFixed(1)} px at frame ${k}`;
+        else if (prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
+        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = v;
+      }
+      if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
     }
   }
   return finds;
@@ -250,8 +278,10 @@ const T = [
   { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
   { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
   { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
-  // (reveal: what is under the card moves down as it grows and the page scrolls it into view: only strays and pops count)
-  { name: 'home → filter more', kind: 'reveal', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  // (fold: what is under the card moves down as it grows, up as it shuts: strays, pops and jumps count, the sheet's
+  // edges too; Max, 2026-11-25: "When expanding and compacting the filters the bottom jumps a few pixels")
+  { name: 'home → filter more', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
+  { name: 'home → filter fewer', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); await click(p, `${HOME} [data-act="comore"]`); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
   { name: 'home → all disruptions', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await settle(p); }, act: p => click(p, `${HOME} [data-go="dislist"]`) },
   { name: 'all disruptions → back', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await click(p, `${HOME} [data-go="dislist"]`); await settle(p); }, act: esc },
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
