@@ -207,8 +207,6 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     if (typeof l === 'function') { const c = l(); return c > 0 ? Math.min(Math.max(headPx() + c, HOME_LOW_PX) + s, fullMax - 40) : PAGE_LOW_PX + s; }
     // (a computer's handle band taller than the phone's handle: its extra room too, index.html #sheet .sh-grab)
     const band = wide() ? Math.max(0, grabH() - GRAB_PX) : 0;
-    // (a computer, ☰'s menu open over Home at rest: the bar alone, 10 px above and under it, no arrow band: index.html)
-    if (pg?.key === 'home' && wide() && sheet.classList.contains('menu-open')) return 10 + (HEAD_PX - GRAB_PX) + 10;
     return pg?.key === 'home' ? HOME_LOW_PX + s + band : (l ?? PAGE_LOW_PX) + s + (wide() ? 10 : 0) + band;
   }
   // A phone: the sheet is as tall as its tallest rest, slid down to the height shown (only its transform moves). A wider

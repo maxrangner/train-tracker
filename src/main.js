@@ -880,29 +880,38 @@ if (window.Capacitor?.isNativePlatform?.()) {
 document.querySelector('#sheet .sh-logo').innerHTML = logoSvg({ small: true });   // the logo in the search field (Max, 2026-11-23: "logo is gone")
 const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
 for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
-// ☰'s menu: its choices as buttons where the search field is, in its place while open (Max, 2026-11-24: "Revamp hamburger
-// menu... You cant search when manu is open anyways, and saves realaste. Also works better with the back arrows"; then
-// "Place the buttons where the search bar is! And same dismiss rules"); until then a card floating by the button. The
-// sheet keeps its height; the page behind holds still (src/stack.js frozen); ☰ or a map tap closes it.
-navButton.before(navEl);
-navEl.classList.remove('pop');
-navEl.classList.add('sh-menu');
-// Open and shut, the buttons slide out of ☰ and back into it, no fade (Max, 2026-11-24: "it should animate both in and
-// out, sliding form the hamburger"; "Remove the fade on all"); the speed as the page changes' (Debug → Animation speed).
-let navOpen = false;
+// ☰'s menu: a card under the search bar, its right edge in line with the bar's (☰'s), an icon before each choice (Max,
+// 2026-11-25: "I want to revert the hamburger menu. Slide out card like before. Under the hamburger and under the
+// searchbar, with good padding. Aligned with the right side of the search bar. Add back icons for options"; from
+// 2026-11-24 night to then its choices were buttons in the search field's place). It slides out from under the bar and
+// back under it, no fade; shutting as fast as opening, the same curve (Max, 2026-11-25: "Should be same speed"); the
+// speed as the page changes' (Debug → Animation speed). Where there is no room under the bar (a phone's sheet at rest,
+// its bar at the bottom) it comes out above the sheet instead. The page behind holds still while it is open (src/stack.js
+// frozen, the sheet's menu-open); ☰, a map tap, Esc or the phone's back close it.
+const NAV_GAP = 10;   // between the bar (or the sheet's edge) and the card
+let navOpen = false, navSide = 'below', navEdge = 0;
+function placeNav() {
+  const a = navButton.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+  const w = navEl.offsetWidth, h = navEl.offsetHeight;
+  navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, a.right - w)))}px`;
+  // (a computer at rest: under the whole box, its arrow band included; Max, 2026-11-24 "Menu still not below the whole
+  // search pill")
+  const under = innerWidth >= 440 && stack.level === 0 ? s.bottom : a.bottom;
+  if (under + NAV_GAP + h <= innerHeight - 10) { navSide = 'below'; navEdge = under; navEl.style.top = `${Math.round(under + NAV_GAP)}px`; }
+  else { navSide = 'above'; navEdge = s.top; navEl.style.top = `${Math.round(Math.max(10, s.top - NAV_GAP - h))}px`; }
+}
+// (out from under the edge it hangs from: the card moves its whole height plus the gap, cut where that edge is, so it
+// shows only on its own side of it; the shadow keeps its room at the other sides)
 function slideNav(open) {
-  const b = navButton.getBoundingClientRect(), k = settings.motionSpeed === 'calm' ? 4 / 3 : 1;
-  const rows = [...navEl.querySelectorAll('.nav-row:not([hidden])')];
-  for (const r of rows) r.getAnimations().forEach(a => a.cancel());
+  navEl.getAnimations().forEach(x => x.cancel());
   if (reduceMotion()) return Promise.resolve();
-  return Promise.all(rows.map((r, i) => {
-    const from = { transform: `translateX(${Math.round(b.left - r.getBoundingClientRect().left)}px)` }, to = { transform: 'none' };
-    // (the first button travels furthest: it leaves first and comes back last; shutting takes as long as opening and
-    // the same curve, Max 2026-11-25: "Should be same speed. Same as opening": it started slowly; they pass behind the
-    // menu's right edge, by ☰, never over it: index.html #nav.sh-menu clip-path)
-    const n = rows.length - 1 - i;
-    return r.animate(open ? [from, to] : [to, from], { duration: (260 + (open ? i : n) * 30) * k, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' }).finished.catch(() => {});
-  }));
+  const k = settings.motionSpeed === 'calm' ? 4 / 3 : 1, h = navEl.offsetHeight, d = h + NAV_GAP;
+  const below = navSide === 'below';
+  const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${h}px -24px -24px -24px)` }
+    : { transform: `translateY(${d}px)`, clipPath: `inset(-24px -24px ${h}px -24px)` };
+  const shown = below ? { transform: 'none', clipPath: `inset(${-NAV_GAP}px -24px -24px -24px)` }
+    : { transform: 'none', clipPath: `inset(-24px -24px ${-NAV_GAP}px -24px)` };
+  return navEl.animate(open ? [hid, shown] : [shown, hid], { duration: 260 * k, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'forwards' }).finished.catch(() => {});
 }
 // (opened with Home pulled up: Home goes down to rest, Max 2026-11-24 "When menu is called while main card is already
 // opened it should close"; a page opened from it and backed out of: Home with the menu open again, "When menu option is
@@ -910,45 +919,43 @@ function slideNav(open) {
 let navBack = false;
 function openNav() {
   if (stack.searching || navOpen) return;
-  if (stack.top() === 'home' && stack.level > 0) stack.setLevel(0);
+  const lower = stack.top() === 'home' && stack.level > 0;
+  if (lower) stack.setLevel(0);
   navOpen = true;
   navEl.hidden = false;
   navButton.setAttribute('aria-expanded', 'true');
   document.getElementById('sheet').classList.add('menu-open');
-  stack.refit();   // (a computer at rest: the box closes round the bar)
-  slideNav(true).then(() => { if (navOpen) for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel()); });
+  const go = () => {
+    if (!navOpen) return;
+    placeNav();
+    slideNav(true).then(() => { if (navOpen) navEl.getAnimations().forEach(x => x.cancel()); });
+  };
+  // (Home lowered first: placed once the sheet is down, hidden meanwhile)
+  if (lower && !reduceMotion()) { navEl.style.visibility = 'hidden'; setTimeout(() => { navEl.style.visibility = ''; go(); }, 300 * (settings.motionSpeed === 'calm' ? 4 / 3 : 1)); }
+  else go();
   navEl.querySelector('.nav-row:not([hidden])')?.focus({ preventScroll: true });
 }
-// at once: a page coming up from the menu (or over it): the search row is hidden on other pages, so no slide back, and
-// the open menu's room under the bar goes before the page comes in (it stayed while the buttons slid home: Settings
-// and About slid in 10 px low and jumped up; Max, 2026-11-25 "Opening settings or about has a vertical jump of a few
-// pixels before settling")
+// (now: a page coming up from the menu or over it; the card slides back as when shut by ☰, the page comes meanwhile)
 function closeNav({ now = false } = {}) {
   if (!navOpen) return;
   navOpen = false;
   navButton.setAttribute('aria-expanded', 'false');
+  document.getElementById('sheet').classList.remove('menu-open');
   const shut = () => {
     if (navOpen) return;   // (opened again meanwhile)
     navEl.hidden = true;
-    for (const r of navEl.querySelectorAll('.nav-row')) r.getAnimations().forEach(a => a.cancel());
-    document.getElementById('sheet').classList.remove('menu-open');
-    stack.refit();
+    navEl.getAnimations().forEach(x => x.cancel());
   };
-  if (!now) { slideNav(false).then(shut); return; }
-  // (the search row fades out on the new page: the buttons stay in it as they were, the field stays hidden, until it
-  // has gone; index.html .menu-fading)
-  const sheetEl = document.getElementById('sheet');
-  sheetEl.classList.remove('menu-open');
-  sheetEl.classList.add('menu-fading');
-  stack.refit();
-  setTimeout(() => { sheetEl.classList.remove('menu-fading'); shut(); }, 300);
+  if (navEl.style.visibility === 'hidden') { navEl.style.visibility = ''; shut(); return; }
+  void now;
+  slideNav(false).then(shut);
 }
 onTap(navButton, () => (navOpen ? closeNav() : openNav()));   // (at once also right after a swipe: sheet.js onTap)
 // (Not a finger on the map: the map works with the menu open, a drag moves it and the menu stays; a plain tap on the
 // map closes it through onMapTap. Max, 2026-11-20; screens-check found it closing on every touch of the map, 2026-11-23.)
-// (inside the sheet only its buttons and ☰ do anything while it is open: src/stack.js frozen. Outside the sheet and the
+// (inside the sheet only ☰ does anything while it is open: src/stack.js frozen; the card's choices do. Outside them and the
 // map, a press closes it as before: the map's own buttons, the pills.)
-document.addEventListener('pointerdown', (e) => { if (navOpen && !e.target.closest?.('#sheet') && !mapEl.contains(e.target)) closeNav(); }, true);
+document.addEventListener('pointerdown', (e) => { if (navOpen && !e.target.closest?.('#sheet, #nav') && !mapEl.contains(e.target)) closeNav(); }, true);
 // A mouse pressed on a button keeps it while it stays where the button was: a pressed button shrinks (button:active,
 // scale .94; a row .98), and a press held near a wide row's edge was let go outside it, so the click went to what was
 // beside it and nothing opened (Max, 2026-11-24: the › on a saved trip "Still doesn't do anything"; quick clicks

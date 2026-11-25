@@ -86,21 +86,24 @@ try {
   const stayed = await page.evaluate(() => window.__stack.top());
   ok(stayed === 'home', `pressed on the row, moved off it and let go: no click (${stayed})`);
 
-  // 6. ☰: its choices as buttons where the search field was, on its row (Max, 2026-11-24: "Place the buttons where the
-  //    search bar is! And same dismiss rules"); the page behind holds still (a wheel over it moves nothing); a choice
-  //    opens its page, the menu goes
+  // 6. ☰: a card under the search bar's box, its right edge in line with ☰'s, an icon before each choice, the search field
+  //    still there (Max, 2026-11-25: "revert the hamburger menu. Slide out card like before. Under the hamburger and under
+  //    the searchbar, with good padding. Aligned with the right side of the search bar. Add back icons"); the page behind
+  //    holds still (a wheel over it moves nothing); a choice opens its page, the menu goes
   await page.evaluate(() => window.__stack.home(1)); await sleep(1200);
-  await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(700);
-  const menu = await page.evaluate(() => { const n = document.querySelector('.sh-search > .sh-menu'), b = document.getElementById('nav-button').getBoundingClientRect(); if (!n || n.hidden) return null;
-    const r = n.getBoundingClientRect(); return { sameRow: Math.abs(r.top - b.top) <= 1, field: Boolean(document.querySelector('#sheet .sh-field').offsetParent), rows: n.querySelectorAll('.nav-row').length }; });
-  ok(menu && menu.rows === 3 && menu.sameRow && !menu.field, `☰: ${menu?.rows} buttons on the search bar's row (${menu?.sameRow}), the field away (${menu ? !menu.field : '?'})`);
+  await page.evaluate(() => document.getElementById('nav-button')?.click()); await sleep(900);
+  const menu = await page.evaluate(() => { const n = document.getElementById('nav'), b = document.getElementById('nav-button').getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect(); if (!n || n.hidden) return null;
+    const r = n.getBoundingClientRect(); return { right: Math.round(r.right - b.right), gap: Math.round(r.top - s.bottom), icons: n.querySelectorAll('.nav-row .nav-ic svg').length,
+      field: Boolean(document.querySelector('#sheet .sh-field').offsetParent), rows: n.querySelectorAll('.nav-row').length }; });
+  ok(menu && menu.rows === 3 && menu.icons === 3 && Math.abs(menu.right) <= 1 && menu.gap >= 6 && menu.gap <= 16 && menu.field,
+    `☰: a card of ${menu?.rows} choices with ${menu?.icons} icons, ${menu?.gap} px under the box (want 6 to 16), its right edge ${menu?.right} px from ☰'s, the field ${menu?.field ? 'there' : 'gone'}`);
   const still = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
   const over = await page.evaluate(() => { const r = document.querySelector('.pg[data-key="home"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + 120 }; });
   await page.mouse.move(over.x, over.y); await page.mouse.wheel({ deltaY: 400 }); await sleep(700);
   const still2 = await page.evaluate(() => ({ lvl: window.__stack.level, top: document.querySelector('.pg[data-key="home"]').scrollTop }));
   ok(still2.lvl === still.lvl && still2.top === still.top, `the menu open, a wheel over the page: height ${still.lvl} -> ${still2.lvl}, scrolled ${still.top} -> ${still2.top} (want nothing)`);
   await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(1200);
-  const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.querySelector('.sh-search > .sh-menu').hidden }));
+  const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.getElementById('nav').hidden }));
   ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes (${after.open ? 'still open' : 'shut'})`);
   await page.evaluate(() => window.__stack.home(0)); await sleep(800);
   await page.keyboard.press('Escape'); await sleep(300);
