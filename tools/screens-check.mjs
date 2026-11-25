@@ -251,6 +251,11 @@ try {
       .map(e => ({ n: e.classList.contains('cd-tiles') ? 'tiles' : e.classList.contains('why') ? 'why' : 'trip', y: Math.round(e.getBoundingClientRect().top) }))
       .sort((a, b) => a.y - b.y).map(x => x.n).join(' → '));
     check(order === 'tiles → trip' || order === 'tiles → why → trip', `the card at half, top to bottom: ${order} (want the tiles, why, then the trip line)`);
+    // (Max, 2026-11-25: the compact card smaller: no red line or state line under the number, no Share; a sign beside
+    // "More" instead, its words in Läget on the full card)
+    const lean = await page.evaluate(() => ({ rows: [...document.querySelectorAll('#panel :is(.panel-alert, .panel-status, .panel-note)')].length,
+      share: Boolean(document.querySelector('#panel .sh-act[data-act-id="share"]')?.offsetParent), sign: document.querySelector('#panel .more-sign')?.dataset.k ?? '' }));
+    check(!lean.rows && !lean.share, `the card at half: ${lean.rows} lines under the number (want none), Share ${lean.share ? 'SHOWN' : 'hidden'}; the sign by "More": ${lean.sign || 'none'}`);
     // over Home (a train tapped on the map) no ‹ on its card: only when it was opened from another page (Max, 2026-11-24:
     // "only on the situation I mentioned or similar, not always"); its company on a line of its own under the number
     const head = await page.evaluate(() => { const h = document.querySelector('#panel .panel-head'), n = h?.querySelector('.panel-title strong')?.getBoundingClientRect(), c = h?.querySelector('.panel-co')?.getBoundingClientRect();
@@ -303,6 +308,11 @@ try {
     const last = await page.evaluate(() => { const more = document.querySelector('#panel .panel-more'), tl = document.querySelector('#panel .panel-table');
       return more && tl ? Math.round(more.getBoundingClientRect().top - tl.getBoundingClientRect().bottom) : null; });
     check(last !== null && last >= 0, `a train at full: "Mindre" ${last ?? '?'} px under the stops (want under them)`);
+    // (at full: Share in the top line; Läget there whenever the compact card had its sign, red with a red sign)
+    const atFull = await page.evaluate(() => ({ share: Boolean(document.querySelector('#panel .sh-act[data-act-id="share"]')?.offsetParent),
+      sign: document.querySelector('#panel .more-sign')?.dataset.k ?? '', laget: document.querySelector('#panel .tv-box')?.offsetParent ? (document.querySelector('#panel .tv-box.warn') ? 'warn' : 'note') : '' }));
+    check(atFull.share && (atFull.sign === '' ? atFull.laget !== 'warn' : atFull.sign === 'warn' ? atFull.laget === 'warn' : Boolean(atFull.laget)),
+      `a train at full: Share ${atFull.share ? 'shown' : 'HIDDEN'}; Läget ${atFull.laget || 'none'} (the sign was ${atFull.sign || 'none'})`);
     await setLevel(page, 1);
   }
   // ---- Home at rest and at half (Max, 2026-11-23): the search bar as far from the sheet's bottom as from its sides; at

@@ -1,8 +1,9 @@
 // The panel that opens when a train is tapped: where it runs and every stop, planned and actual.
 // Compact (Max, 2026-11-15, sketch C): the number, two tiles (the lateness now; the minutes to a stop, the end station
 // unless another is picked from the stops ahead) and the trip as one line. "All stops", or a drag up on a phone, opens
-// it full (class "full", src/stack.js): the star, Trafikverket's notes and the timeline of every stop. On the full card
-// "i" next to the star (class "info"; Max, 2026-11-20) swaps the notes and the stops for the train's own numbers
+// it full (class "full", src/stack.js): the star, Läget (warnings, the train's state, Trafikverket's notes) and the
+// timeline of every stop. On the full card "i" next to the star (class "info"; Max, 2026-11-20) swaps the notes and
+// the stops for the train's own numbers
 // (src/train-info.js, drawn by options.info each second while shown); "i" again brings the stops back.
 // "All places" above the stops on the full card (Max, 2026-11-21, sketch C) puts every place the train passes without
 // stopping between them (options.places, src/places-ahead.js): passed with Trafikverket's times, ahead names only.
@@ -31,11 +32,21 @@ let notesOpen = false;
 // Since 2026-11-24 the station's look (src/board.js msgsHtml; Max: "Messages in station card looks like this, with yellow
 // background. Shouldn't train cards be like this as well?"): a yellow line with ⚠, "3 messages about the train" and ⌄,
 // opened the same line with ⌃ and the messages under it, each a yellow tile (problems in red).
-const notesBox = lines => `<div class="tv-box board-msgs${notesOpen ? ' open' : ''}">` +
-  `<button type="button" class="tv-toggle board-msgs-toggle${notesOpen ? ' tv-fold' : ''}" aria-expanded="${notesOpen}"${notesOpen ? ` aria-label="${esc(t('foldNotes'))}"` : ''}>` +
-  `${icon('warning', 17)}<span>${t('trainNotesCount', lines.length)}</span>` +
-  `${icon(notesOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` +
-  (notesOpen ? `<div class="panel-tvnotes board-msg-list">${lines.join('')}</div>` : '') + '</div>';
+// Since 2026-11-25 (Max, from his phone, 8148): one section "Läget" / "Status" holds, in this order, (a) the warnings in
+// red with a red ⚠ (Trafikverket's problems, cancelled stops), (b) the train's state in grey (src/live/status.js
+// statusLine, the old-data note: .tv-state, put again each second by setStatus), (c) Trafikverket's other notes. Its
+// line has the count, red (⚠ and count) when (a) has anything. The compact card shows none of it: a sign beside "More".
+const notesBox = ({ warn, state, notes }) => {
+  const n = warn.length + state.length + notes.length;
+  return `<div class="tv-box board-msgs${notesOpen ? ' open' : ''}${warn.length ? ' warn' : ''}">` +
+    `<button type="button" class="tv-toggle board-msgs-toggle${notesOpen ? ' tv-fold' : ''}" aria-expanded="${notesOpen}" aria-label="${esc(notesOpen ? t('foldNotes') : t('trainStatusCount', n))}">` +
+    `${icon('warning', 17)}<span>${t('trainStatus')}</span><b class="tv-n">${n}</b>` +
+    `${icon(notesOpen ? 'chevronUp' : 'chevronDown', 16)}</button>` +
+    (notesOpen ? `<div class="panel-tvnotes board-msg-list">${warn.join('')}<div class="tv-state">${state.join('')}</div>${notes.join('')}</div>` : '') + '</div>';
+};
+const stateLine = text => `<p class="panel-tvnote board-msg tv-st">${esc(text)}</p>`;
+// The compact card's sign beside "More": a red "!" for a warning, a grey "i" for a state note or old data.
+const signHtml = k => (k === 'warn' ? icon('info', 16) : k === 'note' ? icon('about', 16) : '');
 
 // "12 min", "1 h 5 min" (both languages: "tim" made the tile overflow, Max 2026-11-15); 0 or less: "Now".
 const inText = ms => {
@@ -95,6 +106,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   let picking = false;    // the list of stops to count down to is open
   let opening = false, closing = false;   // it slides open (only when it opens, not at each redraw) and closed
   let infoOn = false;     // the train's own numbers instead of its stops ("i")
+  let statusText = '';    // the train's state in words (src/live/status.js statusLine), each second; '' for nothing
+  let laget = null;       // what the last draw found: { warn, notes } (Läget's lines), asOf (the route's file time)
   // The notes' fold answers a press and lift on it, not only a click (Max's PC, 2026-11-24: "Sometimes I have to click
   // several times for it to expand"): a click needs the press and the lift on the same element, so one that moved or
   // was drawn again in between (the card gliding after "More") got nothing. The click a lift may still bring is let go.
@@ -196,6 +209,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     el.classList.remove('full');   // always opens compact (the Train card setting went, Max 2026-11-20)
     infoOn = false; el.classList.remove('info');
     shown = { train, route: null };
+    laget = null;
     if (swap) {
       const old = el.querySelector('.panel-head');
       old.outerHTML = head(train);
@@ -205,9 +219,8 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       for (const c of el.children) if (!c.classList.contains('panel-head')) c.classList.add('busy');
     } else el.innerHTML = head(train) + stateHtml('loading', t('loadingRoute'));
     wireHead();
-    // The line on how its place is known, at once: it came with the next second's tick, after the timetable was in,
-    // so the card stepped ~24-43 px taller after its glide (2026-11-21's sweep).
-    putStatus(statusOf?.(train.id) ?? '');
+    // The train's state at once (Läget and the sign by "More" have it when the timetable is in).
+    statusText = statusOf?.(train.id) ?? '';
 
     let route;
     try {
@@ -451,7 +464,6 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   function draw(train, route, { keepScroll = false } = {}) {
     const scrolled = keepScroll ? el.querySelector('.panel-table')?.scrollTop : undefined;
     const infoScrolled = el.querySelector('.panel-info-box')?.scrollTop;
-    const status = el.querySelector('.panel-status')?.textContent ?? '';
     const stops = stopsOf(route);
     shown.stops = stops;
     const nextIdx = nextOf(stops);
@@ -488,6 +500,41 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       if (!nowDone) parts.push(nowLine);
       return parts.join('');
     };
+    // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
+    // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)". Only on the full card, in
+    // Läget (notesBox): the problems and the cancelled stops are its warnings (red), the rest its notes. A note named by
+    // its stops (not a stretch "from" or "until") is also put under each of them in the stop list (atStop).
+    const cancelled = stops.filter(s => (s.dep ?? s.arr).canceled).map(s => stationName(s.station));
+    const warn = [], notes = [], atStop = new Map();   // atStop: stop index -> [{ text, problem }]
+    for (const kind of ['problems', 'notes']) {
+      const at = new Map();   // text -> indices of the stops it is given at
+      stops.forEach((s, i) => {
+        for (const x of [s.arr, s.dep]) for (const text of x?.[kind] ?? []) {
+          if (!at.has(text)) at.set(text, new Set());
+          at.get(text).add(i);
+        }
+      });
+      const problem = kind === 'problems';
+      for (const [text, set] of at) {
+        // ("Inställt" itself is said by the cancelled stops' names: Max, 2026-11-15, VR 2047)
+        if (problem && cancelled.length && /^inställ/i.test(text)) continue;
+        const idx = [...set].sort((a, b) => a - b);
+        const run = idx.at(-1) - idx[0] === idx.length - 1;   // one stretch of stops in a row
+        const name = i => stationName(stops[i].station);
+        const from = run && idx.length >= 3 && idx.at(-1) === stops.length - 1, until = run && idx.length >= 3 && idx[0] === 0;
+        const where = idx.length === stops.length ? '' : from ? t('noteFrom', name(idx[0])) : until ? t('noteUntil', name(idx.at(-1)))
+          : idx.slice(0, 2).map(name).join(', ') + (idx.length > 2 ? ` +${idx.length - 2}` : '');
+        (problem ? warn : notes).push(`<p class="panel-tvnote board-msg${problem ? ' problem' : ''}">${problem ? icon('warning', 15) : ''}${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
+        if (where && !from && !until) for (const i of idx) {
+          if (!atStop.has(i)) atStop.set(i, []);
+          atStop.get(i).push({ text, problem });
+        }
+      }
+    }
+    if (cancelled.length) warn.push(`<p class="panel-tvnote board-msg problem">${icon('warning', 15)}${esc(t('stopsCancelled', cancelled))}</p>`);
+    // (from files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made, in Läget)
+    laget = { warn, notes, asOf: route.asOf ?? null };
+
     const rows = stops.map((s, i) => {
       const a = s.arr, d = s.dep;
       const main = d ?? a;
@@ -506,8 +553,10 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
       // Where the train is: the minutes to the next stop (or till it leaves the one it stands at), each second
       // (showGlance; Max, 2026-11-15: "Nu · nästa station X" said nothing new).
       const now = i === nextIdx && i > 0 && !between ? nowLine : '';
+      // (a note of Trafikverket's about particular stops also under each of them: "Ingen påstigning" at Mora C)
+      const said = (atStop.get(i) ?? []).map(n => `<small class="tl-note${n.problem ? ' problem' : ''}">${esc(n.text)}</small>`).join('');
       return now + `<div class="tl-row ${state}" data-sig="${esc(s.station)}"><span class="tl-time">${time(main.planned)}${offText}</span>` +
-        `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}</span>` +
+        `<span class="tl-node">${dot}</span><span class="tl-name">${esc(stationName(s.station))}${dwell}${said}</span>` +
         `<span class="tl-trk">${esc(d?.track || a?.track || '')}</span></div>` +
         (between ? placeRows(between[i], i === nextIdx - 1 && nextIdx > 0) : '');
     }).join('');
@@ -517,50 +566,13 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     const ends = abroadEnds(route, station);
     const tlRows = (ends.from ? abroadRow(ends.from, nextIdx) : '') + rows + (ends.to ? abroadRow(ends.to, nextIdx) : '');
 
-    // Trafikverket's notes (Max, 2026-11-13): problems first, then the rest. Each once; when it holds for only some
-    // stops, they are named: "(Göteborg C)", "(from Alingsås)", "(Herrljunga, Vårgårda +3)". Only on the full card.
-    const noteLines = [];
-    for (const kind of ['problems', 'notes']) {
-      const at = new Map();   // text -> indices of the stops it is given at
-      stops.forEach((s, i) => {
-        for (const x of [s.arr, s.dep]) for (const text of x?.[kind] ?? []) {
-          if (!at.has(text)) at.set(text, new Set());
-          at.get(text).add(i);
-        }
-      });
-      for (const [text, set] of at) {
-        const idx = [...set].sort((a, b) => a - b);
-        const run = idx.at(-1) - idx[0] === idx.length - 1;   // one stretch of stops in a row
-        const name = i => stationName(stops[i].station);
-        const where = idx.length === stops.length ? ''
-          : run && idx.length >= 3 && idx.at(-1) === stops.length - 1 ? t('noteFrom', name(idx[0]))
-          : run && idx.length >= 3 && idx[0] === 0 ? t('noteUntil', name(idx.at(-1)))
-          : idx.slice(0, 2).map(name).join(', ') + (idx.length > 2 ? ` +${idx.length - 2}` : '');
-        noteLines.push(`<p class="panel-tvnote board-msg${kind === 'problems' ? ' problem' : ''}">${esc(text)}${where ? ` <span>(${esc(where)})</span>` : ''}</p>`);
-      }
-    }
-
-    // On the small card, one red line with what matters for the rest of the trip (Max, 2026-11-15, VR 2047: "Ändrad
-    // väg · Elfel · Alingsås inställt"): Trafikverket's problem notes at the stops not yet passed (the end station
-    // too), each once, then every cancelled stop by name ("Inställt" itself is then said by the names). Problems at
-    // passed stops ("Spårändrat" at Herrljunga) stay on the full card only, with everything else.
-    const ahead = new Set();
-    if (nextIdx !== -1) for (let i = nextIdx; i < stops.length; i++) {
-      for (const x of [stops[i].arr, stops[i].dep]) for (const text of x?.problems ?? []) if (!/^inställ/i.test(text)) ahead.add(text);
-    }
-    const cancelled = stops.filter(s => (s.dep ?? s.arr).canceled).map(s => stationName(s.station));
-    const alert = [...ahead, ...(cancelled.length ? [t('stopsCancelled', cancelled)] : [])].join(' · ');
-
     glanceSeen = '';
     el.innerHTML =
       head(train, route.product) +
-      (alert ? `<p class="panel-alert">${esc(alert)}</p>` : '') +
-      // From files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made.
-      (route.asOf && now() - route.asOf > 2 * 60000 ? `<p class="panel-note">${t('updatedAt', hhmm(route.asOf))}</p>` : '') +
       (stops.length
         ? `<div class="cd"></div><div class="cd cd-tb"></div>` +
-          `<button class="panel-more" type="button"><span class="more">${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
-          (noteLines.length ? notesBox(noteLines) : '') +
+          `<button class="panel-more" type="button"><span class="more"><span class="more-sign"></span>${t('allStops')}${icon('chevronUp', 16)}</span><span class="less">${t('fewerStops')}${icon('chevronDown', 16)}</span></button>` +
+          '<div class="tv-slot"></div>' +
           `<div class="panel-table tl"><div class="tl-head">` +
           // ("All places" back on the card, left of "Track": Max, 2026-11-23; the same setting as Settings → All places)
           `<span class="tl-all"><button type="button" class="tl-places" data-act="allplaces" aria-pressed="${Boolean(settings.allPlaces)}">${icon(settings.allPlaces ? 'check' : 'plus', 14)}${esc(t('allPlaces'))}</button></span><span>${t('track')}</span></div>${tlRows}</div>` +
@@ -572,23 +584,12 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (x) { const at = el.querySelector('.cd-tb') ?? el.querySelector('.panel-more'); if (at) at.before(x); else el.append(x); }
     const more = el.querySelector('.panel-more');
     if (more) more.onclick = () => onMore(!el.classList.contains('full'));
-    const fold = el.querySelector('.tv-toggle');
-    // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
-    // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
-    foldNow = fold ? () => {
-      const h0 = el.querySelector('.tv-box')?.offsetHeight;
-      notesOpen = !notesOpen; draw(train, route, { keepScroll: true });
-      const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
-      // (the page told first, the box at its new height: it brings the opened messages into view from their real size)
-      onFold?.(notesOpen, box);
-      glideHeight(box, h0, h1);
-    } : null;
-    if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
+    foldNow = null;
+    putLaget();
     if (onStop) for (const row of el.querySelectorAll('.tl-row[data-sig]')) row.onclick = () => onStop(row.dataset.sig);
     showGlance();
     drawInfo();
     if (infoScrolled) el.querySelector('.panel-info-box').scrollTop = infoScrolled;
-    if (status) setStatus(status);   // the line on how its place is known stays (main.js updates it each second)
     if (scrolled !== undefined) { const box = el.querySelector('.panel-table'); if (box) box.scrollTop = scrolled; } else toNext();
   }
   // Scroll the timeline (only it) so the train's place is in view; it shows only on the full card.
@@ -629,23 +630,49 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     wireHead();
   }
 
-  // Each second (main.js): a short line under the head saying how it stands with the train ('' for nothing), e.g.
-  // "No report for 3 min"; and the tiles, when their minutes changed.
+  // Each second (src/live/status.js tick): the train's state in words ('' for nothing), e.g. "No GPS for 3 min", for
+  // Läget and the sign beside "More"; and the tiles, when their minutes changed.
   function setStatus(text) {
     showGlance();
     drawInfo();
-    putStatus(text);
+    statusText = text ?? '';
+    putLaget();
   }
-  function putStatus(text) {
-    let line = el.querySelector('.panel-status');
-    if (!text) { line?.remove(); return; }
-    if (!line) {
-      const head = el.querySelector('.panel-head');
-      if (!head) return;
-      line = Object.assign(document.createElement('p'), { className: 'panel-status' });
-      head.after(line);
+  // The train's state lines in Läget: its state, then the old-data note.
+  const stateLines = () => [statusText, laget?.asOf && now() - laget.asOf > 2 * 60000 ? t('updatedAt', hhmm(laget.asOf)) : '']
+    .filter(Boolean).map(stateLine);
+  // Läget (shown only on the full card, src/css/train-card.css) and the sign beside "More": with the card, then each
+  // second. While the box stays, only its state lines and its count change; it is drawn whole when it comes or goes, and
+  // when it is opened or folded (again: draw it whole).
+  function putLaget(again = false) {
+    const slot = el.querySelector('.tv-slot'), state = stateLines();
+    if (!slot || !laget) return;
+    const k = laget.warn.length ? 'warn' : state.length ? 'note' : '';
+    const sign = el.querySelector('.more-sign');
+    if (sign && (sign.dataset.k ?? '') !== k) { sign.dataset.k = k; sign.className = `more-sign${k ? ` ${k}` : ''}`; sign.innerHTML = signHtml(k); }
+    const n = laget.warn.length + state.length + laget.notes.length;
+    const box = slot.querySelector('.tv-box');
+    if (box && n && !again) {
+      const c = box.querySelector('.tv-n');
+      if (c.textContent !== String(n)) { c.textContent = String(n); if (!notesOpen) box.querySelector('.tv-toggle').ariaLabel = t('trainStatusCount', n); }
+      const st = box.querySelector('.tv-state'), html = state.join('');
+      if (st && st.innerHTML !== html) st.innerHTML = html;
+      return;
     }
-    line.textContent = text;
+    if (!box && !n) return;
+    slot.innerHTML = n ? notesBox({ warn: laget.warn, state, notes: laget.notes }) : '';
+    const fold = slot.querySelector('.tv-toggle');
+    // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
+    // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
+    foldNow = fold ? () => {
+      const h0 = el.querySelector('.tv-box')?.offsetHeight;
+      notesOpen = !notesOpen; putLaget(true);
+      const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
+      // (the page told first, the box at its new height: it brings the opened messages into view from their real size)
+      onFold?.(notesOpen, box);
+      glideHeight(box, h0, h1);
+    } : null;
+    if (fold) fold.onclick = () => { if (performance.now() >= foldLetGo) foldNow(); };   // (Enter or Space: a click alone)
   }
 
   // The card put away with the train still open (a screen over it, Settings → Debug → Screen over a train: 'follow'),
