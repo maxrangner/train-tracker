@@ -3,9 +3,10 @@
 // Needs `npm run dev` going. Exit code 0: all good; 1: something failed (it says what); 2: the page isn't running.
 // The one sheet (2026-11-22, src/stack.js): every step goes through tools/lib/screen.mjs.
 // Checked: the page starts without errors in English/light and Swedish/dark, at rest only the search bar and ☰; ☰ lists
-// its rows; Home pulled up shows Statistik's parts (Sweden drawn, its switch), a company opens its page and only its
+// its four rows; Filter (☰) has the lateness bar; the chip Statistik's card at full shows its parts (Sweden drawn, its
+// switch), a company there opens its page and only its
 // trains are drawn, "Show only" keeps that after the page closes (the line above the bar says so, its × shows them all
-// again); a train tapped on Home opens its page; the live mark opens Connection; a tap opens a train's page; the
+// again); a train tapped on Statistik opens its page; the live mark opens Connection; a tap opens a train's page; the
 // compact card (tiles, the stop list, "All stops" raising the sheet, "i"); Settings → All places; every "N trains"
 // label lists exactly N; a search lists every matching train and scrolls; a setting changes without the page
 // reloading; a train picked with the keyboard up is held above the sheet; no model has surfaces on top of each other.
@@ -15,7 +16,7 @@
 import { existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { launch, sleep, PAGE, RUSH_HOUR, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, until, pageKey, toRest, openSearch, typeSearch, openMenu, openFromMenu, openConnection, back, setLevel, sheetState } from './lib/screen.mjs';
+import { waitForMap, until, pageKey, toRest, openSearch, typeSearch, openMenu, openFromMenu, openConnection, back, setLevel, sheetState, openChip, pageSel } from './lib/screen.mjs';
 
 try { await fetch(PAGE); } catch { console.log(`UI check skipped: nothing answers at ${PAGE} (start it with npm run dev)`); process.exit(2); }
 
@@ -26,7 +27,7 @@ const replay = filesAt ? null : has(CARD_HOUR) && existsSync(`data/routes-${CARD
 const base = { ...(replay ? { replay } : {}), ...(filesAt ? { files: filesAt } : {}), view: '12/59.33/18.06', train: 'toy' };
 const runName = filesAt ? 'files, rush-hour replay' : replay ? `replay ${replay}` : 'live';
 const problems = [];
-let stats = 0;   // Statistik's parts on Home
+let stats = 0;   // Statistik's parts
 let filtered = '';   // the filter step's result
 let cardNote = '';   // said in the ok line when the card's parts couldn't be checked
 const expect = (ok, what) => { if (!ok) problems.push(what); };
@@ -47,25 +48,32 @@ try {
     expect(s.lang === lang && s.theme === theme && s.word === word, `${lang}/${theme}: shows lang ${s.lang}, look ${s.theme}, menu "${s.word}"`);
     // At rest: Home, low; only the bar shows (the search field in the bottom 90 px).
     expect(s.key === 'home' && s.level === 0 && s.field > 851 - 90, `${lang}/${theme}: at rest the sheet is ${s.key} at height ${s.level}, its field at y ${s.field}`);
-    // ---- ☰: its three rows ----
+    // ---- ☰: its four rows (Filter, Rewind, Settings, About since the start chips, 2026-11-25) ----
     await openMenu(page);
     const navRows = await page.evaluate(() => [...document.querySelectorAll('#nav .nav-row:not([hidden]) .nav-t')].map(b => b.textContent));
-    expect(navRows.length === 3 && navRows.includes(word), `${lang}/${theme}: ☰ lists ${JSON.stringify(navRows)}`);
+    expect(navRows.length === 4 && navRows.includes(word), `${lang}/${theme}: ☰ lists ${JSON.stringify(navRows)}`);
     await page.keyboard.press('Escape');
     // (its buttons slide back into ☰ first, ~0.3 s: waited for, at most 1.5 s)
     expect(await until(page, () => document.getElementById('nav').hidden, 1500), `${lang}/${theme}: Esc left ☰'s menu open`);
-    // ---- Home pulled up: Statistik's parts (2026-11-22: Statistik is no page of its own) ----
+    // ---- The lateness bar: on the Filter page (☰) since the start chips (2026-11-25; until then on Home) ----
+    await openFromMenu(page, 'filter');
+    const legend = await page.evaluate(h => document.querySelectorAll(`${h} .lg-p`).length, pageSel('filter'));
+    await toRest(page);
+    // ---- Statistik's parts: the chip Statistik's card at full (on Home until 2026-11-25) ----
+    expect(await openChip(page, 'stats'), `${lang}/${theme}: the chip Statistik opened ${await pageKey(page)}`);
     await setLevel(page, 2);
     await sleep(1200);
-    const home = '#sheet .pg[data-key="home"]';
+    const home = pageSel('stats');
+    // (the number is redrawn each second, the trains' count with each frame: until the two agree, at most 4 s)
+    await until(page, (h) => { const n = parseInt(document.querySelector(`${h} .st-big`)?.textContent ?? '', 10); return Math.abs(n - window.__trains.count) <= 0; }, 4000, home);
     const st = await page.evaluate(h => ({ first: document.querySelector(`${h} .st-big`)?.textContent ?? '', bars: document.querySelectorAll(`${h} .st-bar`).length,
-      sections: document.querySelectorAll(`${h} .st-sec`).length, trains: window.__trains.count, legend: document.querySelectorAll(`${h} .lg-p`).length,
+      sections: document.querySelectorAll(`${h} .st-sec`).length, trains: window.__trains.count,
       map: document.querySelector(`${h} canvas`)?.width ?? 0 }), home);
     // The page's number is redrawn each second; from the files, trains come in 5-s batches, so the two may differ by
     // a few at the moment they are read (2026-11-16: "319" against 318).
     const sameCount = filesAt ? Math.abs(parseInt(st.first, 10) - st.trains) <= 3 : st.first.startsWith(String(st.trains));
-    expect(sameCount && st.bars > 0 && st.sections >= 9 && st.map > 0 && st.legend > 0,
-      `${lang}/${theme}: Home shows "${st.first}", ${st.bars} bars, ${st.sections} of 10 Statistik parts, the lateness bar ${st.legend} colours, Sweden ${st.map ? 'drawn' : 'missing'}`);
+    expect(sameCount && st.bars > 0 && st.sections >= 9 && st.map > 0 && legend > 0,
+      `${lang}/${theme}: Statistik shows "${st.first}" (${st.trains} trains on the map), ${st.bars} bars, ${st.sections} of 10 Statistik parts, Sweden ${st.map ? 'drawn' : 'missing'}; Filter's lateness bar ${legend} colours`);
     // The heatmap's switch: Lateness, then back to Trains.
     const heat = await page.evaluate((h) => {
       const late = document.querySelector(`${h} .st-heatseg [data-v="lateness"]`), trains = document.querySelector(`${h} .st-heatseg [data-v="trains"]`);
@@ -76,17 +84,17 @@ try {
     }, home);
     expect(heat === 'ok', `${lang}/${theme}: the heatmap's switch: ${heat}`);
     if (lang === 'en') {
-      // ---- A company on Home opens its page, only its trains are drawn; "Show only" keeps that after it closes
+      // ---- A company on Statistik opens its page, only its trains are drawn; "Show only" keeps that after it closes
       // (the line above the bar says so); × on the line shows them all again ----
       const drawn = () => page.evaluate(() => ({ n: window.__last3d.length, line: !document.getElementById('line').hidden,
         text: document.getElementById('line').textContent, key: window.__stack.top() }));
       const all = await drawn();
-      const company = await page.evaluate(h => { const b = document.querySelector(`${h} [data-filter="brand"]`); b.click(); return b.dataset.v; }, home);
+      const company = await page.evaluate(h => { const b = document.querySelector(`${h} [data-filter="brand"]`); b?.click(); return b?.dataset.v ?? null; }, home);
       await sleep(900);
       const open = await drawn();
-      // (a company picked on Home is a filter at once, its "Show only" already on: Max, 2026-11-23)
+      // (a company picked on Statistik is a filter at once, its "Show only" already on: Max, 2026-11-23)
       const pressed = await page.evaluate(() => document.querySelector('#sheet .show-only')?.getAttribute('aria-pressed'));
-      expect(pressed === 'true', `a company picked on Home is a filter at once: its "Show only" pressed (${pressed})`);
+      expect(pressed === 'true', `a company picked on Statistik is a filter at once: its "Show only" pressed (${pressed})`);
       await back(page);
       await sleep(500);
       const only = await drawn();
@@ -95,10 +103,11 @@ try {
       const again = await drawn();
       filtered = `${company}: ${open.n} of ${all.n} drawn`;
       expect(open.key === `co:${company}` && open.n > 0 && open.n < all.n && !all.line,
-        `a tap on ${company} on Home: page ${open.key}, drawn ${all.n} -> ${open.n}`);
-      expect(only.key === 'home' && only.line && only.text.includes(company) && Math.abs(only.n - open.n) <= 3 && !again.line && again.n >= all.n - 5,
+        `a tap on ${company} on Statistik: page ${open.key}, drawn ${all.n} -> ${open.n}`);
+      // (back from the company: Statistik, the root page it was opened from)
+      expect(only.key === 'stats' && only.line && only.text.includes(company) && Math.abs(only.n - open.n) <= 3 && !again.line && again.n >= all.n - 5,
         `"Show only" ${company}: back on ${only.key}, drawn ${only.n} (line ${only.line ? `"${only.text}"` : 'hidden'}) -> × ${again.n} (line ${again.line ? 'shown' : 'hidden'})`);
-      // ---- A train on Home (the most late, else the fastest) opens its page ----
+      // ---- A train on Statistik (the most late, else the fastest) opens its page ----
       await setLevel(page, 2);
       const tapped = await page.evaluate((h) => {
         const b = document.querySelector(`${h} .st-worst:not([hidden])`) ?? document.querySelector(`${h} .st-fastrow[data-id]`) ?? document.querySelector(`${h} .most-late [data-go]`);
@@ -108,7 +117,7 @@ try {
       await sleep(1500);
       const card = await page.evaluate(() => ({ key: window.__stack.top(), title: document.querySelector('#panel .panel-title strong')?.textContent ?? '' }));
       expect(tapped && card.key.startsWith('train:') && card.title.startsWith(tapped),
-        `a tap on train ${tapped ?? '(none to tap)'} on Home: page ${card.key}, card "${card.title}"`);
+        `a tap on train ${tapped ?? '(none to tap)'} on Statistik: page ${card.key}, card "${card.title}"`);
       await toRest(page);
     }
     // ---- The live mark opens the connection screen (Max's pick Y, 2026-11-18; a page since 2026-11-22) ----
@@ -349,7 +358,7 @@ try {
   expect(search.rows >= Math.min(search.onMap, 200), `search "2": ${search.rows} rows for ${search.onMap} trains on the map`);
   expect(search.onMap < 12 || search.scrolls, 'the search list does not scroll');
   // The empty search: no "Show only" chips since 2026-11-24 (Max: they looked like they filtered the search; they are in
-  // Home's filter card now, tools/filter-pills-check.mjs).
+  // the Filter page now, tools/filter-pills-check.mjs).
   await typeSearch(page, '');
   await page.evaluate(() => { const i = document.getElementById('search'); i.value = ''; i.dispatchEvent(new Event('input')); });
   await sleep(300);
@@ -423,7 +432,7 @@ try {
 
   console.log(problems.length ? `UI check FAILED (${runName}):` : `UI check ok (${runName}): ` +
     `both languages and looks start clean at rest, a tap opens train ${tapped}${cardNote}${placesSeen}, ${groups} group labels match their lists (${farGroups} far out), tilted: ${lowSeen} of ${low.length} near trains drawn, ` +
-    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, Home shows Statistik (${stats} parts), filter ${filtered}, held at ${heldAt}, model surfaces 0`);
+    `search "2" lists ${search.rows} (${search.onMap} on the map), Dark without reloading, Statistik shows ${stats} parts, filter ${filtered}, held at ${heldAt}, model surfaces 0`);
   for (const p of problems) console.log('  -', p);
 } finally {
   await browser.close();
