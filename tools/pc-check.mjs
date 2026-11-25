@@ -181,12 +181,22 @@ try {
   ok(!s2.shown, `Home at half: no bar (${s2.shown ? 'shown' : 'none'})`);
 
   // 13. Home's filter: the companies and "N more" on one row (Max, 2026-11-25: "Filter operators including 'n till' should
-  //     only be one row"); the count says what is left out
-  const co = await page.evaluate(() => { const box = document.querySelector('#sheet .co-filter'); if (!box) return null;
+  //     only be one row"); the count says what is left out. Also after "N more" opened and "Fewer" folded it again, twice
+  //     (Max, 2026-11-25: after "Färre" they showed on two rows: the fit was skipped, its own cache said done)
+  const coRow = () => page.evaluate(() => { const box = document.querySelector('#sheet .co-filter'); if (!box) return null;
     const shown = [...box.children].filter(c => !c.hidden && c.offsetHeight), more = box.querySelector('.co-more');
     return { rows: new Set(shown.map(c => c.offsetTop)).size, chips: shown.filter(c => c.matches('.co-f')).length, total: Number(box.dataset.total), more: more && !more.hidden ? more.textContent.trim() : '' }; });
-  ok(co && co.rows === 1 && (co.total - co.chips === 0 ? !co.more : co.more.startsWith(String(co.total - co.chips))),
-    `the filter's companies: ${co?.rows} row(s), ${co?.chips} of ${co?.total} shown, "${co?.more}"`);
+  const oneRow = co => co && co.rows === 1 && (co.total - co.chips === 0 ? !co.more : co.more.startsWith(String(co.total - co.chips)));
+  const co = await coRow();
+  ok(oneRow(co), `the filter's companies: ${co?.rows} row(s), ${co?.chips} of ${co?.total} shown, "${co?.more}"`);
+  for (const k of [1, 2]) {
+    const more = () => page.evaluate(() => { const b = document.querySelector('#sheet .co-filter .co-more:not([hidden])'); b?.click(); return Boolean(b); });
+    const opened = await more(); await sleep(900);
+    const open = await coRow();
+    const folded = await more(); await sleep(900);
+    const again = await coRow();
+    ok(opened && folded && open?.rows > 1 && oneRow(again), `"N more" then "Fewer" (${k === 1 ? 'once' : 'twice'}): opened ${open?.rows} rows, folded ${again?.rows} row(s), ${again?.chips} of ${again?.total} shown, "${again?.more}"`);
+  }
 
   // 14. New trip, its To field typed in: the sheet ends under the last real part, the Save button, with only the usual
   //     room (Max, 2026-11-25: on a computer it grew to the screen's full, empty, the room meant for a phone's keyboard)

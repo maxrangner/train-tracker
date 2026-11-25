@@ -40,6 +40,23 @@ const PATHS = {
   trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 12.5h9l1-12.5M10 11v5M14 11v5"/>',
   // A trip's station dragged up or down by its six dots (Max's pick A, 2026-11-23).
   grip: '<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></g>',
+  // Home's cards' titles (Max's pick A, 2026-11-25; besides star, locate, warning, train, day (a clock), pause, server):
+  // the filter, punctuality, a company, the fastest, the busiest, "for fun".
+  funnel: '<path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/>',
+  checkCircle: '<circle cx="12" cy="12" r="8.5"/><path d="M8 12.3l2.7 2.7L16 9.5"/>',
+  company: '<path d="M4 20V8l6-3v15M10 20V10l10 3v7M4 20h16"/>',
+  gauge: '<path d="M4.5 16a8 8 0 1 1 15 0"/><path d="M12 13.5l4-4.5"/>',
+  bars: '<path d="M4 19.5h16M7 19.5V12M12 19.5V7M17 19.5v-9"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>',
 };
 export const icon = (name, size = 20, stroke = 2) =>
   `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] ?? ''}</svg>`;
+
+// A card's title on Home (Max's pick A, 2026-11-25: "Give each sub card an icon before the title. And make it dynamic"):
+// the title gets the class ct (and --ct: its colour, the accent unless set), its icon before the words, where there is
+// a number a chip after them in the same colour on a 16 % tint of it (src/css/page.css .ct). titleChip(n): none for
+// 0, null or ''.
+export const titleIcon = name => `<span class="ct-ic" aria-hidden="true">${icon(name, 18)}</span>`;
+export const titleChip = n => (n === 0 || n === null || n === undefined || n === '' ? '' : `<span class="ct-n">${n}</span>`);
+// The attributes of a title (class names besides ct; colour: a CSS colour or none)
+export const titleAttrs = (cls, colour = null) => `class="${cls} ct"${colour ? ` style="--ct:${colour}"` : ''}`;
