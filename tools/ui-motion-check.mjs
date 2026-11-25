@@ -14,7 +14,7 @@
 // rows are .row / .chip with data-go; a train, Connection and the disruptions are pages in the sheet (tools/lib/screen.mjs).
 // node tools/ui-motion-check.mjs (with npm run dev; PAGE= for another port).
 import { launch, sleep, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, toRest, openSearch, openDisruptions, pageSel } from './lib/screen.mjs';
+import { waitForMap, until, toRest, openSearch, openDisruptions, pageSel } from './lib/screen.mjs';
 import { existsSync } from 'node:fs';
 
 const fails = [], oks = [], notes = [];
@@ -46,7 +46,8 @@ try {
   const box = await nb.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await sleep(200);
+  // (waited for, not read once at 200 ms: on a busy PC the press showed later, 2026-11-25)
+  await until(page, () => getComputedStyle(document.getElementById('nav-button')).scale === '0.94', 1500);
   const held = await page.evaluate(() => getComputedStyle(document.getElementById('nav-button')).scale);
   await page.mouse.up();
   await sleep(400);

@@ -31,7 +31,7 @@ function recorder() {
   const own = el => { for (const c of el.childNodes) if (c.nodeType === 3 && c.textContent.trim()) return true; return false; };
   const want = el => !skip(el) && (own(el) || /^(BUTTON|svg|IMG|INPUT|I)$/.test(el.tagName) || el.classList.contains('dot'));
   const describe = (el) => {
-    const pg = el.closest('[data-key]')?.dataset.key ?? (el.closest('#nav') ? 'menu' : el.closest('#sheet') ? 'sheet' : 'screen');
+    const pg = (el.closest('.pg-ghost') ? 'ghost:' : '') + (el.closest('.pg')?.dataset.key ?? (el.closest('#nav') ? 'menu' : el.closest('#sheet') ? 'sheet' : 'screen'));
     const cls = typeof el.className === 'string' ? el.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
     let text = '';
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
@@ -49,7 +49,10 @@ function recorder() {
       const cs = getComputedStyle(p);
       if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none') {
         const r = p.getBoundingClientRect();
-        c = [Math.max(c[0], r.left), Math.max(c[1], r.top), Math.min(c[2], r.right), Math.min(c[3], r.bottom)];
+        // (a leaving page clipped to its top part: inset(0 0 calc(100% - Npx) 0), src/stack.js clipLeaving)
+        const m = /calc\(100% - ([\d.]+)px\)/.exec(p.style.clipPath);   // (its own words: computed, 100% - 0px reads 100%)
+        const bottom = m ? Math.min(r.bottom, r.top + Number(m[1])) : r.bottom;
+        c = [Math.max(c[0], r.left), Math.max(c[1], r.top), Math.min(c[2], r.right), Math.min(c[3], bottom)];
       }
       clip.set(p, c);
       return c;
@@ -73,10 +76,14 @@ function recorder() {
       if (vw < 2 || vh < 2) continue;
       const o = opOf(el);
       if (o < 0.05) continue;
-      out.push([idOf(el), Math.round(r.left * 10) / 10, Math.round(r.top * 10) / 10, Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, Math.round(o * 100) / 100, Math.round(vh)]);
+      const pgEl = el.closest('.pg');   // (its page now: a shared button moves between pages)
+      out.push([idOf(el), Math.round(r.left * 10) / 10, Math.round(r.top * 10) / 10, Math.round(r.width * 10) / 10, Math.round(r.height * 10) / 10, Math.round(o * 100) / 100, Math.round(vh),
+        (pgEl?.classList.contains('pg-ghost') ? 'ghost:' : '') + (pgEl?.dataset.key ?? R.meta[idOf(el)].pg)]);
     }
     const pgTop = document.querySelector(`#sheet .pg[data-key="${CSS.escape(window.__stack.top())}"]`);
-    return { t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
+    const hp = document.querySelector('#sheet .pg[data-key="home"]');
+    const home = hp ? `${hp.isConnected ? '' : 'gone '}${hp.className} clip(${hp.style.clipPath}) vis ${getComputedStyle(hp).visibility} top ${Math.round(hp.getBoundingClientRect().top)}` : 'no home';
+    return { home, t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
   };
   R.start = () => { R.frames = []; R.on = true; const f = () => { if (!R.on) return; R.frames.push(R.snap()); requestAnimationFrame(f); }; requestAnimationFrame(f); };
   R.stop = () => { R.on = false; };
@@ -90,11 +97,15 @@ function analyse(rec, kind) {
   const b = els(before), a = els(after), finds = [];
   const say = id => `${meta[id].pg} ${meta[id].el}${meta[id].text ? ` "${meta[id].text}"` : ''}`;
   // stray
+  // (a leaving page's still copy, src/stack.js ghostOf: its part counts as seen when the same part, look and words, of
+  // its page was shown before)
+  const sig = e => `${e[7].replace(/^ghost:/, '')}|${meta[e[0]].el}|${meta[e[0]].text}`;
+  const shownBefore = new Set([...b.values()].map(sig));
   const seen = new Map();
-  for (const f of frames) for (const e of f.els) if (!b.has(e[0]) && !a.has(e[0]) && meta[e[0]].pg !== after.top) { const s = seen.get(e[0]) ?? { n: 0, at: e }; s.n++; seen.set(e[0], s); }
+  for (const f of frames) for (const e of f.els) if (!(b.has(e[0]) && !e[7].startsWith('ghost:')) && !a.has(e[0]) && e[7] !== after.top && !(e[7].startsWith('ghost:') && shownBefore.has(sig(e)))) { const s = seen.get(e[0]) ?? { n: 0, at: e }; s.n++; seen.set(e[0], s); }
   for (const [id, s] of seen) {
     if (meta[id].pg === 'screen' && /maplibregl/.test(meta[id].el)) continue;
-    finds.push({ kind: 'stray', id, what: say(id), info: `seen in ${s.n} frame(s) at ${Math.round(s.at[1])},${Math.round(s.at[2])} ${Math.round(s.at[3])}×${Math.round(s.at[4])}` });
+    finds.push({ kind: 'stray', id, what: `${s.at[7]} ${say(id).replace(/^\S+ /, '')}`, info: `seen in ${s.n} frame(s) at ${Math.round(s.at[1])},${Math.round(s.at[2])} ${Math.round(s.at[3])}×${Math.round(s.at[4])}` });
   }
   // the series of each element seen in the end
   const series = new Map();
@@ -104,15 +115,21 @@ function analyse(rec, kind) {
     if (meta[id].pg === 'screen' && !/status|map-btn|sh-/.test(meta[id].el)) continue;
     if (meta[id].bottom) continue;   // (the sheet's bottom band, "Mer ⌄": it rides the bottom edge)
     // jump: at rest (3 frames within 0.5 px) then moving 1 px or more again; or turning back by 2 px or more
-    let rest = 0, rested = false, dir = 0, travel = 0, jumped = null;
+    // (each axis on its own: a page sliding in sideways while the sheet rises is two smooth motions)
+    let rest = 0, rested = false, jumped = null;
+    const dir = { x: 0, y: 0 };
     for (let k = 1; k < s.length; k++) {
-      if (s[k].i !== s[k - 1].i + 1) { rest = 0; dir = 0; continue; }
-      const dy = s[k].y - s[k - 1].y, dx = s[k].x - s[k - 1].x;
-      const d = Math.abs(dy) > Math.abs(dx) ? dy : dx;
-      if (Math.abs(d) < 0.5) { rest++; if (rest >= 3) rested = true; continue; }
-      if (rested && Math.abs(d) >= 1 && !jumped) jumped = { k, d, kind: 'moved again after rest' };
-      if (dir && Math.sign(d) !== dir && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: 'turned back' };
-      if (Math.abs(d) >= 0.5) { dir = Math.sign(d); travel += Math.abs(d); rest = 0; }
+      if (s[k].i !== s[k - 1].i + 1) { rest = 0; dir.x = 0; dir.y = 0; continue; }
+      const step = { x: s[k].x - s[k - 1].x, y: s[k].y - s[k - 1].y };
+      if (Math.abs(step.x) < 0.5 && Math.abs(step.y) < 0.5) { rest++; if (rest >= 3) rested = true; continue; }
+      for (const ax of ['x', 'y']) {
+        const d = step[ax];
+        if (Math.abs(d) < 0.5) continue;
+        if (rested && Math.abs(d) >= 1 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax})` };
+        if (dir[ax] && Math.sign(d) !== dir[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `turned back (${ax})` };
+        dir[ax] = Math.sign(d);
+      }
+      rest = 0;
     }
     if (jumped) finds.push({ kind: 'jump', id, what: say(id), info: `${jumped.kind}: ${jumped.d.toFixed(1)} px at frame ${s[jumped.k].i} of ${frames.length}` });
     // grow: the same page, a taller or shorter sheet; what is shown stays still against the sheet's top
@@ -279,7 +296,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
       const finds = analyse({ frames, meta, before, after }, tr.kind);
       if (TRACE) {   // (--trace <words>: the frames of the elements whose text has them)
         const ids = Object.keys(meta).filter(k => meta[k].text.includes(TRACE)).map(Number);
-        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0])); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] ${e ? `y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]}` : '–'}`); });
+        frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0])); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]}` : '–'}`); });
       }
       const pad = (await padding(page)).filter(x => x.type === 'gap' ? x.px > 0 : true);
       all.push({ dev, name: tr.name, frames: frames.length, finds, pad, top: after.top });
