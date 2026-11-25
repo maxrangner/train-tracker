@@ -10,7 +10,7 @@
 // destination (arrivals: where it comes from) typed narrows it; the search button again closes it.
 const time = t => (t ? hhmm(t) : '');
 import { esc } from './html.js';
-import { arrive } from './motion.js';
+import { arrive, reduceMotion } from './motion.js';
 const REFRESH_MS = 30000;
 const MESSAGES_MS = 5 * 60 * 1000;
 
@@ -49,7 +49,16 @@ export function createBoard(el, { load, loadDay = null, stationName, onPickTrain
     if (b) b.onclick = () => {
       if (!forced()) ownFull = el.classList.contains('full');
       const full = !msgsOpen || finding || backTo();
+      const h0 = el.querySelector('.board-msgs')?.offsetHeight;
       glide(el, () => { msgsOpen = !msgsOpen; el.classList.toggle('full', full); el.querySelector('.board-msgs').outerHTML = msgsHtml(); wireMsgs(); });
+      // (the messages' box glides to its new height, so the timetable under it moves down with it, not in one jump:
+      // ui-sweep, 2026-11-25)
+      const box = el.querySelector('.board-msgs'), h1 = box?.offsetHeight;
+      if (box && h0 && h1 && h0 !== h1 && !reduceMotion()) {
+        box.style.overflow = 'hidden';
+        box.animate([{ height: `${h0}px` }, { height: `${h1}px` }], { duration: 260, easing: 'cubic-bezier(.2, .8, .2, 1)' })
+          .finished.catch(() => {}).then(() => { box.style.overflow = ''; });
+      }
     };
   }
   async function askMessages() {
