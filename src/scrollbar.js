@@ -39,7 +39,9 @@ export function addScrollbar(scroller, { host = null } = {}) {
     queued = false;
     if (!scroller?.isConnected) { bar.hidden = true; return; }
     const { room, range, h } = geometry();
-    bar.hidden = range <= 1 || room <= MIN_THUMB || (host && !scrolls());
+    // (a page still sliding in or out: none until it stands, the bar doesn't slide with it; ui-sweep, 2026-11-25)
+    // (nor while the sheet glides to another height: About growing to full showed it for 17 frames, then it fit)
+    bar.hidden = range <= 1 || room <= MIN_THUMB || (host && (!scrolls() || gliding.size > 0 || /(^| )(in|out)-[lr]( |$)/.test(scroller.className)));
     if (bar.hidden) return;
     bar.style.top = `${scroller.offsetTop}px`;
     bar.style.height = `${scroller.clientHeight}px`;
@@ -49,14 +51,16 @@ export function addScrollbar(scroller, { host = null } = {}) {
   const later = () => { if (!queued) { queued = true; requestAnimationFrame(place); } };
   const ro = new ResizeObserver(later);
   const mo = new MutationObserver(later);   // the content grew or shrank
+  const co = new MutationObserver(later);   // (its own class: a page's slide ending)
   function bind(el) {
-    if (scroller) { scroller.removeEventListener('scroll', later); ro.unobserve(scroller); mo.disconnect(); scroller.classList.remove(own); }
+    if (scroller) { scroller.removeEventListener('scroll', later); ro.unobserve(scroller); mo.disconnect(); co.disconnect(); scroller.classList.remove(own); }
     scroller = el;
     if (!el) { bar.hidden = true; return; }
     el.classList.add(own);
     el.addEventListener('scroll', later, { passive: true });
     ro.observe(el);
     mo.observe(el, { childList: true, subtree: true });
+    if (host) co.observe(el, { attributes: true, attributeFilter: ['class'] });
     later();
   }
   const first = scroller;
@@ -64,6 +68,12 @@ export function addScrollbar(scroller, { host = null } = {}) {
   bind(first);
   // (a page in the sheet scrolls only at full: the sheet's height step or the search changing says when)
   if (host) new MutationObserver(later).observe(host.closest('#sheet') ?? host, { attributes: true, attributeFilter: ['data-h', 'data-search'] });
+  // (the sheet's own glides running: its height or its slide)
+  const gliding = new Set(), sheetEl = host?.closest('#sheet');
+  if (sheetEl) {
+    sheetEl.addEventListener('transitionrun', (e) => { if (e.target === sheetEl) { gliding.add(e.propertyName); later(); } });
+    for (const ev of ['transitionend', 'transitioncancel']) sheetEl.addEventListener(ev, (e) => { if (e.target === sheetEl) { gliding.delete(e.propertyName); later(); } });
+  }
 
   // Drag the slider.
   thumb.addEventListener('pointerdown', (e) => {
