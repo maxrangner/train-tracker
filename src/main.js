@@ -419,7 +419,9 @@ function headPlaces() {
   const top = head.getBoundingClientRect().top, was = new Map();
   for (const b of panelEl.querySelectorAll(HEAD_BTNS)) {
     const r = b.getBoundingClientRect();
-    if (r.width) was.set(b, { x: r.left, y: r.top - top, w: r.width, pl: parseFloat(getComputedStyle(b).paddingLeft) });
+    // (ic: where its icon sits in it, measured: an icon-only Follow is centred with no padding)
+    const ic = b.querySelector('svg')?.getBoundingClientRect().left;
+    if (r.width) was.set(b, { x: r.left, y: r.top - top, w: r.width, ic: ic === undefined ? 0 : ic - r.left });
   }
   return was;
 }
@@ -444,8 +446,8 @@ function glideHead(was) {
       // (its width changes while its place in the row keeps its new width: the buttons beside it don't move twice)
       b.classList.add('morph');
       const a = b.animate([
-        { width: `${from.w}px`, marginLeft: `${to.w - from.w}px`, paddingLeft: `${from.pl}px` },
-        { width: `${to.w}px`, marginLeft: '0px', paddingLeft: `${to.w < from.w ? (to.w - 15) / 2 : to.pl}px` },
+        { width: `${from.w}px`, marginLeft: `${to.w - from.w}px`, paddingLeft: `${from.ic}px` },
+        { width: `${to.w}px`, marginLeft: '0px', paddingLeft: `${to.ic}px` },
       ], timing);
       a.finished.catch(() => {}).then(() => b.classList.remove('morph'));
       continue;
@@ -495,7 +497,7 @@ function trainPage(id) {
   }
   return {
     name: number, kind: 'train',
-    show(el, { prev, dir, go = false, again = false }) {
+    show(el, { prev, dir, go = false, again = false, level }) {
       myEl = el;
       el.append(panelEl);
       const m = meta() ?? m0;
@@ -504,7 +506,9 @@ function trainPage(id) {
       else if (panel.hidden) panel.show();
       // (a train just opened starts compact, whatever height the sheet had: from the search at full it took that height
       // and measured itself full, then dropped, 2026-11-23)
-      panelEl.classList.toggle('full', dir <= 0 && stack.level === 2);
+      // (back to it: the height it comes back at, not the one the sheet has yet: drawn compact for a frame, its stops
+      // jumped 32 px; ui-sweep, 2026-11-25)
+      panelEl.classList.toggle('full', dir <= 0 && (dir < 0 && level !== undefined ? level : stack.level) === 2);
       if (!m.onMap) { map.unfollow(); return; }
       buzz();
       panel.setFollowing(true);

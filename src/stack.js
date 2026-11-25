@@ -674,7 +674,8 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
     syncBar();
     H[0] = lowOf(pg);
     const level = opts.level ?? (dir > 0 ? Math.max(1, pg.def.startLevel ?? 1) : pg.lvl ?? 1);
-    pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, ...opts });
+    // (the height it will have, before the sheet has it: a card drawn for the old page's height first redrew a frame later)
+    pg.def.show?.(pg.el, { dir, prev: prev ? { key: prev.key, kind: prev.def.kind ?? prev.key.split(':')[0] } : null, level, ...opts });
     syncBar();   // (‹ and the buttons on its title line before its heights and its scroll are read: a list came back 4 px short)
     [H[0], H[1], H[2]] = heightsOf(pg);   // (once its content is in)
     setIndex(pg.key === 'home' && dir < 0 && opts.level === undefined ? Math.min(level, idx) : level);
