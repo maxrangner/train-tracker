@@ -852,12 +852,14 @@ export function createStack({ sheet, define, onPad = () => {}, onChange = () => 
   // The search's height: a phone's all of the screen (its keyboard covers the lower half: the field goes up, clear of
   // it); a computer's as tall as its results, growing and shrinking with them (Max, 2026-11-24: "Just clicking the
   // search bar expands the card fully with just empty space. It should be sized dynamically relating to the search
-  // results")
+  // results"); empty, only its line and the usual room under it (Max, 2026-11-25: "Empty search field has too big empty
+  // card": a floor of 120 px under the bar left ~100 px empty)
   function searchFull() {
     if (!wide()) return fullMax;
     let end = 0;
     for (const c of results.children) if (c.offsetHeight) end = Math.max(end, c.offsetTop + c.offsetHeight);
-    return Math.round(Math.min(fullMax, Math.max(headPx() + 120, headPx() + end + FIT_GAP_PX)));
+    // (the handle's band at the bottom is hidden while searching, index.html: not counted)
+    return Math.round(Math.min(fullMax, headPx() - grabH() + (grabEl?.offsetHeight ?? 0) + Math.max(end, 24) + FIT_GAP_PX));
   }
   new MutationObserver(() => {
     if (!searching || !wide() || drag) return;

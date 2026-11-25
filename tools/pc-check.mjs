@@ -137,6 +137,15 @@ try {
   await page.evaluate(() => window.__stack.setLevel(2)); await sleep(1300);
   const fb = await page.evaluate(() => { const f = document.querySelector('#sheet .sh-fade').getBoundingClientRect(), g = document.querySelector('#sheet .sh-grab').getBoundingClientRect(); return Math.round(g.top - f.bottom); });
   ok(Math.abs(fb) <= 1, `a train at full: the fade ends ${fb} px above its band (want 0; Max: "A random border clipping the text")`);
+
+  // 11. The empty search: as tall as its line and the usual room under it, no empty band (Max, 2026-11-25: "Empty search
+  //     field has too big empty card")
+  await page.evaluate(() => window.__stack.home(0)); await sleep(900);
+  await page.click('#search'); await sleep(1000);
+  const es = await page.evaluate(() => { const s = document.getElementById('sheet').getBoundingClientRect(), last = [...document.querySelectorAll('#search-results > *')].filter(e => e.offsetHeight).at(-1)?.getBoundingClientRect();
+    return last ? { under: Math.round(s.bottom - last.bottom), h: Math.round(s.height) } : null; });
+  ok(es && es.under >= 8 && es.under <= 20, `the empty search: ${es?.under ?? '?'} px under its line (want 8 to 20), the sheet ${es?.h ?? '?'} px`);
+  await page.keyboard.press('Escape'); await sleep(500);
 } finally {
   await browser.close();
 }

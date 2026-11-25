@@ -872,6 +872,9 @@
     /* (a computer: open, the arrow's band goes and the box closes round the bar; Max, 2026-11-24 "Menu should remove the
        arrow and contract to match needed height"; src/stack.js lowOf) */
     @media (min-width: 440px) { #sheet.menu-open .sh-grab { display: none; } #sheet.menu-open .sh-head { margin-bottom: 10px; } }
+    /* a computer's search: no handle band under it (its arrow is hidden there: an empty 28 px under the results; Max,
+       2026-11-25 "Empty search field has too big empty card") */
+    @media (min-width: 440px) { #sheet[data-search] .sh-grab { display: none; } }
     #sheet.menu-open .sh-field, #sheet.menu-fading .sh-field { display: none; }
     #sheet.menu-open .sh-pages .pg { overflow: hidden !important; touch-action: none; }
     /* The open train's lateness changed: its tile pulses once, a ring in its colour (src/panel.js). */
