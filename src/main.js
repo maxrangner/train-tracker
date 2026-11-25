@@ -709,9 +709,9 @@ function pickPage(key) {
 }
 
 // ---- Settings, About, Connection: their parts are in index.html, moved into the page while it is shown ----
-function heldPage(el, { name, kind, onShow, onHide }) {
+function heldPage(el, { name, kind, onShow, onHide, startLevel }) {
   return {
-    name, kind,
+    name, kind, startLevel,
     show(page) { page.append(el); el.hidden = false; onShow?.(); },
     hide() { el.hidden = true; holder.append(el); onHide?.(); },
     unmount() { el.hidden = true; holder.append(el); },
@@ -1731,7 +1731,9 @@ function define(key) {
     case 'co': case 'kind': case 'late': case 'still': return groupPage(key, pageData);
     case 'page':
       if (v === 'settings') return heldPage(settingsPage, { name: () => t('settings'), kind: 'settings', onShow: () => { foldAccents(false); showSettings(); } });
-      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help' });   // (About Spårat, as before the sheet: Max, 2026-11-24)
+      // (About Spårat, as before the sheet: Max, 2026-11-24; opens full, as tall as it is: Max, 2026-11-25 "'Om spårat'
+      // should be expanded by default")
+      if (v === 'help') return heldPage(helpEl, { name: () => t('aboutApp'), kind: 'help', startLevel: 2 });
       if (v === 'conn') return heldPage(connPage, { name: () => t('connTitle'), kind: 'conn', onShow: () => showConn() });
       return null;
     default: return null;
