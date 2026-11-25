@@ -11,16 +11,21 @@ const smooth = () => (matchMedia('(prefers-reduced-motion: reduce)').matches ? '
 const arrow = d => `<svg width="8" height="6" viewBox="0 0 8 6" aria-hidden="true"><path d="${d}" fill="currentColor"/></svg>`;
 
 // scroller: the element that scrolls; its offset parent (a positioned sheet) holds the bar.
-export function addScrollbar(scroller) {
-  if (!mouse.matches) return;
-  scroller.classList.add('sb-own');
+// { host }: one bar in host for whichever element scrolls there now (the sheet's pages: the top page or the search's
+// results); bar.follow(el) moves it on (Max, 2026-11-25: "Grabbing the scrollbar shows a black background under it ...
+// Also changes width. This was fixed once before. Why back?": since the one sheet the pages themselves scroll, and they
+// had the browser's bar). It shows only while its element really scrolls (a page in the sheet scrolls at full only).
+// Returns { follow } (nothing to follow on a phone).
+export function addScrollbar(scroller, { host = null } = {}) {
+  if (!mouse.matches) return { follow() {} };
+  const own = host ? 'sb-page' : 'sb-own';   // (a page keeps its padding: index.html .pg; only the browser's bar goes)
   const bar = document.createElement('div');
   bar.className = 'sb';
   bar.setAttribute('aria-hidden', 'true');
   bar.innerHTML = `<button type="button" class="sb-arrow sb-up" tabindex="-1">${arrow('M4 0 8 6H0z')}</button>` +
     `<div class="sb-track"><div class="sb-thumb"></div></div>` +
     `<button type="button" class="sb-arrow sb-down" tabindex="-1">${arrow('M0 0h8L4 6z')}</button>`;
-  scroller.after(bar);
+  if (host) host.append(bar); else scroller.after(bar);
   const track = bar.querySelector('.sb-track'), thumb = bar.querySelector('.sb-thumb');
 
   let queued = false;
@@ -29,10 +34,12 @@ export function addScrollbar(scroller) {
     const h = Math.max(MIN_THUMB, room * scroller.clientHeight / Math.max(1, scroller.scrollHeight));
     return { room, range, h };
   };
+  const scrolls = () => { const o = getComputedStyle(scroller).overflowY; return o === 'auto' || o === 'scroll'; };
   function place() {
     queued = false;
+    if (!scroller?.isConnected) { bar.hidden = true; return; }
     const { room, range, h } = geometry();
-    bar.hidden = range <= 1 || room <= MIN_THUMB;
+    bar.hidden = range <= 1 || room <= MIN_THUMB || (host && !scrolls());
     if (bar.hidden) return;
     bar.style.top = `${scroller.offsetTop}px`;
     bar.style.height = `${scroller.clientHeight}px`;
@@ -40,9 +47,23 @@ export function addScrollbar(scroller) {
     thumb.style.transform = `translateY(${(room - h) * scroller.scrollTop / range}px)`;
   }
   const later = () => { if (!queued) { queued = true; requestAnimationFrame(place); } };
-  scroller.addEventListener('scroll', later, { passive: true });
-  new ResizeObserver(later).observe(scroller);
-  new MutationObserver(later).observe(scroller, { childList: true, subtree: true });   // the content grew or shrank
+  const ro = new ResizeObserver(later);
+  const mo = new MutationObserver(later);   // the content grew or shrank
+  function bind(el) {
+    if (scroller) { scroller.removeEventListener('scroll', later); ro.unobserve(scroller); mo.disconnect(); scroller.classList.remove(own); }
+    scroller = el;
+    if (!el) { bar.hidden = true; return; }
+    el.classList.add(own);
+    el.addEventListener('scroll', later, { passive: true });
+    ro.observe(el);
+    mo.observe(el, { childList: true, subtree: true });
+    later();
+  }
+  const first = scroller;
+  scroller = null;
+  bind(first);
+  // (a page in the sheet scrolls only at full: the sheet's height step or the search changing says when)
+  if (host) new MutationObserver(later).observe(host.closest('#sheet') ?? host, { attributes: true, attributeFilter: ['data-h', 'data-search'] });
 
   // Drag the slider.
   thumb.addEventListener('pointerdown', (e) => {
@@ -74,4 +95,5 @@ export function addScrollbar(scroller) {
     for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop);
   }
   later();
+  return { follow: bind };
 }

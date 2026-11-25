@@ -4,11 +4,14 @@
    showed its bar beside ours and the content ran up to it (Max, 2026-11-15). */
 .sb-own { scrollbar-width: none !important; padding-right: 6px !important; }
 .sb-own::-webkit-scrollbar { display: none; }
+/* a page in the sheet (src/main.js pageBar): only the browser's bar goes; the page keeps its 16 px sides, ours runs in them */
+.sb-page { scrollbar-width: none !important; }
+.sb-page::-webkit-scrollbar { display: none; }
 .sb { position: absolute; right: 3px; width: 12px; display: flex; flex-direction: column; z-index: 2; }
 .sb[hidden] { display: none; }
 .sb-arrow { flex: none; width: 12px; height: 12px; padding: 0; border: 0; background: none; color: var(--muted); display: grid; place-items: center;
   cursor: pointer; opacity: 0; transition: opacity .15s; }
-.sheet:hover .sb-arrow { opacity: .85; }
+:is(.sheet, #sheet):hover .sb-arrow { opacity: .85; }
 .sb-arrow:hover { color: var(--ink); }
 .sb-track { position: relative; flex: 1; min-height: 0; cursor: pointer; }
 .sb-thumb { position: absolute; top: 0; left: 50%; width: 5px; margin-left: -2.5px; border-radius: 3px; cursor: grab;

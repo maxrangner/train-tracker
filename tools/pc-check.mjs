@@ -146,6 +146,29 @@ try {
     return last ? { under: Math.round(s.bottom - last.bottom), h: Math.round(s.height) } : null; });
   ok(es && es.under >= 8 && es.under <= 20, `the empty search: ${es?.under ?? '?'} px under its line (want 8 to 20), the sheet ${es?.h ?? '?'} px`);
   await page.keyboard.press('Escape'); await sleep(500);
+
+  // 12. A page in the sheet scrolls with our own thin bar, never the browser's (Max, 2026-11-25: grabbed, the browser's
+  //     "shows a black background under it ... Also changes width. This was fixed once before. Why back?"): Home at
+  //     full, the browser's bar takes no room, ours shows; dragging it scrolls the page, the page as wide as before;
+  //     at half no bar (the page doesn't scroll there)
+  await page.evaluate(() => window.__stack.home(2)); await sleep(1300);
+  const sb = () => page.evaluate(() => { const pg = document.querySelector('#sheet .pg[data-key="home"]'), bar = document.querySelector('#sheet .sh-pages > .sb'), th = bar?.querySelector('.sb-thumb')?.getBoundingClientRect();
+    return { native: pg.offsetWidth - pg.clientWidth, w: pg.clientWidth, can: pg.scrollHeight - pg.clientHeight, top: pg.scrollTop, shown: Boolean(bar && !bar.hidden && bar.offsetHeight),
+      th: th ? { x: th.x + th.width / 2, y: th.y + th.height / 2 } : null }; });
+  const s0 = await sb();
+  if (s0.can > 4) {
+    ok(s0.native === 0 && s0.shown && s0.th, `Home at full: the browser's bar ${s0.native} px (want 0), ours ${s0.shown ? 'shown' : 'missing'}`);
+    if (s0.th) {
+      await page.mouse.move(s0.th.x, s0.th.y); await page.mouse.down();
+      for (let i = 1; i <= 10; i++) { await page.mouse.move(s0.th.x, s0.th.y + i * 12); await sleep(16); }
+      await page.mouse.up(); await sleep(300);
+      const s1 = await sb();
+      ok(s1.top > s0.top + 20 && s1.w === s0.w && s1.native === 0, `our bar dragged 120 px: the page scrolled ${s0.top} -> ${s1.top}, its width ${s0.w} -> ${s1.w}, the browser's bar ${s1.native} px`);
+    }
+  } else console.log(`note Home at full doesn't scroll now (${s0.can} px more): the bar not checked`);
+  await page.evaluate(() => window.__stack.home(1)); await sleep(1300);
+  const s2 = await sb();
+  ok(!s2.shown, `Home at half: no bar (${s2.shown ? 'shown' : 'none'})`);
 } finally {
   await browser.close();
 }
