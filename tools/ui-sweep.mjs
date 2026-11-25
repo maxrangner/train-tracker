@@ -178,7 +178,11 @@ async function padding(page) {
 const click = (page, sel) => page.evaluate(s => { const e = document.querySelector(s); e?.click(); return Boolean(e); }, sel);
 const esc = page => page.keyboard.press('Escape');
 const settle = async (page) => { await sleep(300); await until(page, () => !document.getAnimations().some(a => a.playState === 'running' && a.effect?.target?.closest?.('#sheet, #nav')), 2500); await sleep(300); };
-async function resetView(page) { await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 11, bearing: 0, pitch: 0 })); await sleep(1500); }
+async function resetView(page) {
+  await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 11, bearing: 0, pitch: 0 }));
+  await sleep(1500);
+  await until(page, () => window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).length > 3, 20000);
+}
 const loneTrain = (page, exclude) => page.evaluate((ex) => {
   const m = window.__map, wide = innerWidth >= 440, shown = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sheet-shown')) || 120;
   for (const f of m.queryRenderedFeatures({ layers: ['train-dots'] })) {
@@ -193,11 +197,15 @@ const loneTrain = (page, exclude) => page.evaluate((ex) => {
   return null;
 }, exclude ?? null);
 async function openTrainFromMap(page) {
-  await toRest(page); await resetView(page);
-  const t = await loneTrain(page);
+  let t = null;
+  for (let k = 0; k < 4 && !/^train:/.test(await page.evaluate(() => window.__stack.top())); k++) {   // (a train moves on)
+    await toRest(page); await resetView(page);
+    t = await loneTrain(page);
+    if (!t) continue;
+    await page.mouse.click(t.x, t.y);
+    await until(page, () => /^train:/.test(window.__stack.top()), 3000);
+  }
   if (!t) return null;
-  await page.mouse.click(t.x, t.y);
-  await until(page, () => /^train:/.test(window.__stack.top()), 3000);
   await until(page, () => Boolean(document.querySelector('#panel .panel-more')?.offsetHeight), 15000);
   await settle(page);
   return t;
@@ -252,6 +260,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
     if (!pages[src]) {
       pages[src] = await waitForMap(browser, { size, lang: 'sv', view: '11/59.33/18.06', ...(tr.live ? { wait: 20000 } : { replay: CARD_HOUR }) });
       await pages[src].evaluate(recorder);
+      if (!tr.live) { await openTrainFromMap(pages[src]); await toRest(pages[src]); }   // (the first tap after the start went unanswered on the phone)
     }
     const page = pages[src];
     await page.bringToFront();   // (a tab behind another draws no frames)
@@ -261,7 +270,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
       const before = await page.evaluate(() => window.__rec.snap());
       await page.evaluate(() => window.__rec.start());
       const acted = await tr.act(page);
-      if (acted === false) { notes.push(`${dev} ${tr.name}: nothing to tap (not checked)`); await page.evaluate(() => window.__rec.stop()); continue; }
+      if (acted === false) { notes.push(`${dev} ${tr.name}: nothing to tap (not checked; ${JSON.stringify(await page.evaluate(() => ({ top: window.__stack.top(), lvl: window.__stack.level, more: Boolean(document.querySelector('#panel .panel-more')) })))})`); await page.evaluate(() => window.__rec.stop()); continue; }
       await sleep(1400);
       await page.evaluate(() => window.__rec.stop());
       await settle(page);
