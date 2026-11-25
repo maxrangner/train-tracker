@@ -506,6 +506,10 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // its stops (not a stretch "from" or "until") is also put under each of them in the stop list (atStop).
     const cancelled = stops.filter(s => (s.dep ?? s.arr).canceled).map(s => stationName(s.station));
     const warn = [], notes = [], atStop = new Map();   // atStop: stop index -> [{ text, problem }]
+    // ahead: a warning that still matters, at a stop not yet passed (as the compact card's red line said until
+    // 2026-11-25); the red "!" by "More" is for these only (counting passed stops it was on 51 of 64 trains with a sign)
+    const next = nextOf(stops);
+    let ahead = next !== -1 && stops.some((s, i) => i >= next && (s.dep ?? s.arr).canceled);
     for (const kind of ['problems', 'notes']) {
       const at = new Map();   // text -> indices of the stops it is given at
       stops.forEach((s, i) => {
@@ -519,6 +523,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
         // ("Inställt" itself is said by the cancelled stops' names: Max, 2026-11-15, VR 2047)
         if (problem && cancelled.length && /^inställ/i.test(text)) continue;
         const idx = [...set].sort((a, b) => a - b);
+        if (problem && next !== -1 && idx.at(-1) >= next) ahead = true;
         const run = idx.at(-1) - idx[0] === idx.length - 1;   // one stretch of stops in a row
         const name = i => stationName(stops[i].station);
         const from = run && idx.length >= 3 && idx.at(-1) === stops.length - 1, until = run && idx.length >= 3 && idx[0] === 0;
@@ -533,7 +538,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     }
     if (cancelled.length) warn.push(`<p class="panel-tvnote board-msg problem">${icon('warning', 15)}${esc(t('stopsCancelled', cancelled))}</p>`);
     // (from files more than 2 minutes old (home down, plan step 4; Max 2026-11-17: yes): when they were made, in Läget)
-    laget = { warn, notes, asOf: route.asOf ?? null };
+    laget = { warn, notes, ahead, asOf: route.asOf ?? null };
 
     const rows = stops.map((s, i) => {
       const a = s.arr, d = s.dep;
@@ -647,7 +652,7 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
   function putLaget(again = false) {
     const slot = el.querySelector('.tv-slot'), state = stateLines();
     if (!slot || !laget) return;
-    const k = laget.warn.length ? 'warn' : state.length ? 'note' : '';
+    const k = laget.ahead ? 'warn' : laget.warn.length || state.length ? 'note' : '';
     const sign = el.querySelector('.more-sign');
     if (sign && (sign.dataset.k ?? '') !== k) { sign.dataset.k = k; sign.className = `more-sign${k ? ` ${k}` : ''}`; sign.innerHTML = signHtml(k); }
     const n = laget.warn.length + state.length + laget.notes.length;
