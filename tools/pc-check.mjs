@@ -380,6 +380,21 @@ try {
   const ghostTops = rec.map(r => r.ghost).filter(x => x !== null), searchTops = [...new Set(rec.map(r => r.search))];
   const ghostMove = ghostTops.length ? Math.max(...ghostTops) - Math.min(...ghostTops) : 0;
   ok(ghostTops.length > 0 && ghostMove <= 1 && searchTops.length === 1, `closed by ‹: the leaving page moved ${ghostMove} px (${ghostTops.length} frames seen), the search box stood at ${searchTops.join(', ')} px (want one place)`);
+
+  // 22. A card open, one click on the map's empty ground: closed, Home at rest (Max, 2026-11-26: "a click on the map with a
+  //     card open should close it out, not just collapse it in stages"); a station at half and a train's card at full
+  for (const [what, open, level] of [['a station at half', () => window.__stack.open('station:Cst', { go: true, fromMap: true }), 1], ['Statistik at full', null, 2]]) {
+    await toRest(page);
+    if (open) await page.evaluate(open); else await openChip(page, 'stats');
+    await sleep(1500);
+    await setLevel(page, level);
+    const q = await page.evaluate(() => { for (const [x, y] of [[innerWidth - 160, 140], [innerWidth - 260, 220], [innerWidth / 2, 120]]) {
+      if (document.elementFromPoint(x, y)?.tagName === 'CANVAS' && !window.__map.queryRenderedFeatures([[x - 20, y - 20], [x + 20, y + 20]]).some(f => f.layer.type === 'symbol' || /train|station/.test(f.layer.id))) return { x, y }; } return null; });
+    if (!q) { console.log(`note ${what}: no empty map point to click`); continue; }
+    await page.mouse.click(q.x, q.y); await sleep(900);
+    const r = await page.evaluate(() => ({ top: window.__stack.top(), level: window.__stack.level }));
+    ok(r.top === 'home' && r.level === 0, `${what}, one click on the map: ${r.top} at level ${r.level} (want Home at rest)`);
+  }
 } finally {
   await browser.close();
 }

@@ -129,6 +129,9 @@
   @keyframes pg-in-l { from { transform: translateX(-100%); } }
   @keyframes pg-out-l { to { transform: translateX(-100%); } }
   @keyframes pg-out-r { to { transform: translateX(100%); } }
+  /* (a computer, back to Home: the card fades where it is, src/stack.js show; gone before the search box shows) */
+  .pg.out-fade { animation: pg-out-fade calc(.12s * var(--mk, 1)) linear both; pointer-events: none; }
+  @keyframes pg-out-fade { to { opacity: 0; } }
   /* The other two ways (Debug → Page change, src/settings.js pageMotion): 'rise', the new page comes as a card from the
      sheet's edge over the one before, which stays still (back: away the same way); 'strip', the pages one strip along
      the sheet. The sheet's edge (--edge): the bottom on a phone, the top on a computer. */
@@ -184,6 +187,10 @@
        still, so their 8 px moves were the only motion up there, against the sheet closing below; Max, 2026-11-26:
        "Dismissing any cards the animation is buggy and jittery with the search pill") */
     #sheet:not([data-page="home"]) .sh-search, #sheet:is([data-page="home"], [data-root]) .sh-bar { transform: none; }
+    /* (back on Home: the page's title goes as fast as the card, .pg.out-fade, and the search box comes once they are
+       gone, never over them) */
+    #sheet[data-page="home"] .sh-search { transition: opacity .18s .11s; }
+    #sheet[data-page="home"] .sh-bar { transition: opacity .1s, visibility 0s .1s; }
     /* (the search field 12 px from the top edge, as from its sides) */
     #sheet .sh-head { margin-top: var(--bar-edge); }
     /* The handle band at the bottom, the arrow and its word in the middle: as much room under them as above. */

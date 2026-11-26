@@ -8,6 +8,7 @@
 //            settling")
 //   redrawn  a card growing or shrinking on the same page: what was on screen moves against the sheet's top, or slides
 //            in ("Only the new part should be revealed through the expanding card, not all of it slide in")
+//   under    a leaving page's copy under the search box while the box shows (2026-11-26)
 //   pop      the same: something changes place or size in one frame while the rest glides ("top buttons should
 //            animate into the new layout, not just pop")
 // and one of the look: padding, the gaps between a page's cards and the room inside them, against the page's usual gap
@@ -36,7 +37,7 @@ function recorder() {
     let text = '';
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
     text = text.trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('aria-label') || '';
-    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')),
+    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')), search: Boolean(el.closest('.sh-search')),
       roll: Boolean(el.closest('.cd-late, .roll, .st-odo')) };   // (numbers that roll on purpose, src/motion.js roll; Statistik's odometer wheels, in sight at half on its own card since 2026-11-25)
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
@@ -200,6 +201,19 @@ function analyse(rec, kind) {
       if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
     }
   }
+  // under: a leaving page's copy seen under the search box while it shows (Max, 2026-11-26: "still buggy animations when
+  // closing out cards on the search bar": the card's rows slid under the search box fading in)
+  {
+    let n = 0, at = null;
+    for (const f of frames) {
+      const sb = f.els.filter(e => meta[e[0]].search && e[5] >= 0.05);
+      if (!sb.length) continue;
+      const box = [Math.min(...sb.map(e => e[1])), Math.min(...sb.map(e => e[2])), Math.max(...sb.map(e => e[1] + e[3])), Math.max(...sb.map(e => e[2] + e[4]))];
+      const g = f.els.find(e => e[7].startsWith('ghost:') && e[5] >= 0.05 && e[1] < box[2] && e[1] + e[3] > box[0] && e[2] < box[3] && e[2] + e[4] > box[1]);
+      if (g) { n++; at ??= g; }
+    }
+    if (n) finds.push({ kind: 'under', id: at[0], what: `${at[7]} ${meta[at[0]].el}${meta[at[0]].text ? ` "${meta[at[0]].text}"` : ''}`, info: `under the search box as it shows, ${n} frame(s)` });
+  }
   return finds;
 }
 
@@ -362,6 +376,13 @@ const T = [
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
   { name: 'search close', setup: async (p) => { await toRest(p); await openSearch(p); await settle(p); }, act: esc },
+  // (a card from the map, its title in the page, closed by a click on the map's empty ground: a computer at once to Home,
+  // the card fading where it is and nothing under the search box as it shows; Max, 2026-11-26: "still buggy animations
+  // when closing out cards on the search bar", "a click on the map with a card open should close it out")
+  { name: 'map station → map click', setup: async (p) => { await toRest(p); await resetView(p); await p.evaluate(() => window.__stack.open('station:Cst', { go: true, fromMap: true })); await settle(p); },
+    act: async (p) => { const q = await p.evaluate(() => { for (const [x, y] of [[innerWidth - 160, 140], [innerWidth - 260, 220], [innerWidth / 2, 120]]) {
+      if (document.elementFromPoint(x, y)?.tagName === 'CANVAS' && !window.__map.queryRenderedFeatures([[x - 20, y - 20], [x + 20, y + 20]]).some(f => f.layer.type === 'symbol' || /train|station/.test(f.layer.id))) return { x, y }; } return null; });
+      if (q) await p.mouse.click(q.x, q.y); } },
   { name: 'train from nothing', setup: async (p) => { await toRest(p); await resetView(p); p.__lone = await loneTrain(p); }, act: async (p) => { if (p.__lone) await p.mouse.click(p.__lone.x, p.__lone.y); } },
   { name: 'train more', kind: 'grow', setup: async (p) => { p.__t = await openTrainFromMap(p); }, act: p => click(p, moreBtn) },
   { name: 'train less', kind: 'grow', setup: async (p) => { p.__t = await openTrainFromMap(p); await click(p, moreBtn); await settle(p); }, act: p => click(p, moreBtn) },
