@@ -42,7 +42,7 @@ function recorder() {
       roll: Boolean(el.closest('.cd-late, .roll, .st-odo')) };   // (numbers that roll on purpose, src/motion.js roll; Statistik's odometer wheels, in sight at half on its own card since 2026-11-25)
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
-  R.snap = () => {
+  R.snap = (ft) => {
     const clip = new Map(), op = new Map();
     const clipOf = (el) => {
       const p = el.parentElement;
@@ -94,9 +94,11 @@ function recorder() {
       nav = [Math.max(r.left, w.left), Math.max(r.top, w.top), Math.min(r.right, w.right), Math.min(r.bottom, w.bottom)];
       if (nav[2] - nav[0] < 1 || nav[3] - nav[1] < 1) nav = null;
     }
-    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, sheet.bottom], home, t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
+    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, sheet.bottom], home, t: ft ?? performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
   };
-  R.start = () => { R.frames = []; R.on = true; const f = () => { if (!R.on) return; R.frames.push(R.snap()); requestAnimationFrame(f); }; requestAnimationFrame(f); };
+  // (each frame stamped with its own time, the frame's, not when its reading ended: a reading of hundreds of parts takes
+  // a varying while, and two frames read 1 ms apart made a smooth ease look like a lurch; 2026-11-26)
+  R.start = () => { R.frames = []; R.on = true; const f = (ft) => { if (!R.on) return; R.frames.push(R.snap(ft)); requestAnimationFrame(f); }; requestAnimationFrame(f); };
   R.stop = () => { R.on = false; };
 }
 
