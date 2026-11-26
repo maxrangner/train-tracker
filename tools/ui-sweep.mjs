@@ -272,7 +272,8 @@ async function placeChecks(page) {
       }
     }
     const nav = document.getElementById('nav');
-    if (nav && !nav.hidden && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
+    // (parked under a page the menu opened: covered by it, not placed by the box; src/nav-menu.js fromMenu)
+    if (nav && !nav.hidden && !nav.classList.contains('under') && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
       const r = nav.getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
       const right = wide ? sh.right : b.right;
       const off = r.top >= sh.top ? r.top - (wide && window.__stack.level === 0 ? sh.bottom : b.bottom) : sh.top - r.bottom;
