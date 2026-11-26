@@ -180,6 +180,10 @@
     #sheet[data-root] .sh-head { height: calc(var(--head-h) + var(--chips-row)); }
     #sheet[data-root] .sh-search { bottom: auto; height: var(--head-h); opacity: 1; pointer-events: auto; transform: none; visibility: visible; transition: opacity .2s, transform .28s var(--ez); }
     #sheet[data-root] .sh-chips { top: var(--head-h); }
+    /* (the search box and a page's title line cross-fade where they stand: on a computer the sheet's top edge holds
+       still, so their 8 px moves were the only motion up there, against the sheet closing below; Max, 2026-11-26:
+       "Dismissing any cards the animation is buggy and jittery with the search pill") */
+    #sheet:not([data-page="home"]) .sh-search, #sheet:is([data-page="home"], [data-root]) .sh-bar { transform: none; }
     /* (the search field 12 px from the top edge, as from its sides) */
     #sheet .sh-head { margin-top: var(--bar-edge); }
     /* The handle band at the bottom, the arrow and its word in the middle: as much room under them as above. */

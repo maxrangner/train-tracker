@@ -9,7 +9,7 @@
 // Not checkable here: the browser's own drag-and-drop of a selection (this test browser makes none), a real mouse.
 // Run: PAGE=http://localhost:5181/ node tools/pc-check.mjs
 import { launch, CARD_HOUR, sleep } from './lib/browser.mjs';
-import { waitForMap, setLevel, openChip, openMenu } from './lib/screen.mjs';
+import { waitForMap, setLevel, openChip, openMenu, toRest, openFromMenu } from './lib/screen.mjs';
 
 let failed = 0;
 const ok = (good, what) => { console.log(`${good ? 'ok  ' : 'FAIL'} ${what}`); if (!good) failed++; };
@@ -29,6 +29,7 @@ try {
 
   // 1. A chip's card (Statistik, at half) pulled by its text with the mouse (down and to the right, over the map)
   await openChip(page, 'stats');
+  await setLevel(page, 1);   // (it opens at full on a computer since 2026-11-26: step 19)
   const at = await page.evaluate(() => {
     const el = [...document.querySelectorAll('#sheet .pg p, #sheet .pg h2, #sheet .pg h3')].find(e => e.offsetParent && e.getBoundingClientRect().top > 0 && e.textContent.trim());
     const r = el.getBoundingClientRect();
@@ -322,6 +323,62 @@ try {
   const row = await page.evaluate(() => { const b = document.querySelector('#panel .panel-head > .panel-buttons'), t = document.querySelector('#panel .cd-tiles, #panel .tile');
     return b && t ? { up: Boolean(document.querySelector('#panel .panel-head > .sh-up')?.offsetParent), end: Math.round(b.getBoundingClientRect().right), box: Math.round(t.getBoundingClientRect().right) } : null; });
   ok(row && row.up && Math.abs(row.end - row.box) <= 1, `a train with ‹: its buttons end at ${row?.end} px, the boxes under them at ${row?.box} px`);
+
+  // 19. Settings and the chips' cards open at full, the cards only as tall as they are (Max, 2026-11-26: "Settings should
+  //     start expanded on pc"; "clicking stats, saved or disruptions should show them fully expanded. But only as far as
+  //     needed. An empty saved should just extend down to the last element")
+  const roomUnder = () => page.evaluate(() => {
+    const pg = document.querySelector('#sheet .pg:last-child'), g = document.querySelector('#sheet .sh-grab').getBoundingClientRect();
+    let end = 0; for (const c of pg.children) if (c.offsetHeight && !c.hasAttribute('data-spacer')) end = Math.max(end, c.getBoundingClientRect().bottom);
+    return { level: window.__stack.level, room: Math.round(Math.min(g.top, innerHeight) - end), scrolls: pg.scrollHeight > pg.clientHeight + 1 };
+  });
+  await toRest(page);
+  await openFromMenu(page, 'settings');
+  ok(await page.evaluate(() => window.__stack.level) === 2, `Settings opens at ${await page.evaluate(() => window.__stack.level) === 2 ? 'full' : 'half'}`);
+  for (const key of ['saved', 'stats']) {
+    await toRest(page);
+    await openChip(page, key);
+    const r = await roomUnder();
+    ok(r.level === 2 && (r.scrolls || r.room <= 24), `${key} opens at ${r.level === 2 ? 'full' : `level ${r.level}`}, ${r.scrolls ? 'scrolling (taller than the screen)' : `${r.room} px under its content (want 24 at most)`}`);
+  }
+
+  // 20. A group's list ("N trains here", a tap on its label): no more than 24 px under its rows (Max, 2026-11-26:
+  //     "Multiple trains card shows too much empty space underneth"; it stood at a page's lowest half, 74 px under 2 rows)
+  await toRest(page);
+  let group = null;
+  for (const zoom of [12, 11, 13]) {
+    await page.evaluate(z => window.__map.jumpTo({ center: [18.06, 59.33], zoom: z }), zoom); await sleep(1500);
+    const labels = await page.evaluate(() => [...document.querySelectorAll('.near-label.group')].map((e) => { const r = e.getBoundingClientRect(); return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }; })
+      .filter(q => q.x > 480 && q.x < innerWidth - 20 && q.y > 70 && q.y < innerHeight - 20));
+    for (const g of labels) {
+      await toRest(page);
+      await page.mouse.click(g.x, g.y); await sleep(1500);
+      if (await page.evaluate(() => window.__stack.top().startsWith('pick:'))) { group = await roomUnder(); break; }
+    }
+    if (group) break;
+  }
+  if (group) ok(group.room <= 24, `a group's list: ${group.room} px under its rows (want 24 at most)`);
+  else console.log('note no group label to tap: not checked');
+
+  // 21. A page closed by ‹ back to Home: the leaving page holds still as it goes (the search bar's row came back above it
+  //     and the copy jumped 52 px in one frame) and the search box doesn't move, it fades in where it stands (Max,
+  //     2026-11-26: "Dismissing any cards the animation is buggy and jittery with the search pill")
+  await toRest(page);
+  await page.evaluate(() => window.__stack.open('station:Cst', { go: true })); await sleep(2500);
+  await page.evaluate(() => {
+    window.__rec = []; const t0 = performance.now();
+    const f = () => {
+      const g = document.querySelector('#sheet .pg-ghost')?.getBoundingClientRect(), s = document.querySelector('#sheet .sh-search').getBoundingClientRect();
+      window.__rec.push({ ghost: g ? Math.round(g.top) : null, search: Math.round(s.top) });
+      if (performance.now() - t0 < 600) requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f);
+  });
+  await page.click('#sheet .sh-up:not([hidden])'); await sleep(800);
+  const rec = await page.evaluate(() => window.__rec);
+  const ghostTops = rec.map(r => r.ghost).filter(x => x !== null), searchTops = [...new Set(rec.map(r => r.search))];
+  const ghostMove = ghostTops.length ? Math.max(...ghostTops) - Math.min(...ghostTops) : 0;
+  ok(ghostTops.length > 0 && ghostMove <= 1 && searchTops.length === 1, `closed by ‹: the leaving page moved ${ghostMove} px (${ghostTops.length} frames seen), the search box stood at ${searchTops.join(', ')} px (want one place)`);
 } finally {
   await browser.close();
 }
