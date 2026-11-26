@@ -7,7 +7,7 @@
 // Pictures: shots/film/<size> <scene>.png (not in git). The scenes: SCENES below; add one for each new move.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR, address } from './lib/browser.mjs';
-import { toRest, until, openMenu, openChip, openFromMenu } from './lib/screen.mjs';
+import { toRest, until, openMenu, openChip, openFromMenu, openTrainByNumber } from './lib/screen.mjs';
 
 const args = process.argv.slice(2), opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
 const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film', SLOW = Number(opt('--slow') ?? 1);   // --slow 4: the CPU four times slower (a slow phone)
@@ -25,6 +25,20 @@ const emptyMap = p => p.evaluate(() => {
 });
 const clickMap = async (p) => { const q = await emptyMap(p); if (q) await p.mouse.click(q.x, q.y); };
 const station = p => p.evaluate(() => window.__stack.open('station:Cst', { go: true, fromMap: true }));
+// A train's card at full with its status box (Läget), its messages open or shut: the first train in view that has one
+async function trainWithStatus(p, open) {
+  const nums = await p.evaluate(() => [...new Set(window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).map(f => String(window.__trains.get(f.properties.id)?.number ?? '')).filter(Boolean))].slice(0, 10));
+  for (const n of nums) {
+    await toRest(p);
+    if (!(await openTrainByNumber(p, n))) continue;
+    await p.evaluate(() => window.__stack.setLevel(2)); await sleep(1200 * SLOW);
+    if (!(await p.evaluate(() => Boolean(document.querySelector('#panel .tv-toggle'))))) continue;
+    const isOpen = await p.evaluate(() => document.querySelector('#panel .tv-toggle').getAttribute('aria-expanded') === 'true');
+    if (isOpen !== open) { await p.evaluate(() => document.querySelector('#panel .tv-toggle').click()); await sleep(1000 * SLOW); }
+    return true;
+  }
+  return false;
+}
 
 // name, setup (to the moment before), act (the move filmed), ms (how long after it)
 const SCENES = [
@@ -41,6 +55,8 @@ const SCENES = [
   { name: 'station → back', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: p => p.keyboard.press('Escape') },
   { name: 'statistik → closed by its chip', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="stats"]') },
   { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="saved"]') },
+  { name: 'train status open', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
+  { name: 'train status shut', setup: p => trainWithStatus(p, true), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
 ];
 
