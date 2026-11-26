@@ -21,7 +21,10 @@
 // alone (what was above Home goes) and a root page on top is replaced by it, sliding the way its chip lies, at the
 // height it had; no ‹. Their head holds the chips (src/css/sheet.css .sh-chips; a computer: under the search box).
 //
-// createStack({ sheet, define, roots, onPad, onChange, onBack, held }) -> the stack (see the end).
+// createStack({ sheet, define, roots, onPad, onChange, onBack, held, above }) -> the stack (see the end).
+//   above() -> px: what floats over the bar at rest (the start's chips, src/start-chips.js). On a phone the map's
+//   buttons ride on the sheet's top edge (--sheet-h) but never lower than over those chips at rest: one value, so a
+//   pulled page can't take them under the chips and back up (2026-11-26: they bounced 48 px).
 //   define(key) -> a page, or null when the key names nothing (a train gone, a disruption ended):
 //     { name: string | () => string (its name: stack.names()), kind ('home', 'train', 'station', ... : the sheet's
 //       data-page), low: px (its low height; default the page low) or () -> px (fitted: the height of its content to
@@ -112,7 +115,7 @@ const PART_HEAD = 'h2, h3, h4';
 const partHead = c => (c.matches(PART_HEAD) ? c : c.firstElementChild?.matches(PART_HEAD) ? c.firstElementChild : null);
 const partName = h => [...h.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').trim() || h.textContent.trim();
 
-export function createStack({ sheet, define, roots = [], onPad = () => {}, onChange = () => {}, onBack = null, held = () => false }) {
+export function createStack({ sheet, define, roots = [], onPad = () => {}, onChange = () => {}, onBack = null, held = () => false, above = () => 0 }) {
   const isRoot = pg => Boolean(pg) && roots.includes(pg.key);
   const root = document.documentElement;
   const pagesEl = sheet.querySelector('.sh-pages');
@@ -363,7 +366,7 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   function render(h, glide) {
     root.style.setProperty('--sheet-shown', `${Math.round(h)}px`);
     // the map's buttons and its credit ride on the sheet's top edge (a phone); beside it on a wide screen
-    root.style.setProperty('--sheet-h', wide() ? '0px' : `${Math.round(h)}px`);
+    root.style.setProperty('--sheet-h', wide() ? '0px' : `${Math.round(Math.max(h, lowOf(stack[0]) + above()))}px`);
     root.classList.toggle('sheet-tall', !wide() && h > innerHeight - 260);
     // (high: well over half and over 60 % of the screen; a short page at full, its content all of it since 2026-11-24,
     // leaves the map's buttons and the live mark in place)
@@ -1091,7 +1094,10 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   ready = true;
   show(homePg, null, 0, { level: 0 });
 
+  // (what floats on the sheet's edge changed without the sheet moving: the chips hidden by ☰'s menu, a width change)
+  const edgeChanged = () => render(shownTo, true);
   const api = {
+    edgeChanged,
     open, back, backTo, home, close, replace,
     top: () => top()?.key ?? null,
     keys: () => stack.map(p => p.key),
