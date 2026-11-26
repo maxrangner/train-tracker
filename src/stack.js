@@ -175,10 +175,14 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   // (Home holds nothing under the search bar since Max's pick C, 2026-11-25: no half, its half is its low, so the search
   // pulled down from full goes to the bar alone; Max, 2026-11-26: "when search is fully expanded and swipes down a little
   // bit, there is just a huge area of empty space")
+  // (as the page will be once its glides end, atRest: a train card's parts measured mid-glide set its half 20 px too
+  // tall and the tick took it in a second later, "the small card jumps a few pixels"; Max, 2026-11-26)
   function heightsOf(pg) {
     const base = pg === srch ? top() : pg;
-    const h0 = lowOf(base), h1 = base?.key === 'home' ? h0 : halfOf(base, h0);
-    return [keepsLow(base) ? h0 : h1, h1, fullOf(pg, h1)];
+    return atRest(base?.el, () => {
+      const h0 = lowOf(base), h1 = base?.key === 'home' ? h0 : halfOf(base, h0);
+      return [keepsLow(base) ? h0 : h1, h1, fullOf(pg, h1)];
+    });
   }
   // Where a page's content ends (px from its top edge, its scroll counted): its parts' lowest edge. A part marked
   // [data-spacer] is room, not content (the New trip page's room to scroll a field above a phone's keyboard).
@@ -202,7 +206,9 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     const el = pg?.el;
     // (a page whose content is not in yet: the screen's full, so the sheet only ever goes down to it once it is)
     if (!el?.isConnected || (pg.def.fit && !pg.fitted)) return fullMax;
-    const end = pg.def.atFull ? pg.def.atFull(() => contentEnd(el)) : contentEnd(el);
+    // (as the page will be once its glides end: a part gliding shut measured whole kept the sheet tall and empty under
+    // it until the tick took that away seconds later; Max, 2026-11-26, Störningar's rail work shut)
+    const end = atRest(el, () => (pg.def.atFull ? pg.def.atFull(() => contentEnd(el)) : contentEnd(el)));
     if (!end) return fullMax;
     const need = headPx() + end + geo.fitGap + (wide() ? 0 : safe().bottom);
     return Math.round(Math.max(half, Math.min(fullMax, need)));
@@ -486,11 +492,14 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     if (idx < 2 && srch) closeSearch();
     const pg = cur();
     if (pg) pg.lvl = idx;
+    // (the page takes its look for the new height before its half is measured: a train card measured with its full
+    // look gave a half remembered from before, and when the card had changed since, the sheet stopped a few px off and
+    // the tick moved it a second later; Max, 2026-11-26: "after the contration the small card jumps a few pixels")
+    pg?.def.level?.(idx);
     if (idx === 1) fit('level');
     if (idx < 2) { const s = scroller(); if (s && s.scrollTop > 0) s.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' }); }
     place(H[idx]);
     pad();
-    pg?.def.level?.(idx);
     guard();
   }
   const scroller = () => cur()?.el;
@@ -1012,7 +1021,19 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     if (was && was.key === pg.key && idx === was.to) { setIndex(was.from); return; }
     // (the half from the new low: from the old one, a card whose chooser shut kept its taller half, its room left empty
     // under it, and a map tap then only took that room away: Max's case (a), 2026-11-23)
-    fit('refit');
+    // (measured as the page will be: the part has only begun to glide shut, measured now it was still whole, and the
+    // sheet stood that tall and empty until the tick took it in two seconds later; Max, 2026-11-26: Störningar's
+    // "expanding and contracting the card leaves a lot of empty space")
+    atRest(pg.el, () => fit('refit'));
+  }
+  // measure() with the page's glides (CSS transitions in el) for that moment at their end, then back where they were:
+  // where a glide just started will take the page (just short of the end: a glide at its end is over and gone; one
+  // without an end, a loading sign's, left alone)
+  function atRest(el, measure) {
+    const glides = el?.getAnimations?.({ subtree: true }).filter(a => a.playState === 'running' && Number.isFinite(a.effect?.getComputedTiming().endTime)) ?? [];
+    const was = glides.map(a => a.currentTime);
+    for (const a of glides) a.currentTime = a.effect.getComputedTiming().endTime - 0.01;
+    try { return measure(); } finally { glides.forEach((a, i) => { a.currentTime = was[i]; }); }
   }
   // Take a page off the stack wherever it is (its train is gone, its × was pressed).
   function close(key) {
