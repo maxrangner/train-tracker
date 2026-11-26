@@ -405,12 +405,19 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     if (!box || !stops?.length) return;
     const g = glance(stops, nextOf(stops));
     const late = lateNow(stops);
-    // "→ Destination" in the head line, shown only when the card rests collapsed on a phone (Max, 2026-11-23: "only
-    // number, operator and destination"; src/css/train-card.css)
-    const title = el.querySelector('.panel-title'), dest = `→ ${stationName(stops.at(-1).station)}`;
+    // "→ Destination" beside the number, shown only when the card rests collapsed on a phone (Max, 2026-11-23: "only
+    // number, operator and destination"; 2026-11-26: the name in a small accent pill on the number's line, centred on
+    // it, the arrow outside the pill; src/css/train-card.css)
+    const title = el.querySelector('.panel-title'), dest = stationName(stops.at(-1).station);
     let to = title?.querySelector('.ph-to');
-    if (title && !to) { to = Object.assign(document.createElement('span'), { className: 'ph-to' }); (title.querySelector('.panel-sub') ?? title).append(to); }
-    if (to && to.textContent !== dest) to.textContent = dest;
+    if (title && !to) {
+      to = Object.assign(document.createElement('span'), { className: 'ph-to' });
+      to.innerHTML = '<span class="ph-arr" aria-hidden="true">→</span><span class="ph-pill"></span>';
+      const num = title.querySelector('strong');
+      if (num) num.after(to); else title.append(to);
+    }
+    const pill = to?.querySelector('.ph-pill');
+    if (pill && pill.textContent !== dest) pill.textContent = dest;
     const line = el.querySelector('.tl-now-text');
     if (line && g.nowLine && line.textContent !== g.nowLine) line.textContent = g.nowLine;
     // the tiles (lateness, the time to the stop, its chooser), then the page's parts (why it stands), then the trip line
@@ -670,7 +677,22 @@ export function createPanel(el, { stationName, station = () => undefined, onSele
     // (the row and its arrow: one button; the page is told, so the opened messages are shown at once: onFold)
     // (its box glides to its new height, as a station's messages do: the stops under it move with it, not in one jump)
     foldNow = fold ? () => {
-      const h0 = el.querySelector('.tv-box')?.offsetHeight;
+      const box0 = el.querySelector('.tv-box'), h0 = box0?.offsetHeight;
+      // (shutting: the mirror of opening, the box glides shut over its messages, which stay where they are, and the
+      // title never moves; the shut box is drawn once it has; drawn shut first, the title alone stretched to the gliding
+      // box's height, its colour over all of it and its words sliding up; Max, 2026-11-26: "Not symmetric with opening.
+      // The title which never moves, still slides up when closed")
+      if (notesOpen && box0 && laget) {
+        notesOpen = false;
+        const btn = box0.querySelector('.tv-toggle'), was = document.createElement('div');
+        was.innerHTML = notesBox({ warn: laget.warn, state: stateLines(), notes: laget.notes });
+        const shut = was.querySelector('.tv-toggle');
+        btn.className = shut.className; btn.innerHTML = shut.innerHTML;   // (its arrow turned at once, as opening does)
+        btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-label', shut.getAttribute('aria-label'));
+        onFold?.(false, box0);
+        glideHeight(box0, h0, btn.offsetHeight).then(() => { if (!notesOpen) putLaget(true); });
+        return;
+      }
       notesOpen = !notesOpen; putLaget(true);
       const box = el.querySelector('.tv-box'), h1 = box?.offsetHeight;
       // (the page told first, the box at its new height: it brings the opened messages into view from their real size)

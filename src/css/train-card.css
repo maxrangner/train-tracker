@@ -23,10 +23,13 @@
   #panel .panel-sub:empty { display: none; }
   #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
   .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  /* (the full card's end pill made smaller, .cd-to: the accent, its ink, rounded; Max, 2026-11-26: "should show desitation
-     clearer. Maybe same style of accent pill as the expanded, but maybe a bit smaller?") */
-  .ph-to { display: none; padding: 3px 10px; margin-block: -5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 800; line-height: 20px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; box-sizing: border-box; }
+  /* The destination beside the number on a collapsed card: an arrow, then the full card's end pill made smaller (.cd-to:
+     the accent, its ink, rounded; Max, 2026-11-26: "Align the destination pill vertically with the train number, and move
+     the arrow out of the pill") */
+  .ph-to { display: none; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; }
+  .ph-arr { flex: none; color: var(--muted); font-size: 18px; font-weight: 800; line-height: 1; }
+  .ph-pill { min-width: 0; padding: 3px 10px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 800; line-height: 20px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
   /* (at full Follow is its arrow alone, so the company's name isn't cut, "SJ Snabb…") */
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
@@ -48,6 +51,9 @@
   .tr-acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .tr-acts .chip { gap: 7px; }
   #sheet:not([data-h="2"]) .tr-extras .tr-acts { display: none; }
+  /* (not with "i" on: the info shows the train's own numbers, no action; Max, 2026-11-26: "On train cards, the info panel
+     should not have the 'add a change' button") */
+  #panel.info .tr-extras .tr-acts { display: none; }
   .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
     background: var(--t-some-bg); color: var(--t-some); font: inherit; }
   .why.none { background: var(--hover); color: var(--muted); }
@@ -167,7 +173,8 @@
   .tv-box.open { position: relative; }
   .tv-box.open .panel-tvnotes { padding-right: 34px; margin-top: 6px; }
   .tv-fold { position: absolute; top: -4px; right: -8px; width: 44px; height: 38px; padding: 0; justify-content: center; }   /* (a bigger target: 44 × 38) */
-  #panel .tv-box.board-msgs { margin: 4px 0 2px; }
+  /* (its rows from the top while it glides open or shut: the title keeps its own height, src/panel.js foldNow) */
+  #panel .tv-box.board-msgs { margin: 4px 0 2px; align-content: start; }
   #panel .tv-box .board-msgs-toggle { position: static; width: 100%; height: auto; padding: 9px 12px; justify-content: flex-start; border-radius: 14px;
     background: var(--t-some-bg); color: var(--t-some); font-size: 14px; font-weight: 700; }
   #panel .tv-box .board-msgs-toggle > span { flex: 1; min-width: 0; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -353,7 +360,10 @@
      come back raised; a long company name gives way before the destination); the rest fades back in as soon as it is
      pulled up (.cd is display: contents: its own parts fade). */
   @media (max-width: 439px) {
-    #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline-block; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline-flex; }
+    /* (the number and the destination on one line, centred on each other; the company under them, where it was) */
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-title { flex-direction: row; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 3px; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-title > .panel-sub { flex-basis: 100%; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
