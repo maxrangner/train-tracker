@@ -210,7 +210,7 @@ function statsPage(d) {
 // CO_SHOWN and any picked one, "N more ⌄" for the rest. A tap turns a company on or off right here (src/filter.js; its
 // pill above the bar, src/main.js data-cofilter).
 const LG = ['ontime', 'some', 'late', 'unknown'];
-const CO_SHOWN = 5;
+const CO_SHOWN = 5, CO_ROWS = 2;   // (CO_ROWS: a computer's rows of companies at most, fitCoRow)
 function filterPage(d) {
   let put = null, el = null;
   let coOpen = false;   // the companies all shown ("N more" tapped)
@@ -228,8 +228,9 @@ function filterPage(d) {
     return `<div class="co-filter" data-total="${all.length}">${shown.map(b => `<button type="button" class="chip co-f${on(b) ? ' on' : ''}" data-cofilter="${esc(b)}" aria-pressed="${on(b)}">` +
       `<i class="dot" style="background:${brandColour(b)}"></i>${esc(b)}</button>`).join('')}${more}</div>`;
   }
-  // A computer: the companies and "N more" on one row (Max, 2026-11-25: "Filter operators including 'n till' should only
-  // be one row"): the last companies that don't fit go into "N more" (a picked one always stays). Part of drawing the
+  // A computer: the companies and "N more" on two rows at most (Max, 2026-11-25: "Filter operators including 'n till'
+  // should only be one row"; back to two, 2026-11-26: "a reverse of something I asked for earlier"): the last companies
+  // that don't fit go into "N more" (a picked one always stays). Part of drawing the
   // card: every time it is drawn again (drew), and when its width changed, all its candidates are shown, measured once
   // and the last ones hidden, in the same task (nothing shows in between). A phone: all candidates, no fitting.
   // fitAt: a row of companies -> the width it was fitted at (a redrawn row is a new element; nothing else is kept).
@@ -249,8 +250,8 @@ function filterPage(d) {
     for (const c of chips) c.hidden = false;
     say(0);
     if (w < 0) return;
-    const top0 = (chips[0] ?? more).offsetTop;
-    const wraps = () => [...box.children].some(c => !c.hidden && c.offsetTop > top0 + 2);
+    // (more rows than CO_ROWS: the tops of the shown chips, a row each)
+    const wraps = () => new Set([...box.children].filter(c => !c.hidden).map(c => Math.round(c.offsetTop / 4))).size > CO_ROWS;
     let gone = 0;
     for (let i = chips.length - 1; i >= 0 && wraps(); i--) {
       if (chips[i].classList.contains('on')) continue;

@@ -216,8 +216,9 @@ try {
   const s2 = await sb();
   ok(!s2.shown, `Statistik at half: no bar (${s2.shown ? 'shown' : 'none'})`);
 
-  // 13. The filter (☰ → Filter since the start chips; Home's until then): the companies and "N more" on one row (Max,
-  //     2026-11-25: "Filter operators including 'n till' should only be one row"); the count says what is left out. Also
+  // 13. The filter (☰ → Filter since the start chips; Home's until then): the companies and "N more" on two rows at most
+  //     (Max, 2026-11-25: "Filter operators including 'n till' should only be one row"; back to two, 2026-11-26: "a reverse
+  //     of something I asked for earlier"); the count says what is left out. Also
   //     after "N more" opened and "Fewer" folded it again, twice (Max, 2026-11-25: after "Färre" they showed on two rows:
   //     the fit was skipped, its own cache said done)
   await page.evaluate(() => window.__stack.home(0)); await sleep(900);
@@ -227,7 +228,7 @@ try {
   const coRow = () => page.evaluate(() => { const box = document.querySelector('#sheet .co-filter'); if (!box) return null;
     const shown = [...box.children].filter(c => !c.hidden && c.offsetHeight), more = box.querySelector('.co-more');
     return { rows: new Set(shown.map(c => c.offsetTop)).size, chips: shown.filter(c => c.matches('.co-f')).length, total: Number(box.dataset.total), more: more && !more.hidden ? more.textContent.trim() : '' }; });
-  const oneRow = co => co && co.rows === 1 && (co.total - co.chips === 0 ? !co.more : co.more.startsWith(String(co.total - co.chips)));
+  const oneRow = co => co && co.rows >= 1 && co.rows <= 2 && (co.total - co.chips === 0 ? !co.more : co.more.startsWith(String(co.total - co.chips)));
   const co = await coRow();
   ok(oneRow(co), `the filter's companies: ${co?.rows} row(s), ${co?.chips} of ${co?.total} shown, "${co?.more}"`);
   for (const k of [1, 2]) {
