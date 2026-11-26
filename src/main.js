@@ -30,6 +30,7 @@ import { settings, setSetting } from './settings.js';
 import { t, translatePage } from './i18n.js';
 import { onTap } from './tap.js';
 import { createStack } from './stack.js';
+import { isWide } from './layout.js';
 import { createLine } from './line.js';
 import { createStart, groupPage } from './home.js';
 import { createStartChips, START_KEYS } from './start-chips.js';
@@ -87,7 +88,7 @@ const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;
 // How a page comes in and how fast (Debug → Page change, Animation speed): src/css/sheet.css :root[data-motion], src/css/tokens.css [data-mspeed].
-const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; };
+const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; d.morePill = settings.morePill ? 'on' : 'off'; };
 markMotion();   // (index.html reports it on screen if this line is never reached)
 translatePage();
 
@@ -256,7 +257,8 @@ setInterval(() => {
 
 // ---- The one sheet ----
 const held = createHeldPages({ holder, pages: {
-  settings: { el: settingsPage.el, name: () => t('settings'), kind: 'settings', onShow: settingsPage.onShow },
+  // (a computer: full, as tall as it is; Max, 2026-11-26: "Settings should start expanded on pc")
+  settings: { el: settingsPage.el, name: () => t('settings'), kind: 'settings', onShow: settingsPage.onShow, startLevel: () => (isWide() ? 2 : 1) },
   help: { el: about.el, name: () => t('aboutApp'), kind: 'help', startLevel: 2 },   // (opens full, as tall as it is)
   conn: { el: status.connPage, name: () => t('connTitle'), kind: 'conn', onShow: () => status.showConn() },
 } });

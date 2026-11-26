@@ -359,9 +359,17 @@ try {
   await openSearch(page);
   await typeSearch(page, '2');
   await sleep(1500);
-  const search = await page.evaluate(() => ({ rows: document.querySelectorAll('#search-results .search-trains [data-go]').length,
+  // (the list is made as the field is typed in and a train coming onto the map after it isn't added: 66 rows for 67 on
+  // the files' replay, 2026-11-26; asked again, the list and the map counted at the same moment, up to three times)
+  const readSearch = () => page.evaluate(() => ({ rows: document.querySelectorAll('#search-results .search-trains [data-go]').length,
     onMap: window.__trains.reports().filter(r => String(r.number).startsWith('2')).length,
     scrolls: document.getElementById('search-results').scrollHeight > document.getElementById('search-results').clientHeight }));
+  let search = await readSearch();
+  for (let k = 0; k < 2 && search.rows < Math.min(search.onMap, 200); k++) {
+    await page.evaluate(() => { const i = document.getElementById('search'); i.dispatchEvent(new Event('input', { bubbles: true })); });
+    await sleep(800);
+    search = await readSearch();
+  }
   expect(search.rows >= Math.min(search.onMap, 200), `search "2": ${search.rows} rows for ${search.onMap} trains on the map`);
   expect(search.onMap < 12 || search.scrolls, 'the search list does not scroll');
   // The empty search: no "Show only" chips since 2026-11-24 (Max: they looked like they filtered the search; they are in

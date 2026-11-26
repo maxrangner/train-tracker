@@ -8,6 +8,8 @@
 //            settling")
 //   redrawn  a card growing or shrinking on the same page: what was on screen moves against the sheet's top, or slides
 //            in ("Only the new part should be revealed through the expanding card, not all of it slide in")
+//   peeks    ☰'s card showing over the sheet, through its corners or past its edge (2026-11-26)
+//   under    a leaving page's copy under the search box while the box shows (2026-11-26)
 //   pop      the same: something changes place or size in one frame while the rest glides ("top buttons should
 //            animate into the new layout, not just pop")
 // and one of the look: padding, the gaps between a page's cards and the room inside them, against the page's usual gap
@@ -36,11 +38,11 @@ function recorder() {
     let text = '';
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
     text = text.trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('aria-label') || '';
-    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')),
+    return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')), search: Boolean(el.closest('.sh-search')),
       roll: Boolean(el.closest('.cd-late, .roll, .st-odo')) };   // (numbers that roll on purpose, src/motion.js roll; Statistik's odometer wheels, in sight at half on its own card since 2026-11-25)
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
-  R.snap = () => {
+  R.snap = (ft) => {
     const clip = new Map(), op = new Map();
     const clipOf = (el) => {
       const p = el.parentElement;
@@ -84,9 +86,22 @@ function recorder() {
     const pgTop = document.querySelector(`#sheet .pg[data-key="${CSS.escape(window.__stack.top())}"]`);
     const hp = document.querySelector('#sheet .pg[data-key="home"]');
     const home = hp ? `${hp.isConnected ? '' : 'gone '}${hp.className} clip(${hp.style.clipPath}) vis ${getComputedStyle(hp).visibility} top ${Math.round(hp.getBoundingClientRect().top)}` : 'no home';
-    return { home, t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
+    // (☰'s card: the part of it that shows, inside its window (src/nav-menu.js #nav-window); parked under a page: none)
+    const nv = document.getElementById('nav'), win = document.getElementById('nav-window');
+    let nav = null;
+    if (nv && !nv.hidden && !nv.classList.contains('under') && getComputedStyle(nv).visibility !== 'hidden' && Number(getComputedStyle(nv).opacity) >= 0.05) {
+      const r = nv.getBoundingClientRect(), w = win ? win.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      nav = [Math.max(r.left, w.left), Math.max(r.top, w.top), Math.min(r.right, w.right), Math.min(r.bottom, w.bottom)];
+      if (nav[2] - nav[0] < 1 || nav[3] - nav[1] < 1) nav = null;
+    }
+    // (the sheet's top band: its top edge down past its top corners, where nothing of the menu may show; below it the box
+    // covers the menu sliding behind it)
+    const band = parseFloat(getComputedStyle(document.getElementById('sheet')).borderTopRightRadius) || 0;
+    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, innerWidth >= 440 ? sheet.top + band : sheet.bottom], home, t: ft ?? performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
   };
-  R.start = () => { R.frames = []; R.on = true; const f = () => { if (!R.on) return; R.frames.push(R.snap()); requestAnimationFrame(f); }; requestAnimationFrame(f); };
+  // (each frame stamped with its own time, the frame's, not when its reading ended: a reading of hundreds of parts takes
+  // a varying while, and two frames read 1 ms apart made a smooth ease look like a lurch; 2026-11-26)
+  R.start = () => { R.frames = []; R.on = true; const f = (ft) => { if (!R.on) return; R.frames.push(R.snap(ft)); requestAnimationFrame(f); }; requestAnimationFrame(f); };
   R.stop = () => { R.on = false; };
 }
 
@@ -137,6 +152,9 @@ function analyse(rec, kind) {
         // (against the sheet's top for y: the sheet itself glides)
         const d = ax === 'y' ? s[k].rel - s[k - 1].rel : s[k].x - s[k - 1].x;
         if (Math.abs(d) < 0.5) { rest[ax]++; if (rest[ax] >= 3) rested[ax] = true; continue; }
+        // (its size changed in the same frame: new words in it, not a move; Settings' "Positions arriving", "–" to its
+        // numbers a second after the page, right-aligned so its left edge went 231 px; 2026-11-26)
+        if (Math.abs(s[k].w - s[k - 1].w) > 2 || Math.abs(s[k].h - s[k - 1].h) > 2) { rest[ax] = 0; continue; }
         if (rested[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax === 'y' ? 'up/down in the sheet' : 'sideways'})` };
         if (dir[ax] && Math.sign(d) !== dir[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `turned back (${ax})` };
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
@@ -150,7 +168,9 @@ function analyse(rec, kind) {
       // lurch, the round's check 2026-11-25, 'pc home → filter more' at frame 3; alone it never did)
       let top = 0, prev = 0, going = 0;
       for (let k = 1; k < s.length && !jumped; k++) {
-        if (s[k].i !== s[k - 1].i + 1) { prev = 0; continue; }
+        // (steps one frame long only, 40 ms at most: on a busy PC a late frame held a smooth glide's last stretch, a
+        // 9 px 'lurch' that a film at a quarter of the CPU's speed showed smooth; 'pc filter fewer', 2026-11-26)
+        if (s[k].i !== s[k - 1].i + 1 || s[k].t - s[k - 1].t > 40) { prev = 0; continue; }
         const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);
         if (Math.abs(d) >= 0.5) going++;
         if (going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
@@ -164,7 +184,9 @@ function analyse(rec, kind) {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
       if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
-        for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
+        // (a step counts only as long as one frame: on a busy PC one sample 100 ms after the last held a smooth glide's
+        // whole way, 'station messages fold' in a round's check, 2026-11-26; alone it never did)
+        for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1 && s[k].t - s[k - 1].t <= 40) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
         // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
@@ -189,11 +211,41 @@ function analyse(rec, kind) {
         if (Math.abs(d) < 0.5) { if (++rest >= 3) rested = true; prev = v; continue; }
         if (rested && Math.abs(d) >= 1) jumped = `moved again after rest: ${d.toFixed(1)} px at frame ${k}`;
         else if (dir && Math.sign(d) !== dir && Math.abs(d) >= 1) jumped = `turned back: ${d.toFixed(1)} px at frame ${k}`;
-        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
-        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = v;
+        // (the lurch only between steps one frame long each, 40 ms at most: a late frame's speed, its move spread over
+        // its long wait, looked like a slowed glide and the next frame like a lurch; 'pc filter more', 2026-11-26)
+        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev && frames[k].t - frames[k - 1].t <= 40 && frames[k - 1].t - (frames[k - 2]?.t ?? 0) <= 40) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
+        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = frames[k].t - frames[k - 1].t <= 40 ? v : 0;
       }
       if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
     }
+  }
+  // under: a leaving page's copy seen under the search box while it shows (Max, 2026-11-26: "still buggy animations when
+  // closing out cards on the search bar": the card's rows slid under the search box fading in). A computer only: the
+  // phone kept its sideways slide (his plan: "the phone stays as it is"), where the leaving ‹ shows under the box for
+  // 5-6 frames (TODO 75, asked)
+  if (rec.dev === 'pc') {
+    let n = 0, at = null;
+    for (const f of frames) {
+      const sb = f.els.filter(e => meta[e[0]].search && e[5] >= 0.05);
+      if (!sb.length) continue;
+      const box = [Math.min(...sb.map(e => e[1])), Math.min(...sb.map(e => e[2])), Math.max(...sb.map(e => e[1] + e[3])), Math.max(...sb.map(e => e[2] + e[4]))];
+      const g = f.els.find(e => e[7].startsWith('ghost:') && e[5] >= 0.05 && e[1] < box[2] && e[1] + e[3] > box[0] && e[2] < box[3] && e[2] + e[4] > box[1]);
+      if (g) { n++; at ??= g; }
+    }
+    if (n) finds.push({ kind: 'under', id: at[0], what: `${at[7]} ${meta[at[0]].el}${meta[at[0]].text ? ` "${meta[at[0]].text}"` : ''}`, info: `under the search box as it shows, ${n} frame(s)` });
+  }
+  // peeks: ☰'s card showing at the sheet's top (a computer: its top edge down past its top corners, below that the box
+  // covers it; a phone: anywhere on the sheet; Max, 2026-11-26: "Calling Hamburger menu shows its corner in the top right
+  // of the search bar"; "It should just slide under the search bar, without showing behind the top")
+  {
+    let n = 0, at = null;
+    for (const f of frames) {
+      if (!f.nav || !f.sheetBox) continue;
+      const [l, t, r, b] = f.nav, [sl, st, sr, sb] = f.sheetBox;
+      const w = Math.min(r, sr) - Math.max(l, sl), h = Math.min(b, sb) - Math.max(t, st);
+      if (w > 2 && h > 2) { n++; at ??= `${Math.round(w)}×${Math.round(h)} px at ${Math.round(Math.max(l, sl))},${Math.round(Math.max(t, st))}`; }
+    }
+    if (n) finds.push({ kind: 'peeks', id: 0, what: 'the menu', info: `over the sheet in ${n} frame(s), first ${at}` });
   }
   return finds;
 }
@@ -258,6 +310,13 @@ async function placeChecks(page) {
         let end = 0;
         const real = pg.querySelectorAll('button, input, img, svg, canvas, textarea, select');
         for (const e of real) if (e.offsetHeight) end = Math.max(end, e.getBoundingClientRect().bottom - top);
+        // (a part drawn as a card, its own background: the card's padding under its last line is the card, not empty
+        // room; Sparade at full on a computer counted 14 px of it, 2026-11-26)
+        for (const c of pg.querySelectorAll(':scope > *, :scope > * > *')) {
+          if (!c.offsetHeight || c.closest('[data-spacer]')) continue;
+          const cs = getComputedStyle(c);
+          if (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') end = Math.max(end, c.getBoundingClientRect().bottom - top);
+        }
         const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT);
         for (let n = w.nextNode(); n; n = w.nextNode()) {
           if (!n.textContent.trim() || !n.parentElement.offsetHeight) continue;
@@ -272,7 +331,8 @@ async function placeChecks(page) {
       }
     }
     const nav = document.getElementById('nav');
-    if (nav && !nav.hidden && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
+    // (parked under a page the menu opened: covered by it, not placed by the box; src/nav-menu.js fromMenu)
+    if (nav && !nav.hidden && !nav.classList.contains('under') && !nav.getAnimations().length && getComputedStyle(nav).visibility !== 'hidden') {
       const r = nav.getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
       const right = wide ? sh.right : b.right;
       const off = r.top >= sh.top ? r.top - (wide && window.__stack.level === 0 ? sh.bottom : b.bottom) : sh.top - r.bottom;
@@ -325,6 +385,8 @@ const T = [
   { name: 'menu → settings', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-settings') },
   { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
   { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
+  // (a page that won't cover the menu, a computer's Filter: the menu fades where it is; Max, 2026-11-26)
+  { name: 'menu → filter', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-filter') },
   { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
   // ('menu → arrow' gone: Home has no handle or arrow since the start chips, 2026-11-25, and ☰ over a chip's card closes it first)
   { name: 'new trip typing', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('newtrip', { go: true })); await until(p, () => Boolean(document.querySelector('#sheet .nt-stop'))); await settle(p); },
@@ -349,6 +411,13 @@ const T = [
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
   { name: 'search close', setup: async (p) => { await toRest(p); await openSearch(p); await settle(p); }, act: esc },
+  // (a card from the map, its title in the page, closed by a click on the map's empty ground: a computer at once to Home,
+  // the card fading where it is and nothing under the search box as it shows; Max, 2026-11-26: "still buggy animations
+  // when closing out cards on the search bar", "a click on the map with a card open should close it out")
+  { name: 'map station → map click', setup: async (p) => { await toRest(p); await resetView(p); await p.evaluate(() => window.__stack.open('station:Cst', { go: true, fromMap: true })); await settle(p); },
+    act: async (p) => { const q = await p.evaluate(() => { for (const [x, y] of [[innerWidth - 160, 140], [innerWidth - 260, 220], [innerWidth / 2, 120]]) {
+      if (document.elementFromPoint(x, y)?.tagName === 'CANVAS' && !window.__map.queryRenderedFeatures([[x - 20, y - 20], [x + 20, y + 20]]).some(f => f.layer.type === 'symbol' || /train|station/.test(f.layer.id))) return { x, y }; } return null; });
+      if (q) await p.mouse.click(q.x, q.y); } },
   { name: 'train from nothing', setup: async (p) => { await toRest(p); await resetView(p); p.__lone = await loneTrain(p); }, act: async (p) => { if (p.__lone) await p.mouse.click(p.__lone.x, p.__lone.y); } },
   { name: 'train more', kind: 'grow', setup: async (p) => { p.__t = await openTrainFromMap(p); }, act: p => click(p, moreBtn) },
   { name: 'train less', kind: 'grow', setup: async (p) => { p.__t = await openTrainFromMap(p); await click(p, moreBtn); await settle(p); }, act: p => click(p, moreBtn) },
@@ -399,7 +468,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
       await settle(page);
       const after = await page.evaluate(() => window.__rec.snap());
       const { frames, meta } = await page.evaluate(() => ({ frames: window.__rec.frames, meta: window.__rec.meta }));
-      const finds = analyse({ frames, meta, before, after }, tr.kind);
+      const finds = analyse({ frames, meta, before, after, dev }, tr.kind);
       if (TRACE) {   // (--trace <words>: the frames of the elements whose text has them)
         const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
         frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `x ${e[1]} y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]} ${meta[e[0]].el}<${e[7]}` : '–'}`); });

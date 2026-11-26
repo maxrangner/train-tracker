@@ -24,15 +24,25 @@ import { isWide, sheetGeometry } from './layout.js';
 
 export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   const navEl = document.getElementById('nav'), button = document.getElementById('nav-button');
+  // Its window: the part of the screen past the line it comes out of (the box's bottom edge; above the sheet's top when
+  // it comes out above), which it slides in and out of, so nothing of it shows past that line. A still window, not a
+  // cut that moves with the card: the browser moved the card and its cut in two steps, and a frame where they parted
+  // showed its corner through the box's rounded corner and its rows over the box (Max, 2026-11-26: "Calling Hamburger
+  // menu shows its corner in the top right of the search bar before moving down"). src/css/menu.css #nav-window.
+  const winEl = Object.assign(document.createElement('div'), { id: 'nav-window' });
+  navEl.before(winEl);
+  winEl.append(navEl);
   const sheetEl = document.getElementById('sheet');
   for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
   const gap = () => sheetGeometry().inset;   // between the bar (or the sheet's edge) and the card (src/css/tokens.css --sheet-inset)
   let state = 'closed', side = 'below', turn = 0, placed = false;
+  let faded = false;   // parked and faded out: the page it opened didn't cover it (fromMenu)
   let backHome = false;   // a page the menu opened: back on Home the menu is open again
 
   // What the state looks like: the only place the card's hidden, ☰'s aria-expanded and the sheet's freeze are written.
   function enter(next) {
     state = next;
+    if (next !== 'parked') faded = false;
     const on = next === 'opening' || next === 'open';
     navEl.hidden = next === 'closed';
     navEl.classList.toggle('under', next === 'parked');
@@ -46,26 +56,37 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   function place() {
     const a = button.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
     const w = navEl.offsetWidth, h = navEl.offsetHeight;
-    const right = isWide() ? s.right : a.right;
-    navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)))}px`;
-    // (a computer at rest: under the whole box, its arrow band included)
-    const under = isWide() && stack().level === 0 ? s.bottom : a.bottom, g = gap();
-    if (under + g + h <= innerHeight - 10) { side = 'below'; navEl.style.top = `${Math.round(under + g)}px`; }
-    else { side = 'above'; navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`; }
+    const right = isWide() ? s.right : a.right, left = Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)));
+    navEl.style.left = `${left}px`;
+    // (a computer at rest: under the whole box, its arrow band included; the box's bottom where the sheet is going, its
+    // top stays: read from the screen, a busy PC's sheet could still be closing when its glide's time was up, and the menu
+    // came 120 px under the box; pc-check 6, 2026-11-26)
+    const st = stack(), boxBottom = isWide() && st.target.height ? s.top + st.target.height : s.bottom;
+    const under = isWide() && st.level === 0 ? boxBottom : a.bottom, g = gap();
+    // Its window: below the box's top corners on a computer, so the box itself hides it as it passes behind and it comes
+    // out from under the box's own rounded bottom edge, never shown at the box's top or through its top corners; above
+    // the sheet's top edge on a phone, where it goes under the sheet (Max, 2026-11-26: "It should just slide under the
+    // search bar, without showing behind the top"; a window of its own shape made it look resized, not slid). Its top
+    // in the window.
+    if (under + g + h <= innerHeight - 10) {
+      side = 'below';
+      const line = Math.round(isWide() ? s.top + (parseFloat(getComputedStyle(sheetEl).borderBottomRightRadius) || 0) : under);
+      Object.assign(winEl.style, { top: `${line}px`, bottom: '0px', height: '' });
+      navEl.style.top = `${Math.round(under + g - line)}px`;
+    } else {
+      side = 'above';
+      Object.assign(winEl.style, { top: '0px', bottom: '', height: `${Math.round(s.top)}px` });
+      navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`;
+    }
   }
   // (out from behind the box and back behind it: the card lies under the sheet (src/css/menu.css) and moves its whole
   // height plus the gap, so it shows in the gap as it goes (Max, 2026-11-25: "Menu should go all the way behind the search
-  // bar"); a computer's card is cut only above the sheet's top, where it would pass out over the map)
+  // bar"); its window cuts it at the box's line, above)
   function slide(out) {
     navEl.getAnimations().forEach(x => x.cancel());
     if (reduceMotion()) return Promise.resolve();
-    const g = gap(), h = navEl.offsetHeight, d = h + g, below = side === 'below';
-    const edge = below ? sheetEl.getBoundingClientRect().top - navEl.getBoundingClientRect().top : 0;
-    const hid = below ? { transform: `translateY(${-d}px)`, clipPath: `inset(${edge + d}px -24px -24px -24px)` }
-      : { transform: `translateY(${d}px)`, clipPath: 'inset(-24px)' };
-    const shown = below ? { transform: 'none', clipPath: `inset(${edge}px -24px -24px -24px)` }
-      : { transform: 'none', clipPath: 'inset(-24px)' };
-    return navEl.animate(out ? [hid, shown] : [shown, hid], { duration: ms('fold'), easing: easing('ui'), fill: 'forwards' }).finished.catch(() => {});
+    const d = navEl.offsetHeight + gap(), away = { transform: `translateY(${side === 'below' ? -d : d}px)` }, shown = { transform: 'none' };
+    return navEl.animate(out ? [away, shown] : [shown, away], { duration: ms('fold'), easing: easing('ui'), fill: 'forwards' }).finished.catch(() => {});
   }
 
   // settle: wait for the sheet to stand before placing the card (it is moving, or about to)
@@ -110,6 +131,7 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
     // (parked: shown again under the sheet at once, uncovered as the sheet goes down; open once it stands)
     const mine = ++turn;
     navEl.hidden = false;
+    if (faded) { faded = false; fade(true); }   // (it faded as a page that didn't cover it came: back where it was)
     button.setAttribute('aria-expanded', 'true');
     stack().whenSettled().then(() => { if (turn !== mine || state !== 'parked') return; place(); enter('open'); });
   }
@@ -120,14 +142,40 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   document.addEventListener('pointerdown', (e) => {
     if ((state === 'opening' || state === 'open') && !e.target.closest?.('#sheet, #nav') && !mapEl.contains(e.target)) close();
   }, true);
+  // (also while still sliding out: a quick tap on a choice parks it where it is going, so back finds it there, not
+  // sliding out again; hidden once the page stands only where the page doesn't cover it, so a pull down on the page
+  // uncovers it as it goes; Max, 2026-11-26: "When clicking back from settings for example the menu should not slide up
+  // again, it should already be there")
   const fromMenu = (key) => {
-    if (state !== 'open') { close(); backHome = true; stack().open(key); return; }
+    if (state !== 'open' && !(state === 'opening' && placed)) { close(); backHome = true; stack().open(key); return; }
     const mine = ++turn;
+    navEl.getAnimations().forEach(x => x.finish());
     enter('parked');
     backHome = true;
     stack().open(key);
-    stack().whenSettled().then(() => { if (turn === mine && state === 'parked') navEl.hidden = true; });
+    // (a page that won't cover it, a computer's short Filter: it fades as the page comes, where it is, and back on Home
+    // fades in there again; it showed under the page's edge until the sheet stood, then went in one frame; Max,
+    // 2026-11-26: "Clicking filter option, the menu disappears when the too short card appears")
+    const hide = () => {
+      if (turn !== mine || state !== 'parked' || faded) return;
+      faded = true;
+      fade(false).then(() => { if (turn === mine && state === 'parked') { navEl.hidden = true; navEl.getAnimations().forEach(x => x.cancel()); } });
+    };
+    if (!coversAt(stack().target.height)) hide();
+    stack().whenSettled().then(() => { if (!covered()) hide(); });
   };
+  const covered = () => {
+    const n = navEl.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
+    return n.top >= s.top && n.bottom <= s.bottom && n.left >= s.left && n.right <= s.right;
+  };
+  // (whether the sheet will cover it at the height it is going to: a computer's hangs from its top, a phone's stands on
+  // the screen's bottom)
+  const coversAt = (h) => {
+    const n = navEl.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
+    return isWide() ? n.bottom <= s.top + h : n.top >= innerHeight - h;
+  };
+  const fade = shown => (reduceMotion() ? Promise.resolve()
+    : navEl.animate([{ opacity: shown ? 0 : 1 }, { opacity: shown ? 1 : 0 }], { duration: ms('fold') * 0.6, easing: 'linear', fill: 'forwards' }).finished.catch(() => {}));
   document.getElementById('open-filter').onclick = () => fromMenu('filter');
   document.getElementById('open-day').onclick = () => { close(); onDay(); };
   document.getElementById('open-settings').onclick = () => fromMenu('page:settings');

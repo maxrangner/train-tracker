@@ -15,7 +15,7 @@
 // node tools/sheet-check.mjs (with npm run dev; PAGE= for another port). Not the phone: the feel and the real keyboard.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, until, openSearch, toRest, openTrainByNumber, setLevel, sheetState } from './lib/screen.mjs';
+import { waitForMap, until, openSearch, toRest, openTrainByNumber, setLevel, sheetState, openChip } from './lib/screen.mjs';
 mkdirSync('shots/test-0117', { recursive: true });   // (pictures aren't in git: a fresh working folder has no such folder)
 
 const KEYBOARD_PX = 430;   // the phone keyboard's height in CSS pixels (Max's screenshot, 2026-11-17: 1120 of 2340 device pixels, 2.625 each)
@@ -59,6 +59,18 @@ try {
   }
   await page.setViewport(PHONE);
   await sleep(400);
+  // 1b. The search at full pulled down a little on its empty part: the bar alone at rest, no empty half (Max, 2026-11-26:
+  //     "when search is fully expanded and swipes down a little bit, there is just a huge area of empty space")
+  {
+    await page.evaluate(() => document.activeElement?.blur());
+    const ts = page.touchscreen;
+    await ts.touchStart(200, 400);
+    for (let i = 1; i <= 8; i++) { await ts.touchMove(200, 400 + i * 12); await sleep(30); }
+    await sleep(150); await ts.touchEnd(); await sleep(1200);
+    const s = await page.evaluate(() => ({ level: window.__stack.level, searching: window.__stack.searching, h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), low: window.__stack.heights[0] }));
+    if (s.searching || s.level !== 0 || Math.abs(s.h - s.low) > 3) fails.push(`1b the search pulled down 96 px from full: level ${s.level}, ${s.h} px shown (rest ${s.low}), search ${s.searching ? 'still open' : 'shut'}`);
+    else notes.push(`1b the search pulled down from full: shut, the bar alone at rest (${s.h} px)`);
+  }
   await toRest(page);
 
   // ---- a train's page (through the search), one whose card has its stops (All stops); up to 8 tries ----
@@ -214,7 +226,8 @@ try {
       c = await sheet();
       if (c.level !== 1) fails.push(`4 a pull down of 110 px from the head at full: height ${c.level}, wanted 1`);
       else notes.push('4 a pull down of 110 px from the head at full: half');
-      // Home's search field pulled up by a finger: the sheet rises, the search doesn't open
+      // Home's search field pulled up by a finger: nothing (Home is the search bar alone, strictly the search: Max's pick
+      // C, 2026-11-25, "Search bar strict for searching"; it rose to an empty half until 2026-11-26)
       await toRest(page);
       const f = await page.evaluate(() => { const r = document.getElementById('search').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await page.touchscreen.touchStart(f.x, f.y);
@@ -223,7 +236,8 @@ try {
       await page.touchscreen.touchEnd();
       await sleep(600);
       const s4 = await sheetState(page), searching = await page.evaluate(() => window.__stack.searching);
-      if (s4.level < 1 || searching) fails.push(`4 Home's field pulled up 300 px: height ${s4.level}, the search ${searching ? 'opened' : 'closed'}`);
+      if (s4.level !== 0 || searching) fails.push(`4 Home's field pulled up 300 px: height ${s4.level} (want 0, at rest), the search ${searching ? 'opened' : 'closed'}`);
+      else notes.push('4 Home\'s field pulled up 300 px: stays at rest, no search');
       await toRest(page);
       // a group's list ("N trains here"): opens at half showing all its rows, or as tall as half when they don't fit
       await page.evaluate(() => window.__map.jumpTo({ center: [17.9, 59.3], zoom: 7 }));
@@ -257,6 +271,41 @@ try {
         await toRest(page);
       }
     }
+  }
+
+  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): opened at full, as tall as they are, and a finger
+  // on the chip row in the card's head pulls the card like the rest of it (Max, 2026-11-26: "Whole card should respond
+  // to swipe"; "all three have different height of fully expanded"; a phone) ----
+  {
+    const heights = {};
+    for (const key of ['saved', 'stats']) {
+      await toRest(page);
+      await openChip(page, key);
+      // (opened at full, only as tall as it is: the room under its content, or it scrolls; Max, 2026-11-26: "Statistics on
+      // phone still doesn't open fully expanded like I asked")
+      heights[key] = await page.evaluate(() => {
+        const pg = document.querySelector('#sheet .pg:last-child');
+        let end = 0; for (const c of pg.children) if (c.offsetHeight && !c.hasAttribute('data-spacer')) end = Math.max(end, c.getBoundingClientRect().bottom);
+        return { level: window.__stack.level, room: Math.round(innerHeight - end), scrolls: pg.scrollHeight > pg.clientHeight + 1 };
+      });
+      for (const dy of [-200, 200]) {
+        if (await page.evaluate(k => window.__stack.top() !== k, key)) await openChip(page, key);
+        await setLevel(page, 1);
+        const c = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-chips [data-chip]').getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+        await page.touchscreen.touchStart(c.x, c.y);
+        for (let i = 1; i <= 10; i++) { await page.touchscreen.touchMove(c.x, c.y + dy * i / 10); await sleep(25); }
+        await sleep(150); await page.touchscreen.touchEnd(); await sleep(900);
+        const s = await page.evaluate(() => ({ top: window.__stack.top(), level: window.__stack.level, one: Math.abs(window.__stack.heights[1] - window.__stack.heights[2]) <= 2 }));
+        // (up: at full, or a card short enough that its half is its full: nowhere higher to go)
+        const good = dy < 0 ? s.top === key && (s.level === 2 || s.one) : s.top === 'home';
+        if (!good) fails.push(`5 ${key}: its chip row pulled ${dy < 0 ? 'up' : 'down'} 200 px: ${s.top} at level ${s.level}`);
+      }
+    }
+    for (const [k, h] of Object.entries(heights)) {
+      if (h.level !== 2 || (!h.scrolls && h.room > 60)) fails.push(`5 ${k} opened at level ${h.level} (want 2, full), ${h.scrolls ? 'scrolling' : `${h.room} px under its content`}`);
+      else notes.push(`5 ${k} opens at full, ${h.scrolls ? 'scrolling (taller than the screen)' : `${h.room} px under its content (the bar's room included)`}; its chip row pulls it up and down`);
+    }
+    await toRest(page);
   }
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }

@@ -380,8 +380,11 @@ try {
   await openChip(page, 'stats');
   await sleep(600);
   const cs1 = await card(page);
-  check(cs1.keys === 'home > stats' && cs1.level === 1 && cs1.lit === 'stats' && cs1.head && !cs1.float && !cs1.up,
-    `the chip Statistik: ${cs1.keys} at ${cs1.level}, lit ${cs1.lit || 'none'}, the chips in its head ${cs1.head}, over the map ${cs1.float}, ‹ ${cs1.up ? 'SHOWN' : 'none'}`);
+  // (it opens at full since 2026-11-26, Max: "Statistics on phone still doesn't open fully expanded like I asked"; the
+  // half's cut below, lowered to it)
+  check(cs1.keys === 'home > stats' && cs1.level === 2 && cs1.lit === 'stats' && cs1.head && !cs1.float && !cs1.up,
+    `the chip Statistik: ${cs1.keys} at ${cs1.level} (want 2, full), lit ${cs1.lit || 'none'}, the chips in its head ${cs1.head}, over the map ${cs1.float}, ‹ ${cs1.up ? 'SHOWN' : 'none'}`);
+  await page.evaluate(() => window.__stack.setLevel(1)); await sleep(900);
   const hc = await cutsOf(page, 'stats');
   check(!hc.cut.length && hc.fade && hc.chevron && /^(More|Mer)$/.test(hc.word), `Statistik at half: cut through: ${hc.cut.join(', ') || 'nothing'}; the "more below" fade ${hc.fade}, its chevron at the edge ${hc.chevron}, its word "${hc.word}" (want More)`);
   check(hc.pillGap >= 8 && !hc.behind, `Statistik at half: the "More" pill ${hc.pillGap} px under the part above (want 8 or more), a part's edge behind it: ${hc.behind}`);
@@ -420,6 +423,8 @@ try {
       const pcard = await card(pc);
       check(pcard.keys === 'home > stats' && pcard.lit === 'stats' && pcard.head && pcard.field && pcard.under && !pcard.float,
         `a computer, the chip Statistik: ${pcard.keys}, lit ${pcard.lit || 'none'}, the search field kept ${pcard.field}, the chips under it ${pcard.under}`);
+      // (it opens at full on a computer since 2026-11-26, pc-check 19: lowered to half for this)
+      await pc.evaluate(() => window.__stack.setLevel(1)); await sleep(900);
       const pcut = await cutsOf(pc, 'stats');
       check(!pcut.cut.length && /^(More|Mer)$/.test(pcut.word), `a computer, Statistik at half: cut through: ${pcut.cut.join(', ') || 'nothing'}; the arrow's word "${pcut.word}" (want More)`);
     } else fails.push(`a computer: train ${t2.number} could not be opened`);

@@ -79,7 +79,7 @@ export function createSettingsPage(ctx) {
     if (key === 'boardRows') board.relabel();
     if (key === 'allPlaces') panel.relabel();
     if (key === 'homeLegend') { if (!settings.homeLegend) filter.setLate(null); home.redraw(); }   // (Debug → Lateness colours in Filter)
-    if (key === 'pageMotion' || key === 'motionSpeed') markMotion();
+    if (key === 'pageMotion' || key === 'motionSpeed' || key === 'morePill') markMotion();
     if (key === 'disruptionsMap') map.showDisruptions();
     if (key === 'dayNight') { map.sunShow(); frame.invalidate(true); }   // (the sun's line, the glow and the lit windows)
     if (key === 'scaleSlider') map.sliderShow();
