@@ -35,6 +35,9 @@
   .menu-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
   #settings:not(.debug) .debug-only { display: none; }
   .set-data { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  /* (its label on the value's first line: the value comes a second after the page and takes two lines, and a label
+     centred beside it moved 10 px up; ui-sweep, 2026-11-26) */
+  .set-row:has(> .set-data) { align-items: baseline; }
 
   /* About: the logo and one line, two big buttons, the credits as soft rows. */
   .help-body { overflow: auto; min-height: 0; font-size: 14px; line-height: 1.45; }

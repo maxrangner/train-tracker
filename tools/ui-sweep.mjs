@@ -137,6 +137,9 @@ function analyse(rec, kind) {
         // (against the sheet's top for y: the sheet itself glides)
         const d = ax === 'y' ? s[k].rel - s[k - 1].rel : s[k].x - s[k - 1].x;
         if (Math.abs(d) < 0.5) { rest[ax]++; if (rest[ax] >= 3) rested[ax] = true; continue; }
+        // (its size changed in the same frame: new words in it, not a move; Settings' "Positions arriving", "–" to its
+        // numbers a second after the page, right-aligned so its left edge went 231 px; 2026-11-26)
+        if (Math.abs(s[k].w - s[k - 1].w) > 2 || Math.abs(s[k].h - s[k - 1].h) > 2) { rest[ax] = 0; continue; }
         if (rested[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `moved again after rest (${ax === 'y' ? 'up/down in the sheet' : 'sideways'})` };
         if (dir[ax] && Math.sign(d) !== dir[ax] && Math.abs(d) >= 2 && !jumped) jumped = { k, d, kind: `turned back (${ax})` };
         dir[ax] = Math.sign(d); rest[ax] = 0; moved[ax] = true;
@@ -164,7 +167,9 @@ function analyse(rec, kind) {
       const rel = s.map(p => p.rel), lo = Math.min(...rel), hi = Math.max(...rel);
       if (hi - lo >= 3) {   // (under 3 px: a text's own settling, not a card's move)
         let big = 0;
-        for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
+        // (a step counts only as long as one frame: on a busy PC one sample 100 ms after the last held a smooth glide's
+        // whole way, 'station messages fold' in a round's check, 2026-11-26; alone it never did)
+        for (let k = 1; k < s.length; k++) if (s[k].i === s[k - 1].i + 1 && s[k].t - s[k - 1].t <= 40) big = Math.max(big, Math.abs(s[k].rel - s[k - 1].rel));
         const total = Math.abs(rel.at(-1) - rel[0]);
         const pop = total >= 3 && big >= total * 0.8 && frames.length >= 6;
         // (a card's top buttons glide to their new places on purpose: only a one-frame pop of theirs counts)
