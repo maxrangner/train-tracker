@@ -118,8 +118,14 @@ try {
   const parked = await page.evaluate(() => { const n = document.getElementById('nav'); return { shown: !n.hidden, under: Number(getComputedStyle(n).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex), moving: n.getAnimations().length }; });
   ok(parked.shown && parked.under && !parked.moving, `a choice: the menu stays in place under the sheet as the page comes (shown ${parked.shown}, under ${parked.under}, moving ${parked.moving})`);
   await sleep(1050);
-  const after = await page.evaluate(() => ({ top: window.__stack.top(), open: !document.getElementById('nav').hidden }));
-  ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes (${after.open ? 'still open' : 'shut'})`);
+  // (gone from sight: hidden, or parked under the page that covers it, so back finds it there; Max, 2026-11-26: "the menu
+  // should not slide up again, it should already be there")
+  const after = await page.evaluate(() => {
+    const n = document.getElementById('nav'), r = n.getBoundingClientRect(), s = document.getElementById('sheet').getBoundingClientRect();
+    const covered = n.classList.contains('under') && r.top >= s.top && r.bottom <= s.bottom && r.left >= s.left && r.right <= s.right;
+    return { top: window.__stack.top(), open: !n.hidden && !covered };
+  });
+  ok(after.top === 'page:settings' && !after.open, `a choice opens its page (${after.top}), the menu goes from sight (${after.open ? 'still shown' : 'hidden or under the page'})`);
   //    back from Settings: the menu open again, placed where the sheet came to rest (src/nav-menu.js reopenOnHome; until
   //    2026-11-25 it was placed while the sheet still had Settings' size, somewhere else): its right edge where it was
   //    before Settings, under the box

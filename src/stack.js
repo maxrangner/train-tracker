@@ -188,10 +188,10 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   // half (Max, 2026-11-24: "A full expanded card should never just show empty space. Cut it off earlier in that case").
   // A page whose content differs at full (a train's card: its tables, its notes) measures it so (def.atFull(measure)).
   // A phone's sheet stays fullMax tall and only slides (place): this is just where full stops.
-  // The chips' cards (roots) share their heights: the usual half and the screen's full, so a switch between them never
-  // moves the sheet and none has a full a few px over its half (Max, 2026-11-26: "all three have different height of
-  // fully expanded, also statistics seems to have three different heights it can snap to"; a short list then shows
-  // room under it at full, his yes to that plan)
+  // The chips' cards (roots) share their full, the screen's, so none has a full a few px over its half (Max, 2026-11-26:
+  // "all three have different height of fully expanded, also statistics seems to have three different heights it can
+  // snap to"; a short list then shows room under it at full, his yes to that plan). Their half is each its own, cut at a
+  // clean edge (snapHalf): one half for all cut Statistik through a part, the "More" sign on its edge (screens-check).
   function fullOf(pg, half) {
     if (isRoot(pg)) return fullMax;
     const own = pg?.def.full?.();
@@ -230,7 +230,6 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   let usualHalf = 400;
   // (low: the page's low height, when it is about to change: the half is never under it)
   function halfOf(pg, low = lowOf(pg)) {
-    if (isRoot(pg)) return usualHalf;   // (the chips' cards: one half, fullOf)
     if (!pg?.def.half) return snapHalf(pg, low);
     const own = pg.def.half(), want = own ?? waiting();
     // (a page that fits its content, measured once its content is in: from then its full is measured too, fullOf)
