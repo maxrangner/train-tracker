@@ -87,7 +87,7 @@ const FILES_DELAY_MS = 30 * 1000;
 
 window.__started = true;
 // How a page comes in and how fast (Debug → Page change, Animation speed): src/css/sheet.css :root[data-motion], src/css/tokens.css [data-mspeed].
-const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; };
+const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; d.morePill = settings.morePill ? 'on' : 'off'; };
 markMotion();   // (index.html reports it on screen if this line is never reached)
 translatePage();
 

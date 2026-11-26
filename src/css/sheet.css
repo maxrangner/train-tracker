@@ -97,11 +97,13 @@
     background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 12px); opacity: 0; transition: opacity .2s; }
   #sheet.more-below .sh-fade { opacity: 1; }
   #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
-  /* A phone's "More ⌃" pill (its word: src/stack.js moreWord) */
+  /* A phone's "More ⌄" (its word: src/stack.js moreWord); its grey pill only with Debug → Pill behind "More ⌄" (Max,
+     2026-11-26: "remove the little pill around 'More v'") */
   .sh-more { position: absolute; left: 50%; bottom: calc(4px + env(safe-area-inset-bottom, 0px)); height: 24px; max-width: calc(100% - 32px); transform: translateX(-50%);
-    padding: 0 10px 0 14px; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; background: var(--hover); color: var(--accent); cursor: pointer;
+    padding: 0 10px 0 14px; display: flex; align-items: center; gap: 4px; border: 0; border-radius: 12px; background: none; color: var(--accent); cursor: pointer;
     font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
   .sh-more svg { flex: none; }
+  :root[data-more-pill="on"] .sh-more { background: var(--hover); }
   #sheet.more-below:not(.dragging):not([data-search]) .sh-more { pointer-events: auto; }
   .pg { position: absolute; inset: 0; overflow: hidden; overflow-anchor: none; padding: 4px 16px calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 12px;
     overscroll-behavior: contain; scrollbar-width: thin; box-sizing: border-box; }
