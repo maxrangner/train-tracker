@@ -420,6 +420,8 @@ try {
       const pcard = await card(pc);
       check(pcard.keys === 'home > stats' && pcard.lit === 'stats' && pcard.head && pcard.field && pcard.under && !pcard.float,
         `a computer, the chip Statistik: ${pcard.keys}, lit ${pcard.lit || 'none'}, the search field kept ${pcard.field}, the chips under it ${pcard.under}`);
+      // (it opens at full on a computer since 2026-11-26, pc-check 19: lowered to half for this)
+      await pc.evaluate(() => window.__stack.setLevel(1)); await sleep(900);
       const pcut = await cutsOf(pc, 'stats');
       check(!pcut.cut.length && /^(More|Mer)$/.test(pcut.word), `a computer, Statistik at half: cut through: ${pcut.cut.join(', ') || 'nothing'}; the arrow's word "${pcut.word}" (want More)`);
     } else fails.push(`a computer: train ${t2.number} could not be opened`);
