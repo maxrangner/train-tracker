@@ -1,150 +1,104 @@
-// The menu: opens from the ☰ button, so the main screen stays clean (Max, 2026-11-12). Search for a train number or
-// a station; the full status line.
+// The search, in the one sheet's head (Max's pick A, 2026-11-22; until then a card dropping from the top bar). Tapping
+// the field raises the sheet to full height (src/stack.js openSearch), so the field ends up high, clear of the phone's
+// keyboard. Every result row is a door: data-go carries the stack key it opens (src/main.js opens it).
+//   - Nothing typed: Recent (the last 5 pages opened) and Starred. ("Show only" chips for the companies were here until
+//     2026-11-24; Max: it looked like they filtered the search: they are in Home's filter card now, src/home.js.)
+//   - Typed: trains (a number: those on the map whose number starts with it, then today's timetable for that exact
+//     number), stations, companies and kinds, disruptions.
 //
 // findTrains(digits) -> trains on the map whose number starts with them: [{ id, number, company, time (latest report) }]
 // findStations(text) -> passenger stations whose name matches: [{ sig, name }]
 // searchTimetable(number) -> Promise of today's trips with exactly this number: [{ key, operational, date, number,
 //   product, from, to, keys }] (from/to as names; keys: every piece of the trip, src/trip.js tripsOf). One row per
 //   trip (Max 2026-11-16): a trip with a piece on the map is that piece's row; two pieces of one trip on the map at
-//   once (at the handover; a quiet train stays on the map 2–15 min) become one row, the newest report's.
-// onPickTrain({ id, operational, date, number, onMap }), onPickStation(station)
-// favourites() -> { stations: [{ sig, name }], trains: [{ number, company, onMap }] }; onPickFavouriteTrain(number)
-
+//   once (at the handover) become one row, the newest report's.
+// groups() -> { late, still, kinds: [[k, n]], brands: [[brand, n]] } (the trains on the map now)
+// findDisruptions(text) -> [{ id, header, sub }]
+// recent() -> the page keys opened lately (src/stack.js); rowOf(key) -> a row's HTML for one, or ''
+// starred() -> HTML rows of the starred trains and stations
+// remember(train): a train found in the timetable (not on the map), so its key can be opened.
 import { t } from './i18n.js';
 import { icon } from './icons.js';
-import { stateEl } from './state.js';
-
-// All matches are listed (Max, 2026-11-12: 8 was too few; "2" matches 66 trains at rush hour); the list scrolls.
-const MAX_ROWS = 200;
+import { stateHtml } from './state.js';
 import { esc } from './html.js';
-import { onTap } from './sheet.js';
 import { arrive } from './motion.js';
+import { groupRow } from './home.js';
+import { brandColour } from './stats.js';
 
-// onOpen(): the search opened by its button (main.js closes the ☰ menu then).
-export function createMenu({ button, el, findTrains, findStations, searchTimetable, onPickTrain, onPickStation,
-  favourites, onPickFavouriteTrain, onOpen }) {
-  const input = el.querySelector('#search');
-  const list = el.querySelector('#search-results');
-  let closedAt = 0;
-  let asked = 0;   // counts searches, so a late timetable answer for an old search is dropped
-  // Result rows that weren't there before come in one after another (Max's pick 6, 2026-11-20): a letter that keeps
-  // the same results moves nothing. seen: the rows shown since the search opened.
-  let seen = new Set();
-  const rowsIn = () => arrive([...list.children].filter(li => li.querySelector('button')), seen);
+const MAX_ROWS = 200;   // all matches are listed (Max, 2026-11-12: "2" matches 66 trains at rush hour); the list scrolls
+// A name as it is matched: "Göteborg" matches "goteborg".
+export const fold = s => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+// The stations whose name holds the text (the search; My trains' station picker), those starting with it first.
+export function stationsMatching(stations, text) {
+  const q = fold(text);
+  return [...stations.values()]
+    .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
+    .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
+}
 
-  function open() {
-    seen = new Set();
-    show(input.value.trim());
-    rowsIn();
-    el.hidden = false;
-    button.setAttribute('aria-expanded', 'true');
-    input.focus();
-    input.select();
+export function createMenu({ input, list, findTrains, findStations, searchTimetable, groups, findDisruptions, recent, rowOf, starred, remember }) {
+  let asked = 0, timer = null;
+  let seen = new Set();   // rows shown since the search opened: new ones come in one after another (Max's pick 6, 2026-11-20)
+  const rowsIn = () => arrive([...list.querySelectorAll('.row, .chip')], seen, r => r.dataset.go ?? r.textContent);
+  const lab = text => `<h4 class="lab">${esc(text)}</h4>`;
+
+  function empty() {
+    const lately = recent().map(rowOf).filter(Boolean), star = starred();
+    return (lately.length ? `${lab(t('recent'))}<div class="rows">${lately.join('')}</div>` : '') +
+      (star ? `${lab(t('favourites'))}<div class="rows">${star}</div>` : `<p class="empty">${esc(t('favouritesHint'))}</p>`);
   }
-  function close() {
-    if (el.hidden) return;
-    el.hidden = true;
-    button.setAttribute('aria-expanded', 'false');
-    input.blur();
-    closedAt = performance.now();
+  function trainRowHtml(tr) {
+    return `<button type="button" class="row" data-go="train:${esc(tr.id)}"><b class="r-num">${esc(tr.number)}</b><span class="r-main">` +
+      `<b>${tr.company ? `<i class="dot" style="background:${brandColour(tr.company)}"></i>` : ''}${esc(tr.company || t('train'))}</b><small>${esc(tr.sub)}</small></span></button>`;
   }
-  onTap(button, () => { if (el.hidden) { onOpen?.(); open(); } else close(); });   // (at once also after a swipe: sheet.js)
-  el.querySelector('.menu-close').onclick = close;
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  // A tap outside the menu closes it (and that tap does nothing else, see justClosed).
-  document.addEventListener('pointerdown', (e) => {
-    if (!el.hidden && !el.contains(e.target) && !button.contains(e.target)) close();
-  }, true);
-
-  // ---- Search ----
-  let timer = null;
-  input.addEventListener('input', () => {
-    clearTimeout(timer);
-    show(input.value.trim());
-    rowsIn();
-  });
-  input.addEventListener('keydown', (e) => {   // Enter picks the first result
-    if (e.key === 'Enter') list.querySelector('button')?.click();
-  });
-
-  function row(html, pick) {
-    const li = document.createElement('li');
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.innerHTML = html;
-    b.onclick = () => { close(); pick(); };
-    li.append(b);
-    return li;
-  }
-  const note = text => Object.assign(document.createElement('li'), { className: 'menu-note', textContent: text });
-
   function show(q) {
     const n = ++asked;
-    list.replaceChildren();
-    if (!q) return showFavourites();
-    const digits = /^\d+$/.test(q);
+    clearTimeout(timer);
+    if (!q) { list.innerHTML = empty(); return; }
+    const digits = /^\d+$/.test(q), f = fold(q);
     const trains = digits ? findTrains(q).slice(0, MAX_ROWS) : [];
     const stations = digits ? [] : findStations(q).slice(0, MAX_ROWS);
-    const onMapRows = new Map();   // train id -> its row
-    for (const tr of trains) {
-      const li = row(`<b>${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))} · ${t('onMap')}</span>`,
-        () => onPickTrain({ ...tr, onMap: true }));
-      onMapRows.set(tr.id, li);
-      list.append(li);
-    }
-    for (const st of stations) list.append(row(`<b>${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
-    if (!digits && !stations.length) list.append(stateEl('empty', t('noStation'), 'li'));
+    const g = groups();
+    const hit = name => { const x = fold(name); return x.startsWith(f) || x.split(/[\s\-–]+/).some(w => w.startsWith(f)) || (f.length >= 3 && x.includes(f)); };
+    const cos = digits ? [] : [...g.brands.filter(([b]) => b && hit(b)).map(([b, k]) => groupRow({ key: `co:${b}`, name: b, sub: t('trainsN', k), colour: brandColour(b) })),
+      ...g.kinds.filter(([k]) => hit(t(`kind_${k}`))).map(([k, c]) => groupRow({ key: `kind:${k}`, name: t(`kind_${k}`), sub: t('trainsN', c) }))];
+    const dis = !digits && q.length >= 3 ? findDisruptions(q) : [];
+    list.innerHTML =
+      (trains.length ? `${lab(t('trainsWord'))}<div class="rows search-trains">${trains.map(tr => trainRowHtml({ ...tr, sub: t('onMap') })).join('')}</div>` : '') +
+      (digits ? `<div class="rows search-more">${stateHtml('loading', t('lookingTimetable'))}</div>` : '') +
+      (stations.length ? `${lab(t('stationsWord'))}<div class="rows">${stations.map(st => `<button type="button" class="row" data-go="station:${esc(st.sig)}"><span class="r-ic"><i class="ring"></i></span><span class="r-main"><b>${esc(st.name)}</b><small>${esc(t('station'))}</small></span></button>`).join('')}</div>` : '') +
+      (cos.length ? `${lab(t('companiesKinds'))}<div class="rows">${cos.join('')}</div>` : '') +
+      (dis.length ? `${lab(t('disruptions'))}<div class="rows">${dis.map(x => `<button type="button" class="row" data-go="dis:${esc(x.id)}"><span class="r-ic warn">${icon('warning', 18)}</span><span class="r-main"><b>${esc(x.header)}</b><small>${esc(x.sub)}</small></span></button>`).join('')}</div>` : '') +
+      (!digits && !stations.length && !cos.length && !dis.length ? stateHtml('empty', t('nothingFound', q)) : '');
     if (!digits) return;
-
     // A whole number: also today's timetable, for trains that aren't on the map (not started yet, or done).
-    const waiting = stateEl('loading', t('lookingTimetable'), 'li');
-    list.append(waiting);
     timer = setTimeout(async () => {
       let found;
-      try { found = await searchTimetable(q); } catch (e) { if (n === asked) waiting.replaceWith(stateEl('error', t('timetableFailed', e.message), 'li')); return; }
-      if (n !== asked) return;
-      waiting.remove();
+      const box = () => list.querySelector('.search-more');
+      try { found = await searchTimetable(q); } catch (e) { if (n === asked && box()) box().innerHTML = stateHtml('error', t('timetableFailed', e.message)); return; }
+      if (n !== asked || !box()) return;
       const onMap = new Map(trains.map(tr => [tr.id, tr]));
       // Two pieces of one trip on the map: keep the newest report's row (the same time: the later piece's).
       for (const trip of found) {
         const here = trip.keys.filter(k => onMap.has(k));
         if (here.length < 2) continue;
         const keep = here.reduce((a, k) => ((onMap.get(k).time ?? 0) >= (onMap.get(a).time ?? 0) ? k : a));
-        for (const k of here) if (k !== keep) onMapRows.get(k)?.remove();
+        for (const k of here) if (k !== keep) list.querySelector(`.search-trains [data-go="train:${CSS.escape(k)}"]`)?.remove();
       }
-      const more = found.filter(tr => !tr.keys.some(k => onMap.has(k)));
-      for (const tr of more.slice(0, MAX_ROWS)) {
-        // (two runs of the number, e.g. last night's still running after midnight and today's: each with its start time)
-        list.append(row(`<b>${esc(tr.number)}</b> <span>${esc([tr.at, tr.product, tr.from && tr.to ? `${tr.from} → ${tr.to}` : ''].filter(Boolean).join(' · '))}</span>`,
-          () => onPickTrain({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number, onMap: false })));
-      }
-      if (!trains.length && !more.length) list.append(stateEl('empty', t('noTrainToday', q), 'li'));
+      const more = found.filter(tr => !tr.keys.some(k => onMap.has(k))).slice(0, MAX_ROWS);
+      for (const tr of more) remember({ id: tr.key, operational: tr.operational, date: tr.date, number: tr.number });
+      // (two runs of the number, e.g. last night's still running after midnight and today's: each with its start time)
+      box().innerHTML = more.map(tr => trainRowHtml({ id: tr.key, number: tr.number, company: tr.product,
+        sub: [tr.at, tr.from && tr.to ? `${tr.from} → ${tr.to}` : '', t('notOnMapNow')].filter(Boolean).join(' · ') })).join('') +
+        (!trains.length && !more.length ? stateHtml('empty', t('noTrainToday', q)) : '');
       rowsIn();
     }, 350);
   }
-
-  // With the search field empty: the starred trains and stations.
-  function showFavourites() {
-    const f = favourites?.();
-    if (!f) return;
-    if (!f.trains.length && !f.stations.length) {
-      list.append(note(t('favouritesHint')));
-      return;
-    }
-    list.append(Object.assign(document.createElement('li'), { className: 'menu-label fav-label', textContent: t('favourites') }));
-    for (const tr of f.trains) {
-      list.append(row(`<b>${icon('starFilled', 15)} ${esc(tr.number)}</b> <span>${esc(tr.company || t('train'))}${tr.onMap ? ` · ${t('onMap')}` : ''}</span>`,
-        () => onPickFavouriteTrain(tr.number)));
-    }
-    for (const st of f.stations) list.append(row(`<b>${icon('starFilled', 15)} ${esc(st.name)}</b> <span>${t('station')}</span>`, () => onPickStation(st)));
-  }
-
+  input.addEventListener('input', () => { show(input.value.trim()); rowsIn(); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') list.querySelector('[data-go]')?.click(); });
   return {
-    open, close,
+    open() { seen = new Set(); show(input.value.trim()); rowsIn(); },
     // Show the results again (Settings → Language changed).
-    refresh() { if (!el.hidden) show(input.value.trim()); },
-    get isOpen() { return !el.hidden; },
-    // True just after a tap outside closed the menu: that tap shouldn't also deselect a train on the map.
-    get justClosed() { return performance.now() - closedAt < 500; },
+    refresh() { if (!list.hidden) show(input.value.trim()); },
   };
 }

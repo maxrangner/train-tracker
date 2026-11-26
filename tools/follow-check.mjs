@@ -35,7 +35,7 @@ const measure = id => page.evaluate((id) => {
   const at = map.project(f.geometry.coordinates), c = window.__followFocus?.() ?? map.project(map.getCenter());
   return { off: Math.round(Math.hypot(at.x - c.x, at.y - c.y)), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
 }, id);
-const button = () => page.$eval('.panel-follow', b => b.textContent).catch(() => '(no panel)');
+const button = () => page.$eval('#sheet .sh-follow', b => (b.hidden ? '(no follow)' : b.textContent)).catch(() => '(no panel)');   // (the sheet's Follow since 2026-11-22)
 
 // Pick the moving train nearest the middle: two readings 2 s apart.
 const read = () => page.evaluate(() => {
@@ -122,10 +122,10 @@ await watch('after a wheel zoom in', 4);
 await drag(-(width * 0.45), -(height * 0.25));
 await watch('after a long drag (re-framed)', 4);
 await page.screenshot({ path: 'shots/follow-2.png' });
-await page.click('.panel-follow');
+await page.click('#sheet .sh-follow');
 await watch('after pressing Follow', 4);
 await page.screenshot({ path: 'shots/follow-3.png' });
-await page.evaluate(() => document.querySelector('#panel .panel-close').click());   // the train card's × (hidden on a phone since 2026-11-15: pressed directly)
+await page.evaluate(() => window.__stack.back());   // the train's page closed (one step back: what its × did)
 await sleep(1);
 console.log(`after × : panel ${await page.$eval('#panel', el => el.hidden ? 'hidden' : 'open')}, padding`,
   await page.evaluate(() => JSON.stringify(window.__map.getPadding())));

@@ -5,7 +5,7 @@
 // itself (what it looks like, what moves, what a tap does) is src/stats-page.js.
 import { lateClass } from './lateness.js';
 import { styleFor } from './brands.js';
-import { STAND_MS } from './trains.js';
+import { STAND_SPEED } from './trains.js';
 import { swedishDay } from './clock.js';
 import { KINDS, kindOf } from './train-kinds.js';
 
@@ -162,7 +162,7 @@ export function createStats({ keep = true } = {}) {
       for (const x of frame) {
         dots.push({ id: x.id, lon: x.lon, lat: x.lat, stale: Boolean(x.stale), late: lateClass(lateness.get(x.id)?.minutes) });
         if (x.stale) continue;
-        if (x.v >= STAND_MS) moving++; else standing++;
+        if (x.v >= STAND_SPEED) moving++; else standing++;
         if (!north || x.lat > north.lat) north = x;
         if (!south || x.lat < south.lat) south = x;
         const kmh = reported(x, d.trainOf, at);

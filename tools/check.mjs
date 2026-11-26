@@ -181,6 +181,14 @@ add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { shor
 add(check('monitor-check', depsOf('tools/monitor-check.mjs', 'monitor/main.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
 // The viewer count (2026-11-23): the page's sending, the fetcher's counting, count/i.php on the portable PHP (data/php).
 add(check('viewers-check', [...depsOf('tools/viewers-check.mjs'), 'count/i.php', '.env'], plain(['tools/viewers-check.mjs'], { short: true })));
+// My trains: direct trains and changes from two whole-day boards, on the saved day of 17 Nov (offline, ~10 s; 2026-11-22).
+add(check('trips-check', [...depsOf('tools/trips-check.mjs'), 'data/measure/day-2026-11-17.json'], plain(['tools/trips-check.mjs'], { short: true })));
+// "You seem to be on 231": a phone riding recorded trains is offered the right one; standing, a car, poor fixes not (~5 s).
+add(check('seem-on-check', [...depsOf('tools/seem-on-check.mjs'), 'data/positions-2026-11-19T22-28-02-750Z.jsonl'], plain(['tools/seem-on-check.mjs'], { short: true })));
+// The shop window's tour: the fastest, a real meeting, when it starts (the rush of 17 Nov; ~20 s; 2026-11-22).
+add(check('tour-check', [...depsOf('tools/tour-check.mjs'), 'data/positions-2026-11-17T15-00-00-001Z.jsonl'], plain(['tools/tour-check.mjs'], { short: true })));
+// The sun's line against published sunrise and sunset times (offline, under a second; 2026-11-22).
+add(check('sun-check', depsOf('tools/sun-check.mjs'), plain(['tools/sun-check.mjs'], { short: true })));
 // An odd row stops no feed (positions, passings, a reader that throws; offline, under a second; 2026-11-22).
 add(check('stream-guard-check', depsOf('tools/stream-guard-check.mjs'), plain(['tools/stream-guard-check.mjs'], { short: true })));
 // The fetcher's planned-route questions when one fails: the rest still asked (offline, under a second; 2026-11-22).
@@ -191,6 +199,10 @@ add(check('night-trains-check', [...depsOf('tools/night-trains-check.mjs'), 'dat
 // The date passes (TODO 62): four nights on a fake clock, in Swedish time and in UTC (~2.5 min; 2026-11-22).
 add(check('dates-check', [...depsOf('tools/dates-check.mjs'), 'data/measure/day-2026-11-17.json', 'data/positions-2026-11-12T23-02-56-574Z.jsonl'],
   plain(['tools/dates-check.mjs'], { short: true }), { order: 5 }));
+// The day's history files (build plan part 4): a recording through the fetcher's memory and files and back, names and
+// keep times (midnight, the clock-change days), the page's reader and day-trains (offline, ~1 s; 2026-11-22).
+add(check('history-check', [...depsOf('tools/history-check.mjs'), 'data/positions-2026-11-19T22-28-02-750Z.jsonl', 'data/timetable-2026-11-19T22-28-02-750Z.jsonl'],
+  plain(['tools/history-check.mjs'], { short: true })));
 // A full round of tap files stays quick (the saved day of 17 Nov; ~5 s; 2026-11-22).
 add(check('tap-round-check', [...depsOf('tools/tap-round-check.mjs'), 'data/measure/day-2026-11-17.json'],
   plain(['tools/tap-round-check.mjs'], { short: true })));
@@ -336,6 +348,13 @@ const SCREENS = [
   ['animations', 'tools/ui-motion-check.mjs', 53, true],  // buttons, numbers, rows, signs, the menu (alone: animations mid-flight)
   ['stats and board', 'tools/stats-board-check.mjs', 40], // Max's notes of 2026-11-21: Statistik's loading, dimming, company pages, the board's search (live)
   ['card moves', 'tools/sheet-moves-check.mjs', 35, true], // every card moves in one go, no bounce (Max, 2026-11-21; alone: frame by frame)
+  ['ideas', 'tools/ideas-check.mjs', 90],                 // My trains, the change, why standing, share, peek, you seem to be on, a #train= link, the shop window (2026-11-23)
+  ['pc', 'tools/pc-check.mjs', 20],                      // a computer's screen and mouse: the map always drags (Max's PC notes, 2026-11-23)
+  ['taps', 'tools/tap-check.mjs', 45],                   // the tap rules: one map tap always does something, trains and stations open at once, Show only stays (Max, 2026-11-23)
+  ['filter pills', 'tools/filter-pills-check.mjs', 25],    // two filters, two pills, each × its own (Max, 2026-11-24)
+  ['home icons', 'tools/home-icons-check.mjs', 25],        // an icon before every card's title on Home, its number and colour (Max's pick A, 2026-11-25)
+  ['page motion', 'tools/page-motion-check.mjs', 40, true], // Debug → Page change: each way along its axis, no fade (Max, 2026-11-24; alone: it reads pages mid-slide)
+  ['ui sweep', 'tools/ui-sweep.mjs', 600, true],         // every sheet transition frame by frame, the paths Max used, empty room, the menu's place (in every round's check since 2026-11-25: it catches what he caught; the round's check runs in the background)
 ];
 const screenJobs = [];
 if (!pageUp) {
@@ -343,6 +362,10 @@ if (!pageUp) {
   if (process.env.SPARAT_RELEASE) { console.log('FAIL the screens were not checked (no dev page answering): a release needs them'); failed++; }
 } else {
   for (const [name, file, order, alone, beforeMain] of SCREENS) screenJobs.push(check(name, [...PAGE_FILES, ...depsOf(file)], plain([file]), { order, alone, beforeMain }));
+  // The day's ribbon on a recording's history files and a replaying fetcher of its own, the scale slider and the sun's
+  // line (build plan parts 2, 4, 5; 2026-11-23).
+  screenJobs.push(check('the day', [...PAGE_FILES, ...FETCHER_FILES, ...depsOf('tools/day-check.mjs', 'tools/history-files.mjs')],
+    plain(['tools/day-check.mjs']), { order: 60 }));
   // The same screens on the page reading the fetcher's files (public-plan step 3) on a fetcher of their own, 75 s
   // into its replay, as the old check had it: later in that replay the test can fail by itself (2026-11-21: at about
   // 7 min a tap on 2513 opens Stockholm C's board; TODO B), so the moment is kept fixed. Its wait holds one of the two.

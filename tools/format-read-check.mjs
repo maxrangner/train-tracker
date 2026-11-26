@@ -4,9 +4,9 @@
 // which every field has its own value, reads them with the readers as RELEASED (src/live-file.js and src/tap-files.js
 // taken from the version tag with git, into a temp folder) and with today's, and fails when a field the released
 // reader knows reads differently. Covers the row kinds: the live file's trains and passings, passings, planned,
-// cards, boards, taps-add, and (2026-11-21, TODO 37's rest) arrivals + arrivals-add and the station messages: their
-// readers are src/main.js filesArrivals (taken out of the tag's main.js by its name and run on its own: the page
-// itself can't run here) and src/files-source.js filesTapAsker (the tag's module with what it imports). Kinds with
+// cards, boards, taps-add, history (2026-11-22), and (2026-11-21, TODO 37's rest) arrivals + arrivals-add and the station messages: their
+// readers are src/live/arrivals.js (until 0.7 src/main.js filesArrivals, taken out of the tag's main.js by its name and
+// run on its own: the page itself can't run here) and src/files-source.js filesTapAsker (the tag's module with what it imports). Kinds with
 // named fields (stations, disruptions, stats, taps-index) can't swap by position, and a renamed field fails
 // format-check as "gone".
 // Which releases: the newest version tag; from the first app release on, every tag from tools/file-formats.json
@@ -21,8 +21,10 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import * as now from '../src/live-file.js';
 import * as tapsNow from '../src/tap-files.js';
-import { buildLive, buildPassings, buildPlanned, buildArrivals } from '../fetcher/files.mjs';
+import { buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory } from '../fetcher/files.mjs';
+import { historySlot } from '../src/live-file.js';
 import { filesTapAsker } from '../src/files-source.js';
+import { arrivalsReader as arrivalsNow } from '../src/live/arrivals.js';
 import { createTimetable } from '../fetcher/timetable.mjs';
 
 const list = JSON.parse(readFileSync('tools/file-formats.json', 'utf8'));
@@ -84,6 +86,10 @@ const files = [
   ['live passings', live.passings.map(r => [r]), 'passingOf'],
   ['passings', buildPassings(state, T).passings.map(r => [r]), 'passingOf'],
   ['planned', (f => f.rows.map(r => [r, f.brands]))(buildPlanned(state, T, [], 0)), 'plannedOf'],
+  // The day's history (2026-11-22): a train with two points, every field its own value.
+  ['history', (f => f.trains.map(r => [r, f.t]))(buildHistory(historySlot(T), [{ id: '1234/2026-11-19', number: '5678', brand: 'SJ Regional',
+    from: T + 60000, until: T + 240000, points: [{ time: T + 37000, lon: 18.12345, lat: 59.54321, speed: 87, bearing: 213, late: 3 },
+      { time: T + 101000, lon: 18.13456, lat: 59.55432, speed: null, bearing: null, late: -1 }] }])), 'historyOf'],
 ];
 const tapFiles = [['card', tt.card(tapsNow.groupOf('91'), T)], ['board', tt.board(tapsNow.groupOf('Cst'), T)], ['taps-add', tt.changes(0, T)]];
 for (const [k, f] of tapFiles) if (!f.r.length) { console.log(`format-read-check: the made-up ${k} file is empty (the check itself is broken)`); process.exit(1); }
@@ -95,17 +101,17 @@ const arrFiles = {
 };
 const msgFile = { v: now.FORMAT ?? 1, ...tt.messages(T) };
 const sigs = [...new Set(msgs.map(m => m.LocationCode))];
-// The released arrivals reader: filesArrivals out of a main.js, run with the files above (its fileOf, swedishDay, now).
+// The arrivals reader, run with the files above (its fileOf, swedishDay, now): src/live/arrivals.js; released before
+// it, filesArrivals taken out of that tag's main.js.
+const fileOf = async kind => { if (!arrFiles[kind]) throw new Error(`no ${kind} file yet`); return arrFiles[kind]; };
 function arrivalsReader(src) {
   const i = src.indexOf('async function filesArrivals(');
   const end = i < 0 ? -1 : src.indexOf('\n}\n', i);
   if (end < 0) return null;
   const fn = new Function('fileOf', 'swedishDay', 'now', `${src.slice(i, end + 2)}\nreturn filesArrivals;`);
-  const fileOf = async kind => { if (!arrFiles[kind]) throw new Error(`no ${kind} file yet`); return arrFiles[kind]; };
   return fn(fileOf, () => DAY, () => T);
 }
-const arrNow = arrivalsReader(readFileSync('src/main.js', 'utf8'));
-if (!arrNow) { console.log('format-read-check: filesArrivals not found in src/main.js (the check needs updating)'); process.exit(1); }
+const arrNow = arrivalsNow(fileOf, () => T);
 const msgReader = asker => Promise.all(sigs.map(sig => asker(kind => Promise.resolve(kind === 'messages' ? msgFile : null), () => T)('messages', { sig })))
   .then(answers => answers.flatMap(a => a.TrainStationMessage));
 const arrRowsNow = await arrNow(null, null), msgRowsNow = await msgReader(filesTapAsker);
@@ -138,7 +144,15 @@ try {
     };
     const take = async name => (put(name) ? import(pathToFileURL(join(at, name)).href) : null);
     const old = await take('live-file.js'), oldTaps = await take('tap-files.js'), oldSource = await take('files-source.js');
-    const oldArr = arrivalsReader(show('main.js') ?? '');
+    // (src/live/arrivals.js as released, beside the clock.js it imports, one folder up)
+    const takeArrivals = async () => {
+      const src = show('live/arrivals.js');
+      if (src === null || !put('clock.js')) return null;
+      mkdirSync(join(at, 'live'), { recursive: true });
+      writeFileSync(join(at, 'live', 'arrivals.js'), src);
+      return (await import(pathToFileURL(join(at, 'live', 'arrivals.js')).href)).arrivalsReader(fileOf, () => T);
+    };
+    const oldArr = arrivalsReader(show('main.js') ?? '') ?? await takeArrivals();
     if (old) for (const [what, rows, fn] of files) {
       if (!old[fn]) continue;
       rows.forEach((args, i) => same(tag, what, i, old[fn](...args), now[fn](...args)));

@@ -13,17 +13,15 @@
 // Animations run only while the page is open, and none when the phone asks for less motion.
 import { t } from './i18n.js';
 import { now, hhmmss } from './clock.js';   // (Swedish time on the page's clock, as every other time: 2026-11-22)
-import { roll, forgetRoll } from './motion.js';
+import { roll, forgetRoll, reduceMotion as still } from './motion.js';
 import { icon } from './icons.js';
 import OUTLINE from './sweden-outline.json';
-import './connection.css';
 
 const BLINK_MS = 900;          // a train's blink when its new position comes
 const ECG_SPAN_MS = 60 * 1000; // the heartbeat shows the last minute
 const BEAT_MS = 500;           // one beat's width
 const PERIOD_MS = 5000;        // the public page's files: one every 5 s
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 // The live pill's words (Max, 2026-11-19: some were "WAY too long", e.g. a feed's whole error text): two or three

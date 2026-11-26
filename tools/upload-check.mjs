@@ -3,8 +3,9 @@
 // Each case sets up the web space, runs the uploader briefly, and checks what it wrote, renamed, deleted or refused.
 // Run: node tools/upload-check.mjs     exit code 0: all hold; 1: one failed
 import { EventEmitter } from 'node:events';
-import { createUploader, checkDir, MARK, order, uploadStuck, STUCK_MS } from '../fetcher/upload.mjs';
+import { createUploader, checkDir, MARK, NAME, order, uploadStuck, STUCK_MS } from '../fetcher/upload.mjs';
 import { createShelf, KINDS } from '../fetcher/files.mjs';
+import { historyName, historySlot } from '../src/live-file.js';
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const err = (code, m) => Object.assign(new Error(m), { code });
@@ -173,6 +174,17 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   check('sweep: only its own old files', JSON.stringify(del) === JSON.stringify(['live-1.json', 'live-1.json.tmp']), JSON.stringify(del));
 }
 
+// 6b. The day's history files (2026-11-22): the sweep keeps today's, also those an earlier run made (not on this run's
+// shelf: a restart must not delete the day so far), and removes those past their keep time (01:00 the next night).
+{
+  const slot = historySlot(Date.now());
+  const today = historyName(slot - 4), old = historyName(slot - 3 * 96);
+  const r = await run(marked({ [`${DIR}/${today}`]: file(), [`${DIR}/${old}`]: file() }), DIR, async up => { up.sweep(); await wait(40); });
+  const del = r.ops.filter(o => o[0] === 'delete').map(o => o[1].slice(DIR.length + 1));
+  check('sweep: today\'s history from an earlier run kept, three days old removed', r.fs.has(`${DIR}/${today}`) && JSON.stringify(del) === JSON.stringify([old]), JSON.stringify(del));
+  check('history names allowed, odd ones not', NAME.test('history-1958400.json') && !NAME.test('history-x.json') && !NAME.test('history-12.json.gz'));
+}
+
 // 7. Links planted where it writes are never written through.
 {
   const r = await run(marked({ [`${DIR}/live-5.json.tmp`]: { type: 'link', to: '/web/rangner/index.html' } }), DIR, async up => { up.add('live-5.json', live); await wait(40); });
@@ -205,6 +217,11 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   const got = jobs.map(j => `${j.op} ${j.name}`).join(', ');
   check('order: newest of each kind, the live file, newer files, deletes', got === 'put card-01-2.json, put passings-3.json, put live-2.json, put card-01-4.json, rm stats-0.json', got);
   check('order: older files skipped and counted', skipped === 2, String(skipped));
+  // History files: every one waiting goes (each holds its own 15 minutes), right after the live file.
+  const h = [put('history-10.json', 'history'), put('live-3.json', 'live'), put('history-11.json', 'history'), put('stats-1.json', 'stats'),
+    put('stats-2.json', 'stats'), put('live-4.json', 'live'), put('history-12.json', 'history')];
+  const hgot = order(h).jobs.map(j => j.name).join(', ');
+  check('order: every waiting history file goes, after the live file', hgot === 'stats-2.json, live-4.json, history-10.json, history-11.json, history-12.json', hgot);
   check('order: nothing to reorder without a live file', order(q.slice(0, 1)).jobs.length === 1 && order([put('a-1.json', 'a'), put('a-2.json', 'a')]).jobs.length === 2);
 
   // The same through the uploader: everything made during a break, then the connection back.
@@ -245,6 +262,8 @@ for (const [name, entries, dirOrRe, re] of refusals) {
   check('six hours offline, then back: every current file is there', named.every(n => s.fs.has(`${DIR}/${n}`)), named.filter(n => !s.fs.has(`${DIR}/${n}`)).join(', '));
   check('six hours offline, then back: only current files sent', s.ops.filter(o => o[0] === 'rename' && !sentBefore.has(o[2])).length <= held && st.waiting === 0, JSON.stringify(st));
   check('six hours offline, then back: the newest live file is there', s.fs.has(`${DIR}/${live}`));
+  const days = shelf.all().filter(([, f]) => f.kind === 'history').map(([n]) => n);
+  check('six hours offline, then back: every history file of those hours is there', days.length > 0 && days.every(n => s.fs.has(`${DIR}/${n}`)), `${days.filter(n => !s.fs.has(`${DIR}/${n}`)).length} of ${days.length} missing`);
   console.log(`     (${made} files made in 6 h; at most ${most} waiting; ${st.forgotten} forgotten unsent; ${held} on the shelf)`);
 }
 

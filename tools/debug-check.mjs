@@ -47,6 +47,18 @@ try {
   s = await shown();
   expect(s.every(Boolean), `#debug: ${rows(s)}`);
   await page.evaluate(() => { try { localStorage.removeItem('debugShown'); } catch {} });
+  // Debug → Lateness colours (Max, 2026-11-23): off, the Filter page (☰; Home until the start chips, 2026-11-25) has no
+  // colour bar; on, it is back (opened once trains are on the map: the bar counts them)
+  const legendOn = () => page.evaluate(async () => {
+    for (let i = 0; i < 100 && !(window.__trains?.count > 0); i++) await new Promise(r => setTimeout(r, 100));
+    window.__stack.open('filter');
+    return new Promise(r => setTimeout(() => r(document.querySelectorAll('.pg[data-key="filter"] .lg-p').length), 1500));
+  });
+  await go({ legend: 'false' });
+  const off = await legendOn();
+  await go({ legend: 'true' });
+  const on = await legendOn();
+  expect(off === 0 && on > 0, `Lateness colours on Filter: off ${off} colours, on ${on}`);
   expect(!errors.length, `page errors: ${errors.slice(0, 3).join(' | ') || 'none'}`);
 } finally { await browser.close(); }
 

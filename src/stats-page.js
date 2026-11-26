@@ -5,8 +5,7 @@
 // Built once (and again when the language changes); after that, once a second, only what changed moves: numbers
 // roll to their new value, rings and bars glide (CSS), the comparison slides in. Taps go somewhere: a train opens its
 // card on the map, a station its board, an hour in the graph shows its numbers. Nothing moves for a phone set to
-// reduce motion. Numbers: src/stats.js snapshot(); styles: src/stats.css.
-import './stats.css';
+// reduce motion. Numbers: src/stats.js snapshot(); styles: src/css/stats.css.
 import { t, lang } from './i18n.js';
 import { brandColour } from './stats.js';
 import { kindOf } from './train-kinds.js';
@@ -18,9 +17,9 @@ const FUN_EVERY_MS = 10 * 1000;     // "for fun": a new comparison this often (o
 const COMPANIES_SHOWN = 6;          // "Show all" opens the rest
 const GAUGE_MAX = 250;              // km/h at the speedometer's end (the fastest reported in the recordings: 206)
 import { esc } from './html.js';
-import { roll } from './motion.js';
+import { roll, reduceMotion as reduce } from './motion.js';
 import { hhmm } from './clock.js';
-const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+import { titleIcon, titleAttrs } from './icons.js';
 const num = (n, digits = 0) => Number(n).toLocaleString(lang() === 'sv' ? 'sv-SE' : 'en-GB', { maximumFractionDigits: digits, minimumFractionDigits: digits });
 const pct = (n, all) => (all ? Math.round(100 * n / all) : 0);
 const h = (html) => { const tpl = document.createElement('template'); tpl.innerHTML = html.trim(); return tpl.content.firstElementChild; };
@@ -133,20 +132,32 @@ const ICONS = {
 // punctuality, and more"): "›" at the end of its row; the same tiles, only its trains (src/stats.js snapshot brand),
 // under a head with its name, its kind and its trains today; "‹" back to all. main.js asks for the numbers of
 // `company`.
-export function createStatsPage(root, { openTrain, openStation, describe, filter, redraw }) {
+// Since the one sheet (2026-11-22) the stats page is no page of its own: its parts are drawn into Home and a company's
+// page (src/home.js). parts: which, in order: names ('sweden', 'duo', 'punctuality', 'fastest', 'kinds', 'companies',
+// 'busiest', 'fun', 'data'; 'companyHead' only on a company's own page) or elements of the caller's own (an update(s)
+// of theirs is called with the others'). company: the company whose numbers these are (null: all trains). groups:
+// the kinds' and companies' rows open their group's page (the caller listens to [data-filter]), no "›" beside them.
+// icons: each card's title with its icon before it, the data's line too (Home: Max's pick A, 2026-11-25; src/icons.js titleIcon).
+export function createStatsPage(root, { openTrain, openStation, describe, filter, redraw, parts: want = null, company: only = null, groups = false, icons = false }) {
   let builtLang = null, builtFor = null, parts = [], funOffset = 0, beatSlot = null;
-  let company = null;   // the company whose page is shown (null: all trains)
-  addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
+  let company = only;   // the company whose page is shown (null: all trains)
+  root.classList.add('stats-body');
+  root.classList.toggle('st-groups', groups);
+  if (!want) addScrollbar(root);   // with a mouse: our own thin scrollbar (Max, 2026-11-15)
   const view = { fastest: 'now', busiest: 'recent' };   // the toggles: not remembered
   let companiesOpen = false, hourOn = null, last = null;
+  // A card's title: its words; with icons its icon before them, in the card's colour (colour: a CSS colour, else the accent)
+  const lbl = (key, ic, colour = null) => (icons ? `<span ${titleAttrs('st-lbl', colour)}>${titleIcon(ic)}${t(key)}</span>` : `<span class="st-lbl">${t(key)}</span>`);
 
   function build() {
     builtLang = lang();
     builtFor = company;
     hourOn = null;
     root.innerHTML = '';
-    parts = company === null ? [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()]
-      : [companyHead(), sweden(), duo(), punctuality(), fastest(), busiest(), data()];
+    const make = { sweden, duo, punctuality, fastest, kinds, companies, busiest, fun, data, companyHead };
+    parts = want ? want.map(p => (typeof p === 'string' ? make[p]() : p))
+      : company === null ? [sweden(), duo(), punctuality(), fastest(), kinds(), companies(), busiest(), fun(), data()]
+        : [companyHead(), sweden(), duo(), punctuality(), fastest(), busiest(), data()];
     root.append(...parts);
     root.scrollTop = 0;
   }
@@ -205,8 +216,8 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- Driven while you watched, cancelled today ----
   function duo() {
-    const el = h(`<section class="st-sec st-duo"><div class="st-tile"><span class="st-lbl">${t('stDriven')}</span><div class="st-o"></div><div class="st-sub">${t(company === null ? 'stDrivenSub' : 'stDrivenSubCo')}</div></div>` +
-      `<div class="st-tile st-cancel"><span class="st-lbl">${t('stCancelled')}</span><div style="margin-top:6px"><b class="st-big st-cn">…</b></div><div class="st-sub st-cs">${t('stCancelledSub')}</div></div></section>`);
+    const el = h(`<section class="st-sec st-duo"><div class="st-tile">${lbl('stDriven', 'train')}<div class="st-o"></div><div class="st-sub">${t(company === null ? 'stDrivenSub' : 'stDrivenSubCo')}</div></div>` +
+      `<div class="st-tile st-cancel">${lbl('stCancelled', 'pause', 'var(--c-late)')}<div style="margin-top:6px"><b class="st-big st-cn">…</b></div><div class="st-sub st-cs">${t('stCancelledSub')}</div></div></section>`);
     const odo = odometer();
     $(el, '.st-o').append(odo);
     el.update = (s) => {
@@ -220,7 +231,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- Punctuality: the ring, the most late train, today's graph ----
   function punctuality() {
-    const el = h(`<section class="st-sec st-tile st-punct"><span class="st-lbl">${t('stPunctuality')}</span><div class="st-prow"></div>` +
+    const el = h(`<section class="st-sec st-tile st-punct">${lbl('stPunctuality', 'checkCircle', 'var(--c-ontime)')}<div class="st-prow"></div>` +
       `<button type="button" class="st-go st-worst" hidden><span class="st-sub">${t('stMostLate')}</span><b class="st-wn"></b><span class="st-wt"></span><span class="st-wb"></span><span class="st-chev">›</span></button>` +
       `<div class="st-daybox"><span class="st-lbl st-daylbl">${t('stToday')}<span class="st-busy" hidden><span class="spin" aria-hidden="true"></span>${t('loading')}</span></span><div class="st-dayin"></div></div></section>`);
     const ring = donut(96, 11, ['ontime', 'some', 'late'], `<b class="st-p">0</b><small>${t('stKeyOnTime')}</small>`);
@@ -308,7 +319,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- Fastest: now, or today while the app was open on this phone ----
   function fastest() {
-    const el = h(`<section class="st-sec st-tile"><div class="st-head"><span class="st-lbl">${t('stFastest')}</span>` +
+    const el = h(`<section class="st-sec st-tile"><div class="st-head">${lbl('stFastest', 'gauge')}` +
       `<div class="seg st-seg" role="group" aria-label="${esc(t('stFastest'))}"><button type="button" data-v="now">${t('stNow')}</button><button type="button" data-v="today">${t('stTodayShort')}</button></div></div>` +
       `<div class="st-fast"></div><p class="st-sub st-tnote" hidden>${t('stWhileOpen')}</p></section>`);
     const g = gauge(), list = h(`<div class="st-fastlist"></div>`);
@@ -348,7 +359,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
             `<span class="st-tr"><span class="st-bar" style="width:0;background:${colour(v)}"></span></span><b class="st-n"></b></button>`);
           rows.set(v, r);
           // a company: "›" opens its own page (the row itself still filters the map)
-          if (type === 'brand') {
+          if (type === 'brand' && !groups) {
             const w = h(`<div class="st-brow-w"><button type="button" class="st-cogo" data-company="${esc(v)}" aria-label="${esc(t('stCoOpen', v || t('stNoCompany')))}">›</button></div>`);
             w.prepend(r);
             r.wrap = w;
@@ -360,7 +371,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
         r.setAttribute('aria-pressed', String(Boolean(filter.has(type, v))));
         // A filter on: a row whose trains aren't on the map is dimmed, still a button (Max, 2026-11-21: "the companies
         // that no longer apply should be slightly greyed or otherwise shown to not be relevant. Still clickable")
-        r.classList.toggle('st-off', filter.active && !filter.has(type, v) && !(type === 'brand' ? filter.shows(v)
+        r.classList.toggle('st-off', filter.coActive && !filter.has(type, v) && !(type === 'brand' ? filter.shows(v)
           : filter.list().some(x => x.type === 'brand' && kindOf(x.v) === v)));
         const bar = $(r, '.st-bar'), w = `${(100 * n / most).toFixed(1)}%`;
         if (bar.style.width === '0px' || bar.style.width === '0') requestAnimationFrame(() => { bar.style.width = w; }); else bar.style.width = w;
@@ -371,14 +382,14 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     return el;
   }
   function kinds() {
-    const el = h(`<section class="st-sec st-tile st-sec-bars"><span class="st-lbl">${t('stKinds')}</span><p class="st-sub">${t('stTapToFilter')}</p></section>`);
+    const el = h(`<section class="st-sec st-tile st-sec-bars">${lbl('stKinds', 'train')}<p class="st-sub">${t('stTapToFilter')}</p></section>`);
     const bars = barList('kind');
     $(el, '.st-lbl').after(bars);
     el.update = s => bars.update(s.kinds);
     return el;
   }
   function companies() {
-    const el = h(`<section class="st-sec st-tile st-sec-bars"><span class="st-lbl">${t('stCompanies')}</span><button type="button" class="st-more" hidden></button></section>`);
+    const el = h(`<section class="st-sec st-tile st-sec-bars">${lbl('stCompanies', 'company')}<button type="button" class="st-more" hidden></button></section>`);
     const bars = barList('brand', { limit: COMPANIES_SHOWN }), more = $(el, '.st-more');
     $(el, '.st-lbl').after(bars);
     more.onclick = () => { companiesOpen = !companiesOpen; el.update(last); };
@@ -392,7 +403,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- Busiest stations: the last 15 minutes, or today's arrivals; a tap opens the board ----
   function busiest() {
-    const el = h(`<section class="st-sec st-tile"><div class="st-head"><span class="st-lbl">${t('stBusiest')}</span>` +
+    const el = h(`<section class="st-sec st-tile"><div class="st-head">${lbl('stBusiest', 'bars')}` +
       `<div class="seg st-seg" role="group" aria-label="${esc(t('stBusiest'))}"><button type="button" data-v="recent">${t('st15')}</button><button type="button" data-v="today">${t('stTodayShort')}</button></div></div>` +
       `<div class="st-rank"></div></section>`);
     const list = $(el, '.st-rank'), segs = el.querySelectorAll('.st-seg button');
@@ -412,7 +423,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
   // ---- For fun: all speeds added up, a comparison (every 10 s, or at a tap), north and south ----
   function fun() {
     const el = h(`<section class="st-sec st-tile st-fun" role="button" tabindex="0" aria-label="${esc(t('stFunNext'))}"><span class="st-hint">${t('stTapNext')}</span>` +
-      `<span class="st-lbl">${t('stFun')}</span><div style="margin-top:6px"><b class="st-big st-sum">0</b><span class="st-sub"> km/h</span></div><div class="st-sub">${t('stFunSum')}</div>` +
+      `${lbl('stFun', 'bulb')}<div style="margin-top:6px"><b class="st-big st-sum">0</b><span class="st-sub"> km/h</span></div><div class="st-sub">${t('stFunSum')}</div>` +
       `<div class="st-cmp"><svg viewBox="0 0 44 44" aria-hidden="true"></svg><div><div class="st-x"></div><div class="st-sub st-what"></div></div></div>` +
       `<p class="st-sub st-ns" style="margin-top:10px"></p></section>`);
     let shown = null;
@@ -445,7 +456,7 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
 
   // ---- The data: a grey line at the end (Max, 3A; the same numbers under Settings → Debug) ----
   function data() {
-    const el = h(`<p class="st-sec st-data"><span class="st-live"></span><span class="st-dt"></span></p>`);
+    const el = h(`<p class="st-sec st-data">${icons ? titleIcon('server') : ''}<span class="st-live"></span><span class="st-dt"></span></p>`);
     el.update = (s) => {
       $(el, '.st-dt').textContent = s.rate ? t('stData', num(s.rate.perSecond), num(s.rate.ageS)) : `${t('stData', '–', '–')}`;
       const slot = Math.floor(s.at / 10000);
@@ -460,12 +471,12 @@ export function createStatsPage(root, { openTrain, openStation, describe, filter
     last = s;
     if ((s.brand ?? null) !== company) return;   // (numbers asked for before the page switched: the next second's are right)
     if (first) for (const el of root.querySelectorAll('.st-big, .st-legend b, .st-n, .st-ap, .st-p')) el._v = undefined;
-    for (const p of parts) p.update(s, first);
+    for (const p of parts) p.update?.(s, first);
   }
   return {
     update,
     get company() { return company; },
     // the page opened again: all companies
-    home() { if (company !== null) { company = null; build(); } },
+    home() { if (company !== only) { company = only; build(); } },
   };
 }

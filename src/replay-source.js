@@ -3,7 +3,7 @@
 // recording; the page's clock (src/clock.js) runs from the recording's start. Opened with #replay=<name> in the
 // address; the dev server serves data/ (it is not part of a build).
 import { toRecord } from './trains-source.js';
-import { trainKey, useSavedRoutes } from './trafikverket.js';
+import { trainKey, useSavedRoutes, useSavedBoards } from './trafikverket.js';
 import { now, setClock, hhmmss } from './clock.js';
 
 const SKIP_MS = 60 * 1000;   // start a minute in, so the first batch (the last 10 minutes) has been taken in
@@ -37,16 +37,34 @@ export async function startReplaySource(name, { onRecords, onStatus, onPlanned, 
       const k = `${f}|${a[f]}|${a.ScheduledDepartureDateTime.slice(0, 10)}`;
       (index.get(k) ?? index.set(k, []).get(k)).push(a);
     }
-    useSavedRoutes(async (field, value, day) => {
-      const rows = index.get(`${field}|${value}|${day}`);
-      if (!rows) return null;   // not saved (a train from the day before): Trafikverket is asked, as before
+    // As at the replay's clock: an actual time still ahead of it is left out.
+    const asNow = (rows) => {
       const t = now();
-      return { TrainAnnouncement: rows.map(a => {
+      return rows.map(a => {
         if (!a.TimeAtLocation || Date.parse(a.TimeAtLocation) <= t) return a;
         const { TimeAtLocation, ...ahead } = a;
         return ahead;
-      }) };
+      });
+    };
+    useSavedRoutes(async (field, value, day) => {
+      const rows = index.get(`${field}|${value}|${day}`);
+      if (!rows) return null;   // not saved (a train from the day before): Trafikverket is asked, as before
+      return { TrainAnnouncement: asNow(rows) };
     });
+    // A station's board and whole day from the same rows (2026-11-23: My trains and Peek on a replay; Trafikverket keeps
+    // a day's boards only a few days, so a replay's boards came back empty). Only the trains seen in the recording:
+    // enough for its two hours.
+    const boards = new Map(), seen = new Set();
+    for (const a of saved) {
+      if (!a.Advertised || a.Deleted || !a.LocationSignature || !a.ScheduledDepartureDateTime || !a.AdvertisedTimeAtLocation) continue;
+      const id = `${a.OperationalTrainNumber}|${a.ScheduledDepartureDateTime.slice(0, 10)}|${a.LocationSignature}|${a.ActivityType}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const k = `${a.LocationSignature}|${a.ActivityType}`;
+      (boards.get(k) ?? boards.set(k, []).get(k)).push(a);
+    }
+    for (const list of boards.values()) list.sort((a, b) => Date.parse(a.AdvertisedTimeAtLocation) - Date.parse(b.AdvertisedTimeAtLocation));
+    useSavedBoards(async (sig, act) => ({ TrainAnnouncement: asNow(boards.get(`${sig}|${act}`) ?? []) }));
   }
 
   const events = [];

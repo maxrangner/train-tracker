@@ -20,7 +20,7 @@
 //   is a note).
 // Exit code 0: compatible; 1: not; 2: no files found.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { LIVE_MS } from '../src/live-file.js';
+import { LIVE_MS, HISTORY_MS } from '../src/live-file.js';
 
 const arg = n => { const i = process.argv.indexOf(n); return i < 0 ? null : process.argv[i + 1]; };
 const BASE = (arg('--files') ?? 'https://sparat.rangner.com/data/').replace(/\/?$/, '/');
@@ -29,6 +29,10 @@ const STRICT = process.argv.includes('--strict');
 const WAIT_MS = Number(arg('--wait') ?? 0) * 1000;
 const LIST = 'tools/file-formats.json';
 const MAPS = new Set(['files', 'ops', 'brands']);   // objects whose keys are data (a kind, a train number, a train)
+// Kinds made more seldom than a check waits (2026-11-22: the day's history files, one when a quarter of an hour ends):
+// not waited for, and not made yet is a note, also with --strict (their types are checked whenever one is there;
+// tools/history-check.mjs reads them back offline every time).
+const SELDOM = { history: HISTORY_MS };
 
 // Every path in a value and the types seen there: "trains[][2]" number, "files{}" string, ...
 function paths(v, at, out, seen) {
@@ -71,7 +75,7 @@ const newestLive = async () => {
 const namedKinds = f => new Set(['live', ...Object.values(f?.files ?? {}).map(kindOf)]);
 let live = await newestLive();
 const until = Date.now() + WAIT_MS;
-while (Date.now() < until && Object.keys(list.kinds).some(k => !namedKinds(live).has(k))) {
+while (Date.now() < until && Object.keys(list.kinds).some(k => !SELDOM[k] && !namedKinds(live).has(k))) {
   await new Promise(res => setTimeout(res, 10000));
   live = (await newestLive()) ?? live;
 }
@@ -85,7 +89,9 @@ for (const [kind, name] of Object.entries(live.files ?? {})) {
 }
 let broken = 0;
 // Every kind ever released must still be made (and readable).
-const notMade = Object.keys(list.kinds).filter(k => !(k in files));
+const notMade = Object.keys(list.kinds).filter(k => !(k in files) && !SELDOM[k]);
+const notYet = Object.keys(list.kinds).filter(k => !(k in files) && SELDOM[k]);
+if (notYet.length) console.log(`note not made yet (one every ${SELDOM[notYet[0]] / 60000} minutes): ${notYet.join(', ')}`);
 if (STRICT) {
   for (const k of notMade) { console.log(`FAIL ${k}: no such file is made any more (not named by the live file)`); broken++; }
   for (const k of missing) { console.log(`FAIL ${k}: named by the live file but can't be read`); broken++; }

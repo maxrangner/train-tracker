@@ -1,5 +1,5 @@
 // Loading, empty and error messages in one look (round 4, 2026-11-15): a soft tile with the text centred and an icon
-// before it: a turning ring while loading, (i) for nothing found, ⚠ for an error. CSS .state in index.html.
+// before it: a turning ring while loading, (i) for nothing found, ⚠ for an error. CSS .state in src/css/page.css.
 import { icon } from './icons.js';
 
 import { esc } from './html.js';

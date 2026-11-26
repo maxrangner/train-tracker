@@ -101,15 +101,19 @@ export function createTrainLayer({ getTrains, along = null, selection = null }) 
   // grey): its company's model in the plain model's colours, with its own copies of the materials, so the shared
   // ones in train-model.js stay as they are.
   const STALE = '\0stale';
-  const keyOf = t => (t.stale ? STALE : '') + (t.brand ?? '');
+  // On the night side of the sun's line (src/sun.js; Settings → Day and night) a train's windows are lit: its own model
+  // built once more with the windows in their own unlit, warm paint (train-kit.js lit). t.night comes from src/main.js.
+  const NIGHT = '\0night';
+  const keyOf = t => (t.stale ? STALE : '') + (t.night && !t.stale ? NIGHT : '') + (t.brand ?? '');
   const templateFor = (key) => {
     if (!templates.has(key)) {
-      const stale = key.startsWith(STALE), brand = (stale ? key.slice(STALE.length) : key) || null;
+      const stale = key.startsWith(STALE), rest = stale ? key.slice(STALE.length) : key;
+      const lit = rest.startsWith(NIGHT), brand = (lit ? rest.slice(NIGHT.length) : rest) || null;
       const style = TOY ? toyFor(brand) : styleFor(brand);
       const plain = TOY ? toyFor(null) : styleFor(null);
       // Realistic trains: the company's own train model (toy-brands.js says which), in its realistic paint (brands.js).
-      const train = TOY ? buildToy(stale ? { ...style, colours: plain.colours } : style)
-        : buildTrain({ ...(stale ? { ...style, colours: plain.colours } : style), model: toyFor(brand).model });
+      const train = TOY ? buildToy(stale ? { ...style, colours: plain.colours } : style, { lit })
+        : buildTrain({ ...(stale ? { ...style, colours: plain.colours } : style), model: toyFor(brand).model }, { lit });
       joinParts(train);
       if (stale) {
         train.traverse((o) => {

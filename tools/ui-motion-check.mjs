@@ -1,15 +1,20 @@
 // The small animations (Max's picks 1, 4, 6, 7, 8, 9 of 2026-11-20; the example page
-// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and index.html "Motion"), on a phone-size page:
+// https://claude.ai/artifact/QJRLpa8nQ1wpDvJnvaHiFe; src/motion.js and src/css), on a phone-size page:
 //   1 a held button presses in and springs back; 9 the ☰ menu's rows follow it in;
-//   6 search rows arrive, and the same results again move nothing; the card's timeline rows arrive as it opens full,
-//     and its refresh moves nothing; Störningar's rows arrive as it opens (live data, skipped without problems);
+//   6 search rows arrive, and the same results again move nothing; the card's timeline rows don't arrive as it opens
+//     full (since 2026-11-25: what is shown stays, the edge reveals the rest; tools/ui-sweep.mjs measures it), and its
+//     refresh moves nothing; Störningar opens as one push: no row arriving, no fade (since 2026-11-24; live data,
+//     skipped without problems);
 //   4 + 7 the card's lateness rolls to new minutes and its tile pulses, ending on the exact text; nothing rolls when a
 //     card opens; Anslutning's numbers roll, not when it opens;
 //   8 a tapped station (and a disruption sign, live) gets a copy that grows and is removed;
 //   with "reduce motion": none of it. Also the longest pause between frames during the menu, a lateness change and the
 //   search rows, with the processor slowed 4x (measured, not a limit).
+// Since the one sheet (2026-11-22): ☰'s menu has 3 rows (The day, Settings, About Spårat) and no count; the search's
+// rows are .row / .chip with data-go; a train, Connection and the disruptions are pages in the sheet (tools/lib/screen.mjs).
 // node tools/ui-motion-check.mjs (with npm run dev; PAGE= for another port).
-import { launch, openMap, sleep, CARD_HOUR } from './lib/browser.mjs';
+import { launch, sleep, CARD_HOUR } from './lib/browser.mjs';
+import { waitForMap, until, toRest, openSearch, openDisruptions, pageSel } from './lib/screen.mjs';
 import { existsSync } from 'node:fs';
 
 const fails = [], oks = [], notes = [];
@@ -33,7 +38,7 @@ async function pauses(page, fn, ms = 900) {
 const animNames = (page, sel) => page.evaluate(s => [...document.querySelectorAll(s)].flatMap(e => e.getAnimations().map(a => a.animationName)), sel);
 
 try {
-  const page = await openMap(browser, base);
+  const page = await waitForMap(browser, base);
   const frames = {};
 
   // ---- 1: a held button presses in ----
@@ -41,27 +46,55 @@ try {
   const box = await nb.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await sleep(200);
+  // (waited for, not read once at 200 ms: on a busy PC the press showed later, 2026-11-25)
+  await until(page, () => getComputedStyle(document.getElementById('nav-button')).scale === '0.94', 1500);
   const held = await page.evaluate(() => getComputedStyle(document.getElementById('nav-button')).scale);
   await page.mouse.up();
   await sleep(400);
   const after = await page.evaluate(() => getComputedStyle(document.getElementById('nav-button')).scale);
   check(held === '0.94' && after === 'none', `1: a held button is pressed in (scale ${held}, after ${after})`);
 
-  // ---- 9: the menu's rows follow it in (the tap above opened it; close and open again) ----
-  if (await page.evaluate(() => !document.getElementById('nav').hidden)) { await page.click('#nav-button'); await sleep(400); }
+  // ---- 9: ☰'s menu, a card (Max, 2026-11-25: "revert the hamburger menu. Slide out card like before"): it slides out
+  // from the edge it hangs from (under the bar; a phone at rest: out of the sheet's top) and back, up or down only, no
+  // fade, and never shows over the bar or the sheet; the tap above opened it: close and open again ----
+  if (await page.evaluate(() => !document.getElementById('nav').hidden)) { await page.click('#nav-button'); await sleep(600); }
+  // (every frame until done: the card's furthest move up or down and sideways, its lowest opacity, and how far its visible
+  // part ever reached past the edge: the clip-path's inset counted)
+  const watchNav = (ms, untilHidden) => page.evaluate((ms, untilHidden) => new Promise((done) => {
+    let dy = 0, dx = 0, op = 1, past = 0; const t0 = performance.now();
+    const f = () => {
+      const nav = document.getElementById('nav');
+      if (!nav.hidden) {
+        const cs = getComputedStyle(nav), m = new DOMMatrixReadOnly(cs.transform), r = nav.getBoundingClientRect();
+        const sh = document.getElementById('sheet').getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
+        // (since 2026-11-26 it slides in a still window past the box's line, src/nav-menu.js #nav-window: past = how far
+        // its shown part reaches over the sheet, through its corners or past its edge; not under the sheet at all: 99)
+        const win = document.getElementById('nav-window'), w = win.getBoundingClientRect();
+        const under = Number(getComputedStyle(win).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
+        const vt = Math.max(r.top, w.top), vb = Math.min(r.bottom, w.bottom), vl = Math.max(r.left, w.left), vr = Math.min(r.right, w.right);
+        // (a computer: only the sheet's top band, its top edge down past its top corners; below it the box covers the menu
+        // sliding behind it, Max, 2026-11-26: "slide under the search bar, without showing behind the top")
+        const band = innerWidth >= 440 ? sh.top + (parseFloat(getComputedStyle(document.getElementById('sheet')).borderTopRightRadius) || 0) : sh.bottom;
+        const over = Math.min(vr, sh.right) - Math.max(vl, sh.left) > 2 ? Math.max(0, Math.min(vb, band) - Math.max(vt, sh.top)) : 0;
+        past = Math.max(past, !under ? 99 : over);
+        dy = Math.max(dy, Math.abs(Math.round(m.m42))); dx = Math.max(dx, Math.abs(Math.round(m.m41))); op = Math.min(op, Number(cs.opacity));
+      }
+      if ((untilHidden && nav.hidden) || performance.now() - t0 > ms) done({ dy, dx, op, past: Math.round(past), hidden: nav.hidden }); else requestAnimationFrame(f);
+    };
+    requestAnimationFrame(f); }), ms, untilHidden);
   frames.menu = await pauses(page, async () => {
+    const rec = watchNav(600, false);
     await page.click('#nav-button');
-    await sleep(40);
-    const names = await animNames(page, '#nav .nav-row:not([hidden])');
-    check(names.filter(n => n === 'nav-in').length >= 3, `9: the menu's rows follow it in (${names.length} animated: ${[...new Set(names)].join(', ') || 'none'})`);
+    const s = await rec;
+    check(s.dy > 20 && s.dx === 0 && s.op === 1 && s.past <= 1, `9: the menu card slides out (furthest ${s.dy} px up or down, ${s.dx} sideways; lowest opacity ${s.op}; past its edge ${s.past} px, want 0)`);
   });
-  await page.click('#nav-button');
-  await sleep(400);
+  await sleep(500);
+  const back = await (async () => { const rec = watchNav(2000, true); await page.click('#nav-button'); return rec; })();
+  check(back.hidden && back.dy > 20 && back.op === 1 && back.past <= 1, `9: shut, it slides back (furthest ${back.dy} px, lowest opacity ${back.op}, past its edge ${back.past} px, then gone: ${back.hidden})`);
+  await sleep(300);
 
   // ---- 6: search rows ----
-  await page.click('#menu-button');
-  await sleep(400);
+  await openSearch(page);
   frames.search = await pauses(page, async () => {
     await page.type('#search', '1');
     await sleep(60);
@@ -69,12 +102,14 @@ try {
     check(n >= 3, `6: search rows arrive (${n} arriving)`);
   });
   await sleep(800);
+  // (only rows shown before count: the replay runs on, and a train that came onto the map meanwhile is a new row)
+  const shownBefore = await page.evaluate(() => [...document.querySelectorAll('#search-results [data-go]')].map(e => e.dataset.go));
   await page.evaluate(() => document.getElementById('search').dispatchEvent(new Event('input')));
   await sleep(60);
-  const again = await page.evaluate(() => document.querySelectorAll('#search-results .arrive').length);
-  check(again === 0, `6: the same results again move nothing (${again} arriving)`);
-  await page.keyboard.press('Escape');
-  await sleep(500);
+  const againRows = await page.evaluate(() => [...document.querySelectorAll('#search-results .arrive')].map(e => e.dataset.go ?? e.textContent.trim().slice(0, 30)));
+  const again = againRows.filter(k => shownBefore.includes(k)).length;
+  check(again === 0, `6: the same results again move nothing (${again} arriving${again ? `: ${againRows.slice(0, 3).join(', ')}` : ''}${againRows.length > again ? `; ${againRows.length - again} new since` : ''})`);
+  await toRest(page);
 
   // ---- a card: no roll as it opens; the lateness rolls and pulses; the timeline's rows arrive ----
   // a tap on the lone train nearest the middle (not `except`); its id
@@ -101,7 +136,7 @@ try {
   }, except);
   const id = await tapLone(null);
   await sleep(3500);
-  const card = await page.evaluate(() => ({ open: !document.getElementById('panel').hidden, tiles: document.querySelectorAll('#panel .tile').length,
+  const card = await page.evaluate(() => ({ open: window.__stack.top()?.startsWith('train:') && !document.getElementById('panel').hidden, tiles: document.querySelectorAll('#panel .tile').length,
     late: document.querySelector('#panel .cd-late b')?.textContent, rows: document.querySelectorAll('#panel .tl-row').length, list: Boolean(document.getElementById('picker') && !document.getElementById('picker').hidden) }));
   if (!id || !card.open || card.tiles !== 2) notes.push(`the card's parts not checked (train ${id}, ${JSON.stringify(card)})`);
   else {
@@ -123,18 +158,20 @@ try {
     check(pulsed, '7: the lateness tile pulses when the minutes change');
     await page.evaluate(() => { window.__lateness.get = window.__realGet; });
     await sleep(1500);
-    // the timeline's rows arrive as the card opens full; the refresh moves nothing
+    // the timeline's rows come with the card as it opens full, none arriving after (Max, 2026-11-25: "Only the new part
+    // should be revealed through the expanding card, not all of it slide in"); the refresh moves nothing
     await page.click('#panel .panel-more');
     await sleep(120);
-    const arriving = await page.evaluate(() => document.querySelectorAll('#panel .tl-row.arrive, #panel .tl-now.arrive').length);
-    if (card.rows > 2) check(arriving >= 2, `6: the timeline's rows arrive as the card opens full (${arriving} of ${card.rows})`);
-    else notes.push(`the timeline not checked (${card.rows} rows)`);
+    const arriving = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
+    check(arriving === 0, `6: nothing arrives as the card opens full (${arriving} arriving)`);
     await sleep(1000);
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));   // (the card asks for its times again at once)
     await sleep(1500);
     const refreshed = await page.evaluate(() => document.querySelectorAll('#panel .arrive').length);
     check(refreshed === 0, `6: the card's refresh moves no rows (${refreshed} arriving)`);
-    // ---- 5: card to card: another train picked keeps the card; its number rolls; no "Laddar…" ----
+    // ---- 5: card to card (Max's pick 5, 2026-11-20: no "Laddar…" between them). Since the one sheet (2026-11-22) the
+    // second train is a page of its own over the first (the back chip says Home): its card is never hidden or
+    // "Laddar…" on the way and shows the new number. (Its number no longer rolls from the first one's: a new page slides in.)
     await page.click('#panel .panel-more');   // (compact again)
     await sleep(800);
     await page.evaluate(() => { window.__seen = { hidden: false, loading: false, heads: [] };
@@ -143,29 +180,31 @@ try {
         const h = p.querySelector('.panel-title strong')?.textContent; if (h && h !== window.__seen.heads.at(-1)) window.__seen.heads.push(h);
         if (window.__seen.heads.length < 400) requestAnimationFrame(look); };
       requestAnimationFrame(look); });
+    const first = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id);
     const id2 = await tapLone(id);
     await sleep(2500);
     const sw = await page.evaluate(() => ({ ...window.__seen, late: document.querySelector('#panel .cd-late b')?.textContent, tiles: document.querySelectorAll('#panel .tile').length,
-      busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent }));
+      busy: document.querySelectorAll('#panel .busy').length, number: document.querySelector('#panel .panel-title strong')?.textContent,
+      key: window.__stack.top(), inCard: Boolean(document.querySelector('#panel .panel-head .sh-follow')) }));
     const want2 = await page.evaluate(id => String(window.__trains.get(id)?.number ?? ''), id2);
     if (!id2) notes.push('5 not checked: no second lone train near the middle');
-    else check(!sw.hidden && !sw.loading && sw.heads.length >= 3 && sw.number === want2 && sw.tiles === 2 && !sw.busy,
-      `5: card to card keeps the card and rolls the number (${id} → ${id2}: ${sw.heads.slice(0, 3).join(' → ')}${sw.heads.length > 3 ? ' … ' + sw.heads.at(-1) : ''}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late})`);
-    await page.evaluate(() => document.querySelector('#panel .panel-close')?.click());
-    await sleep(600);
+    else check(!sw.hidden && !sw.loading && sw.number === want2 && sw.tiles === 2 && !sw.busy && sw.key === `train:${id2}` && sw.inCard,
+      `5: card to card: ${sw.key} over ${first} (its buttons ${sw.inCard ? 'in the card' : 'NOT in the card'}), ${sw.heads.join(' → ')}; want ${want2}; hidden ${sw.hidden}, "Laddar…" ${sw.loading}, lateness ${sw.late}`);
+    await toRest(page);
   }
 
   // ---- 4: Anslutning: no roll as it opens; a change rolls ----
   await page.click('#status');
   await sleep(150);
   const opened = await page.evaluate(() => { const n = document.querySelector('#conn-body .n-trains'); return { text: n.textContent, v: n._v }; });
-  check(String(opened.v) === opened.text.replace(/\s/g, ''), `4: Anslutning shows its numbers at once as it opens (${opened.text}, roll at ${opened.v})`);
+  // (a roll as it opens would come from 0 or far below; within 2 of the shown number is the count itself changing at that
+  // moment, a train in or out: seen 2026-11-24, 293 → 294)
+  check(Math.abs(Number(opened.v) - Number(opened.text.replace(/\s/g, ''))) <= 2, `4: Anslutning shows its numbers at once as it opens (${opened.text}, roll at ${opened.v})`);
   await page.evaluate(() => { const n = document.querySelector('#conn-body .n-trains'); n._v = Number(n.textContent.replace(/\s/g, '')) - 60; });
   let seen = new Set();
   for (let t0 = Date.now(); Date.now() - t0 < 2000; await sleep(40)) seen.add(await page.evaluate(() => document.querySelector('#conn-body .n-trains').textContent));
   check(seen.size >= 4, `4: Anslutning's numbers roll to new ones (${seen.size} values seen)`);
-  await page.evaluate(() => document.querySelector('#conn-page .panel-close')?.click());
-  await sleep(500);
+  await toRest(page);
 
   // ---- 8: a tapped station answers ----
   await page.evaluate(() => window.__map.jumpTo({ center: [18.06, 59.33], zoom: 11 }));
@@ -190,22 +229,30 @@ try {
   notes.push(`the longest pause between frames, slowed 4x: menu ${frames.menu} ms, search rows ${frames.search} ms${frames.late ? `, lateness ${frames.late} ms` : ''} (measured, not a limit)`);
   await page.close();
 
-  // ---- live: Störningar's rows arrive as it opens, a disruption sign answers ----
-  const live = await openMap(browser, { view: '5.5/62/16', train: 'toy', lang: 'sv', theme: 'light' });
-  await live.click('#nav-button');
-  await sleep(400);
-  const hasDis = await live.evaluate(() => !document.getElementById('open-disruptions').hidden);
-  if (!hasDis) notes.push('Störningar not checked (no live link)');
+  // ---- live: Störningar opens as one push (Max, 2026-11-24: "It's sliding and fading at the same time, and card
+  // jumps"; until then its rows arrived as it opened): no row arrives while it slides in, no page fades, the sheet moves
+  // one way; a disruption sign answers ----
+  const live = await waitForMap(browser, { view: '5.5/62/16', train: 'toy', lang: 'sv', theme: 'light' });
+  // the list's page (Home → All disruptions): its rows looked at from the moment it opens
+  const listIn = await live.evaluate(async (L) => {
+    window.__disArrive = { n: 0, rows: 0, fade: 1, tops: [] };
+    const look = () => { const el = document.querySelector(L), a = window.__disArrive;
+      if (el) { a.n = Math.max(a.n, el.querySelectorAll('.arrive').length); a.rows = Math.max(a.rows, el.querySelectorAll('.dis-body > .dis-row, .dis-body > .dis-fold').length); }
+      for (const pg of document.querySelectorAll('#sheet .sh-pages > .pg')) a.fade = Math.min(a.fade, Number(getComputedStyle(pg).opacity));
+      a.tops.push(Math.round(document.getElementById('sheet').getBoundingClientRect().top));
+      if (!window.__disStop) requestAnimationFrame(look); };
+    requestAnimationFrame(look); return true; }, pageSel('dislist'));
+  const hasDis = listIn && await openDisruptions(live);
+  if (!hasDis) notes.push('Störningar not checked (no disruption in force, or no live link)');
   else {
-    await live.evaluate(() => document.getElementById('open-disruptions').click());
-    let n = 0, rows = 0;
-    for (let t0 = Date.now(); Date.now() - t0 < 15000 && !rows; await sleep(30)) {
-      ({ n, rows } = await live.evaluate(() => ({ n: document.querySelectorAll('#disruptions-body .arrive').length, rows: document.querySelectorAll('#disruptions-body > .dis-row, #disruptions-body > .dis-fold').length })));
-    }
+    await sleep(600);
+    const { n, rows, fade, tops } = await live.evaluate(() => { window.__disStop = true; return window.__disArrive; });
+    // (the sheet's top edge: the number of times it turned round while the page came in)
+    let turns = 0, dir = 0;
+    for (let k = 1; k < tops.length; k++) { const d = Math.sign(tops[k] - tops[k - 1]); if (d && dir && d !== dir) turns++; if (d) dir = d; }
     if (!rows) notes.push('Störningar has no rows now: not checked');
-    else check(n >= 1, `6: Störningar's rows arrive (${n} arriving of ${rows})`);
-    await live.evaluate(() => document.querySelector('#disruptions-page .panel-close')?.click());
-    await sleep(500);
+    else check(n === 0 && fade >= 0.99 && turns === 0, `Störningar opens as one push: ${n} rows arriving of ${rows} (want 0), the pages' lowest opacity ${fade.toFixed(2)} (want 1), the sheet turned ${turns} times (want 0)`);
+    await toRest(live);
     // Each sign in turn, close in, until one has no train or station beside it (a tap there opens the train, its label or the
     // station first, as always: seen 2026-11-20, a live train standing at Norrköping's sign).
     const signs = await live.evaluate(() => window.__map.queryRenderedFeatures({ layers: ['disruption-icons'] }).map(f => f.geometry.coordinates));
@@ -233,21 +280,19 @@ try {
   await live.close();
 
   // ---- reduce motion: none of it ----
-  const quiet = await openMap(browser, { ...base });
+  const quiet = await waitForMap(browser, { ...base });
   await quiet.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await quiet.click('#nav-button');
   await sleep(40);
   const menuAnim = await animNames(quiet, '#nav .nav-row');
   await quiet.click('#nav-button');
   await sleep(300);
-  await quiet.click('#menu-button');
-  await sleep(300);
+  await openSearch(quiet);
   await quiet.type('#search', '1');
   await sleep(60);
   const rowsAnim = await quiet.evaluate(() => document.querySelectorAll('#search-results .arrive').length);
-  const nb2 = await quiet.$('#nav-button'), b2 = await nb2.boundingBox();
-  await quiet.keyboard.press('Escape');
-  await sleep(300);
+  await toRest(quiet);
+  const nb2 = await quiet.$('#nav-button'), b2 = await nb2.boundingBox();   // (☰ is hidden while searching)
   await quiet.mouse.move(b2.x + b2.width / 2, b2.y + b2.height / 2);
   await quiet.mouse.down();
   await sleep(150);

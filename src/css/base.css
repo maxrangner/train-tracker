@@ -1,0 +1,30 @@
+/* The page itself: no zoom by pinching anywhere (cards still scroll), the map takes every gesture from the first moment,
+   no light-blue box round what a finger holds; the font; a button gives a little while pressed. */
+@layer app {
+  html, body { height: 100%; margin: 0; touch-action: pan-x pan-y; overscroll-behavior: none; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { background: var(--page); font: 500 14px/1.4 var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; }
+  button, input { font-family: inherit; }
+  .icon { display: inline-block; vertical-align: -0.18em; flex: none; }
+  /* (the scale property, so a button's own transform stays; src/motion.js has the rest of the motion) */
+  button { transition: scale .14s var(--ez-pop); }
+  button:active { scale: .94; transition-duration: .06s; }
+  :is(.nav-row, .dis-row, .dis-fold, .bd-row, #search-results button, .cd-row, .about-btn):active { scale: .98; }
+  :is(.row, .chip, .lg-p, .sh-follow, .show-only):active { opacity: .7; }
+  /* Rows that weren't in a list before come in one after another (src/motion.js arrive sets --i). */
+  .arrive { animation: row-in .3s var(--ez-pop) backwards; animation-delay: calc(40ms + var(--i, 0) * 25ms); }
+  @keyframes row-in { from { opacity: 0; transform: translateY(10px); } }
+  /* Changed words fade over (src/panel.js rollIn). */
+  .fresh { animation: fresh-in .3s ease-out; }
+  @keyframes fresh-in { from { opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    button, button:active { transition: none; scale: none; }
+    .arrive, .fresh { animation: none; }
+  }
+}
+
+/* Hidden is hidden, whatever a part's own display (only a card's leaving button outranks it: train-card.css). */
+@layer states {
+  [hidden] { display: none !important; }
+}

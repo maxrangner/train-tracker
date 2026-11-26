@@ -38,6 +38,21 @@ const DEFAULTS = {
   disruptionsMap: 'all',
   // A white edge round the open train's route (Debug, Max 2026-11-21: option E of the route sketches, off).
   routeEdge: false,
+  // Home's lateness colours at the top (Debug, Max 2026-11-23: "Add debug toggle to remove the first colored keys in main
+  // card"): on, as before.
+  homeLegend: true,
+  // The grey pill behind the sheet's "More ⌄" at its bottom edge (Debug, Max 2026-11-26: "remove the little pill around
+  // 'More v' etc. Put in as a debug toggle"): off. src/css/sheet.css .sh-more.
+  morePill: false,
+  // How a page comes into the sheet (Debug, Max 2026-11-24: "Do A, B and F and put them in debug options"; "Remove the
+  // fade on all"; the motion lab https://claude.ai/artifact/EtVxL1BiRBaYbgocQSw7xS): 'side' (A, sideways, as since the
+  // push of 2026-11-24), 'rise' (B, a card from the sheet's edge over the page before) or 'strip' (F, one strip along the
+  // sheet). src/css/sheet.css :root[data-motion].
+  pageMotion: 'side',
+  // How fast a page change and the sheet's glide go (Debug, Max 2026-11-24: "add setting for animation speed. Use current
+  // speed as fast, and add a slower at 75%"): 'fast' (as before) or 'calm' (75 % of the speed: 4/3 of the time).
+  // src/css/tokens.css :root[data-mspeed]; src/motion.js speed().
+  motionSpeed: 'fast',
   // A menu screen opened over an open train's card (Debug, Max 2026-11-20: "Make a debug toggle for the three
   // options"; src/main.js openPage): 'card' (the card waits under it), 'follow' (the card goes, the train stays
   // followed) or 'clear' (card and train let go).
@@ -53,6 +68,19 @@ const DEFAULTS = {
   pillSide: 'auto',
   // Lateness colours colour-blind people can tell apart (Max, 2026-11-21; src/colours.js LATE_SAFE), off.
   colourBlind: false,
+  // The train card's stops with every place passed without stopping between them (src/panel.js, src/places-ahead.js;
+  // Max, 2026-11-21, sketch C: a switch on the card; moved here 2026-11-22, his wish). Until then kept by itself as
+  // localStorage 'allPlaces': read once below.
+  allPlaces: false,
+  // The shop window (build plan part 6, idea 4; on by default, Max can turn it off): the phone on its side, untouched
+  // for 30 s, tours the map by itself (src/shop-window.js).
+  shopWindow: true,
+  // The sun's line (Max's idea 6, 2026-11-22: "with toggle in settings"; src/sun.js): night as a soft shade on the map
+  // and the trains' windows lit where it is night. On (the plan's choice; Max can turn it off).
+  dayNight: true,
+  // The scale slider on the map's right edge (Max's idea 10; src/scale-slider.js). Off by default (Max, 2026-11-23: "Put
+  // the zoom bar behind an options toggle. Default off"): off, the compass says 3D while flat, + and − with a mouse.
+  scaleSlider: false,
   // Not counted as a viewer on this phone or browser (Debug, Max 2026-11-23: his own pages and phone stay out of the
   // numbers; src/count.js).
   noCount: false,
@@ -75,17 +103,27 @@ const KEYS = {
   noEstimate: { param: 'noest' },
   disruptionsMap: { param: 'dis' },
   routeEdge: { param: 'routeedge' },
+  homeLegend: { param: 'legend' },
+  morePill: { param: 'morepill' },
+  pageMotion: { param: 'motion' },
+  motionSpeed: { param: 'mspeed' },
   pageOverTrain: { param: 'overtrain' },
   routeNames: { param: 'routenames' },
   nameSide: { param: 'nameside' },
   pillSide: { param: 'pillside' },
   colourBlind: { param: 'cb' },
+  allPlaces: { param: 'places' },
+  shopWindow: { param: 'shop' },
+  dayNight: { param: 'daynight' },
+  scaleSlider: { param: 'slider' },
   noCount: { param: 'nocount' },
 };
 const STORE = 'settings';
 
 let saved = {};
 try { saved = JSON.parse(localStorage.getItem(STORE) ?? '{}') ?? {}; } catch { /* storage blocked or broken: defaults */ }
+// (the card's own switch until 2026-11-22: taken over once)
+try { if (saved.allPlaces === undefined && localStorage.getItem('allPlaces') === 'true') saved.allPlaces = true; } catch { /* storage blocked */ }
 const hash = new URLSearchParams(location.hash.slice(1));
 // A number from lo to hi in half steps, or undefined.
 const halves = (lo, hi) => v => (v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v))
@@ -106,11 +144,19 @@ const valid = {
   noEstimate: v => (['guess', 'planned'].includes(v) ? v : undefined),
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  homeLegend: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  morePill: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  pageMotion: v => (['side', 'rise', 'strip'].includes(v) ? v : undefined),
+  motionSpeed: v => (['fast', 'calm'].includes(v) ? v : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
-  routeNames: v => (['contrast', 'pill', 'plain'].includes(v) ? v : undefined),
-  nameSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
-  pillSide: v => (['auto', 'right', 'above'].includes(v) ? v : undefined),
+  routeNames: v => (v === 'contrast' ? v : undefined),   // (fixed since 2026-11-23: Max, 'Remove debug settings'; a value saved before is ignored)
+  nameSide: v => (v === 'auto' ? v : undefined),   // (fixed, as routeNames)
+  pillSide: v => (v === 'auto' ? v : undefined),   // (fixed, as routeNames)
   colourBlind: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  allPlaces: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  shopWindow: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  dayNight: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  scaleSlider: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   noCount: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
@@ -130,7 +176,6 @@ const showTheme = () => {
   if (typeof document === 'undefined') return;
   const root = document.documentElement, dark = isDark();
   root.dataset.theme = dark ? 'dark' : 'light';
-  root.dataset.routeNames = settings.routeNames;   // the open train's station names close in (index.html)
   for (const [k, v] of Object.entries(cssVars(dark, settings.accent, settings.colourBlind))) root.style.setProperty(k, v);
 };
 showTheme();

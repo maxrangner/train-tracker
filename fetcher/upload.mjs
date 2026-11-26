@@ -11,7 +11,8 @@
 // The live file names only files that are on one.com (2026-11-21, TODO 40's rest; point 4's second half): names()
 // gives, per kind, the newest file uploaded and not yet let go by the shelf. A file still on its way is named by the
 // first live file made after it arrived; one refused 3 times is never named (the one before it stays named).
-// Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run).
+// Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run; today's history
+// files are kept, whichever run made them).
 // Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
 // so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
 // The server's key is checked against SFTP_HOSTKEY (SHA256 fingerprints, comma-separated): a different server is
@@ -31,13 +32,14 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import ssh2 from 'ssh2';
+import { HISTORY_MS, historyUntil } from '../src/live-file.js';
 
 const WAITS = [1000, 2000, 5000, 10000, 30000];
 const TRIES = 3, TRY_AGAIN_MS = 5000;   // a refused file
 const REFUSED_WAIT = 10 * 60000;
 export const MARK = '.sparat-data';
-export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages)-\d+\.json$/;
-const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages)-\d+\.json\.tmp$/;
+export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history)-\d+\.json$/;
+const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history)-\d+\.json\.tmp$/;
 const HTACCESS = readFileSync(new URL('./data.htaccess', import.meta.url));
 
 const callOn = (s, fn, ...a) => new Promise((res, rej) => s[fn](...a, (e, v) => e ? rej(e) : res(v)));
@@ -95,6 +97,8 @@ export function folderCheck(cfg, { Client = ssh2.Client } = {}) {
 // are queued in the order they are made). So: of the files waiting before the newest live file, only the newest of
 // each kind goes (the next live files name them), then the live file, then the files made after it; deletes last.
 // Older files are never sent (no live file names them), and their deletes are dropped (nothing there to delete).
+// Except the day's history files (2026-11-22): every one waiting goes, right after the live file (a page works their
+// names out from the clock, and each 15 minutes of the day is only in its own file).
 // -> { jobs, skipped: puts not sent }
 export function order(queue) {
   let last = -1;
@@ -102,13 +106,16 @@ export function order(queue) {
   if (last < 0) return { jobs: queue, skipped: 0 };
   const newest = new Map();   // kind -> index of its newest put before the live file
   for (let i = 0; i < last; i++) if (queue[i].op === 'put') newest.set(queue[i].f.kind, i);
-  const before = [], after = [], removes = [], dropped = new Set();
+  const before = [], days = [], after = [], removes = [], dropped = new Set();
   queue.forEach((q, i) => {
     if (q.op !== 'put') removes.push(q);
     else if (i > last) after.push(q);
-    else if (i < last) { if (q.f.kind !== 'live' && newest.get(q.f.kind) === i) before.push(q); else dropped.add(q.name); }
+    else if (i < last) {
+      if (q.f.kind === 'history') days.push(q);
+      else if (q.f.kind !== 'live' && newest.get(q.f.kind) === i) before.push(q); else dropped.add(q.name);
+    }
   });
-  return { jobs: [...before, queue[last], ...after, ...removes.filter(q => !dropped.has(q.name))], skipped: dropped.size };
+  return { jobs: [...before, queue[last], ...days, ...after, ...removes.filter(q => !dropped.has(q.name))], skipped: dropped.size };
 }
 
 // The fetcher's own last resort (2026-11-24, the hang review, finding 3: nothing restarted a stuck fetcher, and at
@@ -294,7 +301,9 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
     if (busyOn === s) busyOn = null;
   }
 
-  // Our files in the folder that nobody needs any more: older than 5 minutes and not kept by the shelf.
+  // Our files in the folder that nobody needs any more: older than 5 minutes and not kept by the shelf. A history file
+  // stays until its keep time (01:00 the night after its day) even when this run's shelf never had it: one made by an
+  // earlier run (a restart) is still today's (2026-11-22).
   async function sweep() {
     if (!sftp || busyOn === sftp) return;
     try {
@@ -304,8 +313,9 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
         if (!NAME.test(filename) && !TMP.test(filename)) continue;
         if (keep(filename)) continue;
         const n = Number(/-(\d+)\.json/.exec(filename)?.[1] ?? 0);
-        const made = filename.startsWith('live-') ? n * 5000 : n;
+        const made = filename.startsWith('live-') ? n * 5000 : filename.startsWith('history-') ? n * HISTORY_MS : n;
         if (now - made < 5 * 60000) continue;
+        if (filename.startsWith('history-') && NAME.test(filename) && now <= historyUntil(made)) continue;
         queue.push({ op: 'rm', name: filename }); stats.swept++;
       }
       work();

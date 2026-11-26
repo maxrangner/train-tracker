@@ -1,1252 +1,379 @@
-import { startTrainSource } from './trains-source.js';
-import { icon } from './icons.js';
-import { splitLabel, tagHtml, minutesText } from './tag.js';
-import { createTrains } from './trains.js';
-import { createLateness, label, lateClass } from './lateness.js';
-import { createMap, ownMap } from './map.js';
+// Spårat's page: wires the parts together. Each feature lives in its own module with its own state; this file makes
+// them in order and hands each what it needs.
+// The stylesheet by part, in this order, first (so the look's variables are there before any part starts; the layers:
+// src/css/tokens.css).
+import './css/tokens.css';
+import './css/base.css';
+import './css/sheet.css';
+import './css/page.css';
+import './css/train-card.css';
+import './css/board.css';
+import './css/menu.css';
+import './css/map.css';
+import './css/settings-about.css';
+import './css/my-trains.css';
+import './css/disruptions.css';
+import './css/shop.css';
+import './css/stats.css';
+import './css/scrollbar.css';
+import './css/connection.css';
+import './css/scale.css';
+import './css/day.css';
+import { createTrains, STAND_SPEED } from './trains.js';
+import { createLateness, label } from './lateness.js';
+import { createMap } from './map.js';
 import { createPanel } from './panel.js';
-import { drawInfo } from './train-info.js';
-import { tripPlaces } from './places-ahead.js';
 import { createSpeedLog } from './speed-log.js';
-import { createMenu } from './menu.js';
-import { createBoard } from './board.js';
-import { pathOf, progressAlong, progressAt } from './path.js';
-import { followPath } from './path-follow.js';
-import { createPathSearch } from './path-async.js';
+import { stationsMatching } from './menu.js';
 import { favourites } from './favourites.js';
-import { settings, setSetting, onSettingChange } from './settings.js';
-import { t, translatePage, lang } from './i18n.js';
-import { ACCENTS, DEFAULT_ACCENT } from './colours.js';
-import { initSheets, onTap } from './sheet.js';
-import { logoSvg } from './logo.js';
-import { stateHtml } from './state.js';
-import { followPassings, fetchStations, fetchPlannedRoutes, fetchBoard, fetchStationDay, fetchCancelledToday, fetchDisruptions, fetchStationMessages, fetchDayArrivals, setTapAsker, hasKey, fetchRunsByNumber, pickRun } from './trafikverket.js';
-import { startFilesSource, filesTapAsker } from './files-source.js';
-import { createDisruptions, rowHtml, cardHtml, isWork } from './disruptions.js';
+import { settings, setSetting } from './settings.js';
+import { t, translatePage } from './i18n.js';
+import { onTap } from './tap.js';
+import { createStack } from './stack.js';
+import { isWide, isNative } from './layout.js';
+import { createLine } from './line.js';
+import { createStart, groupPage } from './home.js';
+import { createStartChips, START_KEYS } from './start-chips.js';
+import { fetchBoard, fetchDisruptions, fetchDayArrivals, hasKey } from './trafikverket.js';
+import { createDisruptions, isWork } from './disruptions.js';
 import { loadNet } from './rail-net.js';
 import { createRoutes } from './routes.js';
-import { now, hhmm, swedishDay } from './clock.js';
-import { startReplaySource } from './replay-source.js';
+import { now } from './clock.js';
 import { createStats } from './stats.js';
-import { createStatsPage } from './stats-page.js';
-import { createConnection, pillText } from './connection.js';
 import { createDayStats } from './day-stats.js';
 import { createFilter } from './filter.js';
-import kofiCup from './kofi-cup.png';
-import { abroadEnds } from './abroad.js';
-import { esc } from './html.js';
 import { addScrollbar } from './scrollbar.js';
-import { roll, arrive } from './motion.js';
+import { hashParams } from './address.js';
+import { createStationList } from './station-list.js';
+import { createRouteOverlay } from './route-overlay.js';
+import { createFrame } from './frame.js';
+import { createNavMenu } from './nav-menu.js';
+import { createBack } from './back.js';
+import { createDay } from './day.js';
+import { createFeeds } from './live/feeds.js';
+import { createStatus } from './live/status.js';
+import { createTrainPages } from './pages/train.js';
+import { createStationPages } from './pages/station.js';
+import { createPicker } from './pages/picker.js';
+import { createDisruptionPages } from './pages/disruptions.js';
+import { createHeldPages } from './pages/held.js';
+import { createRouter } from './pages/router.js';
+import { createAbout } from './about.js';
+import { createSettingsPage } from './settings-page.js';
+import { startChrome, buzz } from './chrome.js';
+import { createFilterPills } from './filter-pills.js';
+import { createSearch } from './search.js';
+// The sheet's ideas: My trains and the change, "You seem to be on", Peek, the shop window, Share.
+import { createMyTrains } from './my-trains.js';
+import { createRide } from './ride.js';
+import { createPeek } from './peek.js';
+import { createShopWindow } from './shop-window.js';
+import { sharedNumber, dropShared } from './share.js';
 import { startCount } from './count.js';
 
-// #replay=<name> in the address plays a recording (data/positions-<name>.jsonl, from tools/collect.mjs) instead of
-// the live data, e.g. #view=11/59.33/18.06&replay=2026-11-11T16-46-20-921Z. The page's clock then runs from the
-// recording's start (src/clock.js).
-const replay = new URLSearchParams(location.hash.slice(1)).get('replay');
-// The public page reads the fetcher's files instead (public-plan step 3, src/files-source.js): VITE_DATA_URL in the
-// build; taps too come from its files (plan step 4, 2026-11-17: filesTapAsker); no key in the page. On the dev page
-// also #files=<address> for tests (only there: a link can't point the public page elsewhere). Otherwise the key, as
-// before (the dev page, the Android dev app).
-const hashOpt = new URLSearchParams(location.hash.slice(1));
-const filesBase = replay ? null : (import.meta.env.DEV && hashOpt.get('files')) || import.meta.env.VITE_DATA_URL || null;
+// ---- Where the data comes from: #replay=<name> plays a recording (data/positions-<name>.jsonl; the page's clock runs
+// from its start); the public page reads the fetcher's files (VITE_DATA_URL; the dev page also #files=<address>, only
+// there: a link can't point the public page elsewhere); else the key (the dev page, the Android dev app). ----
+const hash = hashParams();
+const replay = hash.get('replay');
+const filesBase = replay ? null : (import.meta.env.DEV && hash.get('files')) || import.meta.env.VITE_DATA_URL || null;
 const fromFiles = Boolean(filesBase);
-if (fromFiles) setTapAsker(filesTapAsker(kind => positionsFeed?.latestNow?.(kind) ?? Promise.resolve(null), now));   // (asked at once: 2026-11-22)
 const live = !replay && (hasKey || fromFiles);   // live data of some kind: stations, disruptions, stats, messages
-// The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement is as
-// good as today's (tools/motion-check.mjs --files, 5 recordings, 2026-11-16).
+const modeName = () => (replay ? `replay ${replay}` : fromFiles ? 'files' : 'live');
+// A shared train (#train=531, src/share.js): opened once the trains are in (below); out of the address at once.
+const sharedAt = sharedNumber();
+if (sharedAt) dropShared();
+// The files come every 5 s, a few seconds after the reports: drawn 30 s behind instead of 25, the movement as good
+// (tools/motion-check.mjs --files).
 const FILES_DELAY_MS = 30 * 1000;
 
-window.__started = true;   // index.html reports it on screen if this line is never reached
-translatePage();           // the page's own words in the chosen language (Settings → Language)
-// The rail network: the tracks the trains follow, and Trafikverket's rail lines on the map. Positions start once it
-// has loaded (or failed: then trains move in straight lines between reports).
-const netReady = loadNet('/rail-net.json').catch((e) => {
+window.__started = true;
+// How a page comes in and how fast (Debug → Page change, Animation speed): src/css/sheet.css :root[data-motion], src/css/tokens.css [data-mspeed].
+const markMotion = () => { const d = document.documentElement.dataset; d.motion = settings.pageMotion; d.mspeed = settings.motionSpeed; d.morePill = settings.morePill ? 'on' : 'off'; };
+markMotion();   // (index.html reports it on screen if this line is never reached)
+translatePage();
+
+// ---- The data engines ----
+// The rail network: the tracks the trains follow and the rail lines on the map; positions wait for it (failed: straight
+// lines between reports).
+const netUrl = new URL('rail-net.json', location.href).href;
+const netReady = loadNet(netUrl).catch((e) => {
   console.warn(`rail network: ${e.message} (run node tools/rail-net.mjs)`);
   return null;
 });
+let net = null;
+netReady.then((n) => { net = n; });
 const trains = createTrains(fromFiles ? { delayMs: FILES_DELAY_MS } : {});
 const DRAW_DELAY_MS = trains.DELAY_MS;   // how far behind real time the map is drawn
-let net = null;
-// The open train's route is searched on a thread of its own (src/path-async.js, 2026-11-21): it held the map up to
-// 300 ms on the PC, over a second on a 4 times slower processor. Started once the page's own network is there (the
-// worker loads the same file again, then from the browser's cache).
-let searchPath = null;
-netReady.then((n) => { net = n; if (n) searchPath = createPathSearch('/rail-net.json', () => net); });
-let shownPath = null;   // { id, path, places, key, follow, base }: the open train's path (follow: src/path-follow.js; base: as drawn from the timetable)
-const placesKey = places => places.map(p => `${p.sig}${p.stop ? '*' : ''}`).join('>');
-const pathCache = new Map(), PATH_CACHE_N = 5;   // the last drawn routes (onRoute's cachedPath)
-// The stations where a drawn route may turn round (src/path.js): the advertised ones, worked out again when the list changes.
-let reversalList = null, reversalFrom = null;
-const reversalPlaces = () => { if (reversalFrom !== stations) { reversalFrom = stations; reversalList = [...stations.values()].filter(st => st.advertised && st.lon !== null); } return reversalList; };
-if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // for the tools in tools/; not in a build
-// Each train's planned route (timetable): at junctions a coasting train takes the way to its next planned stop,
-// and it waits before that stop rather than arriving in the drawing.
+if (import.meta.env.DEV) Object.assign(window, { __trains: trains, __now: now });   // (for tools/; not in a build)
+// Each train's planned route: at junctions a coasting train takes the way to its next stop, and waits before it.
 const routes = createRoutes();
 trains.useRoutes(routes);
-netReady.then(net => { if (net) routes.setNet(net); });
+netReady.then((n) => { if (n) routes.setNet(n); });
 const lateness = createLateness();
 if (import.meta.env.DEV) window.__lateness = lateness;   // (tools/ui-motion-check.mjs changes a train's minutes)
-const stats = createStats({ keep: !replay });   // the stats page's running numbers (src/stats.js)
-// Which trains the map shows (src/filter.js): chosen by tapping companies and kinds on the stats page.
-const filter = createFilter();
-// Today's arrivals for the stats page's graph: asked for only while that page is open (live: with the key, or from
-// the fetcher's arrivals files).
-const dayStats = live ? createDayStats({ now, loadArrivals: fromFiles ? filesArrivals : fetchDayArrivals }) : null;
-let stations = new Map();   // signature -> { sig, name, lon, lat, advertised }
-const stationName = sig => stations.get(sig)?.name ?? sig;
-// Where trains really stand at a station (public/stop-places.json, tools/stop-places.mjs; 280 stations measured from the
-// recordings): the map draws its ring and name there, and a flight to it lands there (Max, 2026-11-14; Trafikverket's
-// point is often not at the platform: Bohus 1.3 km off). The movement uses it too (src/routes.js setStopPlaces, Max
-// 2026-11-14, point 5 B): a train seen only at fixed places waits there for its stop, and the dwell rule looks there at
-// the stations where it is over 200 m from the point. Everything else keeps Trafikverket's point.
-let stopPlaces = {};
-const stopPlacesReady = fetch('/stop-places.json').then(r => (r.ok ? r.json() : null)).then((j) => { stopPlaces = j?.places ?? {}; routes.setStopPlaces(stopPlaces); })
-  .catch(e => console.warn('stop places:', e.message));
-const shownAt = (st) => { const p = stopPlaces[st.sig]; return p ? { ...st, lon: p[0], lat: p[1] } : st; };
+const stats = createStats({ keep: !replay });
+const filter = createFilter();   // which trains the map shows (src/filter.js)
+const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers)
+// Today's arrivals for the stats: asked for only while shown (the key, or the fetcher's arrivals files).
+const dayStats = live ? createDayStats({ now, loadArrivals: fromFiles ? (m, s) => feeds.arrivals(m, s) : fetchDayArrivals }) : null;
+const minutesOf = id => lateness.get(id)?.minutes;
+const lateOf = id => minutesOf(id) ?? null;
+const labelFor = r => label(r.number, minutesOf(r.id));
 
-const minutesOf = r => lateness.get(r.id)?.minutes;
-const labelFor = r => label(r.number, minutesOf(r));
-// While a train fast-forwards to catch up with its data, its label gets »» (the map's font has no ⏩). A stale train
-// (silent for 2 minutes, or no data at all) is drawn grey and faded.
-const propsFor = (r, sim) => ({
-  label: labelFor(r) + (sim?.syncing && !sim.stale ? ' »»' : ''), late: lateClass(minutesOf(r)), stale: Boolean(sim?.stale),
-  company: lateness.brand(r.id) ?? '',
-  // The far-out labels' parts, written like the bubbles: "2311 +1 min", the minutes in their colour (round 4); on
-  // time just "2311" (Max, 2026-11-21, option i B).
-  num: String(r.number), mins: minutesOf(r) === null || minutesOf(r) === undefined || minutesOf(r) === 0 ? '' : minutesText(minutesOf(r)),
-  rest: sim?.syncing && !sim.stale ? ' »»' : '',
+// ---- The map, the card, the line on the map, the frame ----
+let stack = null;   // the one sheet (src/stack.js): made last, once everything its pages use is there
+let myTrains = null, ride = null, peek = null, shop = null;   // the sheet's ideas, made after the sheet
+const holder = document.getElementById('page-holder');   // where the pages' parts wait while not shown
+const mapEl = document.getElementById('map');
+const panelEl = document.getElementById('panel');
+const map = createMap('map', {
+  // A plain tap on the map: ☰'s menu closes in the same tap, and the tap goes on to what is under it (src/stack.js R1, R2).
+  onMapTap() {
+    if (peek?.ate()) return true;   // (the finger lifted after a peek)
+    nav.close();
+    return false;
+  },
+  railData: { trv: () => netReady.then((n) => { if (!n) throw new Error('no rail network'); return n.toGeoJSON(); }) },
+  getTrains3d: () => frame.drawn,   // (drawn where this frame put them, the places the camera uses)
+  // Each car of a model sits on the track (The day's trains are drawn straight: the live train's track is elsewhere).
+  alongTrack: (id, d) => (day.past ? null : trains.along(id, d)),
+  sunTime: () => (day.past ? day.view.moment : now() - DRAW_DELAY_MS),
+  // A train opens its page and the camera follows it (R2); nothing: R1 (src/stack.js mapTap). At an earlier moment
+  // (The day): a small bubble over the train instead.
+  onTrainTap(id) {
+    const view = day.view;
+    if (view?.past && (id || view.bubbleShown)) { if (id) day.bubble([id]); else view.hideBubble(); return; }
+    if (trainPages.open(id, { fromMap: true })) return;
+    stack.mapTap();
+  },
+  onStationTap(sig) { stationPages.open(sig, { fromMap: true }); },
+  onDisruptionTap(id) { disPages.open(id, { fromMap: true }); },
+  onGroupTap(list) { if (day.past) day.bubble(list.map(x => x.id)); else picker.show(list, { fromMap: true }); },
 });
-
-// Where a train is drawn in this frame (the camera follows exactly this place).
-// A short buzz when a train is opened or followed (round 4). In the app through Capacitor's haptics plugin (Max,
-// 2026-11-20: "No haptics in app": the app never had Android's permission to vibrate, so the page's vibrate did
-// nothing; the plugin brings it, and works on iPhones too); on the web page navigator.vibrate (Android browsers only).
-const native = Boolean(window.Capacitor?.isNativePlatform?.());
-const haptics = native ? import('@capacitor/haptics').catch(() => null) : null;
 // The viewer count (Max, 2026-11-23; src/count.js): only builds made to count (VITE_COUNT_URL), app or site; Settings →
 // Debug → "Don't count me" stops it here.
-startCount({ url: import.meta.env.VITE_COUNT_URL, kind: native ? 'a' : 's', off: () => settings.noCount });
-const buzz = () => {
-  if (haptics) { haptics.then(h => h?.Haptics.impact({ style: h.ImpactStyle.Light })).catch(() => { /* not here */ }); return; }
-  try { navigator.vibrate?.(8); } catch { /* not allowed here */ }
-};
-const placeNow = id => frameById.get(id) ?? trains.placeOf(id, now() - DRAW_DELAY_MS);
-// Gone, or dragged off the screen or behind the panel: following stops, the card stays open (map.js).
-const follow = id => map.follow(() => placeNow(id), () => panel.setFollowing(false));
-const speedLog = createSpeedLog();   // every train's speeds of the last 10 minutes (the card's own numbers, "i")
-const panel = createPanel(document.getElementById('panel'), {
-  stationName,
-  // the line on how its place is known (also each second, below), for a card just opened
-  statusOf: id => statusLine(trains.stateOf(id, now() - DRAW_DELAY_MS), lastDataAt !== null && now() - lastDataAt > NO_DATA_MS),
-  station: sig => stations.get(sig),   // a trip's end abroad (src/abroad.js)
-  isStarred: number => favourites.has('train', number),
-  lateOf: id => { const r = trains.get(id); return r ? minutesOf(r) : undefined; },   // the card's lateness tile, as on the map
-  // The train's own numbers ("i" on the full card; src/train-info.js), each second while shown.
-  info: (box, c) => {
-    const r = trains.get(c.id);
-    drawInfo(box, { ...c, t: now() - DRAW_DELAY_MS, now: now(), log: speedLog, net, stationName, station: sig => stations.get(sig),
-      path: shownPath?.id === c.id ? shownPath.path : null, place: frameById.get(c.id) ?? null, late: r ? minutesOf(r) : null });
-  },
-  // "All places" on the full card (src/places-ahead.js): the places between the stops, those ahead worked out from the
-  // route as drawn from the timetable (shownPath.base: its places are the trip's stations, path.at where each is).
-  places: (id, route, stops) => {
-    const sp = shownPath?.id === id && shownPath.base ? shownPath : null;
-    const here = sp ? placeNow(id) : null;
-    return tripPlaces(route, stops, sp?.base ?? null, sp?.places ?? null, stations, here ? progressAt(sp.base, here) : null);
-  },
-  onStar: number => favourites.toggle('train', number),
+startCount({ url: import.meta.env.VITE_COUNT_URL, kind: isNative() ? 'a' : 's', off: () => settings.noCount });
+const stations = createStationList({ routes, map });
+const follow = id => map.follow(() => frame.placeNow(id), () => panel.setFollowing(false));   // (gone or dragged off: following stops)
+const panel = createPanel(panelEl, {
+  stationName: stations.name,
+  onMore: full => stack.setLevel(full ? 2 : 1),   // ("All stops" raises the sheet)
+  onFold: (open, box) => (open ? stack.reveal(box) : stack.unreveal()),   // (its messages shown at once)
+  onStop: sig => stationPages.open(sig),
+  extra: id => trainPages.extras(id),
+  onHead: () => stack?.refreshBar(),   // (its head line drawn again: share, star and Follow back in it)
+  statusOf: id => status.lineOf(id),
+  station: stations.get,
+  lateOf: id => (trains.get(id) ? minutesOf(id) : undefined),
+  info: (box, c) => trainPages.info(box, c),
+  places: (id, r, stops) => route.placesAhead(id, r, stops),
   onSelect(id) {
     map.select(id);
-    if (!id) map.unfollow();   // the map stays exactly as it is
-    if (shownPath && shownPath.id !== id) { shownPath = null; map.setPath(null); map.setAbroad(null); }
-    map.setRouteStations(null);   // the new train's come with its route
+    if (!id) map.unfollow();   // (the map stays exactly as it is)
+    route.onSelect(id);
   },
-  // The open train's whole path, start to finish (Max, 2026-11-12): green, the part travelled darker (Max,
-  // 2026-11-13). On the map the darker part ends at the train (each frame, below); a train not on the map has
-  // travelled up to the last place it was reported at.
-  onRoute(id, route) {
-    // The last few drawn routes are kept (the review's F09, 2026-11-17): reopening a train doesn't search the rail
-    // network again (about 45 ms). Keyed by the stations in order and which are stops (all the way's search uses).
-    const cachedPath = async (places) => {
-      if (!net) return pathOf(places, net);   // (the network not loaded yet: straight lines, not kept)
-      const key = placesKey(places);
-      let path = pathCache.get(key);
-      if (path) pathCache.delete(key);
-      else path = await searchPath(places, { reversals: reversalPlaces() });   // (a train may turn round at a station: src/path.js REV_*)
-      pathCache.set(key, path);   // (the newest last)
-      if (pathCache.size > PATH_CACHE_N) pathCache.delete(pathCache.keys().next().value);
-      return path;
-    };
-    const places = [];
-    for (const s of route.stops) {
-      // A trip split over several internal numbers (a diversion): its cancelled stops are often the old way (VR 2047,
-      // 2026-11-15: Alingsås cancelled, the train went Herrljunga → Fristad → Göteborg), so the path leaves them out.
-      if (route.pieces > 1 && s.canceled) continue;
-      const st = stations.get(s.station);
-      if (!st || st.lon === null) continue;
-      const last = places[places.length - 1];
-      if (last && last.sig === s.station) { last.stop ||= s.advertised; last.actual ||= s.actual; continue; }
-      // mark: where the station's ring is (shownAt), so the route's stop dot sits next to it (Max, 2026-11-15).
-      places.push({ sig: s.station, lon: st.lon, lat: st.lat, stop: s.advertised, actual: s.actual, mark: shownAt(st) });
-    }
-    if (places.length < 2) return;
-    // Shown once the camera has come to the train: finding the way over the rail network on the page's own thread
-    // (45-300 ms) made the glide jump (Max, 2026-11-15: "camera is very jerky"). Since 2026-11-21 it is searched on a
-    // thread of its own (src/path-async.js), started at once, during the glide; where no such thread runs, after it.
-    const key = placesKey(places);
-    const kept = () => shownPath?.id === id && shownPath.key === key && shownPath.follow;
-    const early = net && searchPath?.offThread() && !kept() ? cachedPath(places) : null;
-    map.whenSettled().then(async () => {
-      if (panel.openId !== id) return;   // closed, or another train opened meanwhile
-      // The line follows the train itself (src/path-follow.js; Max, 2026-11-19: trains drawn beside their route). The
-      // same trip again (its stations unchanged): the line as it stands, not the timetable's again (that would jump).
-      if (!kept()) {
-        const base = await (early ?? cachedPath(places));
-        // Searched on its own thread meanwhile: closed, or another train opened, or this trip drawn already.
-        if (panel.openId !== id) return;
-        if (!kept()) {
-          const follow = net ? followPath(base, places, net, { reversals: reversalPlaces() }) : null;
-          shownPath = { id, path: follow?.update(trains.wayOf(id), performance.now())?.path ?? base, places, key, follow, base: net ? base : null };
-          panel.placesReady(id);
-        }
-      }
-      const here = placeNow(id);
-      let done = 0;
-      if (here) done = progressAt(shownPath.path, here);
-      else places.forEach((p, i) => { if (p.actual) done = progressAlong(shownPath.path)[shownPath.path.at[i]]; });
-      map.setPathProgress(done);
-      map.setPath(shownPath.path);
-      map.setRouteStations(places.filter(p => p.stop).map(p => p.sig));   // their names in pills (Max, 2026-11-15)
-      // The leg abroad (src/abroad.js; Max, 2026-11-17: "only when that train is selected"): from the path's Swedish
-      // end to the foreign station, dashed, marching the way the train goes; none when the stop at the border is
-      // cancelled (the trip doesn't go there).
-      const ends = abroadEnds(route, sig => stations.get(sig)), c = shownPath.path.coords;
-      map.setAbroad([ends.from, ends.to].filter(e => e && !e.cut && e.lon !== null && c.length).map(e => ({ ...e,
-        coords: e.dir === 'to' ? [c.at(-1), [e.lon, e.lat]] : [[e.lon, e.lat], c[0]] })));
-      if (!trains.get(id)) map.fitPath(shownPath.path);   // not on the map: show all of it
-    });
-  },
+  onRoute: (id, r) => route.onRoute(id, r),
   onFollow(id, on) {
     buzz();
     if (on) follow(id); else map.unfollow();
   },
 });
-const map = createMap('map', {
-  // A plain tap on the map (not a drag): with the menu open it only closes the menu.
-  onMapTap() {
-    if (navEl.hidden) return false;
-    closeNav();
-    return true;
+const route = createRouteOverlay({ map, panel, trains, stations, net: () => net, netReady, netUrl,
+  placeNow: id => frame.placeNow(id), drawnAt: id => frame.byId.get(id) });
+startChrome({ map, mapEl });
+for (const sel of ['#settings', '.help-body', '#conn-body']) addScrollbar(document.querySelector(sel));
+const frame = createFrame({ trains, lateness, map, panel, filter, settings, route, places: at => feeds.placed(at), reportOf: id => feeds.reportOf(id),
+  day: () => day.view, lateOf, drawDelay: DRAW_DELAY_MS, now });
+frame.start();
+
+// ---- Disruptions (live only): the data; their pages below ----
+const disruptions = createDisruptions({ load: fromFiles ? () => feeds.fileOf('disruptions').then(f => f.disruptions) : fetchDisruptions, now, station: stations.get, net: () => net,
+  onData({ geojson }) { map.setDisruptions(geojson); disPages.onData(); } });
+if (live) Promise.all([netReady, stations.ready]).then(() => disruptions.start());
+
+// ---- The pages a key names ----
+// (each part gets the sheet as a getter: it is made last)
+const trainPages = createTrainPages({ get stack() { return stack; }, trains, panel, panelEl, map, route, frame, speedLog, stations, disruptions, live, lateOf, minutesOf,
+  labelFor, buzz, follow, holder, favourites, net: () => net, now, drawDelay: DRAW_DELAY_MS });
+const stationPages = createStationPages({ get stack() { return stack; }, stations, map, route, favourites, holder, pickTrain: tr => trainPages.pick(tr), trains, live, settings, now });
+const picker = createPicker({ get stack() { return stack; }, holder, openTrain: id => trainPages.open(id) });
+const disPages = createDisruptionPages({ get stack() { return stack; }, disruptions, stationName: stations.name, map, now });
+const about = createAbout({ map, panel, trains, lateness, mode: modeName, debugAsked: hash.get('debug') });
+
+// ---- ☰'s menu, The day, the way back ----
+const day = createDay({ map, panel, panelEl, stack: () => stack, frame, feeds: () => feeds, net: () => net, fromFiles, now, drawDelay: DRAW_DELAY_MS });
+const nav = createNavMenu({ stack: () => stack, mapEl, onDay: () => day.toggle(), onState: () => chips?.sync() });
+const back = createBack({ nav, day, stack: () => stack });
+
+// ---- The search; Home and the group pages ----
+const search = createSearch({ get stack() { return stack; }, trains, lateness, lateOf, stations, frame, disruptions, trainPages, favourites });
+const snapshot = (brand = null) => stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frame.all, lateness, stations: stations.all,
+  trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand });
+// (Statistik or a company's page: the stats' cancelled trains and today's arrivals are asked for)
+const statsShown = () => { const top = stack?.top(); return top === 'stats' || Boolean(top?.startsWith('co:')); };
+function wantStats() { if (live) stats.wantCancelled(feeds.askCancelled, now()); dayStats?.open(); }
+const pageData = {
+  frame: () => frame.all, lateOf, numberOf: id => trains.get(id)?.number ?? '?',
+  favourites, stations: () => stations.all, location: () => map.location, stationName: stations.name,
+  myTrains: () => myTrains?.mineHtml() ?? null,
+  disruptions: () => (live && disruptions.loaded ? disruptions.list : null),
+  snapshot, filter, still: STAND_SPEED,
+  reveal: el => stack.reveal(el), unreveal: () => stack.unreveal(),
+  // the lateness bar's colour: a filter with its pill, held on every page
+  legend: { get: () => filter.late, set: (k) => { filter.setLate(filter.late === k ? null : k); start.redraw(); } },
+  statsActions: {
+    openTrain: id => trainPages.open(id, { go: true }),
+    openStation: sig => stationPages.open(sig, { go: true }),
+    describe: (id) => { const r = trains.get(id); return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateOf(id) } : null; },
   },
-  railData: { trv: () => netReady.then(net => { if (!net) throw new Error('no rail network'); return net.toGeoJSON(); }) },
-  // The 3D trains are drawn where this frame put them (see frame below), the same places the camera uses.
-  getTrains3d: () => frameTrains,
-  // Each car of a model sits on the track: a place d metres along a train's track from where it is drawn.
-  alongTrack: (id, d) => trains.along(id, d),
-  // Tapping a train opens its panel and the camera follows it; tapping the map elsewhere closes it, also while it
-  // is followed (Max, 2026-11-13 evening: "single click while following should deselect train, not just stop
-  // following"). A tap that only closed the menu does nothing more.
-  onTrainTap(id) {
-    if (menu.justClosed) return;
-    if (!openTrain(id)) { panel.close(); board.close(); disruptionEl.hidden = true; }
-  },
-  onStationTap(sig) {
-    if (menu.justClosed) return;
-    openStation(sig);
-  },
-  onDisruptionTap(id) {
-    if (menu.justClosed) return;
-    openDisruption(id);
-  },
-  onGroupTap(list) {
-    if (menu.justClosed) return;
-    showPicker(list);
-  },
-});
-
-// Buttons press in while held (index.html "Motion"; Max's pick 1, 2026-11-20). An iPhone shows :active on a touch
-// only when the page listens for touches.
-document.addEventListener('touchstart', () => {}, { passive: true });
-
-// The start screen (index.html) fades once the map shows only Sweden (map.shown), and is then taken away.
-const splash = document.getElementById('splash');
-// The start screen's logo draws itself in about 1.3 s (index.html): the screen stays at least that long.
-const SPLASH_MIN_MS = 1300;
-// (and the drawing on its own thread has finished: index.html window.__splashDrawn)
-Promise.all([map.shown, window.__splashDrawn]).then(() => setTimeout(() => { splash.classList.add('gone'); setTimeout(() => { splash.hidden = true; }, 500); },
-  Math.max(0, SPLASH_MIN_MS - performance.now())));
-
-// The map credit (index.html #credit; Max, 2026-11-17): shown once the start screen has gone, faded on the first touch
-// of the map (or a wheel) or after 5 s, then taken away; the full credits stay in About.
-const CREDIT_MS = 5000;
-const creditEl = Object.assign(document.createElement('div'), { id: 'credit' });
-const creditLink = (href, text) => `<a href="${href}" target="_blank" rel="noopener">${text}</a>`;
-creditEl.innerHTML = `© ${creditLink('https://www.openstreetmap.org/copyright', 'OpenStreetMap')} © ${creditLink('https://openmaptiles.org/', 'OpenMapTiles')}` +
-  (ownMap ? '' : ` · ${creditLink('https://openfreemap.org/', 'OpenFreeMap')}`);
-const mapEl = document.getElementById('map');
-mapEl.appendChild(creditEl);
-// The phone's keyboard shrinks the page (interactive-widget=resizes-content, so the search list ends above it), and the
-// map shrank with it: its middle moved up, and back down when the keyboard went (Max, 2026-11-19). While a text field
-// has focus and the page is clearly lower than before, the map keeps its last full height and runs on behind the
-// keyboard, so it doesn't move; everything else still fits above the keyboard.
-// The field let go (the search closed, ☰ tapped), the keyboard takes a moment to go: the map keeps its full height
-// until the page is tall again (or KEYBOARD_GONE_MS has passed), not shrinking to the short page first and growing
-// back a moment later (Max, 2026-11-20: "a flicker on both menu and map going from search to menu"; measured with a
-// stand-in keyboard: the map went 851 -> 421 -> 851 px within 0.2 s).
-{
-  const KEYBOARD_GONE_MS = 1000;
-  let full = { w: innerWidth, h: innerHeight }, letGoAt = -Infinity;
-  const fit = () => {
-    const typing = Boolean(document.activeElement?.matches?.('input, textarea'));
-    if (innerWidth !== full.w) { full = { w: innerWidth, h: innerHeight }; letGoAt = -Infinity; }
-    const going = !typing && performance.now() - letGoAt < KEYBOARD_GONE_MS;   // the keyboard on its way down
-    if ((typing || going) && innerHeight < full.h - 150) {
-      mapEl.style.bottom = 'auto'; mapEl.style.height = `${full.h}px`;
-    } else {
-      full.h = innerHeight; mapEl.style.bottom = ''; mapEl.style.height = '';
-    }
-  };
-  addEventListener('resize', fit);
-  addEventListener('focusout', () => {
-    letGoAt = performance.now();
-    setTimeout(fit, 0);
-    setTimeout(fit, KEYBOARD_GONE_MS + 50);   // (it never went: the page's own height again)
-  });
-}
-map.shown.then(() => {
-  const fade = (e) => {
-    if (e?.target && creditEl.contains(e.target)) return;   // (a tap on one of its links opens it first)
-    if (creditEl.classList.contains('gone')) return;
-    creditEl.classList.add('gone');
-    setTimeout(() => { creditEl.hidden = true; }, 700);
-    for (const type of ['pointerdown', 'wheel']) mapEl.removeEventListener(type, fade);
-  };
-  setTimeout(fade, Math.max(SPLASH_MIN_MS - performance.now(), 0) + 500 + CREDIT_MS);   // 5 s seen, after the start screen
-  for (const type of ['pointerdown', 'wheel']) mapEl.addEventListener(type, fade, { passive: true });
-});
-
-// ---- Every card and page is a bottom sheet (src/sheet.js; the Soft look, 2026-11-15): the newest open one on top ----
-// With a mouse, our own thin bar in every card that is there from the start, as Statistics has (src/scrollbar.js; Max, 2026-11-19).
-for (const sel of ['#settings', '.help-body', '#disruptions-body', '#conn-body', '#search-results']) addScrollbar(document.querySelector(sel));
-const sheets = initSheets(['panel', 'board', 'picker', 'disruption', 'menu', 'settings-page', 'stats-page', 'conn-page', 'disruptions-page', 'help']
-  .map(id => document.getElementById(id)));
-const raise = id => sheets.raise(document.getElementById(id));
-
-// ---- One screen at a time (Max, 2026-11-20: Störningar, then Statistik from the menu, left both open; closing one
-// showed the other). Every menu screen opens through openPage, which closes the others. What becomes of a card under
-// it (a train, a board, a disruption, the "3 trains" list) is a Debug choice for now (Settings → Debug → Screen over a
-// train; Max: "Make a debug toggle for the three options"): 'card' the card waits under the screen and is back when it
-// closes (as before); 'follow' the cards go, the open train stays picked and followed (a tap on it brings its card
-// back, a tap on the map lets it go); 'clear' the cards go and the train is let go. ----
-const pageEls = () => [settingsPage, statsPage, connPage, disruptionsPage, helpEl];
-function openPage(el) {
-  closeNav();
-  menu.close();
-  for (const p of pageEls()) if (p !== el) p.hidden = true;
-  const mode = settings.pageOverTrain;
-  if (mode !== 'card') {
-    board.close();
-    pickerEl.hidden = true;
-    disruptionEl.hidden = true;
-    if (panel.openId) { if (mode === 'clear') panel.close(); else panel.hide(); }
-  }
-  el.hidden = false;
-  raise(el.id);
-}
-
-// ---- Several trains close together ("3 trains"): pick one ----
-const pickerEl = document.getElementById('picker');
-function showPicker(list) {
-  panel.close();
-  board.close();
-  disruptionEl.hidden = true;
-  const rows = [...list].sort((a, b) => (a.company || '').localeCompare(b.company || '', 'sv') || String(a.label).localeCompare(String(b.label)));
-  pickerEl.innerHTML = `<div class="panel-head"><strong>${t('trainsHere', rows.length)}</strong><span class="panel-buttons">` +
-    `<button class="panel-close" type="button" aria-label="${t('close')}">${icon('close')}</button></span></div><ul class="pick-list">` +
-    rows.map((r, i) => `<li><button type="button" data-i="${i}"><b>${esc(splitLabel(r.label).number)}</b>${tagHtml(splitLabel(r.label).minutes)} <span>${esc(r.company || t('train'))}</span></button></li>`).join('') + '</ul>';
-  pickerEl.hidden = false;
-  raise('picker');
-  pickerEl.querySelector('.panel-close').onclick = () => { pickerEl.hidden = true; };
-  for (const b of pickerEl.querySelectorAll('[data-i]')) b.onclick = () => { pickerEl.hidden = true; openTrain(rows[Number(b.dataset.i)].id); };
-}
-
-// ---- A station's board (where the train panel opens; one of them at a time) ----
-const board = createBoard(document.getElementById('board'), {
-  load: (sig, activity) => fetchBoard(sig, activity, now(), settings.boardRows),
-  loadDay: (sig, activity) => fetchStationDay(sig, activity, now()),   // the search on the board (2026-11-21)
-  stationName,
-  onPickTrain: t => pickTrain({ ...t, onMap: Boolean(trains.get(t.id)) }),
-  isStarred: sig => favourites.has('station', sig),
-  onStar: sig => favourites.toggle('station', sig),
-  // The station's own messages (live only).
-  messages: live ? sig => fetchStationMessages(sig, now()) : null,
-});
-async function openStation(sig, { go = false } = {}) {
-  const st = stations.get(sig);
-  if (!st) return;
-  if (panel.openId) panel.close();
-  map.unfollow();
-  disruptionEl.hidden = true;
-  board.open(st);
-  raise('board');
-  if (go) map.goTo(shownAt(st), 13);   // lands above the board
-}
-
-// A train picked in the search or on a board: on the map, fly there and follow it; otherwise its stops.
-function pickTrain(t) {
-  board.close();
-  if (t.onMap && openTrain(t.id, { go: true })) return;
-  map.unfollow();
-  panel.open({ id: t.id, operational: t.operational, date: t.date, number: t.number, label: String(t.number) }, { follow: false });
-  raise('panel');
-}
-
-// Open a train on the map: its panel, and the camera follows it. go: also fly there, zoomed in to the toys.
-function openTrain(id, { go = false } = {}) {
-  const r = id && trains.get(id);
-  if (!r) return false;
-  buzz();
-  // Already open: the card stays as it is, the camera follows the train again (Max, 2026-11-21: a tap on the selected
-  // train "reloads the card and flickers it once"); its card put away by a screen (openPage, 'follow'): back.
-  if (panel.openId === id) {
-    if (panel.hidden) panel.show();
-    else { board.close(); pickerEl.hidden = true; disruptionEl.hidden = true; }
-    raise('panel');
-    panel.setFollowing(true);
-    const following = follow(id);
-    const p = go && placeNow(id);
-    if (p) following.then(() => map.goTo(p, 13, true));
-    return true;
-  }
-  board.close();
-  pickerEl.hidden = true;
-  disruptionEl.hidden = true;
-  panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
-  raise('panel');
-  const following = follow(id);
-  const p = go && placeNow(id);
-  if (p) following.then(() => map.goTo(p, 13, true));
-  return true;
-}
-
-
-// ---- Help, with the map credits: the ? button next to Tilt ----
-// (Max, 2026-11-12: the credit line at start was too intrusive. Fine while the app is private; OpenStreetMap's
-// attribution guidelines want the credit seen without a tap, so the public version needs it visible again.)
-const helpEl = document.getElementById('help');
-function openHelp() { openPage(helpEl); helpEl.querySelector('.panel-close').focus(); }
-helpEl.querySelector('.panel-close').onclick = () => { helpEl.hidden = true; };
-document.getElementById('help-button').onclick = openHelp;   // in the menu (☰, 2026-11-18)
-// About (round 4): the logo, Buy me a coffee (Max's Ko-fi page) and Report a bug: a ready e-mail (Max, 2026-11-17:
-// "Email, pre-filled"). The mail app opens with the build, a link to the same map view, the open train and the phone
-// filled in; the person writes what happened (and attaches a screenshot). The address (Max, 2026-11-17: no spam, nothing
-// pointing robots at his own domain): the monitor's Gmail with a "+bugs" tag, put together only on a tap, so the
-// page and the public code never hold it whole (bugAddress; tools/about-check.mjs checks the page's code for it).
-// Ko-fi as in Max's Connection Lab (Max, 2026-11-17: "do the same"): a plain link, the one Ko-fi's button script writes,
-// in Ko-fi's blue with Ko-fi's cup kept in the page (kofi-cup.png, from there). Not the script itself: it would load
-// from Ko-fi and Google Fonts on every visit, and it writes with document.writeln, so it can't go in a panel built later.
-const KOFI_URL = 'https://ko-fi.com/X1C729ZIK7';
-const bugAddress = () => { const back = s => [...s].reverse().join(''); return `${back('sgub+ppa.taraps')}@${back('moc.liamg')}`; };
-const PUBLIC_URL = 'https://sparat.rangner.com/';   // the view link points here (inside the app the page's own address is local)
-helpEl.querySelector('.about-logo').innerHTML = logoSvg({ id: 'about-logo' });
-document.querySelector('#kofi-button .about-ic').innerHTML = `<img src="${kofiCup}" alt="">`;   // the words say where it goes
-document.querySelector('#bug-button .about-ic').innerHTML = icon('bug', 20);
-document.getElementById('kofi-button').onclick = () => { if (KOFI_URL) window.open(KOFI_URL, '_blank', 'noopener'); };
-function bugMail() {
-  const version = `${typeof __VERSION__ === 'string' ? __VERSION__ : '?'} (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'})`;
-  const view = map.viewText();
-  const r = panel.openId && trains.get(panel.openId);
-  const company = r && lateness.brand(r.id);
-  const train = r ? `${r.number}${company ? ` ${company}` : ''}` : '–';
-  const mode = replay ? `replay ${replay}` : fromFiles ? 'files' : 'live';
-  const body = [t('bugWhat'), '', '', '', '—', `Spårat ${version}`, `${t('bugView')}: ${PUBLIC_URL}${view ? `#view=${view}` : ''}`,
-    `${t('bugTrain')}: ${train}`, `${t('bugMode')}: ${mode}, ${settings.language}, ${settings.theme}`,
-    `${t('bugDevice')}: ${navigator.userAgent}`].join('\r\n');
-  return `mailto:${bugAddress()}?subject=${encodeURIComponent(t('bugSubject', version))}&body=${encodeURIComponent(body)}`;
-}
-window.__bugMail = bugMail;   // (tools: the mail a tap would open)
-document.getElementById('bug-button').onclick = () => { window.location.href = bugMail(); };
-helpEl.querySelector('.about-soon').hidden = true;
-// The version and the commit it was built from (vite.config.js; Max, 2026-11-17: so a report names its build).
-// The same word in both languages. "dev" on the PC's live-reloading page.
-const versionEl = document.getElementById('about-version');
-const versionText = `Version ${typeof __VERSION__ === 'string' ? __VERSION__ : '?'}` +
-  ` (${typeof __BUILD__ === 'string' ? __BUILD__ : '?'}${import.meta.env.DEV ? ', dev' : ''})`;
-versionEl.textContent = versionText;
-// Settings → Debug shows only when switched on (Max, 2026-11-18: "Taps is good", "build yes"): #debug in the address
-// (#debug=off hides it), or 7 taps on the version line above (7 more hide it), remembered on the device; on the dev
-// page shown unless switched off. Hidden, its choices keep working.
-const DEBUG_KEY = 'debugShown';
-let debugShown = import.meta.env.DEV;
-try { const v = localStorage.getItem(DEBUG_KEY); if (v !== null) debugShown = v === 'true'; } catch { /* storage blocked: the default */ }
-function showDebug(on) {
-  debugShown = on;
-  try { localStorage.setItem(DEBUG_KEY, String(on)); } catch { /* used now, not remembered */ }
-  document.getElementById('settings').classList.toggle('debug', on);
-}
-const debugAsked = new URLSearchParams(location.hash.slice(1)).get('debug');
-if (debugAsked !== null) showDebug(debugAsked !== 'off'); else document.getElementById('settings').classList.toggle('debug', debugShown);
-let taps = 0, lastTap = 0, sayTimer = null;
-versionEl.addEventListener('click', () => {
-  const at = Date.now();
-  taps = at - lastTap < 1500 ? taps + 1 : 1;   // in a row: at most 1.5 s apart
-  lastTap = at;
-  if (taps < 7) return;
-  taps = 0;
-  showDebug(!debugShown);
-  versionEl.textContent = t(debugShown ? 'debugOn' : 'debugOff');
-  clearTimeout(sayTimer);
-  sayTimer = setTimeout(() => { versionEl.textContent = versionText; }, 2500);
-});
-// Esc closes the open page; with none open, the train's card (Max, 2026-11-15: on a computer, × and Esc).
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (!navEl.hidden) { closeNav(); return; }
-  const pages = pageEls();
-  if (pages.some(p => !p.hidden)) { for (const p of pages) p.hidden = true; return; }
-  if (panel.openId && !menu.isOpen && !menu.justClosed) panel.close();   // (an Esc that closed the search: not also the card)
-});
-// The phone's back button in the Android app (Max, 2026-11-17): closes the sheet on top (card, board, search, a page),
-// one per press, like a drag down; with none open, the app goes to the background (as Android's own back does since
-// Android 12: the map stays loaded). Only inside the app: Capacitor's bridge is there; the web page never loads this.
-// With the keyboard open, back only hides the keyboard (Max's phone test, 2026-11-17: one swipe closed both it and the
-// search). Open = a text field has focus and the page is clearly lower than the tallest seen at this width (the
-// viewport line's interactive-widget=resizes-content: the keyboard shrinks the page).
-if (window.Capacitor?.isNativePlatform?.()) {
-  let tallest = { w: 0, h: 0 };
-  const seen = () => { if (innerWidth !== tallest.w) tallest = { w: innerWidth, h: 0 }; tallest.h = Math.max(tallest.h, innerHeight); };
-  seen();
-  addEventListener('resize', seen);
-  const keyboardUp = () => Boolean(document.activeElement?.matches?.('input, textarea')) && innerHeight < tallest.h - 150;
-  import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
-    if (keyboardUp()) { document.activeElement.blur(); return; }
-    if (!navEl.hidden) { closeNav(); return; }
-    if (!sheets.closeTop()) App.minimizeApp();
-  }));
-}
-
-// ---- The menu (☰; Max's pick A, 2026-11-18: menu and search apart): a drawer from the left with Störningar, Statistik,
-// Inställningar and Om Spårat. Closes with ×, Esc, a tap outside, the phone's back, or by opening one of its pages. ----
-const navEl = document.getElementById('nav'), navButton = document.getElementById('nav-button');
-for (const ic of navEl.querySelectorAll('[data-icon]')) ic.innerHTML = icon(ic.dataset.icon, 20);
-function openNav() {
-  menu.close();
-  navEl.hidden = false;
-  navButton.setAttribute('aria-expanded', 'true');
-  navEl.querySelector('.nav-row:not([hidden])')?.focus();
-}
-function closeNav() {
-  if (navEl.hidden) return;
-  navEl.hidden = true;
-  navButton.setAttribute('aria-expanded', 'false');
-}
-onTap(navButton, () => (navEl.hidden ? openNav() : closeNav()));   // (at once also right after a swipe: sheet.js onTap)
-// The map works with the menu open (Max, 2026-11-20: "Map doesn't work with menu open, but cards do"; until then a
-// see-through layer over the map only closed the menu): a drag or pinch moves the map and the menu stays; a plain tap
-// on the map closes the menu and does nothing else (as the search does; createMap onMapTap).
-// Opening the search (Sök or the logo) closes the menu: one card under the bar at a time (createMenu onOpen).
-
-// ---- The search: a train number or a station ----
-const fold = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();   // "Göteborg" matches "goteborg"
-const menu = createMenu({
-  button: document.getElementById('menu-button'),
-  el: document.getElementById('menu'),
-  findTrains: digits => trains.reports()
-    .filter(r => String(r.number).startsWith(digits))
-    .sort((a, b) => String(a.number).length - String(b.number).length || Number(a.number) - Number(b.number))
-    .map(r => ({ id: r.id, operational: r.operational, date: r.date, number: r.number, company: lateness.brand(r.id), time: r.time })),
-  findStations(text) {
-    const q = fold(text);
-    return [...stations.values()]
-      .filter(st => st.advertised && st.lon !== null && fold(st.name).includes(q))
-      .sort((a, b) => fold(b.name).startsWith(q) - fold(a.name).startsWith(q) || a.name.localeCompare(b.name, 'sv'));
-  },
-  async searchTimetable(number) {
-    const found = await fetchRunsByNumber(number, now());
-    return found.map(t => ({ ...t, from: t.from && stationName(t.from), to: t.to && stationName(t.to), at: found.length > 1 && t.start !== null ? hhmm(t.start) : null }));
-  },
-  onPickTrain: pickTrain,
-  onPickStation: st => openStation(st.sig, { go: true }),
-  onOpen: () => closeNav(),
-  favourites: () => ({
-    trains: favourites.trains.map((number) => {
-      const r = trains.reports().find(x => String(x.number) === number);
-      return { number, company: r ? lateness.brand(r.id) : null, onMap: Boolean(r) };
-    }),
-    stations: favourites.stations.map(sig => stations.get(sig)).filter(Boolean),
-  }),
-  // A starred train: on the map, fly there; otherwise its run now, the next one, or the latest (yesterday's while it
-  // still runs after midnight; until 2026-11-22 the day's first run, TODO 62).
-  async onPickFavouriteTrain(number) {
-    const r = trains.reports().find(x => String(x.number) === number);
-    if (r) return pickTrain({ id: r.id, operational: r.operational, date: r.date, number: r.number, onMap: true });
-    try {
-      const t = pickRun(await fetchRunsByNumber(number, now()), now());
-      if (t) { pickTrain({ id: t.key, operational: t.operational, date: t.date, number: t.number, onMap: false }); }
-    } catch (e) { console.warn('favourite:', e.message); }
-  },
-});
-
-// ---- Drawing: one clock per frame ----
-// Each frame every train's simulation is brought to one moment (DELAY_MS ago), once. The camera (following), the
-// 3D trains and the selected train's marker all use those same places, and while a train is selected the map is
-// drawn in this same frame, so nothing creeps against anything else (the 3D trains used to be placed at a slightly
-// later moment than the camera, a stutter on fast trains at close zoom). The dots and labels of the other trains go
-// through the map's background worker, as often as a movement can be seen at this zoom (map.trainsEvery: 30 times a
-// second close in, once a second far out): only the trains in or near the view (map.nearView), made
-// from the places this frame already worked out (every train in Sweden used to be worked through a second time and
-// sent, also when five of them were on screen).
-// Every train is worked out only when the dots are due (map.trainsEvery: while the camera follows a train among the
-// models, as soon as the fastest could have moved half a pixel). Between, only the open train moves on (trains.placedOne): the
-// camera and its marker need it every frame. Until 2026-11-15 every train was worked out in every frame, 60 times a
-// second, for dots refreshed 7 times a second at zoom 11 (Max: "Optimization is KEY here").
-let lastDraw = 0, lastProgress = 0, lastFollow = 0, fullAsked = false;
-// The open train's line is checked against the train's own way this often (src/path-follow.js).
-const FOLLOW_MS = 250;
-const whenIdle = cb => (window.requestIdleCallback ? window.requestIdleCallback(cb, { timeout: 500 }) : setTimeout(cb, 50));
-// The open train's line changed to follow it: drawn, the changed stretch sliding into place.
-function showFollowed(r, place) {
-  shownPath.path = r.path;
-  map.setPath(r.path, r.slide);
-  if (place) map.setPathProgress(progressAt(r.path, place));
-}
-// frameAll: every train; frameTrains: those drawn, all or only those the filter shows (and the open one, always), so the
-// dots, models, labels and "3 trains" groups all agree. The stats page counts every train.
-let frameAll = [], frameTrains = [], frameById = new Map();
-function frame(ts) {
-  const t = now() - DRAW_DELAY_MS;
-  const openId = panel.openId;
-  const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));
-  if (due || !frameAll.length) {
-    frameAll = (netIn ? trains.placedAt(t) : earlyPlaced()).map(x => ({ ...x, brand: lateness.brand(x.id) }));
-    frameTrains = filter.active ? frameAll.filter(x => x.id === openId || filter.shows(x.brand)) : frameAll;
-    frameById = new Map(frameAll.map(x => [x.id, x]));
-  } else if (openId && frameById.has(openId)) {
-    const x = trains.placedOne(openId, t);
-    if (x) {
-      const one = { ...x, brand: lateness.brand(x.id) }, old = frameById.get(openId);
-      frameById.set(openId, one);
-      for (const list of [frameAll, frameTrains]) { const i = list.indexOf(old); if (i >= 0) list[i] = one; }
-    }
-  }
-  if (import.meta.env.DEV) window.__last3d = frameTrains;   // what the 3D layer draws (tools/follow-check.mjs)
-  if (due) {
-    lastDraw = ts;
-    const near = map.nearView(), features = [];
-    for (const x of frameTrains) {
-      const r = near(x.lon, x.lat) && reportOf(x.id);
-      if (r) features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
-        properties: { id: x.id, bearing: x.bearing, ...propsFor(r, x) } });
-    }
-    map.setTrains({ type: 'FeatureCollection', features });
-  }
-  map.tick(ts);
-  const sel = openId && frameById.get(openId);
-  const r = sel && reportOf(sel.id);
-  map.setSelectedPlace(sel || null, r ? propsFor(r, sel) : null);
-  // How far along its route the open train is: at most 10 times a second (it took a fifth of the frame's time).
-  // The open train's line follows its train (src/path-follow.js): checked FOLLOW_MS apart; the rare full re-route of
-  // the way ahead (tens of ms) waits for a quiet moment.
-  const follow = sel && shownPath?.id === sel.id ? shownPath.follow : null;
-  if (follow && ts - lastFollow >= FOLLOW_MS) {
-    lastFollow = ts;
-    const r = follow.update(trains.wayOf(sel.id), ts);
-    if (r) showFollowed(r, sel);
-    else if (follow.wantsFull && !fullAsked) {
-      fullAsked = true;
-      whenIdle(() => {
-        fullAsked = false;
-        if (shownPath?.follow !== follow) return;
-        const r2 = follow.full(trains.wayOf(shownPath.id), performance.now());
-        if (r2) showFollowed(r2, frameById.get(shownPath.id));
-      });
-    }
-  }
-  if (sel && shownPath?.id === sel.id && ts - lastProgress >= 100) {
-    lastProgress = ts;
-    map.setPathProgress(progressAt(shownPath.path, sel));
-  }
-  // Drawn in this frame only when the open train moved a tenth of a pixel or more (a standing train draws nothing; a
-  // moving camera draws itself).
-  if (sel) map.drawIfMoved(sel);
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-// ---- Settings: their own page, from ☰ → Settings (Max, 2026-11-12). Remembered on this phone; every change shows at
-// once, without reloading the page (Max: reloading was a bad experience). ----
-const settingsPage = document.getElementById('settings-page');
-const debugDataEl = document.getElementById('set-data');   // Settings → Debug: the positions' rate and age
-const settingsEl = document.getElementById('settings');
-document.getElementById('open-settings').onclick = () => {
-  openPage(settingsPage);
-  foldAccents(false);   // the accent colours start folded
-  settingsPage.querySelector('.panel-close').focus();
+  onShow: wantStats,
+  onLight: fn => frame.light(fn),
+  fit(list) { if (list.length) map.fitPlaces(list); },   // (a group's trains, all of them in view)
 };
-settingsPage.querySelector('.panel-close').onclick = () => { settingsPage.hidden = true; };
-// A tap outside the card (on the dimmed map behind it) closes it (Max, 2026-11-13).
-document.getElementById('settings-backdrop').onclick = () => { settingsPage.hidden = true; };
-// A change (also Look on Auto when the phone switches between light and dark): each part shows it.
-onSettingChange((key) => {
-  if (key === 'theme' || key === 'trainStyle' || key === 'toyZoom' || key === 'trainSymbol' || key === 'accent'
-    || key === 'routeNames' || key === 'nameSide' || key === 'pillSide' || key === 'routeEdge' || key === 'colourBlind') map.applySettings();
-  if (key === 'language') {
-    translatePage();
-    nameSwatches();
-    map.relabel();   // "3 trains" on the map
-    menu.refresh();
-    panel.relabel();
-    if (!statsPage.hidden) drawStats();
-    conn.relabel(); showConn();
-    showFilter();
-    board.relabel();
-    pickerEl.hidden = true;
-    if (!disruptionsPage.hidden) drawDisruptions();
-    if (!disruptionEl.hidden && disruptionEl.dataset.id) drawDisruption(disruptionEl.dataset.id);
-  }
-  if (key === 'boardRows') board.relabel();
-  if (key === 'disruptionsMap') map.showDisruptions();   // Settings → Disruptions on the map (2026-11-18)
-  // The models' sizes are read each frame (trains-3d.js): draw once now, also when nothing moves.
-  if (key === 'toySize' || key === 'modelSize' || key === 'toyClose' || key === 'realClose' || key === 'trueSize') map.drawNow();
-  showSettings();
-});
-function showSettings() {
-  for (const seg of settingsEl.querySelectorAll('.seg'))
-    for (const b of seg.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === String(settings[seg.dataset.key])));
-  settingsEl.classList.toggle('real', settings.trainStyle !== 'toy');
-  settingsEl.classList.toggle('style-real', settings.trainStyle === 'real');
-  settingsEl.classList.toggle('symbol', settings.trainStyle === 'symbol');
-  sizeEl.value = settings.toySize;
-  sizeOut.textContent = `${settings.toySize} px`;
-  realSizeEl.value = settings.modelSize;
-  realSizeOut.textContent = `×${settings.modelSize}`;
-  // One slider, for the kind of train chosen (Compact or Realistic).
-  const close = settings[closeKey()];
-  closeSizeEl.value = close;
-  closeSizeOut.textContent = `×${close}`;
-  accentName.textContent = (ACCENTS[settings.accent] ?? ACCENTS[DEFAULT_ACCENT]).name[lang()];
-}
-// Settings → Accent colour: one round swatch per curated colour (src/colours.js; Max, 2026-11-15), each in the light
-// and the dark shade (the page's style picks one). 14 since 2026-11-19: the row shows the chosen colour and its name,
-// a tap folds the swatches open under it (index.html .accent-pick); a pick, or the row again, folds them shut.
-const swatchesEl = settingsEl.querySelector('.seg.swatches');
-swatchesEl.innerHTML = Object.entries(ACCENTS).map(([k, a]) =>
-  `<button type="button" data-v="${k}" style="--sw-l:${a.light.c};--sw-d:${a.dark.c}"></button>`).join('');
-const nameSwatches = () => { for (const b of swatchesEl.children) b.title = b.ariaLabel = ACCENTS[b.dataset.v].name[lang()]; };
-nameSwatches();
-const accentOpen = document.getElementById('accent-open'), accentPick = document.getElementById('accent-pick');
-const accentName = accentOpen.querySelector('.accent-name');
-function foldAccents(open) {
-  accentOpen.setAttribute('aria-expanded', String(open));
-  accentPick.classList.toggle('open', open);
-  accentPick.inert = !open;   // folded: its swatches can't be reached by Tab
-}
-accentOpen.onclick = () => foldAccents(accentOpen.getAttribute('aria-expanded') !== 'true');
-for (const seg of settingsEl.querySelectorAll('.seg')) {
-  for (const b of seg.querySelectorAll('button')) b.onclick = () => {
-    setSetting(seg.dataset.key, b.dataset.v);
-    if (seg === swatchesEl) { foldAccents(false); accentOpen.focus(); }
-  };
-}
-const sizeEl = document.getElementById('set-toysize'), sizeOut = document.getElementById('set-toysize-out');
-sizeEl.oninput = () => { setSetting('toySize', sizeEl.value); showSettings(); };
-const realSizeEl = document.getElementById('set-realsize'), realSizeOut = document.getElementById('set-realsize-out');
-realSizeEl.oninput = () => { setSetting('modelSize', realSizeEl.value); showSettings(); };
-const closeSizeEl = document.getElementById('set-closesize'), closeSizeOut = document.getElementById('set-closesize-out');
-const closeKey = () => (settings.trainStyle === 'toy' ? 'toyClose' : 'realClose');
-closeSizeEl.oninput = () => { setSetting(closeKey(), closeSizeEl.value); showSettings(); };
-showSettings();
-
-// ---- The stats page: ☰ → Statistik (Max, 2026-11-18; until then a tap on the live pill). Its own page, like Settings. ----
-const statsPage = document.getElementById('stats-page');
-const statsBody = document.getElementById('stats-body');
-// The page is built once and then only its numbers change (src/stats-page.js); a tap on a train or a station there
-// closes it and opens that train's card (flying to it) or the station's board.
-const statsView = createStatsPage(statsBody, {
-  openTrain: (id) => { statsPage.hidden = true; openTrain(id, { go: true }); },
-  openStation: (sig) => { statsPage.hidden = true; openStation(sig, { go: true }); },
-  describe: (id) => {
-    const r = trains.get(id);
-    return r ? { number: r.number, brand: lateness.brand(id) ?? '', minutes: lateness.get(id)?.minutes ?? null } : null;
-  },
-  filter,
-  redraw: () => drawStats(true),
-});
-// statsView.company: a company's own page (only its trains), or null
-function drawStats(first = false) {
-  const brand = statsView.company;
-  statsView.update(stats.snapshot({ count: trains.count, reports: trains.reports(), frame: frameAll, lateness, stations,
-    trainOf: id => trains.get(id), at: now(), replay: Boolean(replay), day: dayStats?.view(brand) ?? null, brand }), { first });
-}
-function openStats() {
-  statsView.home();
-  openPage(statsPage);
-  if (live) stats.wantCancelled(askCancelled, now());
-  dayStats?.open();
-  drawStats(true);
-  statsPage.querySelector('.panel-close').focus();
-}
-document.getElementById('open-stats').onclick = openStats;
-
-// ---- The connection screen: a tap on the live pill (Max's pick Y, 2026-11-18; src/connection.js). ----
-const connPage = document.getElementById('conn-page');
-const conn = createConnection(connPage, {
-  getTrains: () => frameAll,
-  reportTimeOf: id => trains.get(id)?.time ?? null,
-});
-let lastFileAt = null;   // when the last file came (this phone's clock; the public page)
-function openConn() {
-  showConn();
-  openPage(connPage);
-  connPage.querySelector('.panel-close').focus();
-}
-onTap(document.getElementById('status'), () => (connPage.hidden ? openConn() : (connPage.hidden = true)));
-connPage.querySelector('.panel-close').onclick = () => { connPage.hidden = true; };
-statsPage.querySelector('.panel-close').onclick = () => { statsPage.hidden = true; };
-// A tap on a company or kind of train shows only those trains on the map (taps stack; tapped again, taken off); the
-// page's other taps are its own (src/stats-page.js). While a finger is down on the page its numbers wait, so nothing
-// moves under the finger.
-let statsHeld = false;
-statsBody.addEventListener('pointerdown', () => { statsHeld = true; });
-addEventListener('pointerup', () => { statsHeld = false; });
-addEventListener('pointercancel', () => { statsHeld = false; });
-statsBody.addEventListener('click', (e) => {
-  const row = e.target.closest?.('[data-filter]');
-  if (row) filter.toggle(row.dataset.filter, row.dataset.v);
-  if (row) drawStats();
-});
-// The bar under the status line while a filter is on: what is shown, and × to show every train again.
-const filterBar = document.getElementById('filter-bar'), filterText = document.getElementById('filter-text');
-function showFilter() {
-  lastDraw = 0;   // the dots at once, not at the next refresh (up to a second far out)
-  filterBar.hidden = !filter.active;
-  filterText.textContent = filter.active
-    ? t('filterShowing', filter.list().map(({ type, v }) => (type === 'kind' ? t(`kind_${v}`) : v || t('stNoCompany'))).join(', ')) : '';
-}
-filter.onChange(showFilter);
-document.getElementById('filter-clear').onclick = () => { filter.clear(); if (!statsPage.hidden) drawStats(); };
-
-// ---- Disruptions (src/disruptions.js; live only): the menu's list, the marks on the map, a disruption's card ----
-const disruptionEl = document.getElementById('disruption');
-const disruptionsPage = document.getElementById('disruptions-page');
-let stationsLoaded;
-const stationsReady = new Promise((resolve) => { stationsLoaded = resolve; });
-let netNow = null;
-netReady.then((n) => { netNow = n; });
-const disruptions = createDisruptions({ load: fromFiles ? () => fileOf('disruptions').then(f => f.disruptions) : fetchDisruptions, now, station: sig => stations.get(sig), net: () => netNow,
-  onData({ list, geojson }) {
-    map.setDisruptions(geojson);
-    // The menu's count: problems only, not rail work (Max, 2026-11-18).
-    const problems = list.filter(d => !isWork(d)).length, countEl = document.getElementById('disruptions-count');
-    roll(countEl, problems);   // (rolls to a new number: Max's pick 4, 2026-11-20)
-    countEl.classList.toggle('none', !problems);   // the chip only when there are problems
-    if (!disruptionsPage.hidden) drawDisruptions();
-    const open = disruptionEl.dataset.id;
-    if (!disruptionEl.hidden && open) { if (disruptions.byId(open)) drawDisruption(open); else disruptionEl.hidden = true; }
-  } });
-if (live) {
-  document.getElementById('open-disruptions').hidden = false;
-  Promise.all([netReady, stationsReady]).then(() => disruptions.start());
-}
-// The list (Max's pick C, 2026-11-18): the problems as before, then the rail work folded under "Rail work (n)" at the
-// end, ending soonest first; open or folded is remembered on this device. The fold glides open and shut (Max,
-// 2026-11-20: "Expanding and condensing störningar does not animate"): the rows are always there, in a box whose
-// height goes from none to all of them (index.html .dis-works; none of it for less motion), shut ones out of reach
-// (inert).
-const WORKS_KEY = 'railWorksOpen';
-let worksOpen = false;
-try { worksOpen = localStorage.getItem(WORKS_KEY) === 'true'; } catch { /* folded */ }
-// The list's rows come in one after another when it opens from the menu, and new ones when new data comes (Max's
-// pick 6, 2026-11-20); disSeen: the rows shown since it opened (by id; 'fold' for Banarbeten).
-let disSeen = new Set();
-function drawDisruptions() {
-  const list = disruptions.list, problems = list.filter(d => !isWork(d));
-  const works = list.filter(isWork).sort((a, b) => (a.until ?? Infinity) - (b.until ?? Infinity));
-  const row = d => rowHtml(d, stationName, now());
-  document.getElementById('disruptions-body').innerHTML = (!disruptions.loaded ? stateHtml('loading', t('loading'))
-    : !list.length ? stateHtml('empty', t('noDisruptions'))
-    : `<p class="panel-note">${t(problems.length ? 'disruptionsNote' : 'noProblemsNow')}</p>`) +
-    problems.map(row).join('') +
-    (works.length ? `<button type="button" class="dis-fold" aria-expanded="${worksOpen}"><span class="dis-ic work" aria-hidden="true">${icon('cone', 16)}</span>` +
-      `<span>${t('railWorks')} (${works.length})</span>${icon('chevronDown', 16)}</button>` +
-      `<div class="dis-works${worksOpen ? ' open' : ''}"${worksOpen ? '' : ' inert'}><div class="dis-works-in">${works.map(row).join('')}</div></div>` : '');
-  const body = document.getElementById('disruptions-body');
-  arrive(body.querySelectorAll(':scope > .dis-row, :scope > .dis-fold'), disSeen, r => r.dataset.id ?? 'fold');
-  for (const b of disruptionsPage.querySelectorAll('.dis-row')) b.onclick = () => {
-    listScroll = document.getElementById('disruptions-body').scrollTop;
-    disruptionsPage.hidden = true;
-    openDisruption(b.dataset.id, { go: true, fromList: true });
-  };
-  const fold = disruptionsPage.querySelector('.dis-fold'), box = disruptionsPage.querySelector('.dis-works');
-  if (fold) fold.onclick = () => {
-    worksOpen = !worksOpen;
-    try { localStorage.setItem(WORKS_KEY, String(worksOpen)); } catch { /* not kept */ }
-    fold.setAttribute('aria-expanded', String(worksOpen));
-    box.classList.toggle('open', worksOpen);
-    box.inert = !worksOpen;
-    if (worksOpen) arrive(box.querySelectorAll('.dis-row'), new Set(), r => r.dataset.id);
-  };
-}
-// A disruption opened from the list has a back arrow (Max, 2026-11-20: "Back arrow when in a specific störning"):
-// back to the list, where it was scrolled to (the map stays where the disruption put it).
-let fromList = false, listScroll = 0;
-function drawDisruption(id) {
-  const d = disruptions.byId(id);
-  if (!d) return;
-  disruptionEl.dataset.id = id;
-  disruptionEl.innerHTML = cardHtml(d, stationName, now());
-  disruptionEl.querySelector('.panel-close').onclick = () => { disruptionEl.hidden = true; };
-  if (!fromList) return;
-  const back = Object.assign(document.createElement('button'), { type: 'button', className: 'panel-back', innerHTML: icon('back') });
-  back.setAttribute('aria-label', t('backToList'));
-  back.onclick = () => {
-    disruptionEl.hidden = true;
-    drawDisruptions();
-    openPage(disruptionsPage);
-    document.getElementById('disruptions-body').scrollTop = listScroll;
-  };
-  disruptionEl.querySelector('.panel-head').prepend(back);
-}
-// Open a disruption's card where a train's panel sits; go: show all of its stretches (one station: fly to it).
-function openDisruption(id, { go = false, fromList: listed = false } = {}) {
-  const d = disruptions.byId(id);
-  if (!d) return;
-  fromList = listed;
-  if (panel.openId) panel.close();
-  board.close();
-  pickerEl.hidden = true;
-  map.unfollow();
-  drawDisruption(id);
-  disruptionEl.hidden = false;
-  raise('disruption');
-  if (!go) return;
-  const box = disruptions.boundsOf(d), p = !box && disruptions.placeOf(d);
-  if (box) map.fitBox(box);
-  else if (p) map.goTo(p, 9);
-}
-document.getElementById('open-disruptions').onclick = () => {
-  disSeen = new Set();
-  drawDisruptions();
-  openPage(disruptionsPage);
-  disruptionsPage.querySelector('.panel-close').focus();
-};
-disruptionsPage.querySelector('.panel-close').onclick = () => { disruptionsPage.hidden = true; };
-
-// ---- Rail lines: Trafikverket's, always shown ----
+// Home (the search bar alone) and its pages: Sparade, Statistik, Filter (src/home.js); the chips (made with the sheet)
+const start = createStart(pageData);
+let chips = null;
+const line = createLine(document.getElementById('line'));
+window.__line = line;   // (for the tools: set(id, { html, onTap, onClose, priority }), clear(id))
+const pills = createFilterPills({ get stack() { return stack; }, filter, line, home: start, frame });
 map.showRail('trv');
 
-// ---- Live data ----
-// How each feed is doing, and its own problem if it has one (one feed's good news must not wipe the other's problem).
-const status = { positions: 'starting', passings: 'starting', errors: { positions: null, passings: null }, pausedSince: null };
-const statusError = () => [status.errors.positions, status.errors.passings].filter(Boolean).join(' · ') || null;
-// When position data last arrived (this computer's clock). After NO_DATA_MS with nothing, every train brakes to a
-// stop and turns grey, and the status line says since when; when data returns they fast-forward to their places.
-const NO_DATA_MS = 60 * 1000;
-let lastDataAt = null;
-
-// Station passings: the lateness label, each train's delay and last passing, and a train whose GPS is quiet moves
-// on to a station it is reported passing.
-function onPassings(list) {
-  stats.onPassings(list, now());
-  lateness.update(list);
-  routes.addPassings(list);
-  trains.addPassings(list);
-}
-// Trains before the track file (TODO 24, Codex's beta review point 10; Max's go 2026-11-21, "1 a"): the feeds start
-// at once, beside the track file (650 kB packed: a few seconds on slow mobile data, when the map stayed empty). Until it
-// is in, each train is drawn standing at its latest report (its way, its lateness colour: earlyPlaced) and its reports
-// wait in `early`; when it is in (or failed: no network, as before) they go to the simulation in one batch and it
-// takes over. The movement itself is unchanged.
-let netIn = false;
-const early = [], earlyAt = new Map();   // reports before the track file; each train's latest of them
-const earlyPlaced = () => [...earlyAt.values()].map(r => ({ id: r.id, lon: r.lon, lat: r.lat, bearing: r.bearing ?? 0, syncing: false,
-  stale: false, v: 0, extra: 0 }));
-const reportOf = id => trains.get(id) ?? (netIn ? null : earlyAt.get(id) ?? null);
-const positionHandlers = {
-  onRecords(records) {
-    lastDataAt = now();
-    conn.onBatch(records.length);
-    stats.onRecords(records, now());
-    speedLog.add(records, now());
-    if (!netIn) {
-      early.push(...records);
-      for (const r of records) if (r.gone) earlyAt.delete(r.id); else earlyAt.set(r.id, r);
-      return;
-    }
-    if (trains.halted) trains.setHalted(false);
-    trains.update(records, now());
-  },
-  onStatus(s) {
-    status.positions = s.mode;
-    status.errors.positions = s.error ?? null;
-    status.pausedSince = s.mode === 'paused' ? s.since ?? lastDataAt : null;
-    if (s.error) console.warn('positions:', s.error);
-  },
-};
-let positionsFeed = null, passingsFeed = null;   // the live feeds (stop functions with .restart), for coming back
-netReady.then(net => { if (net) trains.useNet(net); }).finally(() => {
-  netIn = true;
-  if (early.length) trains.update(early.splice(0), now());
-  earlyAt.clear();
-});
-// The feeds start at once (above: their reports wait for the track file).
-(function startFeeds() {
-  // The public page: everything from the fetcher's files (positions, passings, planned routes, stations).
-  if (fromFiles) {
-    positionsFeed = startFilesSource(filesBase, { ...positionHandlers, onPassings, onPlanned: gotPlanned, onStations: gotStations,
-      // When the fetcher last got a position report (in each live file since 0.6.0), not when the file came: a file
-      // keeps coming every 5 s while Trafikverket is silent, and that hid the "no data" halt (Codex's beta review point
-      // 7). Taken as an age on the fetcher's own clock, so a phone clock that is off doesn't matter. Measured: even at
-      // night some train in Sweden reports at least every 10 s (four night recordings), so NO_DATA_MS can stay a minute.
-      onFile: (fileT, lastRecordAt) => { lastFileAt = Date.now(); lastDataAt = now() - (lastRecordAt ? Math.max(0, fileT - lastRecordAt) : 0); } });
-    return;
-  }
-  if (!replay) { positionsFeed = startTrainSource(positionHandlers); return; }
-  // A replay brings its own timetable (planned routes and passings), when the recording has one.
-  startReplaySource(replay, { ...positionHandlers, onPlanned: rows => routes.add(rows), onPassings });
-})();
-
-// Back from the background (another app, a locked phone, another tab) after BACK_MS or more: a phone froze the page,
-// so every train's data is as old as that. Each train is placed where it is now as soon as its next report comes
-// (trains.resume), instead of fast-forwarding there (Max, 2026-11-14, note 3); the live feeds ask again at once; and
-// the "no data" halt waits a minute from now (otherwise every train came back braking, grey, until data came).
-const BACK_MS = 10 * 1000;
-let hiddenAt = null;
-// While hidden the files page asks for nothing (Codex's beta review point 6: the 5-s reads, the open board's and
-// card's refreshes went on behind another app or a locked phone); back, it reads at once.
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { hiddenAt = now(); positionsFeed?.pause?.(); return; }
-  positionsFeed?.resume?.();
-  board.wake?.();
-  panel.wake?.();
-  if (hiddenAt === null) return;
-  const was = hiddenAt;
-  hiddenAt = null;
-  if (now() - was < BACK_MS) return;
-  trains.resume(was, now());
-  if (lastDataAt !== null) lastDataAt = Math.max(lastDataAt, now());
-  if (trains.halted) trains.setHalted(false);
-  positionsFeed?.restart?.();
-  passingsFeed?.restart?.();
-});
-
-// Planned rows (from the fetcher's files; the key page asks for its own below): the routes, and each train's company.
-function gotPlanned(rows) {
-  routes.add(rows);
-  for (const row of rows) if (row.brand) lateness.setBrand(row.key, row.brand);
-}
-// The newest file of a kind from the fetcher (src/files-source.js); fails until it exists.
-async function fileOf(kind) {
-  const f = await positionsFeed?.latest?.(kind);
-  if (!f) throw new Error(`no ${kind} file yet`);
-  return f;
-}
-// { count, byBrand (null from a file made before 2026-11-21) }
-function askCancelled() { return fromFiles ? fileOf('stats').then(f => ({ count: f.cancelled, byBrand: Array.isArray(f.cancelledBy) ? Object.fromEntries(f.cancelledBy) : null, day: f.day ?? null })) : fetchCancelledToday(swedishDay(now())); }
-// Today's arrivals from the files: the whole day (hourly) + what changed since (every 5 minutes), as day-stats asks.
-async function filesArrivals(midnight, since) {
-  const full = await fileOf('arrivals');
-  const add = await fileOf('arrivals-add').catch(() => null);
-  const day = swedishDay(now()), rows = [];
-  if (full.day === day && (since === null || since < full.t)) rows.push(...full.rows);
-  if (add && add.day === day && add.t >= full.t) rows.push(...add.rows);
-  return rows.map(([id, planned, actual, brand]) => ({ id, planned, actual, brand: brand ?? null }));   // (no company in files before 2026-11-21)
-}
-
-function gotStations(m) {
-  stations = m;
-  stationsLoaded();
-  routes.setStations(new Map([...m].filter(([, st]) => st.lon !== null)));
-  stopPlacesReady.then(() => map.setStations([...m.values()].filter(st => st.advertised && st.lon !== null).map(shownAt)));
-  // A card opened before the stations came drew its line without them (no places: nothing, or a part): again now.
-  panel.reroute();
-}
-// The station list is asked for until it arrives: again after 5 s, 15 s, then every minute. (Asked once, a failure
-// left the page without station names, search, boards and planned routes until it was loaded again.)
-function loadStations(tries = 0) {
-  fetchStations().then(gotStations).catch((e) => {
-    console.warn('stations:', e.message);
-    setTimeout(() => loadStations(tries + 1), [5000, 15000][tries] ?? 60000);
-  });
-}
-if (hasKey && replay) loadStations();
-if (hasKey && !replay && !fromFiles) {
-  passingsFeed = followPassings({
-    onPassings,
-    onStatus(s) {
-      status.passings = s.mode;
-      status.errors.passings = s.error ?? null;
-      if (s.error) console.warn('timetable:', s.error);
-    },
-  });
-  loadStations();
-
-  // Planned routes: asked for trains on the map whose known route ends within 30 minutes (or isn't known), at most
-  // every 5 minutes per train; each answer covers 30 minutes back to 90 minutes ahead.
-  // The first question about a train reaches further back: 90 minutes (as far as the passings go) plus its known
-  // delay. The arrival that ends its trip is then among the rows also when it runs late or had arrived before the
-  // page opened; without that row a finished train stayed on the map up to 15 minutes instead of 2 (14 trains in
-  // four recordings, 2026-11-13).
-  const asked = new Map();   // train key -> when its route was last asked for
-  const BACK_MS = 30 * 60000, FIRST_BACK_MS = 90 * 60000, MAX_BACK_MS = 4 * 3600000, LATE_MIN = 15;
-  async function askRoutes() {
-    const t = now();
-    const want = trains.reports().filter(r => routes.until(r.id) < t + 30 * 60000 && !(t - (asked.get(r.id) ?? 0) < 5 * 60000));
-    if (!want.length) return;
-    const lateBy = r => lateness.get(r.id)?.minutes ?? 0;
-    const again = want.filter(r => asked.has(r.id)), first = want.filter(r => !asked.has(r.id));
-    const late = first.filter(r => lateBy(r) > LATE_MIN), onTime = first.filter(r => !(lateBy(r) > LATE_MIN));
-    for (const r of want) asked.set(r.id, t);
-    // Three questions at most: trains asked before, new ones, and new ones running late (few; as far back as the latest).
-    // The first question about a train also asks for its company (withBrand).
-    const groups = [[again, BACK_MS, false], [onTime, FIRST_BACK_MS, true],
-      [late, Math.min(MAX_BACK_MS, FIRST_BACK_MS + Math.max(0, ...late.map(lateBy)) * 60000), true]];
-    for (const [list, back, withBrand] of groups) {
-      if (!list.length) continue;
-      try {
-        const rows = await fetchPlannedRoutes([...new Set(list.map(r => r.operational))], t - back, t + 90 * 60000, { withBrand });
-        routes.add(rows);
-        for (const row of rows) lateness.setBrand(row.key, row.brand);   // the company, also with no passing lately
-      } catch (e) {
-        console.warn('planned routes:', e.message);
-        for (const r of list) asked.delete(r.id);
-      }
-    }
-  }
-  setTimeout(askRoutes, 5000);
-  setInterval(askRoutes, 30000);
-
-  setInterval(() => {
-    const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
-    for (const [key, at] of asked) if (at < before && !keep(key)) asked.delete(key);
-  }, 10 * 60000);
-}
-// Every 10 minutes the lists let go of trains with nothing newer than 6 hours that are neither on the map nor open
-// in the panel (timetable rows, lateness, company, when its route was asked for). They only ever grew.
-const FORGET_MS = 6 * 3600000;
-if (!replay) setInterval(() => {
-  const before = now() - FORGET_MS, keep = key => Boolean(trains.get(key)) || panel.openId === key;
-  routes.trim(before, keep);
-  lateness.trim(before, keep);
-}, 10 * 60000);
-
-const modeText = m => t('mode')[m] ?? m;
-const statusEl = document.getElementById('status');
-const statusCount = statusEl.querySelector('.count');
-const barLogo = document.querySelector('.searchbar .logo');
-barLogo.innerHTML = logoSvg({ small: true });
-barLogo.onclick = () => { if (!menu.justClosed) document.getElementById('menu-button').click(); };   // the logo opens the search too (Max, 2026-11-15: not dead space)
-
-const clock = hhmm;   // Swedish time, wherever the phone is (src/clock.js)
-const mins = sec => `${Math.max(1, Math.floor(sec / 60))} min`;
-
-// The panel line for a train's state (trains.stateOf): '' when it simply follows its GPS.
-function statusLine(st, noData) {
-  if (!st) return t('notOnMap');
-  if (noData) return t('noDataFromTrv', clock(lastDataAt));
-  if (st.syncing) return t('catchingUp');
-  const quiet = st.gpsSilentFor >= 60 ? t('noGpsFor', mins(st.gpsSilentFor)) : null;
-  const passed = st.lastPassing && st.lastPassing.time > now() - 3 * 3600000
-    ? t('lastPassed', stationName(st.lastPassing.sig), clock(st.lastPassing.time)) : '';
-  const q = quiet ?? t('noNewPosition');
-  if (st.stale) return t('silentFor', mins(st.silentFor));
-  if (st.mode === 'stood') return quiet ? t('stoodStill', quiet, passed) : '';
-  if (st.mode === 'waiting' && st.lastPassing?.sig === st.waitingFor && st.lastPassing.activity === 'Ankomst')
-    return t('atStation', q, stationName(st.waitingFor), clock(st.lastPassing.time));
-  if (st.mode === 'waiting' && st.waitingAt) return t('waitingAt', q, stationName(st.waitingFor), passed);
-  if (st.mode === 'waiting') return t('waitingBefore', q, stationName(st.waitingFor), passed);
-  if (st.mode === 'timetable') return t('byTimetable', q, passed);
-  if (st.mode === 'coasted out') return t('stoppedLastSeen', q, passed);
-  return '';
-}
-
-// The connection screen: the state in words, the chain from Trafikverket to this phone, and three numbers (once a
-// second while it is open, src/connection.js).
-function showConn(st = null) {
-  const tNow = st?.tNow ?? now();
-  const noData = st?.noData ?? (lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS);
-  const paused = st?.paused ?? (status.positions === 'paused' && status.pausedSince !== null);
-  const outdated = st?.outdated ?? status.positions === 'outdated';
-  const error = st?.error ?? statusError();
-  const mode = status.positions;
-  const [state, title, text] = replay ? ['replay', t('connReplay'), t('connReplayText', hhmm(tNow))]
-    : outdated ? ['bad', t('needsUpdate'), t('connOutdatedText')]
-    : paused ? ['bad', t('livePausedSince', clock(status.pausedSince)), t('connPausedText')]
-    : noData ? ['bad', t('connNoData', clock(lastDataAt)), t('connNoDataText')]
-    : error ? ['bad', t('connProblem'), error]
-    : mode === 'starting' ? ['slow', modeText(mode), t('connStartText')]
-    : mode !== 'stream' ? ['slow', modeText(mode), t('connSlowText')]
-    : ['live', t('connLive'), t('connLiveText')];
-  const fresh = trains.reports().filter(r => r.time >= tNow - 60000).length;
-  const online = navigator.onLine !== false;
-  const trv = { icon: 'train', name: t('connTrv'), sub: noData ? t('connSilent') : mode === 'stream' ? t('connStream') : t('connEvery10'),
-    st: noData ? 'bad' : mode === 'stream' ? 'ok' : 'slow' };
-  const you = { icon: 'phone', name: t('connYou'), st: online ? 'ok' : 'bad',
-    sub: !online ? t('connOffline') : fromFiles && lastFileAt ? t('connAgo', Math.max(0, Math.round((Date.now() - lastFileAt) / 1000))) : t('connOnline') };
-  // The public page: Trafikverket → our server → the website → you. When files stop coming, the phone can't tell
-  // whether the server or the website failed: the website is marked, the server "not known".
-  const chain = replay ? [] : fromFiles ? [trv,
-    { icon: 'server', name: t('connServer'), sub: paused ? t('connUnknown') : t('connListening'), st: paused || !online ? 'unknown' : 'ok' },
-    { icon: 'globe', name: t('connWeb'), sub: t('connEvery5'), st: !online ? 'unknown' : paused ? 'bad' : 'ok' }, you] : [trv, you];
-  conn.update({ state, title, text, chain, trains: trains.count, fresh, behindS: DRAW_DELAY_MS / 1000,
-    nextAt: fromFiles && !replay ? positionsFeed?.nextAt?.() ?? null : null });
-}
-
-let beatSeen = null, beatAt = 0;
+// ---- The live data and how it is doing ----
+const feeds = createFeeds({ mode: { replay, fromFiles, filesBase }, trains, routes, lateness, stats, speedLog, stations, panel, netReady, now,
+  onBatch: n => status.onBatch(n), wake: () => { stationPages.board.wake?.(); panel.wake?.(); } });
+const status = createStatus({ feeds, trains, stations, stats, panel, frame, mode: { replay, fromFiles }, drawDelay: DRAW_DELAY_MS, now });
+onTap(document.getElementById('status'), () => (stack.top() === 'page:conn' ? stack.back() : stack.open('page:conn')));
+const settingsPage = createSettingsPage({ get stack() { return stack; }, map, day, search, panel, status, pills, home: start, board: stationPages.board, filter, frame, markMotion });
 setInterval(() => {
   const tNow = now();
-  const noData = lastDataAt !== null && tNow - lastDataAt > NO_DATA_MS;
-  if (noData && !trains.halted) trains.setHalted(true);
-  trains.prune(tNow);
-  // The open train's trip handed on to its next internal number (trains.prune): the card and the camera go with it.
-  const to = panel.openId && !trains.get(panel.openId) ? trains.handedTo(panel.openId) : null;
-  if (to) {
-    const r = trains.get(to), wasFollowing = map.following;
-    panel.open({ id: r.id, operational: r.operational, date: r.date, number: r.number, label: labelFor(r) });
-    if (wasFollowing) follow(to); else panel.setFollowing(false);
-  }
-  const error = statusError();
-  // On the map a short line (the main screen stays clean); the whole line in the menu. A problem shows on both, red.
-  const mode = `${modeText(status.positions)}${replay ? ` ${hhmm(tNow)}` : ''}`;
-  // The search bar's chip: the status in words, no count (Max, 2026-11-16: "remove the trains counter. Keep the status
-  // text instead"): live / every 10 s / reconnecting / replay 07:01, or the problem; the whole short line, with the
-  // count, as its label (read by tools/shot.mjs and soak.mjs).
-  // The public page: "live data paused since 14:32" when no new file has come for 30 s (src/files-source.js).
-  const paused = status.positions === 'paused' && status.pausedSince !== null;
-  // Files in a format newer than this page reads (src/files-source.js; TODO 26): an app left un-updated says so.
-  const outdated = status.positions === 'outdated';
-  const state = outdated ? t('needsUpdate') : paused ? t('livePausedSince', clock(status.pausedSince)) : noData ? t('noDataSince', clock(lastDataAt)) : error ?? mode;
-  const short = `${t('trainsCount', trains.count)} · ${state}`;
-  // The pill itself: two or three words (Max, 2026-11-19: some were "WAY too long", the feeds' own error texts); the
-  // whole line stays its label and title, and the connection screen behind it tells the rest.
-  statusCount.textContent = pillText({ mode: status.positions, replayAt: replay ? hhmm(tNow) : null, outdated,
-    pausedSince: paused ? clock(status.pausedSince) : null, noDataSince: noData ? clock(lastDataAt) : null, error: Boolean(error) });
-  statusEl.title = short;
-  statusEl.ariaLabel = short;
-  // Yellow when not streaming (asking every 10 s, reconnecting, starting). The streaming mode is 'stream' (shown as
-  // "live"): the test was !== 'live', so the chip was yellow all the time when live (2026-11-15 to 16).
-  statusEl.classList.toggle('slow', status.positions !== 'stream' && !replay);
-  // A pulse of the live dot when fresh data has come, at most every 10 s (round 4: a sign of life without drawing all the time).
-  if (trains.lastReport && trains.lastReport !== beatSeen && tNow - beatAt > 10000 && !noData && !error) {
-    beatSeen = trains.lastReport; beatAt = tNow;
-    statusEl.classList.remove('beat'); void statusEl.offsetWidth; statusEl.classList.add('beat');
-  }
-  statusEl.classList.toggle('problem', Boolean(error) || noData || paused || outdated);
-  if (!connPage.hidden) showConn({ tNow, noData, paused, outdated, error });
-
-  // The stats: the running numbers every second; the page itself only while it is open.
-  stats.tick(frameAll, tNow, id => trains.get(id));
-  if (!statsPage.hidden) {
-    if (live) stats.wantCancelled(askCancelled, tNow);
+  feeds.tick(tNow);
+  trainPages.handover();
+  if (!day.past) map.sunUpdate();   // (the sun's line moves on once a minute; The day's moment: its own frame)
+  status.tick(tNow);
+  chips?.draw();   // (their numbers)
+  stats.tick(frame.all, tNow, id => trains.get(id));
+  if (statsShown()) {   // (Home's and a company's page draw themselves: src/stack.js every)
+    if (live) stats.wantCancelled(feeds.askCancelled, tNow);
     dayStats?.tick();
-    if (!statsHeld) drawStats();
   }
-  // Settings → Debug: the positions' rate and age (Max, 2026-11-15, 3A: the stats page keeps only a grey line).
-  if (!settingsPage.hidden) {
-    const r = stats.rate(tNow);
-    debugDataEl.textContent = r ? t('stDebugRate', r.perSecond.toFixed(0), r.ageS.toFixed(0)) : '–';
-  }
-
-  // The open train's panel: a short line on how its place is known, when it isn't simply from its GPS.
-  if (panel.openId) panel.setStatus(statusLine(trains.stateOf(panel.openId, tNow - DRAW_DELAY_MS), noData));
 }, 1000);
+
+// ---- The one sheet ----
+const held = createHeldPages({ holder, pages: {
+  // (a computer: full, as tall as it is; Max, 2026-11-26: "Settings should start expanded on pc")
+  settings: { el: settingsPage.el, name: () => t('settings'), kind: 'settings', onShow: settingsPage.onShow, startLevel: () => (isWide() ? 2 : 1) },
+  help: { el: about.el, name: () => t('aboutApp'), kind: 'help', startLevel: 2 },   // (opens full, as tall as it is)
+  conn: { el: status.connPage, name: () => t('connTitle'), kind: 'conn', onShow: () => status.showConn() },
+} });
+const defineNow = createRouter({ home: start.home, own: key => start.define(key) ?? myTrains?.define(key) ?? ride?.define(key), train: id => trainPages.define(id),
+  station: sig => stationPages.define(sig), picker: key => picker.define(key), dis: disPages, group: key => groupPage(key, pageData),
+  held, live, day, stack: () => stack });
+// The sheet's pages scroll themselves at full: with a mouse, our own thin bar for whichever is on top (src/scrollbar.js).
+const pageBar = addScrollbar(null, { host: document.querySelector('#sheet .sh-pages') });
+stack = createStack({
+  sheet: document.getElementById('sheet'),
+  define: defineNow,
+  roots: START_KEYS,   // (the chips' cards)
+  above: () => chips?.room() ?? 0,   // (the chips float on the sheet's edge at rest: the map's buttons above them)
+  onPad: h => day.pad(h),
+  onChange(pg) {
+    nav.pageOnTop(pg.key);
+    // (Home: the lateness bar's colour lit; a group's page and a trip light their own trains themselves)
+    if (pg.key === 'home' || (pg.def.kind !== 'group' && pg.def.kind !== 'trip')) frame.light(null);
+    route.pageOnTop(pg.def.kind);
+    pageBar.follow(pg.el);
+    chips?.sync();
+  },
+  onBack: () => back.step(),
+  held: () => back.held(),
+});
+stack.onSearch((on) => {
+  nav.close();
+  document.documentElement.classList.toggle('searching', on);
+  if (on) search.open();
+  pageBar.follow(on ? document.getElementById('search-results') : stack.pageEl(stack.top()));
+  chips.sync();
+});
+chips = createStartChips({ stack: () => stack, held: () => nav.shown, has: key => key !== 'dislist' || live,
+  counts: { dis: () => (live && disruptions.loaded ? start.disChip() : null), saved: () => start.savedCount() } });
+chips.sync();
+// Every row in the sheet is a door (data-go: the key it opens); a few do something else (data-act).
+document.getElementById('sheet').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-go], [data-act], [data-legend], [data-filter], [data-cofilter], .dis-row[data-id]');
+  if (!b) return;
+  // (a company in Home's filter card: on or off right there, Home stays)
+  if (b.dataset.cofilter !== undefined) { filter.toggle('brand', b.dataset.cofilter); return; }
+  if (b.dataset.act === 'comore') { start.page('filter')?.toggleCo(); return; }
+  // (any row opening a company's or a kind's page filters too, as Home's do: its pill stays after a map tap)
+  const grp = /^(co|kind):(.*)$/.exec(b.dataset.go ?? '');
+  if (grp) { const type = grp[1] === 'kind' ? 'kind' : 'brand'; if (!filter.has(type, grp[2])) filter.toggle(type, grp[2]); }
+  if (b.dataset.go) stack.open(b.dataset.go, { go: true });
+  else if (b.dataset.legend) pageData.legend.set(b.dataset.legend);
+  else if (b.dataset.filter) {
+    // (a company or kind picked on Home: a filter with its pill above the search bar, its × the only way out)
+    const type = b.dataset.filter === 'kind' ? 'kind' : 'brand';
+    if (!filter.has(type, b.dataset.v)) filter.toggle(type, b.dataset.v);
+    stack.open(type === 'kind' ? `kind:${b.dataset.v}` : `co:${b.dataset.v}`);
+  }
+  else if (b.dataset.act === 'favtrain') trainPages.pickFavourite(b.dataset.n);
+  else if (b.dataset.act === 'showonly') stack.pageDef(stack.top())?.toggleShowOnly?.();
+  else if (b.dataset.act === 'allplaces') setSetting('allPlaces', !settings.allPlaces);
+  else if (b.dataset.id && b.classList.contains('dis-row')) stack.open(`dis:${b.dataset.id}`);
+});
+// For the tools (tools/lib/screen.mjs): the stack's keys, its top, the sheet's height; opening and going back.
+window.__stack = {
+  keys: () => stack.keys(), top: () => stack.top(), names: () => stack.names(), get level() { return stack.level; },
+  get heights() { return stack.heights; }, get searching() { return stack.searching; }, get target() { return stack.target; },
+  whenSettled: () => stack.whenSettled(), onSettled: fn => stack.onSettled(fn),
+  open: (key, opts) => stack.open(key, opts), back: () => stack.back(), home: level => stack.home(level), setLevel: i => stack.setLevel(i),
+};
+
+// ---- The sheet's ideas ----
+const openTrainRow = r => trainPages.pick({ id: r.key, operational: r.operational, date: r.date, number: r.number, onMap: Boolean(trains.get(r.key)) });
+const followOnly = id => map.follow(() => frame.placeNow(id), () => {});
+// My trains: saved trips, pinned changes, the line above the bar (src/my-trains.js).
+myTrains = createMyTrains({ stack, line, stationName: stations.name, findStations: text => stationsMatching(stations.all, text), openTrain: openTrainRow,
+  trainInfo: id => trainPages.trainInfo(id),
+  showStation: (sig) => { const st = stations.get(sig); if (!st) return; map.unfollow(); map.goTo(stations.shownAt(st), Math.max(12, map.camera().z)); },
+  redrawHome: () => { start.redraw(); chips.draw(); },
+  // A saved trip on the map: all its stations in view with their names, only its next train(s) lit while on the map.
+  showTrip({ sigs, trains: ids }) {
+    const pts = sigs.map(s => stations.get(s)).filter(Boolean).map(stations.shownAt).filter(p => Number.isFinite(p.lon));
+    if (pts.length > 1) { map.unfollow(); map.fitPlaces(pts); }
+    map.setRouteStations(sigs);
+    const on = new Set(ids.filter(id => frame.byId.has(id)));
+    frame.light(on.size ? x => on.has(x.id) : null);
+  } });
+if (import.meta.env.DEV) {   // (tools/ideas-check.mjs)
+  window.__routeSigs = () => map.routeStationsNow;
+  window.__stationAt = (sig) => { const st = stations.get(sig); return st ? stations.shownAt(st) : null; };
+}
+// "You seem to be on 231" and the ride page (src/ride.js), only while My location is on.
+ride = createRide({ map, stack, line, drawDelay: DRAW_DELAY_MS, frame: () => frame.all, info: id => trainPages.trainInfo(id), stationName: stations.name, lateOf,
+  follow: followOnly, unfollow: () => map.unfollow() });
+// Peek: hold a station on the map (src/peek.js).
+peek = createPeek({ box: mapEl, stationAt: (x, y) => map.stationAt(x, y), load: sig => fetchBoard(sig, 'Avgang', now(), 3), stationName: stations.name,
+  blocked: () => Boolean(shop?.running) });
+// The shop window (src/shop-window.js; Settings → Shop window).
+shop = createShopWindow({ map, enabled: () => settings.shopWindow,
+  busy: () => stack.level > 0 || stack.searching || nav.shown || day.busy,
+  trains() {
+    const said = new Map(speedLog.moving(now()));
+    return frame.all.filter(x => !x.stale).map(x => ({ id: x.id, number: trains.get(x.id)?.number ?? '', brand: x.brand, lon: x.lon, lat: x.lat,
+      // (a speed over 210 km/h is a glitch: the drawn speed then, else none)
+      speed: [said.get(x.id), (x.v ?? 0) * 3.6].find(v => v !== undefined && v <= 210) ?? 0, bearing: x.bearing ?? 0, late: lateOf(x.id) }));
+  },
+  disruptions: () => (live && disruptions.loaded ? disruptions.list.filter(d => !isWork(d)).map(d => ({ id: d.id, header: d.header, place: disruptions.placeOf(d) })) : []),
+  follow: followOnly, unfollow: () => map.unfollow() });
+// A shared link: today's run of that number once the trains are in (on the map: there; otherwise as a starred train).
+if (sharedAt) {
+  (async () => {
+    await map.shown;
+    const t0 = Date.now();
+    while (!trains.count && Date.now() - t0 < 15000) await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 1200));
+    trainPages.pickFavourite(sharedAt);
+  })();
+}
+if (import.meta.env.DEV) window.__ideas = { myTrains, ride, peek, shop, why: id => trainPages.why(id), stoodFor: id => trainPages.stoodFor(id), favourites };

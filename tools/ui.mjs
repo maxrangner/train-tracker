@@ -4,7 +4,7 @@
 //   e.g. node tools/ui.mjs shots/menu- "replay=1&view=12/59.33/18.06&train=toy&lang=sv" click:#menu-button wait:500 shot:open
 // The address settings go after the # (replay=1 plays the rush-hour recording). Steps:
 //   wait:<ms>        wait
-//   click:<css>      tap an element, e.g. click:#menu-button   (a card's × : "click:#panel .panel-close")
+//   click:<css>      tap an element, e.g. click:#nav-button   (one page back: "click:#sheet .sh-up")
 //   type:<text>      type into the focused field
 //   tapat:<lon>,<lat>  tap the map at a place
 //   tapgroup         tap the first "N trains" label on screen

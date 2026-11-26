@@ -8,6 +8,9 @@
 //   mark    only makes sure the folder is claimed and data/ holds the fetcher's marker (.sparat-data); nothing else
 //   list    what is on the site
 //   remove  undo: everything in the folder, the fetcher's data/ too; the address shows one.com's placeholder again
+// --sub dev (with page, list, remove): a test page in the site's folder dev/ (Max, 2026-11-24: the redesign at
+//   sparat.rangner.com/dev/ "to test it away from home"): built for /dev/, it reads the site's own data/ and tiles/;
+//   page writes and deletes only inside dev/, remove deletes only dev/. The site's own page leaves dev/ alone.
 // Settings: the fetcher's (SFTP_HOST, SFTP_PORT, SFTP_USER, SFTP_PASS, SFTP_HOSTKEY) plus SITE_DIR (the address's
 // folder on one.com, e.g. /webroots/4506cfb2) and SITE_URL (e.g. https://sparat.rangner.com).
 // No key and no script ever goes to one.com (2026-11-17, Max: the tap script ask.php and its key file were taken off
@@ -29,6 +32,11 @@ import ssh2 from 'ssh2';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const arg = n => { const i = process.argv.indexOf('--' + n); return i > 0 ? process.argv[i + 1] : undefined; };
 const what = process.argv[2];
+const SUBS = ['dev'];   // test pages in a folder of the site (--sub); the site's own page never touches them
+const SUB = arg('sub');
+if (SUB !== undefined && (!SUBS.includes(SUB) || !['page', 'list', 'remove'].includes(what))) {
+  console.log(`--sub takes ${SUBS.join(', ')}, with page, list or remove`); process.exit(2);
+}
 const envPath = arg('env');
 if (!['tiles', 'page', 'all', 'mark', 'list', 'remove'].includes(what) || !envPath) {
   console.log('node tools/deploy.mjs tiles|page|all|mark|list|remove --env <settings file>'); process.exit(2);
@@ -42,7 +50,7 @@ const URL_ = cfg.SITE_URL.replace(/\/$/, '');
 if (!/^\/webroots\/[0-9a-z]+$/.test(SITE)) { console.log(`SITE_DIR must be a one.com address folder like /webroots/4506cfb2 (got ${SITE})`); process.exit(2); }
 const MARK = '.sparat-site';
 const DATA_MARK = '.sparat-data';   // the fetcher's folder marker (fetcher/upload.mjs MARK)
-const OURS = new Set(['data', 'api', 'tiles', 'count', MARK]);   // never part of the page's own files
+const OURS = new Set(['data', 'api', 'tiles', 'count', MARK, ...SUBS]);   // never part of the page's own files
 
 // Cache rules. Root: the page itself is asked again every visit (a new version shows at once); the few named files
 // beside it are kept an hour. assets/: built names change with their content, so they are kept a year. map/, glyphs/,
@@ -94,7 +102,9 @@ const ROBOTS ='# Spårat is not announced yet (public-plan step 9): please don\'
 
 const sha = b => createHash('sha256').update(b).digest('hex');
 const mapFiles = () => readdirSync(join(ROOT, 'data/map')).filter(f => /^sweden-\d{4}-\d\d-\d\d\.pmtiles$/.test(f)).sort();
-const recordPath = join(ROOT, 'data/site', SITE.split('/').pop() + '.json');
+const recordPath = join(ROOT, 'data/site', SITE.split('/').pop() + (SUB ? `-${SUB}` : '') + '.json');
+const HOME = SUB ? `${SITE}/${SUB}` : SITE;   // where this run's page lives
+const PAGE_URL = SUB ? `${URL_}/${SUB}/` : `${URL_}/`;
 const record = existsSync(recordPath) ? JSON.parse(readFileSync(recordPath, 'utf8')) : { files: {}, gone: {} };
 const saveRecord = () => { mkdirSync(join(ROOT, 'data/site'), { recursive: true }); writeFileSync(recordPath, JSON.stringify(record, null, 1)); };
 const log = s => console.log(`${new Date().toLocaleTimeString('sv-SE')} ${s}`);
@@ -152,6 +162,10 @@ async function walkRemote(p, out = []) {
 // fetcher's folder data/ holds its own marker (.sparat-data): the fetcher writes only where it finds it
 // (fetcher/upload.mjs; plan to beta step 1, 2026-11-17).
 async function claim() {
+  if (SUB) {   // a test page: only in a folder already Spårat's
+    if (!(await stat(`${SITE}/${MARK}`))) throw new Error(`${SITE} has no ${MARK}: not Spårat's, refusing`);
+    return;
+  }
   const names = (await readdir(SITE)).map(e => e.filename);
   if (names.includes(MARK)) return markData();
   const other = names.filter(n => n !== 'data');
@@ -188,7 +202,8 @@ async function page() {
   const name = mapFiles().at(-1);
   if (!name || (await stat(`${SITE}/tiles/${name}`))?.size !== statSync(join(ROOT, 'data/map', name)).size)
     throw new Error(`the map file ${name} is not on the site yet: run tiles first`);
-  const b = spawnSync(process.execPath, ['tools/build-public.mjs', '--data', `${URL_}/data/`, '--map', `${URL_}/tiles/${name}`, '--count', `${URL_}/${COUNT_PHP}`],
+  const b = spawnSync(process.execPath, ['tools/build-public.mjs', '--data', `${URL_}/data/`, '--map', `${URL_}/tiles/${name}`,
+    ...(SUB ? ['--base', `/${SUB}/`] : ['--count', `${URL_}/${COUNT_PHP}`])],
     { cwd: ROOT, stdio: 'inherit' });
   if (b.status !== 0) throw new Error('build:public failed (or the key search found the key): nothing uploaded');
   const dist = join(ROOT, 'dist-public');
@@ -201,36 +216,37 @@ async function page() {
   })(dist, '');
   if (!files.has('index.html')) throw new Error('no index.html in dist-public');
   for (const top of files.keys()) if (OURS.has(top.split('/')[0])) throw new Error(`the build has ${top}, which would clash with the site's own folders`);
-  files.set('robots.txt', Buffer.from(ROBOTS));
+  if (!SUB) files.set('robots.txt', Buffer.from(ROBOTS));   // (the root's robots.txt keeps search engines off dev/ too)
   files.set('.htaccess', Buffer.from(HT_ROOT));
   files.set('assets/.htaccess', Buffer.from(HT_ASSETS));
   for (const d of ['map', 'glyphs', 'fonts']) if ([...files.keys()].some(k => k.startsWith(d + '/'))) files.set(`${d}/.htaccess`, Buffer.from(HT_HOUR));
 
-  const remote = new Map((await walkRemote(SITE)).map(f => [posix.relative(SITE, f.path), f]));
+  const remote = new Map((await walkRemote(HOME)).map(f => [posix.relative(HOME, f.path), f]));
+  const pre = SUB ? `${SUB}/` : '';
   let sent = 0, kept = 0, bytes = 0;
   const order = [...files.keys()].filter(k => k !== 'index.html').concat('index.html');
   for (const rel of order) {
     const buf = files.get(rel), h = sha(buf);
     if (rel !== 'index.html' && record.files[rel] === h && remote.get(rel)?.size === buf.length) { kept++; continue; }
-    await put(rel, buf);
+    await put(pre + rel, buf);
     record.files[rel] = h; delete record.gone[rel];
     sent++; bytes += buf.length;
   }
   saveRecord();
   log(`page: ${sent} files uploaded (${(bytes / 1e6).toFixed(1)} MB), ${kept} unchanged; index.html last`);
-  await count();
+  if (!SUB) await count();   // (a test page in a folder counts no viewers: its build has no count address)
 
   // Files the new page no longer has: kept a day after they left it, then deleted.
   const now = Date.now();
   let dropped = 0, waiting = 0;
   for (const [rel] of remote) {
-    if (OURS.has(rel.split('/')[0]) || files.has(rel) || rel.endsWith('.tmp')) continue;
+    if ((!SUB && OURS.has(rel.split('/')[0])) || files.has(rel) || rel.endsWith('.tmp')) continue;
     record.gone[rel] ??= now;
-    if (now - record.gone[rel] > 24 * 3600e3) { await call('unlink', inside(`${SITE}/${rel}`)); delete record.gone[rel]; delete record.files[rel]; dropped++; } else waiting++;
+    if (now - record.gone[rel] > 24 * 3600e3) { await call('unlink', inside(`${HOME}/${rel}`)); delete record.gone[rel]; delete record.files[rel]; dropped++; } else waiting++;
   }
   saveRecord();
   if (dropped || waiting) log(`page: ${dropped} old files deleted, ${waiting} kept until a day after they left the page`);
-  log(`page: ${URL_}/`);
+  log(`page: ${PAGE_URL}`);
 }
 
 // The viewer count: its folder's rules first (days/ closed before any day file can exist), then the PHP file.
@@ -245,9 +261,9 @@ async function count() {
 }
 
 async function list() {
-  const all = await walkRemote(SITE);
+  const all = await walkRemote(HOME);
   const by = {};
-  for (const f of all) { const top = posix.relative(SITE, f.path).split('/')[0]; (by[top] ??= { n: 0, b: 0 }); by[top].n++; by[top].b += f.size; }
+  for (const f of all) { const top = posix.relative(HOME, f.path).split('/')[0]; (by[top] ??= { n: 0, b: 0 }); by[top].n++; by[top].b += f.size; }
   for (const [k, v] of Object.entries(by).sort()) console.log(`${k.padEnd(28)} ${String(v.n).padStart(5)} files ${(v.b / 1e6).toFixed(1).padStart(8)} MB`);
 }
 
@@ -255,9 +271,15 @@ try {
   if (what === 'list') await list();
   else if (what === 'remove') {
     if (!(await stat(`${SITE}/${MARK}`))) throw new Error(`${SITE} has no ${MARK}: not Spårat's, refusing`);
-    await rmTree(SITE);
-    record.files = {}; record.gone = {}; saveRecord();
-    log(`removed everything in ${SITE}; ${URL_} shows one.com's placeholder again`);
+    if (SUB) {
+      if (await stat(HOME)) { await rmTree(HOME); await call('rmdir', inside(HOME)); }
+      record.files = {}; record.gone = {}; saveRecord();
+      log(`removed ${HOME}; ${PAGE_URL} is gone, the site itself untouched`);
+    } else {
+      await rmTree(SITE);
+      record.files = {}; record.gone = {}; saveRecord();
+      log(`removed everything in ${SITE}; ${URL_} shows one.com's placeholder again`);
+    }
   } else {
     await claim();
     if (what === 'tiles' || what === 'all') await tiles();

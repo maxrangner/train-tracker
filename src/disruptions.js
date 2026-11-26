@@ -105,7 +105,7 @@ export function createDisruptions({ load, now, station, net, onData }) {
   }
 
   // loaded: the first answer has come (until then the list says "Laddar…", not "no disruptions"; 2026-11-20).
-  return { start, get list() { return list; }, get loaded() { return last > 0; }, byId: id => list.find(d => d.id === id) ?? null, placeOf, boundsOf };
+  return { start, get list() { return list; }, get loaded() { return last > 0; }, byId: id => list.find(d => d.id === id) ?? null, placeOf, boundsOf, stretchesOf };
 }
 
 // The places of a disruption in words: "Göteborg C – Alingsås".
@@ -134,8 +134,7 @@ export function rowHtml(d, stationName, now) {
 
 // The card's contents.
 export function cardHtml(d, stationName, now) {
-  return `<div class="panel-head"><strong class="dis-title">${kindIcon(d)} ${esc(d.header)}</strong>` +
-    `<button class="panel-close" type="button" aria-label="${esc(t('close'))}">${icon('close')}</button></div>` +
+  return `<div class="panel-head"><strong class="dis-title">${kindIcon(d)} ${esc(d.header)}</strong></div>` +
     `<p class="panel-note">${esc(d.kind)} · ${esc(placesText(d, stationName))}<br>${esc(timesText(d, now))}</p>` +
     `<div class="dis-text">${esc(d.text)}</div><p class="panel-note dis-source">${esc(t('disruptionSource'))}</p>`;
 }

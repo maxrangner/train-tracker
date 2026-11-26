@@ -77,7 +77,7 @@ const at = (x, y, z, rx = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x,
 // One car, its middle at the origin: { pieces (the body's geometries), frames and screens (the windscreen frames' and
 // windscreens' skins), glow (its lights' geometries) }.
 // ends: { front, back }: 'front' / 'back' where this end is the train's (lights), null where it is coupled.
-function car(spec, c, st, ends) {
+function car(spec, c, st, ends, lit = false) {
   const L = spec.length * st.sL, H = spec.height, W = st.W, hw = W / 2;
   const top = FLOOR + H, bands = BANDS[spec.decks === 2 ? 2 : 1];
   const flat = { len: st.real ? 0.5 : 0.3, base: 0.86, k: 5, taper: 0.04, flat: true };
@@ -127,10 +127,14 @@ function car(spec, c, st, ends) {
 
   const glass = c.band, glint = c.band.clone().lerp(WHITE, st.glint);
   const pos = [], col = [];
-  const tri = (a, b, cc, colour) => {
+  // lit (the night side of the sun's line, 2026-11-23): the side windows go into a part of their own in the lights'
+  // unlit paint (GLOW), warm, instead of the body's glass; the same triangles, so nothing lies on top of anything.
+  const lpos = [], lcol = [];
+  const tri = (a, b, cc, colour, into = null) => {
     if (new THREE.Vector3().subVectors(b, a).cross(new THREE.Vector3().subVectors(cc, a)).lengthSq() < 1e-8) return;
-    pos.push(a.x, a.y, a.z, b.x, b.y, b.z, cc.x, cc.y, cc.z);
-    for (let i = 0; i < 3; i++) col.push(colour.r, colour.g, colour.b);
+    const [P, C] = into ?? [pos, col];
+    P.push(a.x, a.y, a.z, b.x, b.y, b.z, cc.x, cc.y, cc.z);
+    for (let i = 0; i < 3; i++) C.push(colour.r, colour.g, colour.b);
   };
   const paintMid = (f, span, second) => {
     if (f < 0.01) return c.bogie;
@@ -161,8 +165,9 @@ function car(spec, c, st, ends) {
       const pick = second => j2 === 0 ? c.bogie : zone === 'mid' ? paintMid(f, span, second) : paintNose(zone === 'front' ? fN : bN, f, z);
       // Every ring runs the same way round, so (a, c, b) and (a, d, c) always face out (a guess at which way was out
       // turned faces of the X2000's long low nose inside out, and they vanished: a hole; Max, 2026-11-18).
-      tri(a, cc, b, pick(false));
-      tri(a, d, cc, pick(true));
+      const pane = lit && zone === 'mid' && span === 'win' && j2 !== 0 && bands.windows.some(([w0, w1]) => f > w0 && f < w1);
+      tri(a, cc, b, pane ? LIT[0] : pick(false), pane ? [lpos, lcol] : null);
+      tri(a, d, cc, pane ? LIT[1] : pick(true), pane ? [lpos, lcol] : null);
     }
   }
   // Caps at both tips: the upright front, in strips (one per pair of heights), facing out.
@@ -184,6 +189,12 @@ function car(spec, c, st, ends) {
   shell.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   shell.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   pieces.push(shell);
+  if (lpos.length) {
+    const windows = new THREE.BufferGeometry();
+    windows.setAttribute('position', new THREE.Float32BufferAttribute(lpos, 3));
+    windows.setAttribute('color', new THREE.Float32BufferAttribute(lcol, 3));
+    glow.push(windows);
+  }
 
   // Windscreen and frame: thin skins laid over the nose, a grid of facets following the nose's own surface.
   // widthAt(d, v): the body's half-width at height v on the ring d along the nose; the skin's point at (x, v) sits
@@ -299,11 +310,13 @@ const BODY = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: tr
 const FRAME = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
 const SCREEN = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
 const GLOW = new THREE.MeshBasicMaterial({ vertexColors: true });
+// Lit windows at night: warm light, one triangle of each a little paler (as the glass's glint by day).
+const LIT = [new THREE.Color('#ffd98a'), new THREE.Color('#ffe7b0')];
 
 // A whole train. models: the train models (toy-trains.js MODELS); model: one of them; colours: { body, skirt, band,
 // roof, nose, windscreen, stripe, frame, loco: { ... } } (as toy-brands.js and brands.js); style: STYLES.toy or
 // STYLES.real; cars: how many cars (realistic). pieces: true keeps each piece its own part (tools/models-check.mjs).
-export function buildFacets(models, model, colours, style, cars = 0, { pieces: separate = false } = {}) {
+export function buildFacets(models, model, colours, style, cars = 0, { pieces: separate = false, lit = false } = {}) {
   const base = { body: '#d0d7de', band: '#1f2328', windscreen: '#11161c', bogie: '#2d333b', wheel: '#1b1f24', light: '#fff4c2', tail: '#ff4a4a' };
   const r0 = { ...base, ...colours };
   r0.skirt ??= r0.body; r0.roof ??= r0.body; r0.nose ??= r0.body;
@@ -324,7 +337,7 @@ export function buildFacets(models, model, colours, style, cars = 0, { pieces: s
   const train = new THREE.Group();
   let y = -total / 2;
   parts.forEach((p, i) => {
-    const { pieces, frames, screens, glow } = car(p, p.loco ? cl : c, style, { front: i === parts.length - 1 ? 'front' : null, back: i === 0 ? 'back' : null });
+    const { pieces, frames, screens, glow } = car(p, p.loco ? cl : c, style, { front: i === parts.length - 1 ? 'front' : null, back: i === 0 ? 'back' : null }, lit);
     if (i < parts.length - 1) {   // the bellows to the next car, at this car's front end
       const h = Math.min(p.height, parts[i + 1].height);
       for (const k of [-1, 0, 1]) pieces.push(painted(new THREE.BoxGeometry(style.W - (k ? 0.9 : 1.1), 0.2, h - 1.0), c.bogie, at(0, lens[i] / 2 + GAP / 2 + k * 0.22, FLOOR + h / 2 - 0.1)));

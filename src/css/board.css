@@ -1,0 +1,55 @@
+/* A station's page (src/board.js, src/pages/station.js): the name big, its messages, Departures / Arrivals as a
+   segmented switch with a search beside it, then one row per train: time (the new time under it in its colour), where
+   to with number and kind, the lateness tag, the track. Also the picker: one of several trains standing close. */
+@layer app {
+  #board .panel-head strong { font-size: 26px; line-height: 1.1; }
+  /* Under the name: Share, ☆ (src/pages/station.js) */
+  .st-extras { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .st-extras .chip { gap: 7px; }
+  /* The station's own messages (what its monitors show), folded into one yellow line; a tap opens them, in one yellow
+     card, at most a third of the screen, scrolling. */
+  .board-msgs { display: grid; gap: 6px; margin: 10px 0 2px; flex: none; }
+  .board-msgs-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 12px; border: 0; border-radius: 14px; cursor: pointer;
+    background: var(--t-some-bg); color: var(--t-some); font: inherit; font-size: 14px; font-weight: 700; text-align: left; }
+  .board-msgs-toggle span { flex: 1; color: var(--ink); }
+  .board-msg-list { display: grid; gap: 0; max-height: 30vh; overflow: auto; touch-action: pan-y; padding: 2px 12px; border-radius: 14px; background: var(--t-some-bg); }
+  .board-msg { font-size: 13.5px; white-space: pre-line; padding: 9px 0; color: var(--ink); }
+  #board .busy { opacity: 0.45; transition: opacity .15s; }
+  .board-tabs { align-self: flex-start; margin: 10px 0 6px; flex: none; }
+  /* The search beside the tabs: the station's whole day, a number or a destination typed narrows it; trains gone are
+     dimmed; one × only (the button beside the tabs closes the search). */
+  .board-tabrow { display: flex; align-items: center; gap: 10px; flex: none; }
+  .board-find { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; margin: 4px 0 0;
+    border: 0; background: var(--hover); color: var(--ink); cursor: pointer; padding: 0; }
+  .board-find[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .board-qrow { display: flex; flex: none; margin: 2px 0 8px; }
+  .board-q { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--hover); color: var(--ink); }
+  .board-q:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  .board-q::-webkit-search-cancel-button { display: none; }
+  .board-found { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+  .bd-row.gone { opacity: .5; }
+  .bd-head { display: grid; grid-template-columns: 50px 1fr auto; column-gap: 10px; padding: 4px 10px 4px 0; font-size: 12px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; flex: none; }
+  .bd { display: grid; align-content: start; font-variant-numeric: tabular-nums; }
+  /* (the line under a row drawn by its ::after: page.css) */
+  .bd-row { display: grid; grid-template-columns: 50px 1fr auto auto; column-gap: 10px; align-items: center; width: 100%; padding: 9px 0;
+    border: 0; border-bottom: 1px solid transparent; background: none; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+  .bd-row:hover { background: var(--hover); }
+  .bd-row:last-child { border-bottom: 0; }
+  .bd-time { font-weight: 700; font-size: 15px; line-height: 1.15; }
+  .bd-time small { display: block; font-size: 12px; font-weight: 700; }
+  .bd-name { min-width: 0; }
+  .bd-name b { display: block; font-weight: 700; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bd-name small { display: block; color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bd-tag .tag { margin-left: 0; }
+  .bd-row.canceled .bd-time, .bd-row.canceled .bd-name b { text-decoration: line-through; color: var(--muted); }
+  .bd-row .tl-trk { min-width: 22px; text-align: center; }
+
+  /* Picking one of several trains standing close together ("3 trains") */
+  .pick-list { list-style: none; margin: 6px 0 0; padding: 0; overflow: auto; min-height: 0; }
+  .pick-list button { width: 100%; text-align: left; font: inherit; font-size: 15px; padding: 9px 4px; border: 0; border-bottom: 1px solid transparent;
+    background: transparent; color: var(--ink); cursor: pointer; display: flex; gap: 8px; align-items: baseline; }
+  .pick-list button span { color: var(--muted); font-size: 13px; }
+  .pick-list button:hover, .pick-list button:focus-visible { background: var(--hover); outline: none; }
+}

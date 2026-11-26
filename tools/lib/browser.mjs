@@ -33,7 +33,9 @@ export function launch(options = {}) {
 // The page's address with these settings after the #, e.g. address({ view: '12/59.33/18.06', train: 'toy', lang: 'sv' }).
 // replay: true plays the rush-hour recording (or give a recording's name).
 export function address({ replay, ...hash } = {}) {
-  const parts = Object.entries({ ...(replay ? { replay: replay === true ? RUSH_HOUR : replay } : {}), ...hash })
+  // (the shop window off unless a check asks for it: this browser says it is charging, so 30 s untouched started the
+  // tour and the next key only ended it; stats-board-check lost an Esc that way, 2026-11-24)
+  const parts = Object.entries({ shop: 'false', ...(replay ? { replay: replay === true ? RUSH_HOUR : replay } : {}), ...hash })
     .map(([k, v]) => `${k}=${v}`);
   return PAGE + (parts.length ? `#${parts.join('&')}` : '');
 }
