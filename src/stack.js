@@ -188,12 +188,15 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   // half (Max, 2026-11-24: "A full expanded card should never just show empty space. Cut it off earlier in that case").
   // A page whose content differs at full (a train's card: its tables, its notes) measures it so (def.atFull(measure)).
   // A phone's sheet stays fullMax tall and only slides (place): this is just where full stops.
-  // The chips' cards (roots) share their full, the screen's, so none has a full a few px over its half (Max, 2026-11-26:
-  // "all three have different height of fully expanded, also statistics seems to have three different heights it can
-  // snap to"; a short list then shows room under it at full, his yes to that plan). Their half is each its own, cut at a
-  // clean edge (snapHalf): one half for all cut Statistik through a part, the "More" sign on its edge (screens-check).
+  // The chips' cards (roots) open at full, as tall as they are, on both sizes (startOf; Max, 2026-11-26: "clicking stats,
+  // saved or disruptions should show them fully expanded. But only as far as needed"; the phone too: "Statistics on phone
+  // still doesn't open fully expanded like I asked"); a full only a little over their half is their half, no stop a few
+  // px over another ("statistics seems to have three different heights it can snap to").
   function fullOf(pg, half) {
-    if (isRoot(pg) && !wide()) return fullMax;   // (a computer: as tall as they are, startOf)
+    const f = fullOfPage(pg, half);
+    return isRoot(pg) && f - half < 60 ? half : f;
+  }
+  function fullOfPage(pg, half) {
     const own = pg?.def.full?.();
     if (own != null) return Math.min(fullMax, Math.round(own));
     const el = pg?.el;
@@ -818,12 +821,12 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     g.setAttribute('aria-hidden', 'true');
     return g;
   }
-  // The height a page opens at: its def.startLevel (a number, or a function of nothing), else half; the chips' cards on a
-  // computer at full, as tall as they are (fullOf; Max, 2026-11-26: "clicking stats, saved or disruptions should show
+  // The height a page opens at: its def.startLevel (a number, or a function of nothing), else half; the chips' cards at
+  // full, as tall as they are (fullOf; Max, 2026-11-26: "clicking stats, saved or disruptions should show
   // them fully expanded. But only as far as needed")
   function startOf(pg) {
     const own = typeof pg.def.startLevel === 'function' ? pg.def.startLevel() : pg.def.startLevel;
-    return Math.max(1, own ?? (isRoot(pg) && wide() ? 2 : 1));
+    return Math.max(1, own ?? (isRoot(pg) ? 2 : 1));
   }
   function show(pg, prev, dir, opts = {}) {
     const old = prev?.el;
