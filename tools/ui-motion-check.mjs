@@ -67,13 +67,13 @@ try {
       if (!nav.hidden) {
         const cs = getComputedStyle(nav), m = new DOMMatrixReadOnly(cs.transform), r = nav.getBoundingClientRect();
         const sh = document.getElementById('sheet').getBoundingClientRect(), b = document.getElementById('nav-button').getBoundingClientRect();
-        const ins = /inset\(([-\d.]+)px(?: ([-\d.]+)px)?(?: ([-\d.]+)px)?/.exec(cs.clipPath);
-        const it = ins ? Math.max(0, Number(ins[1])) : 0, ib = ins ? Math.max(0, Number(ins[3] ?? ins[1])) : 0;
-        const below = Number(nav.style.top.replace('px', '')) > sh.top;
-        // (since 2026-11-25 it lies under the sheet and slides from behind the box: past = shown out over the map above
-        // the sheet's top on a computer, or not under the sheet at all)
-        const under = Number(cs.zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
-        past = Math.max(past, !under ? 99 : below ? sh.top - (r.top + it) : 0);
+        // (since 2026-11-26 it slides in a still window past the box's line, src/nav-menu.js #nav-window: past = how far
+        // its shown part reaches over the sheet, through its corners or past its edge; not under the sheet at all: 99)
+        const win = document.getElementById('nav-window'), w = win.getBoundingClientRect();
+        const under = Number(getComputedStyle(win).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
+        const vt = Math.max(r.top, w.top), vb = Math.min(r.bottom, w.bottom), vl = Math.max(r.left, w.left), vr = Math.min(r.right, w.right);
+        const over = Math.min(vr, sh.right) - Math.max(vl, sh.left) > 2 ? Math.max(0, Math.min(vb, sh.bottom) - Math.max(vt, sh.top)) : 0;
+        past = Math.max(past, !under ? 99 : over);
         dy = Math.max(dy, Math.abs(Math.round(m.m42))); dx = Math.max(dx, Math.abs(Math.round(m.m41))); op = Math.min(op, Number(cs.opacity));
       }
       if ((untilHidden && nav.hidden) || performance.now() - t0 > ms) done({ dy, dx, op, past: Math.round(past), hidden: nav.hidden }); else requestAnimationFrame(f);
