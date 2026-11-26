@@ -790,10 +790,10 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     // (each part frozen as it looks now: much of its look hangs on the sheet's page and height, which change as it
     // leaves: a train card's Follow came back and its stops rose 40 px in the copy; ui-sweep, 2026-11-25)
     const all = el.getElementsByTagName('*'), copies = g.getElementsByTagName('*');
-    const looks = [];
+    const looks = [], cutOff = new Set();
     // (what is under the cut isn't shown: hidden, not read; a long timetable has hundreds of parts)
     for (let i = 0; i < all.length; i++) {
-      if (all[i].getBoundingClientRect().top > cut) { looks.push(null); continue; }
+      if (all[i].getBoundingClientRect().top > cut) { looks.push(null); cutOff.add(i); continue; }
       const cs = getComputedStyle(all[i]);
       looks.push(cs.display === 'none' ? null : FROZEN.map(k => cs[k]));
     }
@@ -801,6 +801,16 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
       const st = copies[i].style;
       if (!looks[i]) { st.display = 'none'; continue; }
       FROZEN.forEach((k, j) => { st[k] = looks[i][j]; });
+    }
+    // (a grid whose rows under the cut were hidden: the rest from its top; its height is kept, and the room the hidden
+    // rows left was spread over the others, 4 px more under each of Settings' rows, 48 px by the last; ui-sweep,
+    // 2026-11-26. Only those: a grid centring an icon keeps its centre)
+    if (cutOff.size) {
+      const at = new Map([...all].map((e, i) => [e, i]));
+      for (let i = 0; i < copies.length; i++) {
+        if (!looks[i] || !/grid/.test(looks[i][0])) continue;
+        if ([...all[i].children].some(c => cutOff.has(at.get(c)))) copies[i].style.alignContent = 'start';
+      }
     }
     const from = el.querySelectorAll('canvas'), to = g.querySelectorAll('canvas');
     from.forEach((c, i) => { try { to[i].getContext('2d')?.drawImage(c, 0, 0); } catch { /* a picture it can't copy: blank */ } });

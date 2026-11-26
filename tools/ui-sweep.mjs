@@ -258,6 +258,13 @@ async function placeChecks(page) {
         let end = 0;
         const real = pg.querySelectorAll('button, input, img, svg, canvas, textarea, select');
         for (const e of real) if (e.offsetHeight) end = Math.max(end, e.getBoundingClientRect().bottom - top);
+        // (a part drawn as a card, its own background: the card's padding under its last line is the card, not empty
+        // room; Sparade at full on a computer counted 14 px of it, 2026-11-26)
+        for (const c of pg.querySelectorAll(':scope > *, :scope > * > *')) {
+          if (!c.offsetHeight || c.closest('[data-spacer]')) continue;
+          const cs = getComputedStyle(c);
+          if (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') end = Math.max(end, c.getBoundingClientRect().bottom - top);
+        }
         const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT);
         for (let n = w.nextNode(); n; n = w.nextNode()) {
           if (!n.textContent.trim() || !n.parentElement.offsetHeight) continue;
