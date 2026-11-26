@@ -41,6 +41,9 @@ const DEFAULTS = {
   // Home's lateness colours at the top (Debug, Max 2026-11-23: "Add debug toggle to remove the first colored keys in main
   // card"): on, as before.
   homeLegend: true,
+  // The grey pill behind the sheet's "More ⌄" at its bottom edge (Debug, Max 2026-11-26: "remove the little pill around
+  // 'More v' etc. Put in as a debug toggle"): off. src/css/sheet.css .sh-more.
+  morePill: false,
   // How a page comes into the sheet (Debug, Max 2026-11-24: "Do A, B and F and put them in debug options"; "Remove the
   // fade on all"; the motion lab https://claude.ai/artifact/EtVxL1BiRBaYbgocQSw7xS): 'side' (A, sideways, as since the
   // push of 2026-11-24), 'rise' (B, a card from the sheet's edge over the page before) or 'strip' (F, one strip along the
@@ -98,6 +101,7 @@ const KEYS = {
   disruptionsMap: { param: 'dis' },
   routeEdge: { param: 'routeedge' },
   homeLegend: { param: 'legend' },
+  morePill: { param: 'morepill' },
   pageMotion: { param: 'motion' },
   motionSpeed: { param: 'mspeed' },
   pageOverTrain: { param: 'overtrain' },
@@ -137,6 +141,7 @@ const valid = {
   disruptionsMap: v => (['all', 'problems', 'off'].includes(v) ? v : undefined),
   routeEdge: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   homeLegend: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  morePill: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   pageMotion: v => (['side', 'rise', 'strip'].includes(v) ? v : undefined),
   motionSpeed: v => (['fast', 'calm'].includes(v) ? v : undefined),
   pageOverTrain: v => (['card', 'follow', 'clear'].includes(v) ? v : undefined),
