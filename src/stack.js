@@ -172,9 +172,12 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   // search has none either: from it, down is rest.
   const hasOwnHalf = () => !srch && H[1] - H[0] >= 30;
   // [low, half, full] of a page (the search: Home's low and half under it, its own full)
+  // (Home holds nothing under the search bar since Max's pick C, 2026-11-25: no half, its half is its low, so the search
+  // pulled down from full goes to the bar alone; Max, 2026-11-26: "when search is fully expanded and swipes down a little
+  // bit, there is just a huge area of empty space")
   function heightsOf(pg) {
     const base = pg === srch ? top() : pg;
-    const h0 = lowOf(base), h1 = halfOf(base, h0);
+    const h0 = lowOf(base), h1 = base?.key === 'home' ? h0 : halfOf(base, h0);
     return [keepsLow(base) ? h0 : h1, h1, fullOf(pg, h1)];
   }
   // Where a page's content ends (px from its top edge, its scroll counted): its parts' lowest edge. A part marked
@@ -302,7 +305,7 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
         // (full measured as the page is, before its full look: it may have grown since its heights were read; half with
         // its half look on, its parts may have changed since: setIndex asks before and after it sets data-h)
         if (idx === 2) H[2] = Math.max(H[2], fullOf(pg, H[1]));
-        else if (idx === 1) { H[1] = halfOf(pg); if (!keepsLow(pg)) H[0] = H[1]; }
+        else if (idx === 1) { H[1] = heightsOf(pg)[1]; if (!keepsLow(pg)) H[0] = H[1]; }
         return;
       case 'content': {
         if (idx !== 2 || drag) return;
@@ -536,6 +539,8 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     // and pulled up, never down first: at least one height higher (a pull of 260 px from a train's half came back to
     // it: 247 px from half, 252 from full, 2026-11-23)
     if (!wide() && d.i0 < 2 && to <= d.i0 && h > d.h0 + PULL_PX && d.low - d.ys < 10) to = d.i0 + 1;
+    // (down to a half that is its low (Home's: heightsOf): the low itself, at rest)
+    if (to > 0 && to < d.i0 && Math.abs(H[to] - H[to - 1]) <= 2) to -= 1;
     setIndex(to);
   }
   const isGrab = el => el === grip || Boolean(el.closest('.sh-grab')) || Boolean(el.closest('.sh-head, .pg-head') && !el.closest(NOT_GRAB));

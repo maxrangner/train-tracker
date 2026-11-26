@@ -59,6 +59,18 @@ try {
   }
   await page.setViewport(PHONE);
   await sleep(400);
+  // 1b. The search at full pulled down a little on its empty part: the bar alone at rest, no empty half (Max, 2026-11-26:
+  //     "when search is fully expanded and swipes down a little bit, there is just a huge area of empty space")
+  {
+    await page.evaluate(() => document.activeElement?.blur());
+    const ts = page.touchscreen;
+    await ts.touchStart(200, 400);
+    for (let i = 1; i <= 8; i++) { await ts.touchMove(200, 400 + i * 12); await sleep(30); }
+    await sleep(150); await ts.touchEnd(); await sleep(1200);
+    const s = await page.evaluate(() => ({ level: window.__stack.level, searching: window.__stack.searching, h: Math.round(innerHeight - document.getElementById('sheet').getBoundingClientRect().top), low: window.__stack.heights[0] }));
+    if (s.searching || s.level !== 0 || Math.abs(s.h - s.low) > 3) fails.push(`1b the search pulled down 96 px from full: level ${s.level}, ${s.h} px shown (rest ${s.low}), search ${s.searching ? 'still open' : 'shut'}`);
+    else notes.push(`1b the search pulled down from full: shut, the bar alone at rest (${s.h} px)`);
+  }
   await toRest(page);
 
   // ---- a train's page (through the search), one whose card has its stops (All stops); up to 8 tries ----
@@ -214,7 +226,8 @@ try {
       c = await sheet();
       if (c.level !== 1) fails.push(`4 a pull down of 110 px from the head at full: height ${c.level}, wanted 1`);
       else notes.push('4 a pull down of 110 px from the head at full: half');
-      // Home's search field pulled up by a finger: the sheet rises, the search doesn't open
+      // Home's search field pulled up by a finger: nothing (Home is the search bar alone, strictly the search: Max's pick
+      // C, 2026-11-25, "Search bar strict for searching"; it rose to an empty half until 2026-11-26)
       await toRest(page);
       const f = await page.evaluate(() => { const r = document.getElementById('search').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
       await page.touchscreen.touchStart(f.x, f.y);
@@ -223,7 +236,8 @@ try {
       await page.touchscreen.touchEnd();
       await sleep(600);
       const s4 = await sheetState(page), searching = await page.evaluate(() => window.__stack.searching);
-      if (s4.level < 1 || searching) fails.push(`4 Home's field pulled up 300 px: height ${s4.level}, the search ${searching ? 'opened' : 'closed'}`);
+      if (s4.level !== 0 || searching) fails.push(`4 Home's field pulled up 300 px: height ${s4.level} (want 0, at rest), the search ${searching ? 'opened' : 'closed'}`);
+      else notes.push('4 Home\'s field pulled up 300 px: stays at rest, no search');
       await toRest(page);
       // a group's list ("N trains here"): opens at half showing all its rows, or as tall as half when they don't fit
       await page.evaluate(() => window.__map.jumpTo({ center: [17.9, 59.3], zoom: 7 }));
