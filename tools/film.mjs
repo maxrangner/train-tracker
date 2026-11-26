@@ -1,0 +1,94 @@
+// Films of the page's moves, to look at before anything goes to Max (2026-11-26, Max: "I can't go around hunting all
+// these discrepancies manually after every change"): each scene's every painted frame (the browser's screencast), laid
+// out numbered on one picture per scene, its name burned in. The numbers the tests read miss what only shows on screen
+// (a corner showing through, rows sliding under the search box); a film shows it. Every change to a move or a look:
+// the scenes it touches, both sizes, looked at frame by frame.
+//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--out <folder>]   (with npm run dev; PAGE= for another port)
+// Pictures: shots/film/<size> <scene>.png (not in git). The scenes: SCENES below; add one for each new move.
+import { mkdirSync } from 'node:fs';
+import { launch, sleep, PHONE, CARD_HOUR, address } from './lib/browser.mjs';
+import { toRest, until, openMenu, openChip, openFromMenu } from './lib/screen.mjs';
+
+const args = process.argv.slice(2), opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
+const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film';
+const SIZES = { phone: PHONE, pc: { width: 1400, height: 900, deviceScaleFactor: 1 } };
+mkdirSync(OUT, { recursive: true });
+
+// A point on the map's empty ground (no train, station or name within 20 px), away from the sheet
+const emptyMap = p => p.evaluate(() => {
+  const s = document.getElementById('sheet').getBoundingClientRect();
+  for (const [x, y] of [[innerWidth - 160, 140], [innerWidth - 260, 220], [innerWidth / 2, 120], [innerWidth - 120, s.top - 60]]) {
+    if (x > s.left && x < s.right && y > s.top && y < s.bottom) continue;
+    if (document.elementFromPoint(x, y)?.tagName === 'CANVAS' && !window.__map.queryRenderedFeatures([[x - 20, y - 20], [x + 20, y + 20]]).some(f => f.layer.type === 'symbol' || /train|station/.test(f.layer.id))) return { x, y };
+  }
+  return null;
+});
+const clickMap = async (p) => { const q = await emptyMap(p); if (q) await p.mouse.click(q.x, q.y); };
+const station = p => p.evaluate(() => window.__stack.open('station:Cst', { go: true, fromMap: true }));
+
+// name, setup (to the moment before), act (the move filmed), ms (how long after it)
+const SCENES = [
+  { name: 'menu open', setup: toRest, act: p => p.click('#nav-button') },
+  { name: 'menu close by its button', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#nav-button') },
+  { name: 'menu close by the map', setup: async (p) => { await toRest(p); await openMenu(p); }, act: clickMap },
+  { name: 'menu → filter', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#open-filter'), ms: 1300 },
+  { name: 'filter more', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600); }, act: p => p.click('#sheet [data-act="comore"]'), ms: 1500 },
+  { name: 'filter fewer', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600); await p.click('#sheet [data-act="comore"]'); await sleep(1200); }, act: p => p.click('#sheet [data-act="comore"]'), ms: 1500 },
+  { name: 'filter → back', setup: async (p) => { await openFromMenu(p, 'filter'); await sleep(800); }, act: p => p.keyboard.press('Escape'), ms: 1300 },
+  { name: 'menu → settings', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#open-settings'), ms: 1300 },
+  { name: 'settings → back', setup: async (p) => { await openFromMenu(p, 'settings'); await sleep(800); }, act: p => p.keyboard.press('Escape'), ms: 1300 },
+  { name: 'station → map click', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: clickMap },
+  { name: 'station → back', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: p => p.keyboard.press('Escape') },
+  { name: 'statistik → closed by its chip', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="stats"]') },
+  { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="saved"]') },
+  { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
+];
+
+const browser = await launch();
+const made = [];
+try {
+  for (const [size, view] of Object.entries(SIZES)) {
+    if (opt('--size') && opt('--size') !== size) continue;
+    const page = await browser.newPage();
+    await page.setViewport(view);
+    await page.goto(address({ replay: CARD_HOUR, view: '13/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
+    await until(page, () => Boolean(window.__stack?.top()), 30000);
+    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
+    await sleep(3000);
+    const cdp = await page.createCDPSession();
+    for (const sc of SCENES) {
+      if (ONLY && !sc.name.includes(ONLY)) continue;
+      await sc.setup(page);
+      await sleep(400);
+      const frames = [];
+      const on = async (f) => { frames.push({ t: f.metadata.timestamp, data: f.data }); await cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {}); };
+      cdp.on('Page.screencastFrame', on);
+      await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 80, everyNthFrame: 1 });
+      await sleep(150);
+      const t0 = Date.now() / 1000;
+      await sc.act(page);
+      await sleep(sc.ms ?? 900);
+      await cdp.send('Page.stopScreencast');
+      cdp.off('Page.screencastFrame', on);
+      const shown = frames.filter(f => f.t >= t0 - 0.03);
+      // (the frames up to the last one that differs, at most 40: the rest is the same still picture)
+      let last = shown.length - 1;
+      while (last > 0 && shown[last].data === shown[last - 1].data) last--;
+      const keep = shown.slice(0, Math.min(last + 2, 40));
+      const cols = size === 'pc' ? 4 : 6, cw = size === 'pc' ? 460 : 260, ch = size === 'pc' ? 300 : Math.round(260 * view.height / view.width);
+      const html = `<body style="margin:0;padding:10px;background:#fff;font:600 15px 'Segoe UI',sans-serif;width:${cols * (cw + 6)}px">
+        <div style="font:800 26px 'Segoe UI',sans-serif;margin-bottom:6px">${size === 'pc' ? 'Computer' : 'Phone'}: ${sc.name}</div>
+        <div style="color:#57606a;margin-bottom:8px">every painted frame, numbered (about 16 ms apart when the PC keeps up); replay 17 Nov 15:00${size === 'pc' ? '; the sheet\'s corner of the screen' : ''}</div>
+        <div style="display:grid;grid-template-columns:repeat(${cols},${cw}px);gap:6px">${keep.map((f, i) => `<div><div>${i + 1}</div><div style="width:${cw}px;height:${ch}px;overflow:hidden;border:2px solid #1b1f24;border-radius:4px"><img style="display:block;width:${size === 'pc' ? 920 : cw}px" src="data:image/jpeg;base64,${f.data}"></div></div>`).join('')}</div></body>`;
+      const sheet = await browser.newPage();
+      await sheet.setViewport({ width: cols * (cw + 6) + 20, height: 400 });
+      await sheet.setContent(html);
+      const file = `${OUT}/${size} ${sc.name.replace(/[^\p{L}\p{N} →-]/gu, '')}.png`;
+      await sheet.screenshot({ path: file, fullPage: true });
+      await sheet.close();
+      made.push(`${file} (${keep.length} frames)`);
+    }
+    await page.close();
+  }
+} finally { await browser.close(); }
+console.log(made.join('\n'));

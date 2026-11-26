@@ -8,6 +8,7 @@
 //            settling")
 //   redrawn  a card growing or shrinking on the same page: what was on screen moves against the sheet's top, or slides
 //            in ("Only the new part should be revealed through the expanding card, not all of it slide in")
+//   peeks    ☰'s card showing over the sheet, through its corners or past its edge (2026-11-26)
 //   under    a leaving page's copy under the search box while the box shows (2026-11-26)
 //   pop      the same: something changes place or size in one frame while the rest glides ("top buttons should
 //            animate into the new layout, not just pop")
@@ -85,7 +86,15 @@ function recorder() {
     const pgTop = document.querySelector(`#sheet .pg[data-key="${CSS.escape(window.__stack.top())}"]`);
     const hp = document.querySelector('#sheet .pg[data-key="home"]');
     const home = hp ? `${hp.isConnected ? '' : 'gone '}${hp.className} clip(${hp.style.clipPath}) vis ${getComputedStyle(hp).visibility} top ${Math.round(hp.getBoundingClientRect().top)}` : 'no home';
-    return { home, t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
+    // (☰'s card: the part of it that shows, inside its window (src/nav-menu.js #nav-window); parked under a page: none)
+    const nv = document.getElementById('nav'), win = document.getElementById('nav-window');
+    let nav = null;
+    if (nv && !nv.hidden && !nv.classList.contains('under') && getComputedStyle(nv).visibility !== 'hidden' && Number(getComputedStyle(nv).opacity) >= 0.05) {
+      const r = nv.getBoundingClientRect(), w = win ? win.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+      nav = [Math.max(r.left, w.left), Math.max(r.top, w.top), Math.min(r.right, w.right), Math.min(r.bottom, w.bottom)];
+      if (nav[2] - nav[0] < 1 || nav[3] - nav[1] < 1) nav = null;
+    }
+    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, sheet.bottom], home, t: performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
   };
   R.start = () => { R.frames = []; R.on = true; const f = () => { if (!R.on) return; R.frames.push(R.snap()); requestAnimationFrame(f); }; requestAnimationFrame(f); };
   R.stop = () => { R.on = false; };
@@ -215,6 +224,18 @@ function analyse(rec, kind) {
       if (g) { n++; at ??= g; }
     }
     if (n) finds.push({ kind: 'under', id: at[0], what: `${at[7]} ${meta[at[0]].el}${meta[at[0]].text ? ` "${meta[at[0]].text}"` : ''}`, info: `under the search box as it shows, ${n} frame(s)` });
+  }
+  // peeks: ☰'s card showing over the sheet (it lies under it: what shows there shows through the box's rounded corners or
+  // past its edge; Max, 2026-11-26: "Calling Hamburger menu shows its corner in the top right of the search bar")
+  {
+    let n = 0, at = null;
+    for (const f of frames) {
+      if (!f.nav || !f.sheetBox) continue;
+      const [l, t, r, b] = f.nav, [sl, st, sr, sb] = f.sheetBox;
+      const w = Math.min(r, sr) - Math.max(l, sl), h = Math.min(b, sb) - Math.max(t, st);
+      if (w > 2 && h > 2) { n++; at ??= `${Math.round(w)}×${Math.round(h)} px at ${Math.round(Math.max(l, sl))},${Math.round(Math.max(t, st))}`; }
+    }
+    if (n) finds.push({ kind: 'peeks', id: 0, what: 'the menu', info: `over the sheet in ${n} frame(s), first ${at}` });
   }
   return finds;
 }
@@ -354,6 +375,8 @@ const T = [
   { name: 'menu → settings', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-settings') },
   { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
   { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
+  // (a page that won't cover the menu, a computer's Filter: the menu fades where it is; Max, 2026-11-26)
+  { name: 'menu → filter', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-filter') },
   { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
   // ('menu → arrow' gone: Home has no handle or arrow since the start chips, 2026-11-25, and ☰ over a chip's card closes it first)
   { name: 'new trip typing', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('newtrip', { go: true })); await until(p, () => Boolean(document.querySelector('#sheet .nt-stop'))); await settle(p); },
