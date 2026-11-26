@@ -3,7 +3,6 @@
 // (docs/kit/sheet.mjs). node tools/look-start-chips.mjs [--replay] (PAGE= for another port; --raw: the screenshots only).
 // Out: shots/start-chips/.
 import { mkdirSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
 import { waitForMap, until, toRest, openMenu } from './lib/screen.mjs';
 
@@ -43,7 +42,8 @@ try {
   await browser.close();
 }
 if (!raw) {
-  const { sheet } = await import(pathToFileURL('D:/dev/train-map/docs/kit/sheet.mjs').href);
+  // (the labelled sheet maker in this folder's docs/kit, which only the main folder has: run it there for pictures)
+  const { sheet } = await import(new URL('../docs/kit/sheet.mjs', import.meta.url).href);
   const when = new Date().toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' }).slice(0, 16);
   for (const [name, list] of Object.entries(shots)) {
     const sub = `${name === 'phone' ? 'Phone' : 'Computer'}, ${replay ? 'a replay' : 'live data'} ${when}`;
