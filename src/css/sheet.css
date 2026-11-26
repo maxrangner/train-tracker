@@ -190,6 +190,10 @@
     /* (back on Home: the page's title goes as fast as the card, .pg.out-fade, and the search box comes once they are
        gone, never over them) */
     #sheet[data-page="home"] .sh-search { transition: opacity .18s .11s; }
+    /* (leaving Home for a page whose title is in the page, its head folded to nothing (.no-bar): the search box keeps
+       its height while it fades, quickly; squeezed with the head it jumped 13 px up as it went; tools/film.mjs
+       'menu → filter', 2026-11-26) */
+    #sheet:not([data-page="home"]):not([data-root]) .sh-search { bottom: auto; height: var(--head-h); transition: opacity .1s, visibility 0s .1s; }
     #sheet[data-page="home"] .sh-bar { transition: opacity .1s, visibility 0s .1s; }
     /* (the search field 12 px from the top edge, as from its sides) */
     #sheet .sh-head { margin-top: var(--bar-edge); }
