@@ -116,7 +116,7 @@ try {
   await page.evaluate(() => document.getElementById('open-settings').click()); await sleep(150);
   // (the card stays where it is, under the sheet, and the page slides over it: no slide back; Max, 2026-11-25 "the hamburger
   // menu clips through the new card. New card should just slide over with menu under")
-  const parked = await page.evaluate(() => { const n = document.getElementById('nav'); return { shown: !n.hidden, under: Number(getComputedStyle(n).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex), moving: n.getAnimations().length }; });
+  const parked = await page.evaluate(() => { const n = document.getElementById('nav'); return { shown: !n.hidden, under: Number(getComputedStyle(document.getElementById('nav-window')).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex), moving: n.getAnimations().length }; });
   ok(parked.shown && parked.under && !parked.moving, `a choice: the menu stays in place under the sheet as the page comes (shown ${parked.shown}, under ${parked.under}, moving ${parked.moving})`);
   await sleep(1050);
   // (gone from sight: hidden, or parked under the page that covers it, so back finds it there; Max, 2026-11-26: "the menu
