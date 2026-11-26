@@ -56,8 +56,8 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   function place() {
     const a = button.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
     const w = navEl.offsetWidth, h = navEl.offsetHeight;
-    const right = isWide() ? s.right : a.right;
-    navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)))}px`;
+    const right = isWide() ? s.right : a.right, left = Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)));
+    navEl.style.left = `${left}px`;
     // (a computer at rest: under the whole box, its arrow band included; the box's bottom where the sheet is going, its
     // top stays: read from the screen, a busy PC's sheet could still be closing when its glide's time was up, and the menu
     // came 120 px under the box; pc-check 6, 2026-11-26)
@@ -73,7 +73,20 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
       Object.assign(winEl.style, { top: '0px', bottom: '', height: `${Math.round(s.top)}px` });
       navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`;
     }
+    shapeWindow(left, w);
   }
+  // The window's edge at the line: across the card's width it has the card's own rounded corners, so the part of the card
+  // that shows as it slides out always has round corners, never a straight cut under the box's rounded ones (Max,
+  // 2026-11-26: "when the hamburger menu slides out, it's clipped at the bottom of the search bar even though its
+  // rounded"); beside the card the window starts lower by the corner, room for the card's shadow there.
+  function shapeWindow(left, w) {
+    const W = innerWidth, H = Math.round(winEl.getBoundingClientRect().height), r = navRadius() + 1;
+    const L = left - 1, R = left + w + 1;   // (its 1 px ring included)
+    winEl.style.clipPath = side === 'below'
+      ? `path('M0 ${r} L${L} ${r} A${r} ${r} 0 0 1 ${L + r} 0 L${R - r} 0 A${r} ${r} 0 0 1 ${R} ${r} L${W} ${r} L${W} ${H} L0 ${H} Z')`
+      : `path('M0 0 L${W} 0 L${W} ${H - r} L${R} ${H - r} A${r} ${r} 0 0 1 ${R - r} ${H} L${L + r} ${H} A${r} ${r} 0 0 1 ${L} ${H - r} L0 ${H - r} Z')`;
+  }
+  const navRadius = () => parseFloat(getComputedStyle(navEl).borderTopRightRadius) || 18;
   // (out from behind the box and back behind it: the card lies under the sheet (src/css/menu.css) and moves its whole
   // height plus the gap, so it shows in the gap as it goes (Max, 2026-11-25: "Menu should go all the way behind the search
   // bar"); its window cuts it at the box's line, above)
