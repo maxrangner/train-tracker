@@ -391,7 +391,7 @@ const SV = {
   allStops: 'Mer', fewerStops: 'Mindre',
   allPlaces: 'Alla platser', allPlacesSub: 'På ett tågs sida: driftplatser och stationer utan stopp',
   notesCount: n => `Meddelanden (${n})`, foldNotes: 'Dölj meddelandena',
-  messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`, trainStatus: 'Läget', trainStatusCount: n => `Läget: ${n} sak${n === 1 ? '' : 'er'}`,
+  messagesCount: n => `${n} meddelande${n === 1 ? '' : 'n'} från stationen`, trainStatus: 'Status', trainStatusCount: n => `Status: ${n} sak${n === 1 ? '' : 'er'}`,   // (not "Läget": Max, 2026-11-26 "a strange wording here")
   arrivesIn: s => `Om ${s}`, arrivesAbout: s => `Om ca ${s}`, arrivesNow: 'Ankommer nu',
   leavesIn: s => `Avgår om ${s}`, leavesAbout: s => `Avgår om ca ${s}`, leavesNow: 'Avgår nu',
   routeEdge: 'Vit kant på rutten', homeLegend: 'Förseningsfärger i Filter', morePill: 'Pill bakom "Mer ⌄"',

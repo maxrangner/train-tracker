@@ -51,9 +51,10 @@
   .tr-acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .tr-acts .chip { gap: 7px; }
   #sheet:not([data-h="2"]) .tr-extras .tr-acts { display: none; }
-  /* (not with "i" on: the info shows the train's own numbers, no action; Max, 2026-11-26: "On train cards, the info panel
-     should not have the 'add a change' button") */
-  #panel.info .tr-extras .tr-acts { display: none; }
+  /* (not with "i" on: the info shows the train's own numbers alone, no tiles, no why, no action; Max, 2026-11-26: "On
+     train cards, the info panel should not have the 'add a change' button"; "Train 'i' section should not show time
+     (+n) box or time to destination. Only the stats for the train") */
+  #panel.info :is(.cd-tiles, .tr-extras) { display: none; }
   .why { display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box; padding: 10px 12px; border: 0; border-radius: 14px; text-align: left;
     background: var(--t-some-bg); color: var(--t-some); font: inherit; }
   .why.none { background: var(--hover); color: var(--muted); }
