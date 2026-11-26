@@ -120,13 +120,22 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   document.addEventListener('pointerdown', (e) => {
     if ((state === 'opening' || state === 'open') && !e.target.closest?.('#sheet, #nav') && !mapEl.contains(e.target)) close();
   }, true);
+  // (also while still sliding out: a quick tap on a choice parks it where it is going, so back finds it there, not
+  // sliding out again; hidden once the page stands only where the page doesn't cover it, so a pull down on the page
+  // uncovers it as it goes; Max, 2026-11-26: "When clicking back from settings for example the menu should not slide up
+  // again, it should already be there")
   const fromMenu = (key) => {
-    if (state !== 'open') { close(); backHome = true; stack().open(key); return; }
+    if (state !== 'open' && !(state === 'opening' && placed)) { close(); backHome = true; stack().open(key); return; }
     const mine = ++turn;
+    navEl.getAnimations().forEach(x => x.finish());
     enter('parked');
     backHome = true;
     stack().open(key);
-    stack().whenSettled().then(() => { if (turn === mine && state === 'parked') navEl.hidden = true; });
+    stack().whenSettled().then(() => { if (turn === mine && state === 'parked' && !covered()) navEl.hidden = true; });
+  };
+  const covered = () => {
+    const n = navEl.getBoundingClientRect(), s = sheetEl.getBoundingClientRect();
+    return n.top >= s.top && n.bottom <= s.bottom && n.left >= s.left && n.right <= s.right;
   };
   document.getElementById('open-filter').onclick = () => fromMenu('filter');
   document.getElementById('open-day').onclick = () => { close(); onDay(); };
