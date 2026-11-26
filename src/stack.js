@@ -718,12 +718,22 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     boxWatch?.observe(box);
   }
   // A page's title line: its .g-head or .panel-head at its top (one level in at most)
-  const headOf = pg => pg.el.querySelector(':scope > .g-head, :scope > .panel-head, :scope > :first-child > .g-head, :scope > :first-child > .panel-head');
+  let headSwapTimer = 0;
+  const headOf = pg =>pg.el.querySelector(':scope > .g-head, :scope > .panel-head, :scope > :first-child > .g-head, :scope > :first-child > .panel-head');
   // The bar over a page: ☆, Follow and the page's own buttons when it has them; none (or taken into the page): no bar.
   function syncBar() {
     const pg = top();
     if (!pg) return;
     sheet.dataset.page = pg.def.kind ?? pg.key.split(':')[0];
+    // (data-head-swap: a chip's card just came or went, the head's chips and search box trade places; the leaving one
+    // goes first, the coming one after it, never over it: src/css/sheet.css; Max, 2026-11-26: "the card visually buggs
+    // out when closing. Clipping the search bar". Set only as the card comes or goes, kept through the fades: this
+    // runs again each second)
+    if (sheet.hasAttribute('data-root') !== isRoot(pg)) {
+      sheet.setAttribute('data-head-swap', '');
+      clearTimeout(headSwapTimer);
+      headSwapTimer = setTimeout(() => sheet.removeAttribute('data-head-swap'), 600);
+    }
     sheet.toggleAttribute('data-root', isRoot(pg));
     // Home's head is the search bar, a root page's the chips (src/css/sheet.css): ‹ and the buttons back in the bar, unseen
     if (pg.key === 'home' || isRoot(pg)) {

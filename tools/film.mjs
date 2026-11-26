@@ -3,7 +3,8 @@
 // out numbered on one picture per scene, its name burned in. The numbers the tests read miss what only shows on screen
 // (a corner showing through, rows sliding under the search box); a film shows it. Every change to a move or a look:
 // the scenes it touches, both sizes, looked at frame by frame.
-//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--slow 4] [--out <folder>]   (with npm run dev; PAGE= for another port)
+//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--slow 4] [--live] [--out <folder>]   (with npm run dev; PAGE= for another port)
+//   (--live: today's trains instead of the replay; Störningar's scenes need it)
 // Pictures: shots/film/<size> <scene>.png (not in git). The scenes: SCENES below; add one for each new move.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR, address } from './lib/browser.mjs';
@@ -55,10 +56,17 @@ const SCENES = [
   { name: 'station → back', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: p => p.keyboard.press('Escape') },
   { name: 'chip → statistik', setup: toRest, act: p => p.evaluate(() => document.querySelector('#chips [data-chip="stats"]').click()), ms: 1300 },
   { name: 'chip → sparade', setup: toRest, act: p => p.evaluate(() => document.querySelector('#chips [data-chip="saved"]').click()), ms: 1300 },
-  { name: 'statistik → closed by its chip', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="stats"]') },
+  // (each of Home's three cards closed every way: its chip again, Esc, a map click; Max, 2026-11-26: "When closing either
+  // störningar, sparade or statistik the card visually buggs out when closing. Clipping the search bar")
+  ...[['stats', 'statistik'], ['saved', 'sparade'], ['dislist', 'störningar']].flatMap(([chip, word]) => [
+    { name: `${word} → closed by its chip`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.click(`#sheet .sh-chips [data-chip="${chip}"]`) },
+    { name: `${word} → closed by Esc`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.keyboard.press('Escape') },
+    { name: `${word} → closed by the map`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: clickMap },
+  ]),
   { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="saved"]') },
   { name: 'train status open', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
   { name: 'train status shut', setup: p => trainWithStatus(p, true), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
+  { name: 'train i on', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .panel-info')?.click()) },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
 ];
 
@@ -69,8 +77,10 @@ try {
     if (opt('--size') && opt('--size') !== size) continue;
     const page = await browser.newPage();
     await page.setViewport(view);
-    await page.goto(address({ replay: CARD_HOUR, view: '13/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
+    await page.goto(address({ ...(args.includes('--live') ? {} : { replay: CARD_HOUR }), view: '13/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
     await until(page, () => Boolean(window.__stack?.top()), 30000);
+    // (--live: today's trains, for what a replay lacks: Störningar's chip waits for the disruptions)
+    if (args.includes('--live')) await until(page, () => Boolean(document.querySelector('#chips [data-chip="dislist"]')), 60000);
     await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
     await sleep(3000);
     const cdp = await page.createCDPSession();
@@ -97,7 +107,7 @@ try {
       const cols = size === 'pc' ? 4 : 6, cw = size === 'pc' ? 460 : 260, ch = size === 'pc' ? 300 : Math.round(260 * view.height / view.width);
       const html = `<body style="margin:0;padding:10px;background:#fff;font:600 15px 'Segoe UI',sans-serif;width:${cols * (cw + 6)}px">
         <div style="font:800 26px 'Segoe UI',sans-serif;margin-bottom:6px">${size === 'pc' ? 'Computer' : 'Phone'}: ${sc.name}</div>
-        <div style="color:#57606a;margin-bottom:8px">every painted frame, numbered (about 16 ms apart when the PC keeps up); replay 17 Nov 15:00${size === 'pc' ? '; the sheet\'s corner of the screen' : ''}</div>
+        <div style="color:#57606a;margin-bottom:8px">every painted frame, numbered (about 16 ms apart when the PC keeps up); ${args.includes('--live') ? 'live' : 'replay 17 Nov 15:00'}${size === 'pc' ? '; the sheet\'s corner of the screen' : ''}</div>
         <div style="display:grid;grid-template-columns:repeat(${cols},${cw}px);gap:6px">${keep.map((f, i) => `<div><div>${i + 1}</div><div style="width:${cw}px;height:${ch}px;overflow:hidden;border:2px solid #1b1f24;border-radius:4px"><img style="display:block;width:${size === 'pc' ? 920 : cw}px" src="data:image/jpeg;base64,${f.data}"></div></div>`).join('')}</div></body>`;
       const sheet = await browser.newPage();
       await sheet.setViewport({ width: cols * (cw + 6) + 20, height: 400 });
