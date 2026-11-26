@@ -304,17 +304,24 @@ try {
       .filter(f => f.properties.point_count).map(f => ({ n: f.properties.point_count, q: window.__map.project(f.geometry.coordinates) }))
       .filter(g => g.q.x > 40 && g.q.x < innerWidth - 40 && g.q.y > 90 && g.q.y < b - 20).slice(0, 3), bottom);
     for (const g of found) {
-      let rows = null;
+      let rows = null, nAt = g.n, nAfter = g.n;
+      // (the group's count read at the tap and again after it: the fetcher's batches regroup trains every few seconds,
+      // and one read before toRest saw "2 trains" where the tap then listed 3; round check 2026-11-26)
+      const countNear = q => page.evaluate((p) => { const f = window.__map.queryRenderedFeatures({ layers: ['train-labels'] }).filter(x => x.properties.point_count)
+        .map(x => ({ n: x.properties.point_count, d: Math.hypot(window.__map.project(x.geometry.coordinates).x - p.x, window.__map.project(x.geometry.coordinates).y - p.y) }))
+        .sort((a, b) => a.d - b.d)[0]; return f && f.d < 30 ? f.n : null; }, q);
       for (const dy of [15, 18, -15, 0]) {   // the label is under its point, or moved above it
         await toRest(page);
+        nAt = (await countNear(g.q)) ?? g.n;
         await page.evaluate((x, y) => { const m = window.__map; m.fire('click', { point: { x, y }, lngLat: m.unproject([x, y]), originalEvent: new MouseEvent('click') }); }, g.q.x, g.q.y + dy);
         await sleep(300);
         rows = await pickRows();
+        nAfter = (await countNear(g.q)) ?? nAt;
         if (rows !== null) break;
       }
       if (rows === null) continue;
       farGroups++;
-      expect(rows === g.n, `far out (zoom ${zoom}), a "${g.n} trains" label listed ${rows}`);
+      expect(rows === nAt || rows === nAfter, `far out (zoom ${zoom}), a "${nAt} trains" label listed ${rows}`);
     }
     await toRest(page);
   }
