@@ -837,7 +837,10 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
       if (!reduceMotion()) {
         ghost = ghostOf(old, clipLeaving(old));
         old.style.clipPath = '';
-        ghost.classList.add(dir > 0 ? 'out-l' : 'out-r');
+        // (a computer, back to Home: the card fades where it is as the sheet closes to the search box, no slide; it lay
+        // under the search box fading in, three moves in one place; Max, 2026-11-26: "still buggy animations when closing
+        // out cards on the search bar")
+        ghost.classList.add(wide() && pg === stack[0] ? 'out-fade' : dir > 0 ? 'out-l' : 'out-r');
       }
       old.remove();
       old.classList.remove('in-r', 'in-l', 'out-l', 'out-r');
@@ -950,6 +953,9 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
     if (srch) { closeSearch(); setIndex(0); return 'down'; }
     const pg = top();
     pg.def.dismiss?.();
+    // (a computer: every page closes at once, Home at rest; Max, 2026-11-26: "a click on the map with a card open should
+    // close it out, not just collapse it in stages")
+    if (wide() && stack.length > 1) { revealed = null; home(0); return 'home'; }
     fit('dismiss');   // (what was dismissed took its room with it)
     revealed = null;
     // what of the page is shown: below full, at most its half (more is empty room a glide left under it: taking only
