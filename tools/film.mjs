@@ -41,7 +41,7 @@ async function trainWithStatus(p, open) {
   return false;
 }
 
-// name, setup (to the moment before), act (the move filmed), ms (how long after it)
+// name, setup (to the moment before), act (the move filmed), ms (how long after it), live (only with --live)
 const SCENES = [
   { name: 'menu open', setup: toRest, act: p => p.click('#nav-button') },
   { name: 'menu close by its button', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#nav-button') },
@@ -59,14 +59,20 @@ const SCENES = [
   // (each of Home's three cards closed every way: its chip again, Esc, a map click; Max, 2026-11-26: "When closing either
   // störningar, sparade or statistik the card visually buggs out when closing. Clipping the search bar")
   ...[['stats', 'statistik'], ['saved', 'sparade'], ['dislist', 'störningar']].flatMap(([chip, word]) => [
-    { name: `${word} → closed by its chip`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.click(`#sheet .sh-chips [data-chip="${chip}"]`) },
-    { name: `${word} → closed by Esc`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.keyboard.press('Escape') },
-    { name: `${word} → closed by the map`, setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: clickMap },
+    { name: `${word} → closed by its chip`, live: chip === 'dislist', setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.click(`#sheet .sh-chips [data-chip="${chip}"]`) },
+    { name: `${word} → closed by Esc`, live: chip === 'dislist', setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: p => p.keyboard.press('Escape') },
+    { name: `${word} → closed by the map`, live: chip === 'dislist', setup: async (p) => { await openChip(p, chip); await sleep(800); }, act: clickMap },
   ]),
+  // (Störningar's rail work fold opened and shut; Max, 2026-11-26: "expanding and contracting the card leaves a lot of
+  // empty space"; --live)
+  { name: 'störningar fold open', live: true, setup: async (p) => { await openChip(p, 'dislist'); await sleep(1500); if (await p.evaluate(() => document.querySelector('.dis-fold')?.getAttribute('aria-expanded') === 'true')) { await p.click('.dis-fold'); await sleep(2500); } }, act: p => p.click('.dis-fold'), ms: 1600 },
+  { name: 'störningar fold shut', live: true, setup: async (p) => { await openChip(p, 'dislist'); await sleep(1500); if (await p.evaluate(() => document.querySelector('.dis-fold')?.getAttribute('aria-expanded') !== 'true')) { await p.click('.dis-fold'); await sleep(2500); } }, act: p => p.click('.dis-fold'), ms: 2600 },
   { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="saved"]') },
   { name: 'train status open', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
   { name: 'train status shut', setup: p => trainWithStatus(p, true), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
   { name: 'train i on', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .panel-info')?.click()) },
+  // (full to compact by "Mindre ⌃"; Max, 2026-11-26: "after the contration the small card jumps a few pixels up and down")
+  { name: 'train less', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .panel-more')?.click()), ms: 1600 },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
 ];
 
@@ -87,6 +93,7 @@ try {
     if (SLOW > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: SLOW });
     for (const sc of SCENES) {
       if (ONLY && !sc.name.includes(ONLY)) continue;
+      if (sc.live && !args.includes('--live')) continue;   // (Störningar: only with today's trains)
       await sc.setup(page);
       await sleep(400);
       const frames = [];
