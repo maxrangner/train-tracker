@@ -58,8 +58,11 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
     const w = navEl.offsetWidth, h = navEl.offsetHeight;
     const right = isWide() ? s.right : a.right;
     navEl.style.left = `${Math.round(Math.max(10, Math.min(innerWidth - w - 10, right - w)))}px`;
-    // (a computer at rest: under the whole box, its arrow band included)
-    const under = isWide() && stack().level === 0 ? s.bottom : a.bottom, g = gap();
+    // (a computer at rest: under the whole box, its arrow band included; the box's bottom where the sheet is going, its
+    // top stays: read from the screen, a busy PC's sheet could still be closing when its glide's time was up, and the menu
+    // came 120 px under the box; pc-check 6, 2026-11-26)
+    const st = stack(), boxBottom = isWide() && st.target.height ? s.top + st.target.height : s.bottom;
+    const under = isWide() && st.level === 0 ? boxBottom : a.bottom, g = gap();
     // (its top in the window, which starts at the line below, at the screen's top above)
     if (under + g + h <= innerHeight - 10) {
       side = 'below';
