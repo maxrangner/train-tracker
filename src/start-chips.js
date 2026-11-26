@@ -9,8 +9,8 @@
 // three are the stack's root pages (src/stack.js roots: they replace each other, no ‹), and while one is open the
 // chips are in the card's head, the lit one marked; a tap on the lit one closes it, back to the bar alone.
 // The room the floating row takes: --chips-h on <html> (what sits on the sheet's edge stands above it or under it: the
-// line, Rewind's ribbon; src/css/map.css, day.css), --chips-low the same on a phone only (the map's buttons, its
-// credit and scale ride on a phone's sheet's top edge; a computer's sheet is at the top).
+// line, Rewind's ribbon; src/css/map.css, day.css), and room() for the stack, which counts it into --sheet-h on a phone
+// (the map's buttons, its credit and scale ride on the sheet's top edge: one value, one glide; src/stack.js above).
 //
 // createStartChips({ stack, counts: { dis() -> { n, colour } or null, saved() -> n }, held() -> bool (☰'s menu
 //   shown), has(key) -> bool (that chip shown: Störningar only with live data, a replay has none) }) -> { draw() (the numbers again: each second), sync() (shown or not: a page came, the search, the menu) };
@@ -49,7 +49,7 @@ export function createStartChips({ stack, counts, held, has = () => true }) {
     // fades; drawn again unlit it was a new row flashing by as the card closed, ui-sweep 'störningar → back', 2026-11-26)
     if (START_KEYS.includes(top)) swap(head, html(top));
   }
-  let shown = null;
+  let shown = null, room = 0;   // room: the row's height and the 10 px over it, as last measured shown (a phone)
   function sync() {
     draw();
     const st = stack(), on = st.top() === 'home' && !st.searching && !held();
@@ -61,7 +61,8 @@ export function createStartChips({ stack, counts, held, has = () => true }) {
     // (a chip's height and the 10 px over it; hidden the row takes no room)
     const h = on ? (float.querySelector('.sc')?.offsetHeight ?? 0) + 10 : 0;
     root.style.setProperty('--chips-h', `${h}px`);
-    root.style.setProperty('--chips-low', `${isWide() ? 0 : h}px`);
+    const low = isWide() ? 0 : h || room;   // (hidden: kept, the map's buttons stay where they stand at rest)
+    if (low !== room) { room = low; stack()?.edgeChanged?.(); }
   }
   // A tap: that part's card, or the lit one closed (back to the bar alone)
   const tap = (e) => {
@@ -74,5 +75,5 @@ export function createStartChips({ stack, counts, held, has = () => true }) {
   float.addEventListener('click', tap);
   head.addEventListener('click', tap);
   onWideChange(sync);
-  return { draw, sync };
+  return { draw, sync, room: () => room };
 }

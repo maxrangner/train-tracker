@@ -269,6 +269,7 @@ stack = createStack({
   sheet: document.getElementById('sheet'),
   define: defineNow,
   roots: START_KEYS,   // (the chips' cards)
+  above: () => chips?.room() ?? 0,   // (the chips float on the sheet's edge at rest: the map's buttons above them)
   onPad: h => day.pad(h),
   onChange(pg) {
     nav.pageOnTop(pg.key);
