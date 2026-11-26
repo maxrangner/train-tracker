@@ -109,7 +109,9 @@
   #sheet[data-search] .pg:not(.res) { display: none; }
   .pg > * { flex: none; }
   /* What the pages hold: no own scrolling, no own height limits (the sheet has them). */
-  .pg :is(.panel-table, .panel-info-box, .help-body, #settings, #conn-body, .pick-list, .dis-text, .stats-body) { overflow: visible; max-height: none; min-height: 0; margin-right: 0; padding-right: 0; }
+  /* (a scroll area of its own also takes a finger's pull from the sheet: the browser scrolls it instead, Störningar's
+     list at half didn't move with a swipe, Max 2026-11-26) */
+  .pg :is(.panel-table, .panel-info-box, .help-body, #settings, #conn-body, .pick-list, .dis-text, .dis-body, .stats-body) { overflow: visible; max-height: none; min-height: 0; margin-right: 0; padding-right: 0; }
   .pg :is(#panel, #board, #picker, #disruption, #settings-page, #help, #conn-page) { display: flex; flex-direction: column; gap: 6px; }
   .pg #disruption { gap: 0; }
 
@@ -147,7 +149,10 @@
   /* The start's chips (src/start-chips.js): a row of named buttons, an icon and a number each (as Home's card titles
      were: src/css/page.css .ct-ic, .ct-n); floating over the map just above the bar at rest, in the card's head while
      one's card is open. A row too wide scrolls sideways. */
-  .sc-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-user-select: none; user-select: none; }
+  /* (pan-x: a sideways finger scrolls the row, an up or down one pulls the sheet; a scroll area resets the sheet's
+     touch-action: none, and the chips in a card's head took no swipe; Max, 2026-11-26: "you can't use the space where
+     the three buttons are to swipe card") */
+  .sc-row { display: flex; align-items: center; gap: 6px; overflow-x: auto; touch-action: pan-x; scrollbar-width: none; -webkit-user-select: none; user-select: none; }
   .sc-row::-webkit-scrollbar { display: none; }
   .sc { flex: none; display: inline-flex; align-items: center; gap: 6px; height: var(--chip-h); padding: 0 12px 0 10px; border: 0; border-radius: calc(var(--chip-h) / 2);
     background: var(--hover); color: var(--ink); font: 650 14px var(--font); white-space: nowrap; cursor: pointer; transition: background .15s, color .15s; }

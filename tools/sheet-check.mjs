@@ -15,7 +15,7 @@
 // node tools/sheet-check.mjs (with npm run dev; PAGE= for another port). Not the phone: the feel and the real keyboard.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, until, openSearch, toRest, openTrainByNumber, setLevel, sheetState } from './lib/screen.mjs';
+import { waitForMap, until, openSearch, toRest, openTrainByNumber, setLevel, sheetState, openChip } from './lib/screen.mjs';
 mkdirSync('shots/test-0117', { recursive: true });   // (pictures aren't in git: a fresh working folder has no such folder)
 
 const KEYBOARD_PX = 430;   // the phone keyboard's height in CSS pixels (Max's screenshot, 2026-11-17: 1120 of 2340 device pixels, 2.625 each)
@@ -271,6 +271,32 @@ try {
         await toRest(page);
       }
     }
+  }
+
+  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): the same half and full each, and a finger
+  // on the chip row in the card's head pulls the card like the rest of it (Max, 2026-11-26: "Whole card should respond
+  // to swipe"; "all three have different height of fully expanded") ----
+  {
+    const heights = {};
+    for (const key of ['saved', 'stats']) {
+      await toRest(page);
+      await openChip(page, key);
+      heights[key] = await page.evaluate(() => window.__stack.heights.slice(1).join('/'));
+      for (const dy of [-200, 200]) {
+        if (await page.evaluate(k => window.__stack.top() !== k, key)) await openChip(page, key);
+        await setLevel(page, 1);
+        const c = await page.evaluate(() => { const b = document.querySelector('#sheet .sh-chips [data-chip]').getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+        await page.touchscreen.touchStart(c.x, c.y);
+        for (let i = 1; i <= 10; i++) { await page.touchscreen.touchMove(c.x, c.y + dy * i / 10); await sleep(25); }
+        await sleep(150); await page.touchscreen.touchEnd(); await sleep(900);
+        const s = await page.evaluate(() => ({ top: window.__stack.top(), level: window.__stack.level }));
+        const good = dy < 0 ? s.top === key && s.level === 2 : s.top === 'home';
+        if (!good) fails.push(`5 ${key}: its chip row pulled ${dy < 0 ? 'up' : 'down'} 200 px: ${s.top} at level ${s.level}`);
+      }
+    }
+    if (heights.saved !== heights.stats) fails.push(`5 the chips' cards' half/full differ: Sparade ${heights.saved}, Statistik ${heights.stats}`);
+    else notes.push(`5 the chips' cards: half/full ${heights.saved} both; their chip row pulls them up and down`);
+    await toRest(page);
   }
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));
 } finally { await browser.close(); }
