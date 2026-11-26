@@ -63,30 +63,22 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
     // came 120 px under the box; pc-check 6, 2026-11-26)
     const st = stack(), boxBottom = isWide() && st.target.height ? s.top + st.target.height : s.bottom;
     const under = isWide() && st.level === 0 ? boxBottom : a.bottom, g = gap();
-    // (its top in the window, which starts at the line below, at the screen's top above)
+    // Its window: below the box's top corners on a computer, so the box itself hides it as it passes behind and it comes
+    // out from under the box's own rounded bottom edge, never shown at the box's top or through its top corners; above
+    // the sheet's top edge on a phone, where it goes under the sheet (Max, 2026-11-26: "It should just slide under the
+    // search bar, without showing behind the top"; a window of its own shape made it look resized, not slid). Its top
+    // in the window.
     if (under + g + h <= innerHeight - 10) {
       side = 'below';
-      Object.assign(winEl.style, { top: `${Math.round(under)}px`, bottom: '0px', height: '' });
-      navEl.style.top = `${Math.round(g)}px`;
+      const line = Math.round(isWide() ? s.top + (parseFloat(getComputedStyle(sheetEl).borderBottomRightRadius) || 0) : under);
+      Object.assign(winEl.style, { top: `${line}px`, bottom: '0px', height: '' });
+      navEl.style.top = `${Math.round(under + g - line)}px`;
     } else {
       side = 'above';
       Object.assign(winEl.style, { top: '0px', bottom: '', height: `${Math.round(s.top)}px` });
       navEl.style.top = `${Math.round(Math.max(10, s.top - g - h))}px`;
     }
-    shapeWindow(left, w);
   }
-  // The window's edge at the line: across the card's width it has the card's own rounded corners, so the part of the card
-  // that shows as it slides out always has round corners, never a straight cut under the box's rounded ones (Max,
-  // 2026-11-26: "when the hamburger menu slides out, it's clipped at the bottom of the search bar even though its
-  // rounded"); beside the card the window starts lower by the corner, room for the card's shadow there.
-  function shapeWindow(left, w) {
-    const W = innerWidth, H = Math.round(winEl.getBoundingClientRect().height), r = navRadius() + 1;
-    const L = left - 1, R = left + w + 1;   // (its 1 px ring included)
-    winEl.style.clipPath = side === 'below'
-      ? `path('M0 ${r} L${L} ${r} A${r} ${r} 0 0 1 ${L + r} 0 L${R - r} 0 A${r} ${r} 0 0 1 ${R} ${r} L${W} ${r} L${W} ${H} L0 ${H} Z')`
-      : `path('M0 0 L${W} 0 L${W} ${H - r} L${R} ${H - r} A${r} ${r} 0 0 1 ${R - r} ${H} L${L + r} ${H} A${r} ${r} 0 0 1 ${L} ${H - r} L0 ${H - r} Z')`;
-  }
-  const navRadius = () => parseFloat(getComputedStyle(navEl).borderTopRightRadius) || 18;
   // (out from behind the box and back behind it: the card lies under the sheet (src/css/menu.css) and moves its whole
   // height plus the gap, so it shows in the gap as it goes (Max, 2026-11-25: "Menu should go all the way behind the search
   // bar"); its window cuts it at the box's line, above)
