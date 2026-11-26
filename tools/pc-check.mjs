@@ -132,9 +132,9 @@ try {
   //    before Settings, under the box
   await page.keyboard.press('Escape'); await sleep(1600);
   const again = await page.evaluate(() => { const n = document.getElementById('nav'), s = document.getElementById('sheet').getBoundingClientRect(); if (!n || n.hidden) return null;
-    const r = n.getBoundingClientRect(); return { top: window.__stack.top(), at: Math.round(r.right), gap: Math.round(r.top - s.bottom), moving: n.getAnimations().length }; });
+    const r = n.getBoundingClientRect(), w = document.getElementById('nav-window').getBoundingClientRect(); return { top: window.__stack.top(), at: Math.round(r.right), gap: Math.round(r.top - s.bottom), moving: n.getAnimations().length, where: `menu ${Math.round(r.top)}-${Math.round(r.bottom)}, its window from ${Math.round(w.top)}, the box ${Math.round(s.top)}-${Math.round(s.bottom)}, level ${window.__stack.level}` }; });
   ok(again && again.top === 'home' && Math.abs(again.at - menu?.at) <= 1 && again.gap >= 6 && again.gap <= 16 && !again.moving,
-    `back from Settings: the menu ${again ? 'open again' : 'NOT open'} on ${again?.top}, its right edge at ${again?.at} px (before Settings ${menu?.at}), ${again?.gap} px under the box (want 6 to 16)`);
+    `back from Settings: the menu ${again ? 'open again' : 'NOT open'} on ${again?.top}, its right edge at ${again?.at} px (before Settings ${menu?.at}), ${again?.gap} px under the box (want 6 to 16; ${again?.where})`);
   // 6b. ☰ again shuts it (the bar alone has no arrow under it since the start chips, Max 2026-11-25); Home stays at rest,
   //     the chips come back under the box
   await page.mouse.click(...(await page.evaluate(() => { const b = document.getElementById('nav-button').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }))); await sleep(900);
