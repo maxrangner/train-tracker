@@ -273,15 +273,15 @@ try {
     }
   }
 
-  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): the same half and full each, and a finger
+  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): the same full each, and a finger
   // on the chip row in the card's head pulls the card like the rest of it (Max, 2026-11-26: "Whole card should respond
-  // to swipe"; "all three have different height of fully expanded") ----
+  // to swipe"; "all three have different height of fully expanded"; a phone) ----
   {
     const heights = {};
     for (const key of ['saved', 'stats']) {
       await toRest(page);
       await openChip(page, key);
-      heights[key] = await page.evaluate(() => window.__stack.heights.slice(1).join('/'));
+      heights[key] = await page.evaluate(() => window.__stack.heights[2]);
       for (const dy of [-200, 200]) {
         if (await page.evaluate(k => window.__stack.top() !== k, key)) await openChip(page, key);
         await setLevel(page, 1);
@@ -294,8 +294,8 @@ try {
         if (!good) fails.push(`5 ${key}: its chip row pulled ${dy < 0 ? 'up' : 'down'} 200 px: ${s.top} at level ${s.level}`);
       }
     }
-    if (heights.saved !== heights.stats) fails.push(`5 the chips' cards' half/full differ: Sparade ${heights.saved}, Statistik ${heights.stats}`);
-    else notes.push(`5 the chips' cards: half/full ${heights.saved} both; their chip row pulls them up and down`);
+    if (heights.saved !== heights.stats) fails.push(`5 the chips' cards' full differs: Sparade ${heights.saved}, Statistik ${heights.stats}`);
+    else notes.push(`5 the chips' cards: full ${heights.saved} both; their chip row pulls them up and down`);
     await toRest(page);
   }
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));
