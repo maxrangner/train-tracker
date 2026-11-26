@@ -125,6 +125,8 @@ export const pageSel = key => `#sheet .pg[data-key="${key}"]`;
 // A start chip tapped as a person does: the one over the map at rest, else the one in an open chip card's head; waits
 // for its card to stand (slid in, the one it replaced gone). Returns whether it opened.
 export async function openChip(page, key) {
+  // (already open: a tap on the lit chip would close it)
+  if (await page.evaluate(k => window.__stack.top() === k && !window.__stack.searching && document.getElementById('nav').hidden, key)) return true;
   if (!(await page.evaluate(() => document.getElementById('sheet').hasAttribute('data-root')))) await toRest(page);
   const sel = await page.evaluate(() => (document.getElementById('sheet').hasAttribute('data-root') ? '#sheet .sh-chips' : '#chips'));
   await page.click(`${sel} [data-chip="${key}"]`);
