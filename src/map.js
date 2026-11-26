@@ -1066,12 +1066,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       }
       document.documentElement.classList.toggle('labels-held', on);
     };
+    // (one finger only: a second one is a pinch, which zooms with the labels kept; Max, 2026-11-26: "When zooming with two
+    // fingers, dont hide labels. Only when tapping and holding")
+    const down = new Set();
     map.getCanvasContainer().addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      down.add(e.pointerId);
       clearTimeout(holdTimer);
+      if (down.size > 1) { hideLabels(false); return; }
       holdTimer = setTimeout(() => hideLabels(true), HOLD_MS);
     });
-    const release = () => { clearTimeout(holdTimer); hideLabels(false); };
+    const release = (e) => {
+      if (e.type === 'blur') down.clear(); else down.delete(e.pointerId);
+      clearTimeout(holdTimer);
+      hideLabels(false);
+    };
     for (const ev of ['pointerup', 'pointercancel', 'blur']) window.addEventListener(ev, release);
     resolve();
   }));
