@@ -33,6 +33,11 @@
   /* A chip's card (src/stack.js roots): the chips in the head, the lit one marked (a computer: under the search box) */
   .sh-chips { position: absolute; inset: 0; transition: opacity .2s, transform .28s var(--ez); }
   #sheet:not([data-root]) .sh-chips { opacity: 0; pointer-events: none; transform: translateY(8px); visibility: hidden; transition: opacity .2s, transform .28s var(--ez), visibility 0s .28s; }
+  /* (a chip's card coming or going (src/stack.js data-head-swap): the leaving one quickly, where it stands, the coming
+     one once it is gone; the two faded into each other in the same place, the lit chip over the search text: Max,
+     2026-11-26 "Clipping the search bar", tools/film.mjs 'sparade → closed by Esc', 'chip → statistik') */
+  #sheet[data-head-swap]:not([data-root]) .sh-chips, #sheet[data-head-swap][data-root] .sh-search { transition: opacity .1s, visibility 0s .1s; }
+  #sheet[data-head-swap][data-page="home"] .sh-search, #sheet[data-head-swap][data-root] .sh-chips { transition: opacity .18s .1s, transform .28s var(--ez) .1s; }
   .sh-field { flex: 1; min-width: 0; height: 48px; box-sizing: border-box; border-radius: 24px; background: var(--hover); display: flex; align-items: center; gap: 8px;
     padding: 0 14px; color: var(--muted); cursor: text; }
   .sh-field:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
@@ -93,8 +98,14 @@
   /* More of the page below what is shown (src/stack.js syncFade): a fade at the sheet's shown bottom edge (--sheet-off:
      how far the sheet's own bottom is below the screen's; a phone's sheet slides down). A phone: solid 12 px down, so
      nothing shows behind the "More" pill; a computer: a longer soft fade. */
-  .sh-fade { position: absolute; left: 0; right: 0; bottom: var(--sheet-off, 0px); height: calc(40px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none;
-    background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 12px); opacity: 0; transition: opacity .2s; }
+  .sh-fade { position: absolute; left: 0; right: 0; bottom: 0; transform: translateY(calc(-1 * var(--sheet-off, 0px))); height: calc(40px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none;
+    background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 0%, transparent), var(--bg) 12px); opacity: 0;
+    transition: opacity .2s, transform calc(var(--t-glide) * var(--mk, 1)) var(--ez); }
+  /* (it glides as the sheet does, by a transform as the sheet, so it stays on the screen's bottom edge; set at once to
+     the sheet's new place, a card closing on a phone showed its "More ⌄" up in the head, then sliding down with the
+     sheet as it faded; moved by "bottom" it fell behind the sheet when the page was busy: tools/film.mjs
+     'statistik → closed by Esc', 'chip → statistik', 2026-11-26) */
+  #sheet.dragging .sh-fade { transition: opacity .2s; }
   #sheet.more-below .sh-fade { opacity: 1; }
   #sheet.dragging .sh-fade, #sheet[data-search] .sh-fade { opacity: 0; }
   /* A phone's "More ⌄" (its word: src/stack.js moreWord); its grey pill only with Debug → Pill behind "More ⌄" (Max,
@@ -169,11 +180,19 @@
   .sc[aria-pressed="true"] :is(.ct-ic, .ct-n) { color: var(--accent-ink); }
   .sc[aria-pressed="true"] .ct-n { background: color-mix(in srgb, var(--accent-ink) 18%, transparent); }
   .sc:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #chips { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(var(--sheet-shown, 72px) + 10px);
-    padding: 6px 0; margin: -6px 0; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s; }
+  #chips { position: fixed; z-index: 5; left: calc(12px + env(safe-area-inset-left, 0px)); right: calc(12px + env(safe-area-inset-right, 0px)); bottom: 10px;
+    transform: translateY(calc(-1 * var(--sheet-shown, 72px)));
+    padding: 6px 0; margin: -6px 0; transition: transform calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s; }
+  /* (a phone: moved as the sheet is, by a transform, so they glide together on the graphics card; moved by "bottom"
+     they glide on the page's own thread and fell behind the sheet's edge whenever it was busy, tools/film.mjs
+     'statistik → closed by Esc', 2026-11-26) */
   #chips .sc { background: var(--card); box-shadow: var(--shadow-s); }
+  /* (shown, over the sheet's layer: under it the sheet's shadow lay on them; Max, 2026-11-26 "The pills under the
+     search bar is also hit by the search bars shadow". Stepped aside, under it again at once, as the card grows over
+     them) */
+  html:not(.chips-off) #chips { z-index: 7; }
   /* (stepped aside: a page, the search or ☰'s menu open) */
-  .chips-off #chips { opacity: 0; visibility: hidden; pointer-events: none; transition: bottom calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s .18s; }
+  .chips-off #chips { opacity: 0; visibility: hidden; pointer-events: none; transition: transform calc(var(--t-glide) * var(--mk, 1)) var(--ez), top calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s .18s; }
 
   /* A computer */
   @media (min-width: 440px) {
@@ -181,11 +200,14 @@
       transition: height calc(var(--t-glide) * var(--mk, 1)) var(--ez); will-change: height; }
     #sheet-grip { display: none; }
     /* (the chips under the search box at rest; in a chip's card the box keeps its search field, the chips under it) */
-    #chips { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; max-width: var(--sheet-w); bottom: auto; top: calc(var(--sheet-shown, 72px) + 20px + env(safe-area-inset-top, 0px));
+    #chips { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; max-width: var(--sheet-w); bottom: auto; transform: none; top: calc(var(--sheet-shown, 72px) + 20px + env(safe-area-inset-top, 0px));
       transition: top calc(var(--t-glide) * var(--mk, 1)) var(--ez), opacity .18s, visibility 0s; }
     #sheet[data-root] .sh-head { height: calc(var(--head-h) + var(--chips-row)); }
     #sheet[data-root] .sh-search { bottom: auto; height: var(--head-h); opacity: 1; pointer-events: auto; transform: none; visibility: visible; transition: opacity .2s, transform .28s var(--ez); }
-    #sheet[data-root] .sh-chips { top: var(--head-h); }
+    /* (always under the box, also while they fade as the card closes: back at the head's top they lay over the search
+       box; and no 8 px move, as for the search box and the title line below) */
+    #sheet .sh-chips { top: var(--head-h); bottom: auto; height: var(--chips-row); }
+    #sheet:not([data-root]) .sh-chips { transform: none; }
     /* (the search box and a page's title line cross-fade where they stand: on a computer the sheet's top edge holds
        still, so their 8 px moves were the only motion up there, against the sheet closing below; Max, 2026-11-26:
        "Dismissing any cards the animation is buggy and jittery with the search pill") */
