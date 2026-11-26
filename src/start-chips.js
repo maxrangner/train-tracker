@@ -45,7 +45,9 @@ export function createStartChips({ stack, counts, held, has = () => true }) {
   function draw() {
     const top = stack().top();
     swap(float, html(null));
-    swap(head, html(START_KEYS.includes(top) ? top : null));
+    // (the card's head only while a chip's card is on top: as the card goes it keeps its look, the lit chip lit, while it
+    // fades; drawn again unlit it was a new row flashing by as the card closed, ui-sweep 'störningar → back', 2026-11-26)
+    if (START_KEYS.includes(top)) swap(head, html(top));
   }
   let shown = null;
   function sync() {
