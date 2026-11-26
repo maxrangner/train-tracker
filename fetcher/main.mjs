@@ -18,7 +18,7 @@ import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCanc
 import { followPositions } from '../src/trains-source.js';
 import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
-import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory, LIVE_MS } from './files.mjs';
+import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory, lateKinds, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
@@ -86,9 +86,13 @@ globalThis.fetch = (url, opts) => {
 const state = createState();
 let uploader = null;
 const shelf = createShelf({ onAdd: (name, f) => uploader?.add(name, f), onRemove: (name, f) => uploader?.remove(name, f) });
-if (args.includes('--upload')) {
-  const { createUploader } = await import('./upload.mjs');
-  uploader = createUploader(cfg, log, { keep: name => Boolean(shelf.get(name)) });
+const uploadLib = args.includes('--upload') ? await import('./upload.mjs') : null;
+if (uploadLib) uploader = uploadLib.createUploader(cfg, log, { keep: name => Boolean(shelf.get(name)) });
+// The viewer count (2026-11-23; fetcher/viewers.mjs): count/i.php's day files read over the same connection.
+let viewers = null;
+if (uploader) {
+  const { createViewers } = await import('./viewers.mjs');
+  viewers = createViewers({ read: (name, from) => uploader.readCount(name, from), list: () => uploader.listCount(), log });
 }
 const feeds = { positions: { mode: 'starting', since: Date.now() }, passings: { mode: 'starting', since: Date.now() }, lastRecordAt: null,
   newestReport: null };   // the newest position report's own time
@@ -99,8 +103,8 @@ const sizes = () => Object.fromEntries(Object.entries(shelf.names()).map(([kind,
   return [kind, { name, bytes: f?.json.length ?? 0, gz: f?.gz.length ?? 0 }];
 }));
 const status = () => ({ now: Date.now(), up: Math.round(process.uptime()), pid: process.pid, startedAt, feeds, state: state.sizes(),
-  load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), sizes: sizes(), upload: uploader?.stats() ?? null,
-  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null });
+  load: { ...load, streamBytes: NodeEventSource.bytes }, files: shelf.names(), late: lateKinds(shelf.names(), Date.now()), sizes: sizes(), upload: uploader?.stats() ?? null,
+  memoryMB: Math.round(process.memoryUsage().rss / 1e6), cpu: process.cpuUsage(), taps: timetable?.stats() ?? null, viewers: viewers?.status() ?? null });
 const server = servePort ? serve(shelf, servePort, status) : null;
 if (server) log(`files on http://localhost:${servePort}/ (status: /status)`);
 // --status 8091: only the status, only on this computer (127.0.0.1), for the monitor (monitor/main.mjs).
@@ -163,16 +167,24 @@ function historyTick(t) {
 }
 
 // The live file, at the start of every 5-s slot.
+// One round that throws must not stop the live files for good (until 2026-11-24 the next round was set only at the
+// end; the hang review, finding 7): the next one is always set, the error logged when it changes.
+let liveError = null;
 function liveTick() {
-  const t = Date.now();
-  try { historyTick(t); } catch (e) { log(`history: ${e.message}`); }
-  // Uploading: only what is on one.com (fetcher/upload.mjs names()); else (--serve) everything on the shelf.
-  const names = uploader ? uploader.names() : shelf.names(); delete names.live;
-  const live = buildLive(state, t, names);
-  live.feeds = { positions: feeds.positions.mode, passings: feeds.passings.mode, lastRecordAt: feeds.lastRecordAt };
-  shelf.put('live', t, live);
-  shelf.sweep(t);
-  later(LIVE_MS - (Date.now() % LIVE_MS) + 50, liveTick);
+  try {
+    const t = Date.now();
+    try { historyTick(t); } catch (e) { log(`history: ${e.message}`); }
+    // Uploading: only what is on one.com (fetcher/upload.mjs names()); else (--serve) everything on the shelf.
+    const names = uploader ? uploader.names() : shelf.names(); delete names.live;
+    const live = buildLive(state, t, names);
+    live.feeds = { positions: feeds.positions.mode, passings: feeds.passings.mode, lastRecordAt: feeds.lastRecordAt };
+    shelf.put('live', t, live);
+    shelf.sweep(t);
+    liveError = null;
+  } catch (e) {
+    if (e.message !== liveError) log(`live file: ${e.stack ?? e.message}`);
+    liveError = e.message;
+  } finally { later(LIVE_MS - (Date.now() % LIVE_MS) + 50, liveTick); }
 }
 later(LIVE_MS - (Date.now() % LIVE_MS) + 50, liveTick);
 
@@ -187,6 +199,7 @@ every('passings-add file', MIN, 75000, () => {
 // Planned routes for the trains on the map: fetcher/ask-routes.mjs.
 let plannedBaseAt = null, plannedBaseIds = null;
 const askRoutes = () => askRoutesOnce(state, fetchPlannedRoutes);
+if (viewers) every('viewers', 10 * MIN, 30000, () => viewers.round());
 if (!replayName) every('planned routes', 30000, 10000, askRoutes);   // a replay brings its own
 const shownIds = t => state.trains(t).map(r => r.id);
 every('planned file', 10 * MIN, 40000, () => {
@@ -249,6 +262,16 @@ if (timetable) {
   every('messages file', 2 * MIN, 50000, () => { const t = Date.now(); shelf.put('messages', t, { v: FORMAT, ...timetable.messages(t) }); });
 }
 
+// ---------- the last resort: uploads stuck ----------
+// Nothing reached one.com for 10 minutes although Trafikverket answers and nothing says why (fetcher/upload.mjs
+// uploadStuck; the hang review, finding 3): stop with code 1, systemd starts the fetcher again 5 s later
+// (Restart=always) and the monitor counts the restart. Catches hangs nobody has found yet.
+if (uploader && !replayName) every('upload watch', MIN, MIN, () => {
+  if (!uploadLib.uploadStuck(uploader.stats(), { now: Date.now(), since: startedAt, lastRecordAt: feeds.lastRecordAt })) return;
+  log(`upload: nothing reached one.com for ${uploadLib.STUCK_MS / MIN} minutes while Trafikverket answers: restarting (systemd starts the fetcher again)`);
+  stop('uploads stuck', 1);
+});
+
 // ---------- a status line every 10 minutes ----------
 let lastLoad = { asks: 0, streams: 0, at: Date.now(), cpu: process.cpuUsage() };
 every('status', 10 * MIN, 10 * MIN, () => {
@@ -261,17 +284,18 @@ every('status', 10 * MIN, 10 * MIN, () => {
 });
 
 // ---------- stopping ----------
-async function stop(why) {
+async function stop(why, code = 0) {
   const s = status(), mins = (Date.now() - load.since) / MIN;
   log(`stopping (${why}) after ${mins.toFixed(1)} min: ${s.state.trains} trains, ${s.state.passings} passings, ${s.state.planned} routes, ` +
     `${Object.keys(s.files).length} kinds of files; Trafikverket ${(load.asks / mins).toFixed(1)} asks/min, ${load.streams} streams opened; ` +
     `${s.upload ? `uploads ${s.upload.ok} ok, ${s.upload.failed} failed; ` : ''}memory ${s.memoryMB} MB; feeds ${feeds.positions.mode}/${feeds.passings.mode}`);
+  setTimeout(() => process.exit(code), 10000).unref();   // stopping itself can't hang (the uploader's close waits 3 s at most)
   for (const s of stops) s();
   for (const t of timers) clearTimeout(t);
   server?.close();
   statusServer?.close();
   await uploader?.close();
-  process.exit(0);
+  process.exit(code);
 }
 process.on('SIGINT', () => stop('SIGINT'));
 process.on('SIGTERM', () => stop('SIGTERM'));

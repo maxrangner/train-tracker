@@ -120,7 +120,12 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
       // A day asked again (03:30, a stream gap) stays in memory while its new copy comes (loadDay's clean copy removes
       // what Trafikverket no longer has): until 2026-11-22 it was taken out first, so no tap files were made meanwhile
       // (~21 s a night; for the whole outage if Trafikverket was down at 03:30).
-      for (const d of want) if (!days.has(d) || again.has(d)) { again.delete(d); await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null); }
+      // A failed load asks again next minute (until 2026-11-24 the flag went first, so a failed 03:30 or after-outage
+      // copy waited until the next 03:30; the hang review, finding 6).
+      for (const d of want) if (!days.has(d) || again.has(d)) {
+        const was = again.delete(d);
+        try { await loadDay(d, d === yesterday ? now - YESTERDAY_BACK_MS : null); } catch (e) { if (was) again.add(d); throw e; }
+      }
       const running = new Set(), cut = Date.now() - KEEP_RUNNING_MS;   // (the time after the loads)
       for (const x of rows.values()) if (x.day === yesterday && x.r[6] * 1000 >= cut) running.add(tripOf(x));
       for (const [k, x] of rows) if (x.day === yesterday && !running.has(tripOf(x))) rows.delete(k);

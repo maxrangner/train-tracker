@@ -15,8 +15,9 @@
 // folder on one.com, e.g. /webroots/4506cfb2) and SITE_URL (e.g. https://sparat.rangner.com).
 // No key and no script ever goes to one.com (2026-11-17, Max: the tap script ask.php and its key file were taken off
 // one.com; taps come from the fetcher's files instead, public plan phase B): put() refuses any .php file and anything
-// under api/. No viewer's browser asks Trafikverket anything: since plan step 4 (2026-11-17) taps come from the
-// fetcher's files too.
+// under api/, with one exception: count/i.php, the viewer count (Max, 2026-11-23: "Why not PHP? Why not build
+// ourself?"), which holds no secret and only adds a line to its day file (count/days/, closed to the web).
+// No viewer's browser asks Trafikverket anything: since plan step 4 (2026-11-17) taps come from the fetcher's files too.
 // Safety: it writes and deletes only inside SITE_DIR, and never in data/ (the fetcher's) except on remove. The first
 // run needs the folder empty (data/ allowed) and leaves a marker (.sparat-site); later runs refuse a folder without
 // it, so a wrong SITE_DIR (rangner.com's own folder, say) is never written to.
@@ -49,7 +50,7 @@ const URL_ = cfg.SITE_URL.replace(/\/$/, '');
 if (!/^\/webroots\/[0-9a-z]+$/.test(SITE)) { console.log(`SITE_DIR must be a one.com address folder like /webroots/4506cfb2 (got ${SITE})`); process.exit(2); }
 const MARK = '.sparat-site';
 const DATA_MARK = '.sparat-data';   // the fetcher's folder marker (fetcher/upload.mjs MARK)
-const OURS = new Set(['data', 'api', 'tiles', MARK, ...SUBS]);   // never part of the page's own files
+const OURS = new Set(['data', 'api', 'tiles', 'count', MARK, ...SUBS]);   // never part of the page's own files
 
 // Cache rules. Root: the page itself is asked again every visit (a new version shows at once); the few named files
 // beside it are kept an hour. assets/: built names change with their content, so they are kept a year. map/, glyphs/,
@@ -86,7 +87,18 @@ Header always set Cache-Control "public, max-age=604800"
 </FilesMatch>
 </IfModule>
 `;
-const ROBOTS = '# Spårat is not announced yet (public-plan step 9): please don\'t list it.\nUser-agent: *\nDisallow: /\n';
+// The viewer count's folder (2026-11-23): count/i.php from the project; its day files in count/days/, closed to the web.
+const COUNT_PHP = 'count/i.php';
+const HT_COUNT = `# Spårat's viewer count (tools/deploy.mjs, count/i.php): no listing, never cached
+Options -Indexes
+<IfModule mod_headers.c>
+Header always set Cache-Control "no-store"
+</IfModule>
+`;
+const HT_DAYS = `# Spårat's viewer count: the day files are read only by the fetcher over SFTP
+Require all denied
+`;
+const ROBOTS ='# Spårat is not announced yet (public-plan step 9): please don\'t list it.\nUser-agent: *\nDisallow: /\n';
 
 const sha = b => createHash('sha256').update(b).digest('hex');
 const mapFiles = () => readdirSync(join(ROOT, 'data/map')).filter(f => /^sweden-\d{4}-\d\d-\d\d\.pmtiles$/.test(f)).sort();
@@ -123,7 +135,7 @@ async function mkdirs(dir) {
 }
 // A whole file under a temporary name, then into place: a reader never gets half a file.
 async function put(rel, buf) {
-  if (/\.(php|phtml|phar)$/i.test(rel) || rel.split('/')[0] === 'api') throw new Error(`refusing ${rel}: no scripts and nothing under api/ on one.com`);
+  if ((/\.(php|phtml|phar)$/i.test(rel) && rel !== COUNT_PHP) || rel.split('/')[0] === 'api') throw new Error(`refusing ${rel}: no scripts and nothing under api/ on one.com`);
   const to = inside(`${SITE}/${rel}`), tmp = `${to}.up-${process.pid}.tmp`;
   await mkdirs(posix.dirname(to));
   await call('writeFile', tmp, buf);
@@ -191,7 +203,7 @@ async function page() {
   if (!name || (await stat(`${SITE}/tiles/${name}`))?.size !== statSync(join(ROOT, 'data/map', name)).size)
     throw new Error(`the map file ${name} is not on the site yet: run tiles first`);
   const b = spawnSync(process.execPath, ['tools/build-public.mjs', '--data', `${URL_}/data/`, '--map', `${URL_}/tiles/${name}`,
-    ...(SUB ? ['--base', `/${SUB}/`] : [])],
+    ...(SUB ? ['--base', `/${SUB}/`] : ['--count', `${URL_}/${COUNT_PHP}`])],
     { cwd: ROOT, stdio: 'inherit' });
   if (b.status !== 0) throw new Error('build:public failed (or the key search found the key): nothing uploaded');
   const dist = join(ROOT, 'dist-public');
@@ -222,6 +234,7 @@ async function page() {
   }
   saveRecord();
   log(`page: ${sent} files uploaded (${(bytes / 1e6).toFixed(1)} MB), ${kept} unchanged; index.html last`);
+  if (!SUB) await count();   // (a test page in a folder counts no viewers: its build has no count address)
 
   // Files the new page no longer has: kept a day after they left it, then deleted.
   const now = Date.now();
@@ -234,6 +247,17 @@ async function page() {
   saveRecord();
   if (dropped || waiting) log(`page: ${dropped} old files deleted, ${waiting} kept until a day after they left the page`);
   log(`page: ${PAGE_URL}`);
+}
+
+// The viewer count: its folder's rules first (days/ closed before any day file can exist), then the PHP file.
+async function count() {
+  await put('count/days/.htaccess', HT_DAYS);
+  await put('count/.htaccess', HT_COUNT);
+  const php = readFileSync(join(ROOT, COUNT_PHP));
+  if (record.files[COUNT_PHP] === sha(php) && (await stat(`${SITE}/${COUNT_PHP}`))) { log(`count: ${COUNT_PHP} unchanged`); return; }
+  await put(COUNT_PHP, php);
+  record.files[COUNT_PHP] = sha(php); saveRecord();
+  log(`count: ${COUNT_PHP} uploaded`);
 }
 
 async function list() {

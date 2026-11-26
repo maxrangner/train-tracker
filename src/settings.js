@@ -81,6 +81,9 @@ const DEFAULTS = {
   // The scale slider on the map's right edge (Max's idea 10; src/scale-slider.js). Off by default (Max, 2026-11-23: "Put
   // the zoom bar behind an options toggle. Default off"): off, the compass says 3D while flat, + and − with a mouse.
   scaleSlider: false,
+  // Not counted as a viewer on this phone or browser (Debug, Max 2026-11-23: his own pages and phone stay out of the
+  // numbers; src/count.js).
+  noCount: false,
 };
 // The address name of each setting. Every change takes effect at once, without reloading the page (Max, 2026-11-12):
 // whoever shows a setting listens with onSettingChange.
@@ -113,6 +116,7 @@ const KEYS = {
   shopWindow: { param: 'shop' },
   dayNight: { param: 'daynight' },
   scaleSlider: { param: 'slider' },
+  noCount: { param: 'nocount' },
 };
 const STORE = 'settings';
 
@@ -153,6 +157,7 @@ const valid = {
   shopWindow: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   dayNight: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
   scaleSlider: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
+  noCount: v => (v === true || v === 'true' || v === '1' ? true : v === false || v === 'false' || v === '0' ? false : undefined),
 };
 
 export const settings = Object.fromEntries(Object.entries(DEFAULTS).map(([k, d]) =>

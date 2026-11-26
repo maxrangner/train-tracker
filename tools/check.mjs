@@ -177,7 +177,10 @@ add(check('upload-check', depsOf('tools/upload-check.mjs'), plain(['tools/upload
 // Taps from files (plan step 4): a saved day's timetable through the files' format and back, offline. A second.
 add(check('taps-check', null, plain(['tools/taps-check.mjs', '--format'], { short: true })));
 // The monitor's mail rules on made-up timelines (offline, under a second; in the check since 2026-11-22).
-add(check('monitor-check', depsOf('tools/monitor-check.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// monitor-check also runs monitor/main.mjs itself for a few seconds (2026-11-23).
+add(check('monitor-check', depsOf('tools/monitor-check.mjs', 'monitor/main.mjs'), plain(['tools/monitor-check.mjs'], { short: true })));
+// The viewer count (2026-11-23): the page's sending, the fetcher's counting, count/i.php on the portable PHP (data/php).
+add(check('viewers-check', [...depsOf('tools/viewers-check.mjs'), 'count/i.php', '.env'], plain(['tools/viewers-check.mjs'], { short: true })));
 // My trains: direct trains and changes from two whole-day boards, on the saved day of 17 Nov (offline, ~10 s; 2026-11-22).
 add(check('trips-check', [...depsOf('tools/trips-check.mjs'), 'data/measure/day-2026-11-17.json'], plain(['tools/trips-check.mjs'], { short: true })));
 // "You seem to be on 231": a phone riding recorded trains is offered the right one; standing, a car, poor fixes not (~5 s).

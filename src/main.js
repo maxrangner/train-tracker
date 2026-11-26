@@ -30,7 +30,7 @@ import { settings, setSetting } from './settings.js';
 import { t, translatePage } from './i18n.js';
 import { onTap } from './tap.js';
 import { createStack } from './stack.js';
-import { isWide } from './layout.js';
+import { isWide, isNative } from './layout.js';
 import { createLine } from './line.js';
 import { createStart, groupPage } from './home.js';
 import { createStartChips, START_KEYS } from './start-chips.js';
@@ -69,6 +69,7 @@ import { createRide } from './ride.js';
 import { createPeek } from './peek.js';
 import { createShopWindow } from './shop-window.js';
 import { sharedNumber, dropShared } from './share.js';
+import { startCount } from './count.js';
 
 // ---- Where the data comes from: #replay=<name> plays a recording (data/positions-<name>.jsonl; the page's clock runs
 // from its start); the public page reads the fetcher's files (VITE_DATA_URL; the dev page also #files=<address>, only
@@ -150,6 +151,9 @@ const map = createMap('map', {
   onDisruptionTap(id) { disPages.open(id, { fromMap: true }); },
   onGroupTap(list) { if (day.past) day.bubble(list.map(x => x.id)); else picker.show(list, { fromMap: true }); },
 });
+// The viewer count (Max, 2026-11-23; src/count.js): only builds made to count (VITE_COUNT_URL), app or site; Settings →
+// Debug → "Don't count me" stops it here.
+startCount({ url: import.meta.env.VITE_COUNT_URL, kind: isNative() ? 'a' : 's', off: () => settings.noCount });
 const stations = createStationList({ routes, map });
 const follow = id => map.follow(() => frame.placeNow(id), () => panel.setFollowing(false));   // (gone or dragged off: following stops)
 const panel = createPanel(panelEl, {

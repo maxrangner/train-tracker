@@ -14,13 +14,16 @@ const data = arg('data') ?? process.env.VITE_DATA_URL;
 const mapFile = arg('map') ?? process.env.VITE_MAP_URL ?? '';
 const base = arg('base');
 if (base && !/^\/([a-z0-9-]+\/)+$/.test(base)) { console.log(`--base must look like /dev/ (got ${base})`); process.exit(2); }
+// --count <address of count/i.php>: the viewer count (2026-11-23, src/count.js); only the real site's build has it
+// (tools/deploy.mjs page), so test builds never count.
+const countUrl = arg('count') ?? '';
 if (!data) { console.log('build:public needs --data <address of the fetcher\'s files> (and --map <address of the map file>)'); process.exit(2); }
 
 // Values already in the environment win over .env (Vite), so the key is empty in this build.
-const env = { ...process.env, VITE_TRV_KEY: '', VITE_DATA_URL: data, VITE_MAP_URL: mapFile };
+const env = { ...process.env, VITE_TRV_KEY: '', VITE_DATA_URL: data, VITE_MAP_URL: mapFile, VITE_COUNT_URL: countUrl };
 const build = spawnSync('npx', ['vite', 'build', '--outDir', 'dist-public', '--emptyOutDir', ...(base ? ['--base', base] : [])], { stdio: 'inherit', env, shell: true });
 if (build.status !== 0) process.exit(build.status ?? 1);
-console.log(`built dist-public/: data ${data}, map ${mapFile || 'OpenFreeMap'}${base ? `, in ${base}` : ''}`);
+console.log(`built dist-public/: data ${data}, map ${mapFile || 'OpenFreeMap'}${base ? `, in ${base}` : ''}, viewer count ${countUrl || 'off'}`);
 // Every secret, and a search that can't run is a failure too (plan to beta phase B, 2026-11-17: exit 2 used to pass).
 const search = spawnSync('node', ['tools/key-search.mjs', 'dist-public'], { stdio: 'inherit' });
 process.exit(search.status === 0 ? 0 : 1);

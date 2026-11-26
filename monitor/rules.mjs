@@ -1,3 +1,5 @@
+import { summaryHtml } from './summary-mail.mjs';
+
 // When the monitor mails Max (Max, 2026-11-16: "Mostly errors so I can act", plus a daily summary). A pure function of
 // the minute rows (monitor/main.mjs makes them), so tools/monitor-check.mjs can feed made-up timelines.
 //
@@ -64,7 +66,7 @@ const PROBLEMS = {
   'uploads-failing': { net: true,
     on: r => r.up && r.uploads && (r.upAgo === null ? r.upFor >= LIMITS.uploadS : r.upAgo >= LIMITS.uploadS),
     off: r => r.up && (!r.uploads || (r.upAgo !== null && r.upAgo < 30)),
-    subject: 'uploads to one.com are failing', ok: 'uploads to one.com work', look: 'one.com may be down or refusing the login. ' + LOOK.network },
+    subject: 'uploads to one.com are failing', ok: 'uploads to one.com work', look: 'The fetcher\'s error above says what (one.com down, the login refused, the web space full). ' + LOOK.network },
   'onecom-refused': { net: true,
     on: r => r.one.status === 429,
     off: (r, h) => h.slice(-LIMITS.clearRows).every(x => x.one.status !== 429),
@@ -85,10 +87,17 @@ const PROBLEMS = {
     on: r => r.up && r.upFor >= LIMITS.reportS && r.hour >= LIMITS.dayFrom && r.hour < LIMITS.dayTo && (r.reportAge === null || r.reportAge > LIMITS.reportS),
     off: r => r.up && r.reportAge !== null && r.reportAge <= 120,
     subject: 'no new train positions from Trafikverket', ok: 'train positions arrive', look: 'Trafikverket\'s stream may be down (the fetcher retries every minute). ' + LOOK.fetcher },
+  // One kind of the map's data no longer made (2026-11-24, the hang review, finding 4): the fetcher's status says which
+  // kinds' newest file is older than 3 times its period (fetcher/files.mjs lateKinds). Not in the first 20 minutes.
+  'data-late': { net: true,
+    on: (r, h) => h.slice(-2).length === 2 && h.slice(-2).every(x => x.up && x.upFor >= 1200 && x.late?.length),
+    off: r => r.up && !r.late?.length,
+    subject: 'part of the map\'s data stopped updating', ok: 'all of the map\'s data updates', look: 'Viewers see that part as it was (its "as of" time). ' + LOOK.fetcher },
 };
 
 // The rules' memory. step(row) takes the next minute and gives the mails to send now.
-export function createRules({ summaryAt = '07:00' } = {}) {
+// context() (optional) gives what the summary needs beyond the rows: { version, versionText, days } (monitor/main.mjs).
+export function createRules({ summaryAt = '07:00', context = () => ({}) } = {}) {
   const history = [];
   const open = new Map();        // key -> { since, mailed }
   const lastMail = new Map();    // key -> when its problem mail went
@@ -148,13 +157,36 @@ export function createRules({ summaryAt = '07:00' } = {}) {
     const [sh, sm] = summaryAt.split(':').map(Number), m = row.hour * 60 + row.minute, due = sh * 60 + sm;
     if (m >= due && m < due + 120 && summaryDay !== row.day) {
       summaryDay = row.day;
-      const s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject));
-      mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text });
+      // A summary that can't be made still mails something (until 2026-11-24 the throw ended the monitor, which came
+      // back and tried again every minute until 09:00; the hang review, finding 7).
+      let s;
+      try { s = summary(history.filter(x => x.t > row.t - 24 * 3600000), sent.filter(x => x.t > row.t - 24 * 3600000 && x.kind !== 'summary'), [...open.keys()].map(k => PROBLEMS[k].subject), context()); }
+      catch (e) { s = { subject: 'the daily summary could not be made', text: `The daily summary could not be made: ${e.message}\nThe monitor goes on watching; tell Claude.` }; }
+      mail({ key: 'summary', kind: 'summary', subject: s.subject, text: s.text, html: s.html });
     }
     return out;
   }
 
-  return { step, open: () => [...open].map(([key, o]) => ({ key, subject: PROBLEMS[key].subject, since: o.since })), sent: () => [...sent] };
+  // Over a restart (2026-11-23; monitor/main.mjs keeps the rows and this snapshot in its folder): the history comes back
+  // without judging it (no mails for minutes already judged), and the memory of what was mailed, so the day's summary
+  // lists them, a problem still open gets its "OK again", and the summary isn't sent twice.
+  function snapshot() {
+    return { summaryDay, offlineSince, offlineLast, open: [...open], lastMail: [...lastMail], sent: sent.map(({ html, text, ...m }) => m) };
+  }
+  function restore(rows, snap) {
+    history.length = 0;
+    history.push(...rows.slice(-1440));
+    if (!snap || typeof snap !== 'object') return;
+    const t0 = (rows.at(-1)?.t ?? Date.now()) - 25 * 3600000;
+    if (typeof snap.summaryDay === 'string') summaryDay = snap.summaryDay;
+    for (const [k, o] of Array.isArray(snap.open) ? snap.open : []) if (PROBLEMS[k] && typeof o?.since === 'number') open.set(k, { since: o.since, mailed: o.mailed === true });
+    for (const [k, t] of Array.isArray(snap.lastMail) ? snap.lastMail : []) if (typeof k === 'string' && typeof t === 'number') lastMail.set(k, t);
+    for (const m of Array.isArray(snap.sent) ? snap.sent : []) if (m && typeof m.t === 'number' && m.t > t0 && typeof m.subject === 'string') sent.push(m);
+    // An internet loss going on at the stop: its mail comes when it is back (the minutes in between count as out).
+    if (typeof snap.offlineSince === 'number' && rows.length && rows.at(-1).offline) { offlineSince = snap.offlineSince; offlineLast = snap.offlineLast ?? snap.offlineSince; }
+  }
+
+  return { step, open: () => [...open].map(([key, o]) => ({ key, subject: PROBLEMS[key].subject, since: o.since })), sent: () => [...sent], snapshot, restore };
 }
 
 function detail(key, r) {
@@ -163,7 +195,17 @@ function detail(key, r) {
     case 'crash-loop': return 'The fetcher started again 3 or more times in 15 minutes: it is crashing.';
     case 'trv-refused': return `Trafikverket refused ${r.refused} question(s) in the last minute.`;
     case 'asking-too-much': return `${r.asks} questions to Trafikverket in the last minute.`;
-    case 'uploads-failing': return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${r.upError ? ` The fetcher says: ${r.upError}` : ''}`;
+    // The error with its time, and whether it came after the last good upload (until 2026-11-24 an hours-old error was
+    // quoted as if it were the cause; the hang review, finding 8).
+    case 'uploads-failing': {
+      const since = r.upAgo === null ? null : r.t - r.upAgo * 1000;
+      const fresh = r.upError && (since === null || (r.upErrorAt ?? 0) >= since);
+      const why = !r.upError ? ' The fetcher reports no error: it may be stuck (it restarts itself after 10 minutes of this).'
+        : fresh ? ` The fetcher's last error (${r.upErrorAt ? hm(r.upErrorAt) : 'time unknown'}): ${r.upError}${/(^|: )Failure$/.test(r.upError) ? ' ("Failure" alone may mean the web space on one.com is full: look at its control panel.)' : ''}`
+        : ` No error since the last good upload: it may be stuck (it restarts itself after 10 minutes of this). Its last error, from before (${hm(r.upErrorAt)}): ${r.upError}`;
+      return `No file has reached one.com for ${r.upAgo === null ? r.upFor : r.upAgo} s (${r.upFailed} failed, ${r.reconnects} reconnects in the last minute).${why}`;
+    }
+    case 'data-late': return `Late: ${(r.late ?? []).map(k => `${k.kind} (newest ${Math.round(k.age / 60)} min old; made every ${k.every >= 60 ? `${Math.round(k.every / 60)} min` : `${k.every} s`})`).join(', ')}. The fetcher's log says why (a question to Trafikverket failing, or the timetable not loading).`;
     case 'onecom-refused': return 'one.com refused the monitor\'s read of the newest file.';
     case 'stale-file': return r.one.age === null ? 'No recent file is found on one.com.' : `The newest file on one.com is ${r.one.age} s old.`;
     case 'clock-off': return `The Linux PC's clock is ${Math.abs(r.one.clockOff)} s ${r.one.clockOff > 0 ? 'ahead of' : 'behind'} one.com's.`;
@@ -199,23 +241,52 @@ export function dayNumbers(rows) {
   };
 }
 
-export function summary(rows, mails, openKeys) {
+// The versions run in the rows (each row says its version since 2026-11-23): [{ ver, from }], oldest first.
+export function versionsRun(rows) {
+  const out = [];
+  for (const r of rows) if (r.ver && out.at(-1)?.ver !== r.ver) out.push({ ver: r.ver, from: r.t });
+  return out;
+}
+const dayTime = t => new Date(t).toLocaleString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' });
+export function versionLine(rows, ctx = {}) {
+  const runs = versionsRun(rows);
+  const now = ctx.versionText ?? (runs.at(-1) ? `Spårat ${runs.at(-1).ver}` : null);
+  if (!now) return null;
+  if (runs.length > 1) return `Version: ${now}; updated ${runs.slice(1).map(r => `to ${r.ver} at ${dayTime(r.from)}`).join(', ')} (from ${runs[0].ver}).`;
+  return `Version: ${now}${runs.length ? `, the whole time watched` : ''}.`;
+}
+
+// The viewers (fetcher/viewers.mjs, from the release after 0.7.0): the day before the summary and today so far.
+export function viewersLine(v, end) {
+  if (!v || !v.days?.length) return null;
+  const today = end ? new Date(end).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : null;
+  const y = v.days.filter(x => x.day < today).at(-1), t = v.days.find(x => x.day === today);
+  return `Viewers: ${y ? `${y.day} ${y.people} people (app ${y.app}, site ${y.site}), most at once ${y.peak}${y.peakAt ? ` at ${hm(y.peakAt)}` : ''}` : 'none counted yesterday'}${t ? `; today so far ${t.people}` : ''}.`;
+}
+
+export function summary(rows, mails, openKeys, ctx = {}) {
   const d = dayNumbers(rows);
   const problems = mails.filter(m => m.kind === 'problem' || m.kind === 'offline');
   const fine = !problems.length && !openKeys.length;
   const day = rows.length ? new Date(rows.at(-1).t).toLocaleDateString('sv-SE', { timeZone: 'Europe/Stockholm' }) : '';
+  const cpus = rows.map(x => x.cpuPct).filter(x => x !== null && x !== undefined);
+  const cpuAvg = cpus.length ? (cpus.reduce((n, x) => n + x, 0) / cpus.length).toFixed(1) : null;
   const lines = [
     rows.length < 1380 ? `(The monitor has watched for ${Math.round(rows.length / 60 * 10) / 10} h of the last 24.)` : 'The last 24 hours:',
+    versionLine(rows, ctx),
     '',
     `Fetcher: running ${d.upPct} % of the time, ${d.restarts} restart(s)${d.offlineMin ? `; internet out ${d.offlineMin} min in all` : ''}.`,
-    `Trafikverket: ${d.asks} questions (${(d.asks / Math.max(1, d.minutes)).toFixed(1)} a minute, most ${d.asksMax} in one minute), ${d.streamsOpened} stream(s) opened, ${d.refused} "too many requests", ${MB(d.bytesIn)} received.`,
+    `Trafikverket: ${d.asks} questions (${(d.asks / Math.max(1, d.minutes)).toFixed(1)} a minute, most ${d.asksMax} in one minute), ${d.streamsOpened} stream(s) opened, ${d.refused} "too many requests", ${d.trvFailed} failed, ${MB(d.bytesIn)} received.`,
     `one.com: ${d.upOk} uploads, ${d.upFailed} failed, ${d.reconnects} reconnects, ${MB(d.bytesOut)} sent; the file viewers read was ${d.fileAgeMed ?? '-'} s old in the middle, ${d.fileAgeMax ?? '-'} s at worst when found${d.fileMissingMin ? `, none recent in ${d.fileMissingMin} minute(s)` : ''}${d.oneRefused ? `; "too many requests" ${d.oneRefused} time(s)` : ''}.`,
     `Train positions: the newest report ${d.reportAgeMed ?? '-'} s old in the middle, ${d.reportAgeMax === null ? '-' : d.reportAgeMax < 120 ? d.reportAgeMax + ' s' : Math.round(d.reportAgeMax / 60) + ' min'} at worst; up to ${d.trainsMax ?? '-'} trains at once.`,
     `File sizes (as viewers get them): ${Object.entries(d.sizes).map(([k, s]) => `${k} ${kB(s.med)} (max ${kB(s.max)})`).join(', ')}.`,
-    `Fetcher memory: up to ${d.memMax ?? '-'} MB.`,
+    `Fetcher memory: up to ${d.memMax ?? '-'} MB; CPU ${cpuAvg ?? '-'} % on average.`,
+    viewersLine(ctx.viewers, rows.at(-1)?.t),
     '',
     problems.length ? `Problems mailed:\n${problems.map(m => `- ${hm(m.t)} ${m.subject}`).join('\n')}` : 'No problems.',
     openKeys.length ? `Still open now: ${openKeys.join(', ')}.` : null,
   ];
-  return { subject: `daily summary ${day}: ${fine ? 'all OK' : `${problems.length} problem(s)${openKeys.length ? ', some still open' : ''}`}`, text: lines.filter(x => x !== null).join('\n') };
+  const watchedH = Math.min(24, Math.round(rows.length / 60 * 10) / 10);
+  const html = summaryHtml({ rows, mails, openKeys, ctx, d, day, fine, problemsCount: problems.length, watchedH });
+  return { subject: `daily summary ${day}: ${fine ? 'all OK' : `${problems.length} problem(s)${openKeys.length ? ', some still open' : ''}`}`, text: lines.filter(x => x !== null).join('\n'), html };
 }

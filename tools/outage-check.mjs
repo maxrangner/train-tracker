@@ -14,11 +14,16 @@ const at = () => (Date.now() - t0) / MIN;   // minutes since the start, on the f
 
 const OUT_FROM = 2, OUT_TO = 22;   // Trafikverket unreachable from minute 2 to minute 22
 const asks = [];                   // { min, kind, ok }
+let failedOnce = false;
 globalThis.fetch = async (url, opts = {}) => {
   const body = String(opts.body ?? '');
   const kind = body.includes('changeid=') ? 'changes' : body.includes('TrainStationMessage') ? 'messages' : 'day';
-  const down = at() >= OUT_FROM && at() < OUT_TO;
-  asks.push({ min: at(), kind, ok: !down });
+  // The first day question after the outage fails too (Trafikverket still flaky): it must be asked again (until
+  // 2026-11-24 the reload was dropped then until 03:30; the hang review, finding 6).
+  const flaky = kind === 'day' && at() >= OUT_TO && !failedOnce;
+  if (flaky) failedOnce = true;
+  const down = flaky || (at() >= OUT_FROM && at() < OUT_TO);
+  asks.push({ min: at(), kind, ok: !down, day: /ScheduledDepartureDateTime" value="([\d-]+)"/.exec(body)?.[1] });
   if (down) throw new TypeError('fetch failed');
   const result = kind === 'changes' ? { TrainAnnouncement: [], INFO: { LASTCHANGEID: String(asks.length), SSEURL: 'https://api.trafikinfo.trafikverket.se/v2/data.json?ssl=1' } }
     : kind === 'messages' ? { TrainStationMessage: [] } : { TrainAnnouncement: [] };
@@ -53,5 +58,7 @@ const reload = logs.find(l => /changes missed/.test(l.m) && l.min >= OUT_TO);
 ok(Boolean(reload), `back after 20 minutes: today loaded again${reload ? ` ("${reload.m}" at minute ${reload.min.toFixed(1)})` : ' (not done)'}`);
 const after = asks.filter(a => a.kind === 'changes' && a.min >= OUT_TO && a.ok);
 ok(after.length > 0 && after[0].min - OUT_TO < 1.5, `back to normal soon after: first answered question ${after.length ? `${(after[0].min - OUT_TO).toFixed(1)} min after` : 'never'}`);
+const dayAfter = asks.filter(a => a.kind === 'day' && a.min >= OUT_TO), lost = dayAfter[0];
+ok(lost && !lost.ok && dayAfter.slice(1).some(a => a.ok && a.day === lost.day), `the reload failing once is tried again: ${lost ? `${lost.day} failed, then ${dayAfter.slice(1).filter(a => a.day === lost.day).map(a => (a.ok ? 'ok' : 'failed')).join(', ') || 'never asked again'}` : 'no day question after the outage'}`);
 console.log(failed ? 'outage-check FAILED' : 'outage-check ok');
 process.exit(failed ? 1 : 0);

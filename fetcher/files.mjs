@@ -31,6 +31,20 @@ export const KINDS = {
   // Swedish time the night after its day (keptUntil below, not this number: the longest it can be is about 25 h).
   history: [HISTORY_MS, 25 * 60 * MIN],
 };
+// Kinds whose newest file is late: older than 3 times its period, at least 10 minutes (2026-11-24, the hang review,
+// finding 4: a kind whose question kept failing, or the timetable never loading, froze while the live file went on
+// naming its last file; nobody was told). names: kind -> its newest file name. -> [{ kind, age (s), every (s) }]
+// (in the fetcher's status as `late`; the monitor mails it).
+export function lateKinds(names, now) {
+  const out = [];
+  for (const [kind, [every]] of Object.entries(KINDS)) {
+    if (kind === 'live' || !names[kind]) continue;
+    const made = Number(/-(\d+)\.json$/.exec(names[kind])?.[1]);
+    if (!Number.isFinite(made)) continue;
+    if (now - made > Math.max(3 * every, 10 * MIN)) out.push({ kind, age: Math.round((now - made) / 1000), every: Math.round(every / 1000) });
+  }
+  return out;
+}
 const GROUP_KEEP = 25 * MIN;   // card-NN, board-NN, day-NN: kept 25 minutes after made (a newer one comes within ~16)
 export const keepOf = kind => KINDS[kind]?.[1] ?? (/^(card|board|day)-\d+$/.test(kind) ? GROUP_KEEP : 15 * MIN);
 // Until when a file of `kind` made at `at` is kept (a history file: its slot's start; src/live-file.js historyUntil).
