@@ -36,7 +36,7 @@ export async function toRest(page) {
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     await until(page, () => document.getElementById('nav').hidden, 1500);
   }
-  const fromMenu = await page.evaluate(() => window.__stack.keys().some(k => k === 'page:settings' || k === 'page:help'));
+  const fromMenu = await page.evaluate(() => window.__stack.keys().some(k => k === 'page:settings' || k === 'page:help' || k === 'filter'));
   await page.evaluate(() => { if (window.__stack.searching) window.__stack.back(); window.__stack.home(0); });
   await until(page, () => window.__stack.top() === 'home' && window.__stack.level === 0);
   await sleep(300);
@@ -98,8 +98,8 @@ export async function openMenu(page) {
   await until(page, () => { const n = document.getElementById('nav'); return !n.hidden && n.style.visibility !== 'hidden' && !n.getAnimations().length; }, 4000);
   await sleep(100);
 }
-// A row of ☰'s menu: 'day', 'settings' or 'help' (or its words as shown). Waits for its page (not for The day).
-const ROWS = { day: '#open-day', settings: '#open-settings', help: '#help-button', about: '#help-button' };
+// A row of ☰'s menu: 'filter', 'day', 'settings' or 'help' (or its words as shown). Waits for its page (not for The day).
+const ROWS = { filter: '#open-filter', day: '#open-day', settings: '#open-settings', help: '#help-button', about: '#help-button' };
 export async function openFromMenu(page, name) {
   if (await pageKey(page) !== 'home') await toRest(page);
   await openMenu(page);
@@ -109,7 +109,7 @@ export async function openFromMenu(page, name) {
   }, String(name));
   if (!sel) throw new Error(`no row "${name}" in ☰`);
   await page.click(sel);
-  const want = { '#open-settings': 'page:settings', '#help-button': 'page:help' }[sel];
+  const want = { '#open-filter': 'filter', '#open-settings': 'page:settings', '#help-button': 'page:help' }[sel];
   if (want) await until(page, k => window.__stack.top() === k, 3000, want);
   // until the page has slid in and the one it pushed out is gone (2026-11-25: four checks at a time, a click on
   // Settings' theme button 400 ms after the tap hit the page mid-slide: "Node is either not clickable")
@@ -125,6 +125,8 @@ export const pageSel = key => `#sheet .pg[data-key="${key}"]`;
 // A start chip tapped as a person does: the one over the map at rest, else the one in an open chip card's head; waits
 // for its card to stand (slid in, the one it replaced gone). Returns whether it opened.
 export async function openChip(page, key) {
+  // (already open: a tap on the lit chip would close it)
+  if (await page.evaluate(k => window.__stack.top() === k && !window.__stack.searching && document.getElementById('nav').hidden, key)) return true;
   if (!(await page.evaluate(() => document.getElementById('sheet').hasAttribute('data-root')))) await toRest(page);
   const sel = await page.evaluate(() => (document.getElementById('sheet').hasAttribute('data-root') ? '#sheet .sh-chips' : '#chips'));
   await page.click(`${sel} [data-chip="${key}"]`);

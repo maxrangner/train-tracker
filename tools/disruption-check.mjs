@@ -1,13 +1,14 @@
 // Disruptions: rail work told apart from real problems (2026-11-18, Max: the list as C, the map as B, the count
 // problems only, Settings → Disruptions on the map: Off / Problems / All, default All). On the live page (disruptions
 // are live only), so what is checked depends on what is in force: said when a kind is missing.
-// Since the one sheet (2026-11-22): the count is on Home (its Disruptions part, "All disruptions": n problems · m rail
-// work), the list is the page `dislist` (.dis-body), a disruption the page `dis:<id>` over it; back (Esc, Android's
+// Since the start chips (2026-11-25): the count is the chip Störningar's (all of them; Home's Disruptions part "n
+// problems · m rail work" until then), the list is its page `dislist` (.dis-body), a disruption the page `dis:<id>`
+// over it; back (Esc, Android's
 // back) gives the list again, scrolled where it was (the page scrolls itself at full); the back chip says Home (since
 // 2026-11-23).
 // node tools/disruption-check.mjs (with npm run dev and the key; PAGE= for another port).
 import { launch, sleep } from './lib/browser.mjs';
-import { waitForMap, until, setLevel, toRest, back, sheetState, openFromMenu, openDisruptions, HOME, pageSel } from './lib/screen.mjs';
+import { waitForMap, until, setLevel, toRest, back, sheetState, openFromMenu, openDisruptions, openChip, pageSel } from './lib/screen.mjs';
 
 const fails = [], notes = [];
 const expect = (ok, what) => { (ok ? notes : fails).push(what); };
@@ -17,8 +18,15 @@ let railWorks = 0;   // rail work in force (the list's fold)
 const browser = await launch();
 try {
   const page = await waitForMap(browser, { lang: 'sv', view: '4.6/62.5/16.5', wait: 45000 });
-  // Home's Disruptions part: drawn once they are in (src/home.js disHtml)
-  const loaded = () => until(page, h => Boolean(document.querySelector(`${h} .dis-list`)), 45000, HOME);
+  // The chip Störningar's number: shown once they are in (src/start-chips.js; Home's Disruptions part until 2026-11-25);
+  // none in force at all: no number, the list says so
+  const loaded = async () => {
+    if (await until(page, () => Boolean(document.querySelector('#chips [data-chip="dislist"] .ct-n')), 45000)) return true;
+    if (!(await openChip(page, 'dislist'))) return false;
+    const none = await until(page, L => Boolean(document.querySelector(`${L} .dis-body .state.empty`)), 5000, LIST);
+    await toRest(page);
+    return none;
+  };
   if (!(await loaded())) { fails.push('the disruptions never loaded (no key, or Trafikverket not answering)'); throw new Error('stop'); }
   await sleep(2500);
   // isWork (src/disruptions.js, read in the page: it needs the page's settings).
@@ -27,26 +35,27 @@ try {
   expect(w[0] && !w[1], 'isWork: the type code decides when given');
   expect(w[2] && !w[3], 'isWork: an older file\'s name "Banarbete…" without a code');
 
-  // ---- Home's count, then the list ----
-  const count = await page.evaluate(h => document.querySelector(`${h} [data-go="dislist"] .dis-sub`)?.textContent ?? '', HOME);
-  // Home's rows and "All disruptions": their icons the same size, in one column (Max, 2026-11-24: "The icons dont align")
-  if (count) {
-    const ics = await page.evaluate(h => [...document.querySelectorAll(`${h} .dis-list .dis-row .dis-ic`)].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; }), HOME);
-    expect(ics.length >= 2 && ics.every(([x, w]) => Math.abs(x - ics[0][0]) <= 1 && w === ics[0][1]), `Home's disruption icons in one column, one size: ${JSON.stringify(ics)}`);
-  }
+  // ---- The chip's count (every disruption, the list's problems and rail work: Max's pick A, 2026-11-25, "number of
+  // total störningar"; Home's "n problems · m rail work" until then), then the list ----
+  const count = await page.evaluate(() => document.querySelector('#chips [data-chip="dislist"] .ct-n')?.textContent ?? '');
   const openList = async () => { await openDisruptions(page); await sleep(200); };
-  if (!count) notes.push('no disruption in force at all: Home has no "All disruptions" row, the list not checked');
+  if (!count) notes.push('no disruption in force at all: the chip has no number, the list not checked');
   else {
     await openList();
+    // the list's rows (the problems, and the rail work once unfolded): their icons the same size, in one column (Max,
+    // 2026-11-24: "The icons dont align", of Home's rows then; the fold's own cone is not a row: not judged)
+    const icons = () => page.evaluate(L => [...document.querySelectorAll(`${L} .dis-body .dis-row .dis-ic`)].filter(e => !e.closest('.dis-works:not(.open)'))
+      .map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.width)]; }), LIST);
+    const aligned = ics => ics.length < 2 || ics.every(([x, w]) => Math.abs(x - ics[0][0]) <= 1 && w === ics[0][1]);
     // (the rail work rows are always there; shut, they sit in a box with no height: only open ones count as shown)
     const list = () => page.evaluate(l => ({ rows: [...document.querySelectorAll(`${l} .dis-body .dis-row`)].filter(r => !r.closest('.dis-works:not(.open)')).map(r => r.querySelector('.dis-ic')?.classList.contains('work')),
       fold: document.querySelector(`${l} .dis-fold`)?.textContent ?? null, open: document.querySelector(`${l} .dis-fold`)?.getAttribute('aria-expanded') }), LIST);
     let l = await list();
+    const ics0 = await icons();
     const shownProblems = l.rows.filter(x => !x).length, works = Number(/\((\d+)\)/.exec(l.fold ?? '')?.[1] ?? 0);
     railWorks = works;
-    const said = /^(\d+)/.exec(count)?.[1];
-    expect(said === String(shownProblems) && (works ? count.includes(String(works)) : !/banarbete/.test(count)),
-      `Home counts problems apart: "${count}", the list has ${shownProblems} problem(s)${works ? ` and ${works} rail work(s) folded` : ''}`);
+    expect(count === String(shownProblems + works),
+      `the chip counts them all: "${count}", the list has ${shownProblems} problem(s)${works ? ` and ${works} rail work(s) folded` : ''}`);
     expect(l.rows.every((x, i) => !x || l.rows.slice(i).every(Boolean)), 'the problems come first, rail work after');
     if (works) {
       const wasOpen = l.open === 'true';
@@ -62,6 +71,8 @@ try {
       const lo = Math.min(heights[0], heights.at(-1)), hi = Math.max(heights[0], heights.at(-1));
       expect(heights.slice(1, -1).filter(h => h > lo + 2 && h < hi - 2).length >= 2, `the fold glides (heights ${heights.map(Math.round).join(' → ')} px)`);
       l = await list();
+      const ics1 = await icons();
+      expect(aligned(ics0) && aligned(ics1), `the list's disruption icons in one column, one size, folded and not: ${JSON.stringify(ics0)}, ${JSON.stringify(ics1)}`);
       const workRows = l.rows.filter(Boolean).length;
       expect(wasOpen ? workRows === 0 : workRows === works, `"Banarbeten (${works})" ${wasOpen ? 'folds' : 'unfolds'}: ${workRows} rail work row(s) shown, each with a cone`);
       await page.reload({ waitUntil: 'domcontentloaded' });
@@ -72,7 +83,10 @@ try {
       const again = await list();
       expect(again.open === String(!wasOpen), `the fold is remembered after a reload (${again.open})`);
       if (again.open === 'true') { await page.evaluate(L => document.querySelector(`${L} .dis-fold`).click(), LIST); await sleep(300); }
-    } else notes.push('no rail work in force now: the fold not checked');
+    } else {
+      notes.push('no rail work in force now: the fold not checked');
+      expect(aligned(ics0), `the list's disruption icons in one column, one size: ${JSON.stringify(ics0)}`);
+    }
     // A disruption opened from the list: its page over the list, the back chip says Home (2026-11-23), back (Esc):
     // the list again, scrolled where it was.
     const visibleRows = () => page.evaluate(L => [...document.querySelectorAll(`${L} .dis-body .dis-row`)].filter(r => !r.closest('.dis-works:not(.open)')).length, LIST);

@@ -135,7 +135,9 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
 
   return {
     get isOpen() { return state === 'opening' || state === 'open'; },
-    get shown() { return state !== 'closed' && state !== 'parked'; },
+    // (parked under a page: not shown; parked and shown again on Home while the sheet goes down, reopenOnHome: shown, so
+    // the start's chips stay aside and don't flash in until it is open; ui-sweep 'settings → back', 2026-11-26)
+    get shown() { return state !== 'closed' && !(state === 'parked' && navEl.hidden); },
     open, close, toggle, reopenOnHome,
     // A page came on top: the menu is Home's, any other page shuts it (the status pill, the map); Home may reopen it.
     pageOnTop(key) { if (key === 'home') reopenOnHome(); else if (state !== 'parked') close(); },

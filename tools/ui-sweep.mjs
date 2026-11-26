@@ -14,10 +14,10 @@
 // ("Pic 1: Bad padding").
 //   node tools/ui-sweep.mjs [--only <name part>] [--size phone|pc] [--shots <folder>] [--report]
 // --report lists every find and exits 0; without it the finds not in the accepted list (ACCEPT below) fail the run.
-// Two pages per size: the replay the screens check plays (its trains have their stops) and, for Home's disruptions
-// (live only), the live map. In Swedish, as Max uses it. The page: PAGE (tools/lib/browser.mjs).
+// Two pages per size: the replay the screens check plays (its trains have their stops) and, for the disruptions (live
+// only; the chip Störningar), the live map. In Swedish, as Max uses it. The page: PAGE (tools/lib/browser.mjs).
 import { launch, sleep, PHONE, CARD_HOUR } from './lib/browser.mjs';
-import { waitForMap, until, toRest, openMenu, openSearch, HOME } from './lib/screen.mjs';
+import { waitForMap, until, toRest, openMenu, openSearch, openChip, openFromMenu, openDisruptions, pageSel } from './lib/screen.mjs';
 
 const args = process.argv.slice(2);
 const opt = n => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : null; };
@@ -37,7 +37,7 @@ function recorder() {
     for (const c of el.childNodes) if (c.nodeType === 3) text += c.textContent;
     text = text.trim().replace(/\s+/g, ' ').slice(0, 40) || el.getAttribute('aria-label') || '';
     return { pg, el: `${el.tagName.toLowerCase()}${cls ? `.${cls}` : ''}`, text, bottom: Boolean(el.closest('.sh-grab, .sh-more')), btn: Boolean(el.closest('.sh-btns, .panel-buttons')),
-      roll: Boolean(el.closest('.cd-late, .roll')) };   // (numbers that roll on purpose, src/motion.js roll)
+      roll: Boolean(el.closest('.cd-late, .roll, .st-odo')) };   // (numbers that roll on purpose, src/motion.js roll; Statistik's odometer wheels, in sight at half on its own card since 2026-11-25)
   };
   const idOf = (el) => { let id = R.ids.get(el); if (!id) { id = ++R.n; R.ids.set(el, id); R.meta[id] = describe(el); } return id; };
   R.snap = () => {
@@ -100,7 +100,9 @@ function analyse(rec, kind) {
   // stray
   // (a leaving page's still copy, src/stack.js ghostOf: its part counts as seen when the same part, look and words, of
   // its page was shown before)
-  const sig = e => `${e[7].replace(/^ghost:/, '')}|${meta[e[0]].el}|${meta[e[0]].text}`;
+  // (its digits aside: a number on the page is redrawn each second, so the copy can hold a newer value than the frame
+  // before; Statistik's numbers in its leaving copy, 2026-11-26)
+  const sig = e => `${e[7].replace(/^ghost:/, '')}|${meta[e[0]].el}|${meta[e[0]].text.replace(/\d/g, '#')}`;
   const shownBefore = new Set([...b.values()].map(sig));
   // (by height only: the copy is already sliding sideways in its first frame)
   // (in the sheet: the sheet itself may be moving)
@@ -324,19 +326,26 @@ const T = [
   { name: 'settings → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#open-settings'); await settle(p); }, act: esc },
   { name: 'menu → about', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#help-button') },
   { name: 'about → back', setup: async (p) => { await toRest(p); await openMenu(p); await click(p, '#help-button'); await settle(p); }, act: esc },
-  { name: 'menu → arrow', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#sheet .sh-grab') },
+  // ('menu → arrow' gone: Home has no handle or arrow since the start chips, 2026-11-25, and ☰ over a chip's card closes it first)
   { name: 'new trip typing', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.open('newtrip', { go: true })); await until(p, () => Boolean(document.querySelector('#sheet .nt-stop'))); await settle(p); },
     act: p => p.evaluate(() => { const q = document.querySelector('#sheet .nt-q'); if (q) { q.focus(); return true; } const b = [...document.querySelectorAll('#sheet .nt-stop [data-nt]')].at(-1); b?.click(); return Boolean(b); }) },
   { name: 'menu → rewind', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => click(p, '#open-day') },
-  { name: 'home rest → half', kind: 'grow', setup: toRest, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
-  { name: 'home half → full', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
-  { name: 'home full → rest', kind: 'grow', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(0)) },
+  // (Home has no heights since the start chips, 2026-11-25: Home's rest → half → full → rest are a chip's card's now,
+  // Statistik: opened by its chip, raised, lowered, closed by its lit chip)
+  { name: 'chip → statistik', setup: toRest, act: p => click(p, '#chips [data-chip="stats"]') },
+  { name: 'statistik half → full', kind: 'grow', setup: async (p) => { await openChip(p, 'stats'); await p.evaluate(() => window.__stack.setLevel(1)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(2)) },
+  { name: 'statistik full → half', kind: 'grow', setup: async (p) => { await openChip(p, 'stats'); await p.evaluate(() => window.__stack.setLevel(2)); await settle(p); }, act: p => p.evaluate(() => window.__stack.setLevel(1)) },
+  { name: 'statistik → closed by its chip', setup: async (p) => { await openChip(p, 'stats'); await settle(p); }, act: p => click(p, '#sheet .sh-chips [data-chip="stats"]') },
+  { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await settle(p); }, act: p => click(p, '#sheet .sh-chips [data-chip="saved"]') },
   // (fold: what is under the card moves down as it grows, up as it shuts: strays, pops and jumps count, the sheet's
-  // edges too; Max, 2026-11-25: "When expanding and compacting the filters the bottom jumps a few pixels")
-  { name: 'home → filter more', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
-  { name: 'home → filter fewer', kind: 'fold', setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-act="comore"]:not([hidden])')), 20000); await settle(p); await click(p, `${HOME} [data-act="comore"]`); await settle(p); }, act: p => click(p, `${HOME} [data-act="comore"]`) },
-  { name: 'home → all disruptions', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await settle(p); }, act: p => click(p, `${HOME} [data-go="dislist"]`) },
-  { name: 'all disruptions → back', live: true, setup: async (p) => { await toRest(p); await p.evaluate(() => window.__stack.setLevel(1)); await until(p, () => Boolean(document.querySelector('[data-go="dislist"]')), 30000); await click(p, `${HOME} [data-go="dislist"]`); await settle(p); }, act: esc },
+  // edges too; Max, 2026-11-25: "When expanding and compacting the filters the bottom jumps a few pixels"; the Filter
+  // page from ☰ since the start chips, Home's filter card until then)
+  { name: 'filter more', kind: 'fold', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, s => Boolean(document.querySelector(`${s} [data-act="comore"]:not([hidden])`)), 20000, pageSel('filter')); await settle(p); }, act: p => click(p, `${pageSel('filter')} [data-act="comore"]`) },
+  { name: 'filter fewer', kind: 'fold', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, s => Boolean(document.querySelector(`${s} [data-act="comore"]:not([hidden])`)), 20000, pageSel('filter')); await settle(p); await click(p, `${pageSel('filter')} [data-act="comore"]`); await settle(p); }, act: p => click(p, `${pageSel('filter')} [data-act="comore"]`) },
+  { name: 'filter → back', setup: async (p) => { await openFromMenu(p, 'filter'); await settle(p); }, act: esc },
+  // (the list of disruptions by the chip Störningar since 2026-11-25; Home's "Alla störningar" row until then)
+  { name: 'chip → störningar', live: true, setup: async (p) => { await toRest(p); await until(p, () => Boolean(document.querySelector('#chips [data-chip="dislist"] .ct-n')), 30000); await settle(p); }, act: p => click(p, '#chips [data-chip="dislist"]') },
+  { name: 'störningar → back', live: true, setup: async (p) => { if (!(await openDisruptions(p, { wait: 30000 }))) return; await settle(p); }, act: esc },
   { name: 'home → connection', setup: toRest, act: p => click(p, '#status') },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
   { name: 'search close', setup: async (p) => { await toRest(p); await openSearch(p); await settle(p); }, act: esc },

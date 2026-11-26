@@ -5,19 +5,20 @@
 //       lowest height, or every page closed (Home at rest); never a step back through earlier pages. Max's cases:
 //       (a) a train, "to …" picked in its chooser, a tap; (b) the chooser open, a tap (it shuts in that same tap);
 //       (c) "Show only" on, a train, a tap; (d) a "2 trains" list, a train from it, taps: never the list again.
-//       Also: ☰'s menu open over Home raised, one tap: the menu shut and Home down; the search open, one tap: shut.
+//       Also: ☰'s menu open over Home, one tap: the menu shut; the search open, one tap: shut.
 //   R2  a tap on a train (☰'s menu open; the chooser open) or a station (a train's page open) opens it at once.
-//   R3  "Show only" stays through map taps until its × is tapped; a company in Home's filter card sets it.
+//   R3  "Show only" stays through map taps until its × is tapped; a company on the Filter page (☰) or in Statistik's
+//       list sets it (both on Home until the start chips, 2026-11-25).
 //   R4  Esc steps back one page (a train from a "2 trains" list: the list); the back chip goes Home.
-// And Max's notes of 2026-11-23: 4 a computer's handle is a small ⌃/⌄ arrow (a tap raises the sheet), a phone keeps the
-// dash; 5 Home's hint under the lateness colours only with Home at full; 6 rows rounded (hover, focus, press follow
+// And Max's notes of 2026-11-23: 4 a computer's handle is a small ⌃/⌄ arrow (a tap moves the sheet), a phone keeps the
+// dash (on a chip's card: Home has none since 2026-11-25); 5 no hint over the lateness colours (Filter's); 6 rows rounded (hover, focus, press follow
 // the corners), their lines between them straight; 7 a train's messages opened at the bottom edge come into view at
 // once (the page scrolls), and (live only) the disruptions' "Rail work" fold raises the sheet and lowers it again when
 // shut; 8 a tap on the messages row's arrow opens them.
 // Not checkable here: a real finger's wobble, a phone's own tap handling (the test browser's taps are exact).
 // Run: PAGE=http://localhost:5182/ node tools/tap-check.mjs
 import { launch, CARD_HOUR, sleep, PHONE } from './lib/browser.mjs';
-import { waitForMap, until, toRest, setLevel, openSearch, openDisruptions } from './lib/screen.mjs';
+import { waitForMap, until, toRest, setLevel, openSearch, openDisruptions, openChip, openFromMenu } from './lib/screen.mjs';
 
 const PC = { width: 1500, height: 1000, deviceScaleFactor: 1 };
 const STEP_PX = 40;
@@ -99,17 +100,17 @@ try {
       await tapsHome();
     }
 
-    // ---- R3 + R1 (c): "Show only" from Home's filter card (the search's chips until 2026-11-24), a train of that
-    // company, taps ----
-    await p.evaluate(() => window.__stack.home(1));
-    await sleep(1500);
-    const chips = await p.evaluate(() => [...document.querySelectorAll('#sheet .co-filter .co-f')].map(c => c.dataset.cofilter));
-    ok(chips.length > 0, `${dev} R3: Home's filter card lists the companies (${chips.length})`);
+    // ---- R3 + R1 (c): "Show only" from the Filter page (☰; Home's filter card until 2026-11-25, the search's chips
+    // until 2026-11-24), a train of that company, taps ----
+    await openFromMenu(p, 'filter');
+    await sleep(1000);
+    const chips = await p.evaluate(() => [...document.querySelectorAll('#sheet .pg[data-key="filter"] .co-filter .co-f')].map(c => c.dataset.cofilter));
+    ok(chips.length > 0, `${dev} R3: the Filter page lists the companies (${chips.length})`);
     const co = chips[0];
-    await p.evaluate(() => document.querySelector('#sheet .co-filter .co-f')?.click());
+    await p.evaluate(() => document.querySelector('#sheet .pg[data-key="filter"] .co-filter .co-f')?.click());
     await sleep(900);
     const c0 = await state();
-    ok(c0.filter && c0.top === 'home', `${dev} R3: the company "${co}" sets its filter (line above the bar ${c0.filter ? 'shown' : 'not shown'}), Home stays (${c0.top})`);
+    ok(c0.filter && c0.top === 'filter', `${dev} R3: the company "${co}" sets its filter (line above the bar ${c0.filter ? 'shown' : 'not shown'}), Filter stays (${c0.top})`);
     await toRest(p);
     const tc = await openChooserTrain(co);
     if (!tc) notes.push(`${dev} R1c: no ${co} train with a chooser (not checked)`);
@@ -126,15 +127,17 @@ try {
     await sleep(400);
     ok(!(await state()).filter, `${dev} R3: its × clears it`);
 
-    // ---- R3 from Home (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the filtering. Also
-    // in a train card when filtering, if dismissing the train card the filtering goes away"): a company in Home's list
-    // is the filter at once; map taps back to Home and a train opened and closed keep it ----
+    // ---- R3 from Statistik (Max, 2026-11-23: "when filtering an operator: clicking the map dismisses the filtering.
+    // Also in a train card when filtering, if dismissing the train card the filtering goes away"): a company in
+    // Statistik's list (the chip's card; Home's list until 2026-11-25) is the filter at once; map taps back to Home and a
+    // train opened and closed keep it ----
     await toRest(p);
-    await p.evaluate(() => window.__stack.setLevel(2));
+    await openChip(p, 'stats');
+    await setLevel(p, 2);
     await sleep(700);
-    const hco = await p.evaluate(() => { const b = document.querySelector('.pg[data-key="home"] [data-filter="brand"]'); b?.click(); return b?.dataset.v ?? null; });
+    const hco = await p.evaluate(() => { const b = document.querySelector('.pg[data-key="stats"] [data-filter="brand"]'); b?.click(); return b?.dataset.v ?? null; });
     await sleep(900);
-    if (!hco) notes.push(`${dev} R3 Home: no company row on Home (not checked)`);
+    if (!hco) notes.push(`${dev} R3 Statistik: no company row on Statistik (not checked)`);
     else {
       const h0 = await state();
       await tapsHome();
@@ -142,7 +145,7 @@ try {
       const ht = await openChooserTrain(hco);
       if (ht) await tapsHome();
       const h2 = await state();
-      ok(h0.filter && h1.filter && h2.filter, `${dev} R3 Home: ${hco} from Home's list is the filter (${h0.filter}); after map taps home (${h1.filter}); after a train opened and closed (${ht ? h2.filter : 'no train'})`);
+      ok(h0.filter && h1.filter && h2.filter, `${dev} R3 Statistik: ${hco} from Statistik's list is the filter (${h0.filter}); after map taps home (${h1.filter}); after a train opened and closed (${ht ? h2.filter : 'no train'})`);
       await p.evaluate(() => document.querySelector('#line .line-x')?.click());
       await sleep(400);
     }
@@ -175,14 +178,15 @@ try {
     ok(await p.evaluate(() => !document.querySelector('#sheet .sh-back')), `${dev} R4: a Home chip is there (want none)`);
 
     // ---- R1 with ☰'s menu open, and with the search open (a computer: the map is free beside the sheet) ----
+    // (over Home at rest: Home has no other height since the start chips, 2026-11-25; ☰ over a chip's card closes the
+    // card first, tools/pc-check.mjs)
     await toRest(p);
-    await setLevel(p, 1);
     await p.click('#nav-button');
     await sleep(400);
     const n0 = await state();
     await tapEmpty();
     const n1 = await state();
-    ok(n0.nav && !n1.nav && n1.level === 0, `${dev} R1: ☰ open over Home raised, one map tap: ${say(n0)} -> ${say(n1)} (want the menu shut and Home down)`);
+    ok(n0.nav && !n1.nav && n1.level === 0, `${dev} R1: ☰ open over Home, one map tap: ${say(n0)} -> ${say(n1)} (want the menu shut and Home at rest)`);
     if (dev === 'pc') {
       await openSearch(p);
       const s0 = await state();
@@ -255,40 +259,47 @@ try {
       } else notes.push(`${dev} R2: no other lone train to tap (not checked)`);
     }
 
-    // ---- 4: the handle on a computer is an arrow; a phone keeps the dash ----
+    // ---- 4: the handle on a computer is an arrow; a phone keeps the dash (on a chip's card, Statistik at half: Home
+    // has no handle since the start chips, 2026-11-25) ----
     await toRest(p);
+    await openChip(p, 'stats');
     await sleep(500);   // (the arrow's turn ended)
     const grab = () => p.evaluate(() => {
       const g = document.querySelector('#sheet .sh-grab'), i = g.querySelector('i'), a = g.querySelector('.sh-arrow');
       const r = (a && a.offsetParent ? a : g).getBoundingClientRect();
       return { dash: Boolean(i?.offsetParent), arrow: Boolean(a?.offsetParent), turn: a ? getComputedStyle(a).transform : 'none', x: r.x + r.width / 2, y: r.y + r.height / 2 };
     });
-    const g0 = await grab();
+    const g0 = await grab(), l0 = (await state()).level;
     if (dev === 'pc') {
-      ok(!g0.dash && g0.arrow && g0.turn !== 'none' && !/matrix\(1, 0, 0, 1/.test(g0.turn), `pc 4: at rest the handle is an arrow pointing down: the sheet hangs from the top (dash ${g0.dash}, arrow ${g0.arrow}, ${g0.turn})`);
+      // (it points the way its next click goes, 2026-11-24: down while more of the page is hidden, up when all is shown)
+      const turned = g => !(g.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g.turn));
+      const more0 = await p.evaluate(() => document.getElementById('sheet').dataset.next === 'more');
+      ok(!g0.dash && g0.arrow && turned(g0) === more0, `pc 4: Statistik at half, the handle is an arrow pointing ${turned(g0) ? 'down' : 'up'} (dash ${g0.dash}, arrow ${g0.arrow}, ${g0.turn}; ${more0 ? 'more hidden' : 'all shown'})`);
       await p.mouse.click(g0.x, g0.y);
       await sleep(700);
       const g1 = await grab(), l1 = (await state()).level;
-      // (it points the way its next click goes, 2026-11-24: down while more of Home is hidden, up when all is shown)
       const more = await p.evaluate(() => document.getElementById('sheet').dataset.next === 'more');
-      const up = g1.turn === 'none' || /matrix\(1, 0, 0, 1/.test(g1.turn);
-      ok(l1 > 0 && up === !more, `pc 4: a click on the arrow lowers the sheet's edge (level ${l1}) and it points ${up ? 'up' : 'down'} (${more ? 'more hidden' : 'all shown'})`);
-    } else ok(g0.dash && !g0.arrow, `phone 4: the handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
+      ok(l1 !== l0 && turned(g1) === more, `pc 4: a click on the arrow moves the sheet's edge (level ${l0} -> ${l1}) and it points ${turned(g1) ? 'down' : 'up'} (${more ? 'more hidden' : 'all shown'})`);
+    } else ok(g0.dash && !g0.arrow, `phone 4: Statistik's handle is the dash (dash ${g0.dash}, arrow ${g0.arrow})`);
 
-    // ---- 5: no hint line over Home's lateness bar at any height (Max, 2026-11-24: 'Remove the "just nu tryck..." line') ----
+    // ---- 5: no hint line over the lateness bar at any height (Max, 2026-11-24: 'Remove the "just nu tryck..." line';
+    // on the Filter page since the start chips, 2026-11-25, on Home until then) ----
+    await openFromMenu(p, 'filter');
     const hint = [];
-    for (const l of [0, 1, 2]) { await setLevel(p, l); await sleep(300); hint.push(await p.evaluate(() => Boolean(document.querySelector('#sheet .pg[data-key="home"] .lg-hint')))); }
-    ok(!hint.some(Boolean), `${dev} 5: Home's hint line at rest/half/full: ${hint.join('/')} (want none)`);
+    for (const l of [0, 1, 2]) { await setLevel(p, l); await sleep(300); hint.push(await p.evaluate(() => Boolean(document.querySelector('#sheet .pg[data-key="filter"] .lg-hint')))); }
+    ok(!hint.some(Boolean), `${dev} 5: Filter's hint line at low/half/full: ${hint.join('/')} (want none)`);
 
-    // ---- 6: rows rounded, the lines between them straight ----
+    // ---- 6: rows rounded, the lines between them straight (Statistik's rows, its Most late: Home's until 2026-11-25) ----
+    await toRest(p);
+    await openChip(p, 'stats');
     await setLevel(p, 2);
     const shape = await p.evaluate(() => {
-      const rows = [...document.querySelectorAll('#sheet .pg[data-key="home"] .rows > .row')].filter(r => r.offsetParent);
+      const rows = [...document.querySelectorAll('#sheet .pg[data-key="stats"] .rows > .row')].filter(r => r.offsetParent);
       const two = rows.find(r => r.previousElementSibling?.classList.contains('row'));
       return { n: rows.length, radius: rows.map(r => parseFloat(getComputedStyle(r).borderTopLeftRadius)), border: rows.map(r => getComputedStyle(r).borderTopColor),
         line: two ? getComputedStyle(two, '::before').borderTopWidth : null };
     });
-    ok(shape.n > 0 && shape.radius.every(r => r >= 8), `${dev} 6: Home's rows rounded (${shape.n} rows, radii ${[...new Set(shape.radius)].join(', ')} px)`);
+    ok(shape.n > 0 && shape.radius.every(r => r >= 8), `${dev} 6: Statistik's rows rounded (${shape.n} rows, radii ${[...new Set(shape.radius)].join(', ')} px)`);
     ok(shape.line === null || shape.line === '1px', `${dev} 6: the line between two rows still drawn (${shape.line ?? 'no two rows'})`);
     await p.evaluate(() => { const ids = window.__trains.reports().map(r => r.id).slice(0, 2); window.__picker(ids.map((id, i) => ({ id, label: String(2200 + i), company: 'Test' }))); });
     await sleep(800);
