@@ -202,8 +202,10 @@ function analyse(rec, kind) {
     }
   }
   // under: a leaving page's copy seen under the search box while it shows (Max, 2026-11-26: "still buggy animations when
-  // closing out cards on the search bar": the card's rows slid under the search box fading in)
-  {
+  // closing out cards on the search bar": the card's rows slid under the search box fading in). A computer only: the
+  // phone kept its sideways slide (his plan: "the phone stays as it is"), where the leaving ‹ shows under the box for
+  // 5-6 frames (TODO 75, asked)
+  if (rec.dev === 'pc') {
     let n = 0, at = null;
     for (const f of frames) {
       const sb = f.els.filter(e => meta[e[0]].search && e[5] >= 0.05);
@@ -433,7 +435,7 @@ for (const [dev, size] of Object.entries(SIZES)) {
       await settle(page);
       const after = await page.evaluate(() => window.__rec.snap());
       const { frames, meta } = await page.evaluate(() => ({ frames: window.__rec.frames, meta: window.__rec.meta }));
-      const finds = analyse({ frames, meta, before, after }, tr.kind);
+      const finds = analyse({ frames, meta, before, after, dev }, tr.kind);
       if (TRACE) {   // (--trace <words>: the frames of the elements whose text has them)
         const ids = Object.keys(meta).filter(k => `${meta[k].el} ${meta[k].text}`.includes(TRACE)).map(Number);
         frames.forEach((f, i) => { const e = f.els.find(x => ids.includes(x[0]) && (!finds.length || finds.some(d => d.id === x[0]))); console.log(`  ${String(i).padStart(3)} t${Math.round(f.t - frames[0].t)} sheet ${f.sheetTop}/${f.sheetH} lvl ${f.lvl} scroll ${f.scroll} [${f.cls}] {${f.home}} ${e ? `x ${e[1]} y ${e[2]} rel ${(e[2] - f.sheetTop).toFixed(1)} w ${e[3]} ${meta[e[0]].el}<${e[7]}` : '–'}`); });
