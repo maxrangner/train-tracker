@@ -163,7 +163,9 @@ function analyse(rec, kind) {
       // lurch, the round's check 2026-11-25, 'pc home → filter more' at frame 3; alone it never did)
       let top = 0, prev = 0, going = 0;
       for (let k = 1; k < s.length && !jumped; k++) {
-        if (s[k].i !== s[k - 1].i + 1) { prev = 0; continue; }
+        // (steps one frame long only, 40 ms at most: on a busy PC a late frame held a smooth glide's last stretch, a
+        // 9 px 'lurch' that a film at a quarter of the CPU's speed showed smooth; 'pc filter fewer', 2026-11-26)
+        if (s[k].i !== s[k - 1].i + 1 || s[k].t - s[k - 1].t > 40) { prev = 0; continue; }
         const d = s[k].rel - s[k - 1].rel, v = Math.abs(d) / Math.max(1, s[k].t - s[k - 1].t);
         if (Math.abs(d) >= 0.5) going++;
         if (going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = { k, d, kind: 'lurched at the end of its glide (up/down in the sheet)' };
