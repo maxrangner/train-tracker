@@ -11,7 +11,8 @@
 // doesn't. A drag here is a slow finger held still before it lifts (the test browser's touches come too slowly to be
 // a swipe): the sheet goes to the nearest height. KNOWN: bounces found and waiting for Max's word, printed as notes.
 //   1. the recorded weekday evening (17 Nov): a train's page and its parts, drags, a station over it and back, the
-//      search with the keyboard, a long pull down, ☰'s menu, Home pulled up, a company, Settings, Connection;
+//      search with the keyboard, a long pull down, ☰'s menu, Statistik (its chip) pulled up, a company, Settings,
+//      Connection;
 //   2. live, Uppsala C (it usually has a message): its message, the handle, the board's search (the keyboard up and
 //      down while searching), trains picked from the board, the disruptions, the heights coming back.
 // node tools/sheet-moves-check.mjs (with npm run dev; PAGE= for another port).
@@ -162,25 +163,29 @@ try {
     await act('train: a long pull down', async () => { await page.evaluate(() => window.__stack.setLevel(0)); await sleep(500); await drag(200)(); }, 1500);
     state((await top()) === 'home' && (await level()) === 0, `train: a long pull down left ${await top()} at ${await level()}`);
   }
-  // the search with the keyboard, from Home at half
-  await setLevel(page, 1);
+  // the search with the keyboard, from Home (at rest: Home has no other height since the start chips, 2026-11-25; from
+  // Home at half until then)
+  await toRest(page);
   await act('the search: open', ev(() => document.getElementById('search').focus()), 1000);
   await act('the search: the keyboard up', kbUp, 1200);
   await act('the search: typed', () => page.type('#search', '12'), 1000);
   await act('the search: the keyboard down', kbDown, 1200);
   await act('the search: Cancel', ev(() => document.querySelector('#sheet .sh-cancel').click()), 1200);
-  state((await level()) === 1 && !(await page.evaluate(() => window.__stack.searching)), `the search closed: Home at ${await level()} (it was at half)`);
+  state((await level()) === 0 && !(await page.evaluate(() => window.__stack.searching)), `the search closed: Home at ${await level()} (it was at rest)`);
   await toRest(page);
   // ☰'s menu and its pages
   await act('☰: open', ev(() => document.getElementById('nav-button').click()), 700);
   await act('☰: closed by ☰', ev(() => document.getElementById('nav-button').click()), 700);
-  await act('Home: pulled up', ev(() => window.__stack.setLevel(2)), 1800);
-  await act('Home: a company', ev(() => document.querySelector('#sheet .pg[data-key="home"] [data-filter="brand"]:not([data-v=""])')?.click()), 1800);
+  // Statistik, the chip's card (Home pulled up until 2026-11-25)
+  await act('Statistik: opened by its chip', ev(() => document.querySelector('#chips [data-chip="stats"]')?.click()), 1800);
+  state((await top()) === 'stats', `the chip Statistik: ${await top()} on top`);
+  await act('Statistik: pulled up', ev(() => window.__stack.setLevel(2)), 1800);
+  await act('Statistik: a company', ev(() => document.querySelector('#sheet .pg[data-key="stats"] [data-filter="brand"]:not([data-v=""])')?.click()), 1800);
   await act('the company: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
-  // (a company tapped on Home filters the map until the × on the line since 2026-11-23: let go, or later steps find no train)
+  // (a company tapped on Statistik filters the map until the × on the line since 2026-11-23: let go, or later steps find no train)
   await act('the company: its filter off (×)', ev(() => document.querySelector('#line .line-x')?.click()), 1000);
-  await act('Home: a long pull down', drag(700), 1500);
-  state((await level()) === 0, `Home: a long pull down left it at ${await level()}`);
+  await act('Statistik: a long pull down', drag(700), 1500);
+  state((await top()) === 'home' && (await level()) === 0, `Statistik: a long pull down left ${await top()} at ${await level()}`);
   await act('Settings: open', ev(() => { document.getElementById('nav-button').click(); document.getElementById('open-settings').click(); }), 1500);
   await act('Settings: dark', ev(() => document.querySelector('#settings-page [data-key="theme"] [data-v="dark"]')?.click()), 2500);
   await act('Settings: light', ev(() => document.querySelector('#settings-page [data-key="theme"] [data-v="light"]')?.click()), 2500);
@@ -260,7 +265,7 @@ try {
   // the disruptions (live only)
   if (await openDisruptions(page)) {
     await toRest(page);
-    await act('Störningar: open', ev(() => document.querySelector('#sheet .pg[data-key="home"] [data-go="dislist"]')?.click()), 1500);
+    await act('Störningar: open', ev(() => document.querySelector('#chips [data-chip="dislist"]')?.click()), 1500);
     await act('Störningar: a fold', ev(() => document.querySelector('#sheet .pg[data-key="dislist"] .dis-fold')?.click()), 1200);
     await act('Störningar: a disruption', ev(() => [...document.querySelectorAll('#sheet .pg[data-key="dislist"] .dis-row')].find(r => !r.closest('.dis-works:not(.open)'))?.click()), 2000);
     await act('the disruption: back', ev(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))), 1500);
