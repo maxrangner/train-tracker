@@ -3,14 +3,14 @@
 // out numbered on one picture per scene, its name burned in. The numbers the tests read miss what only shows on screen
 // (a corner showing through, rows sliding under the search box); a film shows it. Every change to a move or a look:
 // the scenes it touches, both sizes, looked at frame by frame.
-//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--out <folder>]   (with npm run dev; PAGE= for another port)
+//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--slow 4] [--out <folder>]   (with npm run dev; PAGE= for another port)
 // Pictures: shots/film/<size> <scene>.png (not in git). The scenes: SCENES below; add one for each new move.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR, address } from './lib/browser.mjs';
 import { toRest, until, openMenu, openChip, openFromMenu } from './lib/screen.mjs';
 
 const args = process.argv.slice(2), opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
-const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film';
+const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film', SLOW = Number(opt('--slow') ?? 1);   // --slow 4: the CPU four times slower (a slow phone)
 const SIZES = { phone: PHONE, pc: { width: 1400, height: 900, deviceScaleFactor: 1 } };
 mkdirSync(OUT, { recursive: true });
 
@@ -32,8 +32,8 @@ const SCENES = [
   { name: 'menu close by its button', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#nav-button') },
   { name: 'menu close by the map', setup: async (p) => { await toRest(p); await openMenu(p); }, act: clickMap },
   { name: 'menu → filter', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#open-filter'), ms: 1300 },
-  { name: 'filter more', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600); }, act: p => p.click('#sheet [data-act="comore"]'), ms: 1500 },
-  { name: 'filter fewer', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600); await p.click('#sheet [data-act="comore"]'); await sleep(1200); }, act: p => p.click('#sheet [data-act="comore"]'), ms: 1500 },
+  { name: 'filter more', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600 * SLOW); }, act: p => p.evaluate(() => document.querySelector('#sheet [data-act="comore"]').click()), ms: 1500 },
+  { name: 'filter fewer', setup: async (p) => { await openFromMenu(p, 'filter'); await until(p, () => Boolean(document.querySelector('#sheet [data-act="comore"]:not([hidden])')), 20000); await sleep(600); await p.evaluate(() => document.querySelector('#sheet [data-act="comore"]').click()); await sleep(1500 * SLOW); }, act: p => p.evaluate(() => document.querySelector('#sheet [data-act="comore"]').click()), ms: 1500 },
   { name: 'filter → back', setup: async (p) => { await openFromMenu(p, 'filter'); await sleep(800); }, act: p => p.keyboard.press('Escape'), ms: 1300 },
   { name: 'menu → settings', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#open-settings'), ms: 1300 },
   { name: 'settings → back', setup: async (p) => { await openFromMenu(p, 'settings'); await sleep(800); }, act: p => p.keyboard.press('Escape'), ms: 1300 },
@@ -56,6 +56,7 @@ try {
     await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'dark' }]);
     await sleep(3000);
     const cdp = await page.createCDPSession();
+    if (SLOW > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: SLOW });
     for (const sc of SCENES) {
       if (ONLY && !sc.name.includes(ONLY)) continue;
       await sc.setup(page);
@@ -67,7 +68,7 @@ try {
       await sleep(150);
       const t0 = Date.now() / 1000;
       await sc.act(page);
-      await sleep(sc.ms ?? 900);
+      await sleep((sc.ms ?? 900) * SLOW);
       await cdp.send('Page.stopScreencast');
       cdp.off('Page.screencastFrame', on);
       const shown = frames.filter(f => f.t >= t0 - 0.03);
@@ -83,7 +84,7 @@ try {
       const sheet = await browser.newPage();
       await sheet.setViewport({ width: cols * (cw + 6) + 20, height: 400 });
       await sheet.setContent(html);
-      const file = `${OUT}/${size} ${sc.name.replace(/[^\p{L}\p{N} →-]/gu, '')}.png`;
+      const file = `${OUT}/${size}${SLOW > 1 ? ` slow${SLOW}` : ''} ${sc.name.replace(/[^\p{L}\p{N} →-]/gu, '')}.png`;
       await sheet.screenshot({ path: file, fullPage: true });
       await sheet.close();
       made.push(`${file} (${keep.length} frames)`);
