@@ -206,8 +206,10 @@ function analyse(rec, kind) {
         if (Math.abs(d) < 0.5) { if (++rest >= 3) rested = true; prev = v; continue; }
         if (rested && Math.abs(d) >= 1) jumped = `moved again after rest: ${d.toFixed(1)} px at frame ${k}`;
         else if (dir && Math.sign(d) !== dir && Math.abs(d) >= 1) jumped = `turned back: ${d.toFixed(1)} px at frame ${k}`;
-        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
-        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = v;
+        // (the lurch only between steps one frame long each, 40 ms at most: a late frame's speed, its move spread over
+        // its long wait, looked like a slowed glide and the next frame like a lurch; 'pc filter more', 2026-11-26)
+        else if (++going > 4 && prev && prev < top / 4 && Math.abs(d) >= 3 && v > 3 * prev && frames[k].t - frames[k - 1].t <= 40 && frames[k - 1].t - (frames[k - 2]?.t ?? 0) <= 40) jumped = `lurched at the end of its glide: ${d.toFixed(1)} px at frame ${k}`;
+        dir = Math.sign(d); rest = 0; top = Math.max(top, v); prev = frames[k].t - frames[k - 1].t <= 40 ? v : 0;
       }
       if (jumped) finds.push({ kind: 'jump', id: 0, what: `the sheet's ${name} edge`, info: `${jumped} of ${frames.length}` });
     }
