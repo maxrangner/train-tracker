@@ -23,7 +23,10 @@
   #panel .panel-sub:empty { display: none; }
   #panel .panel-title strong { font-size: 34px; line-height: 1; letter-spacing: -0.01em; }
   .panel-co { font-size: 13.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .ph-to { display: none; font-size: 15px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  /* (the full card's end pill made smaller, .cd-to: the accent, its ink, rounded; Max, 2026-11-26: "should show desitation
+     clearer. Maybe same style of accent pill as the expanded, but maybe a bit smaller?") */
+  .ph-to { display: none; padding: 3px 10px; margin-block: -5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 800; line-height: 20px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; box-sizing: border-box; }
   /* (at full Follow is its arrow alone, so the company's name isn't cut, "SJ Snabb…") */
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow { width: 40px; padding: 0; justify-content: center; }
   #sheet[data-page="train"][data-h="2"] #panel .sh-follow span { display: none; }
@@ -350,7 +353,7 @@
      come back raised; a long company name gives way before the destination); the rest fades back in as soon as it is
      pulled up (.cd is display: contents: its own parts fade). */
   @media (max-width: 439px) {
-    #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline; }
+    #sheet[data-page="train"][data-h="0"]:not(.dragging) .ph-to { display: inline-block; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-btns :is(.sh-acts, .sh-star) { display: none; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .panel-head > .sh-up { display: none; }
     #sheet[data-page="train"][data-h="0"]:not(.dragging) #panel .sh-follow { width: 44px; padding: 0; justify-content: center; }
