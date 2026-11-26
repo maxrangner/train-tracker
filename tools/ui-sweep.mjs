@@ -94,7 +94,10 @@ function recorder() {
       nav = [Math.max(r.left, w.left), Math.max(r.top, w.top), Math.min(r.right, w.right), Math.min(r.bottom, w.bottom)];
       if (nav[2] - nav[0] < 1 || nav[3] - nav[1] < 1) nav = null;
     }
-    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, sheet.bottom], home, t: ft ?? performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
+    // (the sheet's top band: its top edge down past its top corners, where nothing of the menu may show; below it the box
+    // covers the menu sliding behind it)
+    const band = parseFloat(getComputedStyle(document.getElementById('sheet')).borderTopRightRadius) || 0;
+    return { nav, sheetBox: [sheet.left, sheet.top, sheet.right, innerWidth >= 440 ? sheet.top + band : sheet.bottom], home, t: ft ?? performance.now(), scroll: pgTop ? Math.round(pgTop.scrollTop) : null, lvl: window.__stack.level, cls: document.getElementById('panel').className, sheetTop: Math.round(sheet.top * 10) / 10, sheetH: Math.round(sheet.height * 10) / 10, top: window.__stack.top(), els: out };
   };
   // (each frame stamped with its own time, the frame's, not when its reading ended: a reading of hundreds of parts takes
   // a varying while, and two frames read 1 ms apart made a smooth ease look like a lurch; 2026-11-26)
@@ -231,8 +234,9 @@ function analyse(rec, kind) {
     }
     if (n) finds.push({ kind: 'under', id: at[0], what: `${at[7]} ${meta[at[0]].el}${meta[at[0]].text ? ` "${meta[at[0]].text}"` : ''}`, info: `under the search box as it shows, ${n} frame(s)` });
   }
-  // peeks: ☰'s card showing over the sheet (it lies under it: what shows there shows through the box's rounded corners or
-  // past its edge; Max, 2026-11-26: "Calling Hamburger menu shows its corner in the top right of the search bar")
+  // peeks: ☰'s card showing at the sheet's top (a computer: its top edge down past its top corners, below that the box
+  // covers it; a phone: anywhere on the sheet; Max, 2026-11-26: "Calling Hamburger menu shows its corner in the top right
+  // of the search bar"; "It should just slide under the search bar, without showing behind the top")
   {
     let n = 0, at = null;
     for (const f of frames) {

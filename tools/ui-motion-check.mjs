@@ -72,7 +72,10 @@ try {
         const win = document.getElementById('nav-window'), w = win.getBoundingClientRect();
         const under = Number(getComputedStyle(win).zIndex) < Number(getComputedStyle(document.getElementById('sheet')).zIndex);
         const vt = Math.max(r.top, w.top), vb = Math.min(r.bottom, w.bottom), vl = Math.max(r.left, w.left), vr = Math.min(r.right, w.right);
-        const over = Math.min(vr, sh.right) - Math.max(vl, sh.left) > 2 ? Math.max(0, Math.min(vb, sh.bottom) - Math.max(vt, sh.top)) : 0;
+        // (a computer: only the sheet's top band, its top edge down past its top corners; below it the box covers the menu
+        // sliding behind it, Max, 2026-11-26: "slide under the search bar, without showing behind the top")
+        const band = innerWidth >= 440 ? sh.top + (parseFloat(getComputedStyle(document.getElementById('sheet')).borderTopRightRadius) || 0) : sh.bottom;
+        const over = Math.min(vr, sh.right) - Math.max(vl, sh.left) > 2 ? Math.max(0, Math.min(vb, band) - Math.max(vt, sh.top)) : 0;
         past = Math.max(past, !under ? 99 : over);
         dy = Math.max(dy, Math.abs(Math.round(m.m42))); dx = Math.max(dx, Math.abs(Math.round(m.m41))); op = Math.min(op, Number(cs.opacity));
       }
