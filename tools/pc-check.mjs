@@ -292,6 +292,22 @@ try {
   const click = await labelOp();
   ok(during.held && during.text === 0 && !after2.held && after2.text !== 0 && !click.held,
     `held on the map: labels ${during.held ? 'hidden' : 'SHOWN'} (station names' opacity ${JSON.stringify(during.text)}); let go: ${after2.held ? 'still hidden' : 'back'}; a plain click: ${click.held ? 'hid them' : 'nothing'}`);
+  // 17b. Two fingers (a pinch) held as long: the labels stay (Max, 2026-11-26: "When zooming with two fingers, dont hide
+  //      labels. Only when tapping and holding"); one finger held the same way: they go
+  {
+    const cdp = await page.createCDPSession();
+    const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts.map(([x, y], id) => ({ x, y, id })) });
+    await touch('touchStart', [[860, 450]]); await sleep(30);
+    await touch('touchStart', [[860, 450], [960, 450]]);
+    await touch('touchMove', [[850, 450], [970, 450]]); await sleep(400);
+    const pinch = await labelOp();
+    await touch('touchEnd', []); await sleep(200);
+    await touch('touchStart', [[900, 450]]); await sleep(400);
+    const one = await labelOp();
+    await touch('touchEnd', []); await sleep(200);
+    await cdp.detach();
+    ok(!pinch.held && one.held, `two fingers held: labels ${pinch.held ? 'HIDDEN' : 'kept'}; one finger held: ${one.held ? 'hidden' : 'NOT hidden'}`);
+  }
 
   // 18. A train card with ‹ (opened from a station's board): its top row's buttons end where the boxes under it end (Max,
   //     2026-11-25: "'följer' button not aligned correctly. Maybe bug in whole row?")
