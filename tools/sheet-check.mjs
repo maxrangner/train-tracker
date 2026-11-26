@@ -273,7 +273,7 @@ try {
     }
   }
 
-  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): the same full each, and a finger
+  // ---- 5. The chips' cards (Sparade, Statistik; Störningar needs live data): opened at full, as tall as they are, and a finger
   // on the chip row in the card's head pulls the card like the rest of it (Max, 2026-11-26: "Whole card should respond
   // to swipe"; "all three have different height of fully expanded"; a phone) ----
   {
@@ -281,7 +281,13 @@ try {
     for (const key of ['saved', 'stats']) {
       await toRest(page);
       await openChip(page, key);
-      heights[key] = await page.evaluate(() => window.__stack.heights[2]);
+      // (opened at full, only as tall as it is: the room under its content, or it scrolls; Max, 2026-11-26: "Statistics on
+      // phone still doesn't open fully expanded like I asked")
+      heights[key] = await page.evaluate(() => {
+        const pg = document.querySelector('#sheet .pg:last-child');
+        let end = 0; for (const c of pg.children) if (c.offsetHeight && !c.hasAttribute('data-spacer')) end = Math.max(end, c.getBoundingClientRect().bottom);
+        return { level: window.__stack.level, room: Math.round(innerHeight - end), scrolls: pg.scrollHeight > pg.clientHeight + 1 };
+      });
       for (const dy of [-200, 200]) {
         if (await page.evaluate(k => window.__stack.top() !== k, key)) await openChip(page, key);
         await setLevel(page, 1);
@@ -289,13 +295,16 @@ try {
         await page.touchscreen.touchStart(c.x, c.y);
         for (let i = 1; i <= 10; i++) { await page.touchscreen.touchMove(c.x, c.y + dy * i / 10); await sleep(25); }
         await sleep(150); await page.touchscreen.touchEnd(); await sleep(900);
-        const s = await page.evaluate(() => ({ top: window.__stack.top(), level: window.__stack.level }));
-        const good = dy < 0 ? s.top === key && s.level === 2 : s.top === 'home';
+        const s = await page.evaluate(() => ({ top: window.__stack.top(), level: window.__stack.level, one: Math.abs(window.__stack.heights[1] - window.__stack.heights[2]) <= 2 }));
+        // (up: at full, or a card short enough that its half is its full: nowhere higher to go)
+        const good = dy < 0 ? s.top === key && (s.level === 2 || s.one) : s.top === 'home';
         if (!good) fails.push(`5 ${key}: its chip row pulled ${dy < 0 ? 'up' : 'down'} 200 px: ${s.top} at level ${s.level}`);
       }
     }
-    if (heights.saved !== heights.stats) fails.push(`5 the chips' cards' full differs: Sparade ${heights.saved}, Statistik ${heights.stats}`);
-    else notes.push(`5 the chips' cards: full ${heights.saved} both; their chip row pulls them up and down`);
+    for (const [k, h] of Object.entries(heights)) {
+      if (h.level !== 2 || (!h.scrolls && h.room > 60)) fails.push(`5 ${k} opened at level ${h.level} (want 2, full), ${h.scrolls ? 'scrolling' : `${h.room} px under its content`}`);
+      else notes.push(`5 ${k} opens at full, ${h.scrolls ? 'scrolling (taller than the screen)' : `${h.room} px under its content (the bar's room included)`}; its chip row pulls it up and down`);
+    }
     await toRest(page);
   }
   if (page.errors.length) fails.push('page errors: ' + page.errors.slice(0, 3).join(' | '));

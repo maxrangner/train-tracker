@@ -53,6 +53,8 @@ const SCENES = [
   { name: 'settings → back', setup: async (p) => { await openFromMenu(p, 'settings'); await sleep(800); }, act: p => p.keyboard.press('Escape'), ms: 1300 },
   { name: 'station → map click', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: clickMap },
   { name: 'station → back', setup: async (p) => { await toRest(p); await station(p); await sleep(2000); }, act: p => p.keyboard.press('Escape') },
+  { name: 'chip → statistik', setup: toRest, act: p => p.evaluate(() => document.querySelector('#chips [data-chip="stats"]').click()), ms: 1300 },
+  { name: 'chip → sparade', setup: toRest, act: p => p.evaluate(() => document.querySelector('#chips [data-chip="saved"]').click()), ms: 1300 },
   { name: 'statistik → closed by its chip', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="stats"]') },
   { name: 'statistik → sparade', setup: async (p) => { await openChip(p, 'stats'); await sleep(800); }, act: p => p.click('#sheet .sh-chips [data-chip="saved"]') },
   { name: 'train status open', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .tv-toggle')?.click()) },
