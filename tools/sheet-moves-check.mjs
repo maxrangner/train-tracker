@@ -113,9 +113,11 @@ try {
     if (!p) throw new Error('no train in view (' + await page.evaluate(() => `dots ${window.__map.queryRenderedFeatures({ layers: ['train-dots'] }).length}, line ${document.getElementById('line').dataset.id || '-'}, top ${window.__stack.top()} at ${window.__stack.level}, sheet ${window.__stack.heights.join('/')}, zoom ${window.__map.getZoom().toFixed(1)}`) + ')');
     const before = await top();
     await page.touchscreen.tap(p.x, p.y);
-    // (the map follows the open train, so a tap can miss: the next train then)
-    await sleep(1200);
-    const now = await top();
+    // (the map follows the open train, so a tap can miss: the next train then; its card waited for up to 4 s, not a
+    // fixed 1.2 s: the release's check on a busy PC read Home before the card had come, 2026-11-27)
+    let now = before;
+    for (let t0 = Date.now(); Date.now() - t0 < 4000; await sleep(200)) { now = await top(); if (now.startsWith('train:') && now !== before) break; }
+    await sleep(400);
     if ((now.startsWith('train:') && now !== before) || tries > 3) return;
     missed = true;
     await tapTrain(k + 1, tries + 1);
@@ -199,7 +201,8 @@ try {
   const openBoard = async () => {   // (through the search, the field typed by hand)
     await openSearch(page);
     await typeSearch(page, 'Uppsala C');
-    await sleep(500);
+    await until(page, () => [...document.querySelectorAll('#search-results [data-go^="station:"]')].find(b => b.textContent.includes('Uppsala C')), 8000);
+    await sleep(300);
     await page.evaluate(() => [...document.querySelectorAll('#search-results [data-go^="station:"]')].find(b => b.textContent.includes('Uppsala C'))?.click());
     for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await has('#board .bd-row')) break;
     await sleep(800);
@@ -207,7 +210,10 @@ try {
   await act('the search: open', ev(() => document.getElementById('search').focus()), 800);
   await act('the search: the keyboard up', kbUp, 800);
   await page.type('#search', 'Uppsala C');
-  await sleep(800);
+  // (its result clicked once it is there: on a busy PC 0.8 s was too soon and the board never opened, the release's
+  // check of 2026-11-27)
+  await until(page, () => [...document.querySelectorAll('#search-results [data-go^="station:"]')].find(b => b.textContent.includes('Uppsala C')), 8000);
+  await sleep(300);
   await act('the search: the keyboard down', kbDown, 800);
   await act('board: opened from the search', ev(() => [...document.querySelectorAll('#search-results [data-go^="station:"]')].find(b => b.textContent.includes('Uppsala C'))?.click()), 2500);
   for (let t0 = Date.now(); Date.now() - t0 < 15000; await sleep(300)) if (await has('#board .bd-row')) break;
