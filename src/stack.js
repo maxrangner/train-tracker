@@ -150,7 +150,9 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   const safe = () => { const s = getComputedStyle(probe); return { top: parseFloat(s.paddingTop) || 0, bottom: parseFloat(s.paddingBottom) || 0 }; };
 
   let geo = sheetGeometry(true);   // the sheet's sizes (the top of this file); read again in measure()
-  const homeLow = () => geo.head + 2 * geo.barEdge;    // Home at rest: the search bar, as much room above it as under it
+  // (a computer: Rewind's bar inside the head while it is open, its height in --day-in: src/day.js)
+  const dayIn = () => (isWide() ? parseFloat(document.documentElement.style.getPropertyValue('--day-in')) || 0 : 0);
+  const homeLow = () => geo.head + 2 * geo.barEdge + dayIn();    // Home at rest: the search bar, as much room above it as under it (and Rewind's bar)
   const stack = [];          // [{ key, def, el, scroll, lvl }]
   const top = () => stack[stack.length - 1];
   let idx = 0, H = [homeLow(), 400, 800], fullMax = 800, preSearch = 0, ready = false;
@@ -221,7 +223,7 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   const grabEl = sheet.querySelector('.sh-grab'), grabH = () => (atHome() ? 0 : grabEl?.offsetHeight || geo.grab);
   // (with the search bar: 8 px more under it, so a scrolled page goes out of sight below it, not right at its edge;
   // src/css/sheet.css .sh-head's margin; Max, 2026-11-24 "Better just add the padding")
-  const headPx = () => (sheet.classList.contains('no-bar') ? 0 : geo.head + geo.barGap + (wide() && sheet.hasAttribute('data-root') ? geo.chipsRow : 0))
+  const headPx = () => (sheet.classList.contains('no-bar') ? dayIn() : geo.head + geo.barGap + dayIn() + (wide() && sheet.hasAttribute('data-root') ? geo.chipsRow : 0))
     + grabH() + (wide() || atHome() ? geo.barEdge : 0);
   // A page whose content is still coming (its half() or low() null): where the sheet is now, at most half the screen
   // (from Home at full a loading card covered it all until its stops came), measured as half() is
@@ -1177,6 +1179,8 @@ export function createStack({ sheet, define, roots = [], onPad = () => {}, onCha
   const edgeChanged = () => render(shownTo, true);
   const api = {
     edgeChanged,
+    // the head's height changed (Rewind's bar in it or out, a computer): every height read again, the sheet placed there
+    headChanged: () => fit('resize'),
     open, back, backTo, home, close, replace,
     top: () => top()?.key ?? null,
     keys: () => stack.map(p => p.key),

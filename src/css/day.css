@@ -89,14 +89,23 @@
   .only-live p { margin: 0; font-size: 16px; font-weight: 650; }
   .only-live button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: var(--accent); color: var(--accent-ink); font: 700 15px var(--font); cursor: pointer; }
 
-  /* A computer: above the sheet at the left, as wide as it */
+  /* A computer: inside the search card, right under the search box, on every page (src/day.js moves it into the
+     sheet's head, src/stack.js counts it in the head): the card's pages and a chip's card open under it, the chips
+     under the whole card (Max, 2026-11-27: "The rewind should always sit on top where it is when active, not pushed
+     below saved etc"; and no shadow between the search box and it: it is the card's own) */
   @media (min-width: 440px) {
-    #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-inset) + var(--sheet-shown, 72px) - 1px + env(safe-area-inset-top, 0px));
-      padding: 8px 10px 8px; border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow);
-      /* (it glides with the chips' room, as on a phone: ☰ hides the chips and it jumped up under them in one frame) */
-      transition: top var(--t-glide) var(--ez), opacity .18s; }
-    .day-open:not(.sheet-high) #sheet { border-radius: var(--radius) var(--radius) 0 0; box-shadow: var(--shadow); }
-    .day-open:not(.sheet-high) #chips { transform: none; top: calc(var(--sheet-shown, 72px) + 20px + var(--day-h, 0px) + env(safe-area-inset-top, 0px)); transition: opacity .18s, visibility 0s; }
+    #sheet #day { position: absolute; left: 0; right: 0; top: var(--head-h); bottom: auto; width: auto; z-index: auto;
+      padding: 8px 0 4px; border-radius: 0; background: none; box-shadow: none; transition: opacity .18s; }
+    .day-in #sheet .sh-head { height: calc(var(--head-h) + var(--day-in, 0px)); }
+    .day-in #sheet[data-root] .sh-head { height: calc(var(--head-h) + var(--day-in, 0px) + var(--chips-row)); }
+    .day-in #sheet .sh-head > :is(.sh-search, .sh-bar) { bottom: auto; height: var(--head-h); }
+    .day-in #sheet .sh-chips { top: calc(var(--head-h) + var(--day-in, 0px)); }
+    .day-in #sheet.no-bar .sh-head { height: var(--day-in, 0px); }
+    .day-in #sheet.no-bar #day { top: 0; }
+    .day-in.sheet-high #day { opacity: 1; pointer-events: auto; }
+    /* (the phone's join: not here) */
+    .day-open:not(.sheet-high) #sheet { border-radius: var(--radius); box-shadow: var(--shadow); }
+    .day-open:not(.sheet-high) #chips { transform: none; }
   }
 
   @media (prefers-reduced-motion: reduce) {

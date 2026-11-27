@@ -22,8 +22,21 @@ const SQUEEZE = { over: 74, slider: 190, room: 52 };   // the scale slider (74 p
 export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay, buzz = () => {}, openTrain = () => false, stationName = sig => sig }) {
   let view = null, sheetPad = 0;
 
+  // A computer: the bar inside the search card, under the search box (src/css/day.css; Max, 2026-11-27: "always sit on
+  // top where it is when active"); a phone: on its own, on the sheet's top edge.
+  function place() {
+    const root = document.documentElement, inside = Boolean(view?.isOpen) && isWide();
+    const head = document.querySelector('#sheet .sh-head'), el = view?.el;
+    if (el && inside && el.parentElement !== head) head.append(el);
+    if (el && !inside && el.parentElement !== document.body) document.body.insertBefore(el, document.getElementById('day-bubble'));
+    root.classList.toggle('day-in', inside);
+    const was = root.style.getPropertyValue('--day-in'), now = inside ? `${el.offsetHeight}px` : '0px';
+    if (now !== was) { root.style.setProperty('--day-in', now); stack()?.headChanged?.(); }
+    return inside;
+  }
   function pad() {
-    const h = view?.isOpen ? view.el.offsetHeight : 0, root = document.documentElement;
+    const inside = place();
+    const h = view?.isOpen && !inside ? view.el.offsetHeight : 0, root = document.documentElement;
     root.style.setProperty('--ribbon-h', !isWide() && h ? `${h}px` : '0px');
     root.style.setProperty('--day-h', `${h}px`);   // (the pills step past it: src/css/day.css)
     // (not while the card's "to …" chooser is open: it shuts back to the same height, and the map stays still)
