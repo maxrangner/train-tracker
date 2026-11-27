@@ -6,7 +6,8 @@
 //     midnight, the 23- and 25-hour days, in Swedish time and with the computer in UTC and in New York; the shelf
 //     (fetcher/files.mjs) lets go of a file only then;
 //   - a train's trip ends (start, end: fetcher/timetable.mjs ends, sampled by fetcher/state.mjs) read back; an older
-//     row without them reads as null; the day's overview (daysum) counts each slot as the page's bars do;
+//     row without them reads as null; the day's overview (daysum) counts each slot as the page's bars do; Rewind's
+//     timeline labels (src/day-ticks.js): Yesterday, the hours, Today at Swedish midnight, now;
 //   - the page's reader (src/files-source.js history()) on a pretend site: every slot asked by its name, a missing one
 //     a gap (rows null), the slot running now not asked;
 //   - src/day-trains.js: a train between its two points (half-way at half time), standing at its last point, gone after
@@ -18,6 +19,7 @@ import { historyOf, historyRow, historyName, historySlot, historyUntil, historyC
 import { createState } from '../fetcher/state.mjs';
 import { buildHistory, buildDaySum, createShelf } from '../fetcher/files.mjs';
 import { createTimetable } from '../fetcher/timetable.mjs';
+import { ticksFor } from '../src/day-ticks.js';
 import { startFilesSource } from '../src/files-source.js';
 import { createDayTrains } from '../src/day-trains.js';
 import { eventsOf, play } from './lib/history-play.mjs';
@@ -122,6 +124,19 @@ for (const tz of [null, 'UTC', 'America/New_York']) {
   const sum = JSON.parse(JSON.stringify(buildDaySum(t, new Map([[101, c], [100, [2, 1, 1, 0, 0]]])))), back = daySumOf(sum);
   ok(c.join() === '4,1,1,1,1' && sum.kind === 'daysum' && sum.slots[0][0] === 100 && back.get(101)?.n === 4 && back.get(101)?.c.late === 1 && back.get(100)?.c.some === 1,
     `the day's overview: a slot's trains by lateness (${c.join(' ')}), slots in order, read back`);
+}
+
+// ---------- 2c. Rewind's timeline labels (src/day-ticks.js) ----------
+{
+  const words = { yesterday: 'Igår', today: 'Idag', now: 'nu' }, show = r => r.ticks.map(t => t.text).join(' ');
+  const day = ticksFor(Z('2026-11-26T11:40:00Z'), Z('2026-11-27T11:40:00Z'), 300, words);   // a phone: 300 px for 24 h
+  const mid = (Z('2026-11-26T23:00:00Z') - Z('2026-11-26T11:40:00Z')) / 864e5 * 300;
+  ok(show(day) === 'Igår 18 21 Idag 03 06 09 nu' && Math.abs(day.midnight - mid) < 0.01, `24 h on a phone: ${show(day)}, midnight at ${day.midnight?.toFixed(1)} px`);
+  const short = ticksFor(Z('2026-11-27T10:15:00Z'), Z('2026-11-27T11:40:00Z'), 300, words);
+  ok(short.midnight === null && !show(short).includes('Igår') && show(short).startsWith('12') && show(short).endsWith('nu'), `a morning's hour and a half: ${show(short)}, no midnight`);
+  const summer = ticksFor(Z('2026-07-01T10:00:00Z'), Z('2026-07-02T10:00:00Z'), 300, words);
+  const at = summer.ticks.find(t => t.kind === 'today');
+  ok(at && Math.abs(at.x - (Z('2026-07-01T22:00:00Z') - Z('2026-07-01T10:00:00Z')) / 864e5 * 300) < 0.01, `summer time: "Idag" at Swedish midnight (${at?.x.toFixed(1)} px)`);
 }
 
 // ---------- 3. the page's reader ----------

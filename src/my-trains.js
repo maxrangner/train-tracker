@@ -204,7 +204,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   // pageKey: the page they sit on; editKey: the page the pencil opens; remove(): forgets the trip or change.
   const DELETE_ARMED_MS = 4000, DELETE_GAP_MS = 450;
   function editDelete(pageKey, editKey, remove) {
-    let armedAt = 0, disarm = 0;
+    // (never armed until tapped: from 0 it counted from the page's start, so for its first 4 s one tap deleted; Max,
+    // 2026-11-27: "Yes" to the fix)
+    let armedAt = -Infinity, disarm = 0;
     const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
     return {
       acts: () => [{ id: 'edit', icon: 'edit', label: t('tripEdit') },
@@ -226,7 +228,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         clearTimeout(disarm);
         disarm = setTimeout(() => { if (stack.top() === pageKey) stack.refreshBar(); }, DELETE_ARMED_MS + 50);
       },
-      reset() { armedAt = 0; },
+      reset() { armedAt = -Infinity; },
       stop() { clearTimeout(disarm); },
     };
   }

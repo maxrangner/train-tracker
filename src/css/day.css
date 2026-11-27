@@ -48,6 +48,8 @@
   .day-ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
   .day-ticks span.now { transform: translateX(-100%); }
   .day-ticks span.first { transform: none; }
+  /* (Yesterday at the start, Today at midnight: the day's words in the ink, bolder; src/day-ticks.js) */
+  .day-ticks span.day { color: var(--ink); font-weight: 800; }
   #day-frame { position: fixed; inset: 0; z-index: 4; pointer-events: none; box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 26px color-mix(in srgb, var(--accent) 45%, transparent); }
   #day-clock { position: fixed; z-index: 5; top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); height: 30px;
     display: inline-flex; align-items: center; padding: 0 12px; border-radius: 15px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow-s);

@@ -37,6 +37,7 @@ import { minutesText } from './tag.js';
 import { t } from './i18n.js';
 import { icon } from './icons.js';
 import { esc } from './html.js';
+import { ticksFor } from './day-ticks.js';
 import { ms, reduceMotion } from './motion.js';
 
 // The play speeds: real time, then ten minutes a minute, an hour a minute, three hours a minute, ten hours a minute.
@@ -254,6 +255,9 @@ export function createDayView({ history, overview = async () => null, stationNam
         }
       }
     }
+    // The hours under it, and midnight as a line through it (src/day-ticks.js)
+    const { ticks: marks, midnight } = ticksFor(t0, t1, W, { yesterday: t('dayYesterdayTick'), today: t('dayTodayTick'), now: t('dayNow') });
+    if (midnight !== null) { g.fillStyle = css('--ink') || '#000'; g.globalAlpha = 0.85; g.fillRect(Math.round(midnight) - 1, 0, 2, H); g.globalAlpha = 1; }
     // Not in the files yet (the slot running now, and the live map's moment): the live end, in the accent.
     const live0 = x(end);
     g.fillStyle = css('--accent'); g.globalAlpha = 0.18; g.fillRect(live0, top, Math.max(2, W - live0), full); g.globalAlpha = 1;
@@ -271,18 +275,9 @@ export function createDayView({ history, overview = async () => null, stationNam
     handle.classList.toggle('live', T === null);
     track.setAttribute('aria-valuenow', String(Math.round((hx / Math.max(1, W)) * 100)));
     track.setAttribute('aria-valuetext', T === null ? t('dayLive') : hhmm(T));
-    // The hours under it, as many as fit.
-    const hours = span / 3600000, step = [1, 2, 3, 4, 6].find(k => (W / hours) * k >= 44) ?? 6;
-    const first = Math.ceil(t0 / 3600000) * 3600000, ticks = [];
-    for (let at = first; at < t1 - 0.4 * 3600000 * step; at += 3600000) {
-      const hh = Number(hhmm(at).slice(0, 2));
-      if (hh % step) continue;
-      const xa = x(at);
-      if (xa > W - 34) continue;   // (clear of "now")
-      ticks.push(`<span${xa < 10 ? ' class="first"' : ''} style="left:${xa.toFixed(1)}px">${hhmm(at).slice(0, 2)}</span>`);
-    }
-    ticks.push(`<span class="now" style="left:${W}px">${esc(t('dayNow'))}</span>`);
-    ticksEl.innerHTML = ticks.join('');
+    const cls = m => (m.kind === 'now' ? 'now' : m.kind === 'yesterday' || m.x < 10 ? `first${m.kind === 'yesterday' ? ' day' : ''}` : m.kind === 'today' ? 'day' : '');
+    const ticksHtml = marks.map(m => `<span${cls(m) ? ` class="${cls(m)}"` : ''} style="left:${m.x.toFixed(1)}px">${esc(m.text)}</span>`).join('');
+    if (ticksEl.innerHTML !== ticksHtml) ticksEl.innerHTML = ticksHtml;
     // the buttons and the clock
     const playing = rate > 0;
     if (playBtn.dataset.on !== String(playing)) { playBtn.dataset.on = String(playing); playBtn.innerHTML = icon(playing ? 'pause' : 'play', 18); playBtn.setAttribute('aria-label', t(playing ? 'dayPause' : 'dayPlay')); }
