@@ -26,7 +26,9 @@ const SCRIPT = 'linux/sparat';
 const LIBS = ['ssh2', 'nodemailer'];
 
 // Every project file reached by import from the start files (import/export … from '…' at a line's start, and import('…')).
-const specs = src => [...src.matchAll(/^\s*(?:import|export)\b[^'"]*?\bfrom\s*['"]([^'"]+)['"]/gm), ...src.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm),
+// (no ';' between the word and its from: an `export const …;` line and a comment under it saying "from 'YYYY-MM-DD'"
+// read as one import of a library "YYYY-MM-DD", src/clock.js, found by the release of 2026-11-27)
+const specs = src => [...src.matchAll(/^\s*(?:import|export)\b[^'";]*?\bfrom\s*['"]([^'"]+)['"]/gm), ...src.matchAll(/^\s*import\s*['"]([^'"]+)['"]/gm),
   ...src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]);
 const files = new Set();
 (function follow(list) {
