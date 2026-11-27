@@ -140,10 +140,9 @@ const map = createMap('map', {
   alongTrack: (id, d) => (day.past ? null : trains.along(id, d)),
   sunTime: () => (day.past ? day.view.moment : now() - DRAW_DELAY_MS),
   // A train opens its page and the camera follows it (R2); nothing: R1 (src/stack.js mapTap). At an earlier moment
-  // (The day): a small bubble over the train instead.
+  // (The day): the same, with a small bubble over the train instead of its page (src/day.js tap).
   onTrainTap(id) {
-    const view = day.view;
-    if (view?.past && (id || view.bubbleShown)) { if (id) day.bubble([id]); else view.hideBubble(); return; }
+    if (day.tap(id)) return;
     if (trainPages.open(id, { fromMap: true })) return;
     stack.mapTap();
   },
@@ -202,7 +201,8 @@ const disPages = createDisruptionPages({ get stack() { return stack; }, disrupti
 const about = createAbout({ map, panel, trains, lateness, mode: modeName, debugAsked: hash.get('debug') });
 
 // ---- ☰'s menu, The day, the way back ----
-const day = createDay({ map, panel, panelEl, stack: () => stack, frame, feeds: () => feeds, net: () => net, fromFiles, now, drawDelay: DRAW_DELAY_MS });
+const day = createDay({ map, panel, panelEl, stack: () => stack, frame, feeds: () => feeds, net: () => net, fromFiles, now, drawDelay: DRAW_DELAY_MS,
+  buzz, openTrain: id => trainPages.open(id) });
 const nav = createNavMenu({ stack: () => stack, mapEl, onDay: () => day.toggle(), onState: () => chips?.sync() });
 const back = createBack({ nav, day, stack: () => stack });
 

@@ -177,7 +177,15 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   const fade = shown => (reduceMotion() ? Promise.resolve()
     : navEl.animate([{ opacity: shown ? 0 : 1 }, { opacity: shown ? 1 : 0 }], { duration: ms('fold') * 0.6, easing: 'linear', fill: 'forwards' }).finished.catch(() => {}));
   document.getElementById('open-filter').onclick = () => fromMenu('filter');
-  document.getElementById('open-day').onclick = () => { close(); onDay(); };
+  // (Rewind: the menu goes at once, the chips are back at once and Rewind's bar fades in where the menu stood (src/day-view.js
+  // open); sliding away the menu held the chips back, and when they came they pushed the bar (Max, 2026-11-27: "after a
+  // short moment the störningar, sparade and statistik pills reappear and push it down"); fading, it showed round the bar)
+  function goNow() {
+    if (state === 'closed') return;
+    ++turn;
+    enter('closed');
+  }
+  document.getElementById('open-day').onclick = () => { goNow(); onDay(); };
   document.getElementById('open-settings').onclick = () => fromMenu('page:settings');
   document.getElementById('help-button').onclick = () => fromMenu('page:help');
 
