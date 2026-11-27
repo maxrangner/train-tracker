@@ -3,15 +3,16 @@
 // out numbered on one picture per scene, its name burned in. The numbers the tests read miss what only shows on screen
 // (a corner showing through, rows sliding under the search box); a film shows it. Every change to a move or a look:
 // the scenes it touches, both sizes, looked at frame by frame.
-//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--slow 4] [--live] [--out <folder>]   (with npm run dev; PAGE= for another port)
-//   (--live: today's trains instead of the replay; Störningar's scenes need it)
+//   node tools/film.mjs [--only <name part>] [--size phone|pc] [--slow 4] [--live | --files <address>] [--out <folder>]   (with npm run dev; PAGE= for another port)
+//   (--live: today's trains instead of the replay; Störningar's scenes need it. --files /fetcher/: the fetcher's files,
+//   a fetcher on this PC with --serve 8097 behind the dev page's /fetcher/ (vite.config.js); Rewind's scenes need them)
 // Pictures: shots/film/<size> <scene>.png (not in git). The scenes: SCENES below; add one for each new move.
 import { mkdirSync } from 'node:fs';
 import { launch, sleep, PHONE, CARD_HOUR, address } from './lib/browser.mjs';
 import { toRest, until, openMenu, openChip, openFromMenu, openTrainByNumber } from './lib/screen.mjs';
 
 const args = process.argv.slice(2), opt = k => (args.includes(k) ? args[args.indexOf(k) + 1] : null);
-const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film', SLOW = Number(opt('--slow') ?? 1);   // --slow 4: the CPU four times slower (a slow phone)
+const ONLY = opt('--only'), OUT = opt('--out') ?? 'shots/film', SLOW = Number(opt('--slow') ?? 1), FILES = opt('--files');   // --slow 4: the CPU four times slower (a slow phone)
 const SIZES = { phone: PHONE, pc: { width: 1400, height: 900, deviceScaleFactor: 1 } };
 mkdirSync(OUT, { recursive: true });
 
@@ -41,7 +42,31 @@ async function trainWithStatus(p, open) {
   return false;
 }
 
-// name, setup (to the moment before), act (the move filmed), ms (how long after it), live (only with --live)
+// Rewind (☰ → Rewind; Max, 2026-11-27): open, at an earlier moment (30 min back, paused), a train picked there
+const dayOpen = async (p) => {
+  await toRest(p);
+  if (await p.evaluate(() => window.__day?.isOpen)) return;
+  await openMenu(p); await p.click('#open-day');
+  await until(p, () => Object.values(window.__day?.state().slots ?? {}).some(v => v === 'ok'), 20000); await sleep(800);
+};
+const dayBack = async (p) => { await dayOpen(p); await p.evaluate(() => { const s = window.__day.state(); window.__day.seek(s.edge - 30 * 60000); }); await sleep(800); };
+// (a moving train near the middle that is still on the live map, the map at zoom 12 over it; its screen point)
+const dayTrain = p => p.evaluate(async () => {
+  const s = document.getElementById('sheet').getBoundingClientRect(), mid = { x: innerWidth > 600 ? (s.right + innerWidth) / 2 : innerWidth / 2, y: innerWidth > 600 ? innerHeight / 2 : s.top / 2 };
+  const x = (window.__last3d ?? []).filter(t => window.__trains.get(t.id) && (t.speed ?? 0) > 30).map(t => ({ t, p: window.__map.project([t.lon, t.lat]) }))
+    .sort((a, b) => Math.hypot(a.p.x - mid.x, a.p.y - mid.y) - Math.hypot(b.p.x - mid.x, b.p.y - mid.y))[0]?.t;
+  if (!x) return null;
+  window.__map.jumpTo({ center: [x.lon, x.lat], zoom: 12 });
+  await new Promise(r => setTimeout(r, 900));
+  const now = (window.__last3d ?? []).find(t => t.id === x.id);
+  return now && { id: x.id, ...window.__map.project([now.lon, now.lat]) };
+});
+const dayPicked = async (p) => { await dayBack(p); const t = await dayTrain(p); if (t) { await p.mouse.click(t.x, t.y); await sleep(1500); } };
+const speedTo = (p, i) => p.evaluate((i) => { const el = document.querySelector('#day .day-speed'); el.value = String(i); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
+const dayClosed = async (p) => { if (await p.evaluate(() => window.__day?.isOpen)) { await p.click('#day .day-x'); await sleep(800); } };
+
+// name, setup (to the moment before), act (the move filmed), ms (how long after it), live (only with --live), files
+// (only with --files)
 const SCENES = [
   { name: 'menu open', setup: toRest, act: p => p.click('#nav-button') },
   { name: 'menu close by its button', setup: async (p) => { await toRest(p); await openMenu(p); }, act: p => p.click('#nav-button') },
@@ -74,6 +99,17 @@ const SCENES = [
   // (full to compact by "Mindre ⌃"; Max, 2026-11-26: "after the contration the small card jumps a few pixels up and down")
   { name: 'train less', setup: p => trainWithStatus(p, false), act: p => p.evaluate(() => document.querySelector('#panel .panel-more')?.click()), ms: 1600 },
   { name: 'search open', setup: toRest, act: p => p.evaluate(() => document.querySelector('#sheet .sh-field input, #sheet .sh-field')?.click()) },
+  // (Rewind: the bar in its place at once, the chips with it; Max, 2026-11-27: "after a short moment the störningar,
+  // sparade and statistik pills reappear and push it down")
+  { name: 'rewind open', files: true, setup: async (p) => { await dayClosed(p); await toRest(p); await openMenu(p); }, act: p => p.click('#open-day'), ms: 1300 },
+  { name: 'rewind play', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 2); }, act: p => p.click('#day .day-play'), ms: 1500 },
+  { name: 'rewind speed', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 1); await p.click('#day .day-play'); await sleep(800); }, act: p => speedTo(p, 4), ms: 1200 },
+  { name: 'rewind pause', files: true, setup: async (p) => { await dayBack(p); await p.click('#day .day-play'); await sleep(800); }, act: p => p.click('#day .day-play'), ms: 900 },
+  { name: 'rewind follow', files: true, setup: async (p) => { await dayBack(p); p.__dayTrain = await dayTrain(p); }, act: async (p) => { if (p.__dayTrain) await p.mouse.click(p.__dayTrain.x, p.__dayTrain.y); }, ms: 1800 },
+  { name: 'rewind follow playing', files: true, setup: async (p) => { await dayPicked(p); await speedTo(p, 2); }, act: p => p.click('#day .day-play'), ms: 1800 },
+  { name: 'rewind map tap', files: true, setup: dayPicked, act: clickMap, ms: 900 },
+  { name: 'rewind live with a train', files: true, setup: dayPicked, act: p => p.click('#day .day-live'), ms: 2200 },
+  { name: 'rewind close', files: true, setup: async (p) => { await dayBack(p); }, act: p => p.click('#day .day-x'), ms: 1200 },
 ];
 
 const browser = await launch();
@@ -83,7 +119,7 @@ try {
     if (opt('--size') && opt('--size') !== size) continue;
     const page = await browser.newPage();
     await page.setViewport(view);
-    await page.goto(address({ ...(args.includes('--live') ? {} : { replay: CARD_HOUR }), view: '13/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
+    await page.goto(address({ ...(args.includes('--live') ? {} : FILES ? { files: FILES } : { replay: CARD_HOUR }), view: '13/59.33/18.06' }), { waitUntil: 'domcontentloaded' });
     await until(page, () => Boolean(window.__stack?.top()), 30000);
     // (--live: today's trains, for what a replay lacks: Störningar's chip waits for the disruptions)
     if (args.includes('--live')) await until(page, () => Boolean(document.querySelector('#chips [data-chip="dislist"]')), 60000);
@@ -93,7 +129,8 @@ try {
     if (SLOW > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: SLOW });
     for (const sc of SCENES) {
       if (ONLY && !sc.name.includes(ONLY)) continue;
-      if (sc.live && !args.includes('--live')) continue;   // (Störningar: only with today's trains)
+      if (sc.live && !args.includes('--live') && !FILES) continue;   // (Störningar: only with today's trains)
+      if (sc.files && !FILES) continue;   // (Rewind: only with the fetcher's files)
       await sc.setup(page);
       await sleep(400);
       const frames = [];
@@ -114,7 +151,7 @@ try {
       const cols = size === 'pc' ? 4 : 6, cw = size === 'pc' ? 460 : 260, ch = size === 'pc' ? 300 : Math.round(260 * view.height / view.width);
       const html = `<body style="margin:0;padding:10px;background:#fff;font:600 15px 'Segoe UI',sans-serif;width:${cols * (cw + 6)}px">
         <div style="font:800 26px 'Segoe UI',sans-serif;margin-bottom:6px">${size === 'pc' ? 'Computer' : 'Phone'}: ${sc.name}</div>
-        <div style="color:#57606a;margin-bottom:8px">every painted frame, numbered (about 16 ms apart when the PC keeps up); ${args.includes('--live') ? 'live' : 'replay 17 Nov 15:00'}${size === 'pc' ? '; the sheet\'s corner of the screen' : ''}</div>
+        <div style="color:#57606a;margin-bottom:8px">every painted frame, numbered (about 16 ms apart when the PC keeps up); ${args.includes('--live') ? 'live' : FILES ? "the fetcher's files" : 'replay 17 Nov 15:00'}${size === 'pc' ? '; the sheet\'s corner of the screen' : ''}</div>
         <div style="display:grid;grid-template-columns:repeat(${cols},${cw}px);gap:6px">${keep.map((f, i) => `<div><div>${i + 1}</div><div style="width:${cw}px;height:${ch}px;overflow:hidden;border:2px solid #1b1f24;border-radius:4px"><img style="display:block;width:${size === 'pc' ? 920 : cw}px" src="data:image/jpeg;base64,${f.data}"></div></div>`).join('')}</div></body>`;
       const sheet = await browser.newPage();
       await sheet.setViewport({ width: cols * (cw + 6) + 20, height: 400 });

@@ -31,6 +31,7 @@ import { minutesText } from './tag.js';
 import { t } from './i18n.js';
 import { icon } from './icons.js';
 import { esc } from './html.js';
+import { ms, reduceMotion } from './motion.js';
 
 // The play speeds: real time, then ten minutes a minute, an hour a minute, three hours a minute, ten hours a minute.
 export const SPEEDS = [1, 10, 60, 180, 600];
@@ -363,6 +364,8 @@ export function createDayView({ history, now, delay, net, onMode = () => {}, onC
     if (shown) return;
     shown = true;
     el.hidden = false;
+    // (it fades in where it is, already in its place: ☰'s menu went at once, src/nav-menu.js)
+    if (!reduceMotion()) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: ms('fold') * 0.6, easing: 'linear' });
     root.classList.add('day-open');
     relabel();
     fillDay();
