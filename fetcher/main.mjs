@@ -18,13 +18,13 @@ import { setKey, followPassings, fetchPlannedRoutes, fetchDisruptions, fetchCanc
 import { followPositions } from '../src/trains-source.js';
 import { swedishDay, swedishMidnight } from '../src/clock.js';
 import { createState } from './state.mjs';
-import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory, lateKinds, LIVE_MS } from './files.mjs';
+import { createShelf, buildLive, buildPassings, buildPlanned, buildArrivals, buildHistory, buildDaySum, lateKinds, LIVE_MS } from './files.mjs';
 import { serve, serveStatus } from './serve.mjs';
 import { startReplay } from './replay.mjs';
 import { createTimetable } from './timetable.mjs';
 import { askRoutes as askRoutesOnce, MAX_BACK_MS } from './ask-routes.mjs';
 import { createTapRound } from './tap-round.mjs';
-import { FORMAT, HISTORY_MS, HISTORY_EVERY_MS, historySlot } from '../src/live-file.js';
+import { FORMAT, HISTORY_MS, HISTORY_EVERY_MS, historySlot, historyUntil, historyCounts } from '../src/live-file.js';
 
 globalThis.EventSource ??= NodeEventSource;
 const MIN = 60000;
@@ -153,6 +153,9 @@ function every(name, ms, first, fn) {
 // (fetcher/state.mjs sampleHistory), and when a 15-minute slot has ended its file (history-<slot>.json). A slot this
 // run started in the middle of goes out with what it has; a replay (--replay) makes them the same way.
 let sampledAt = null, historyAt = null;   // the minute last sampled, the slot being gathered
+let endsOf = null;   // a train's trip ends, once the timetable is there (below)
+// The day's overview (src/live-file.js daySumOf): every slot's counts for the last day, sent with each history file.
+const daySums = new Map();
 function historyTick(t) {
   const minute = Math.floor(t / HISTORY_EVERY_MS);
   if (minute === sampledAt) return;
@@ -160,10 +163,16 @@ function historyTick(t) {
   const slot = historySlot(t);
   if (historyAt !== null && slot !== historyAt) {
     const trains = state.takeHistory(historyAt);
-    if (trains.length) shelf.put('history', historyAt * HISTORY_MS, buildHistory(historyAt, trains));
+    if (trains.length) {
+      const file = buildHistory(historyAt, trains);
+      shelf.put('history', historyAt * HISTORY_MS, file);
+      daySums.set(historyAt, historyCounts(file.trains));
+      for (const s of daySums.keys()) if (historyUntil(s * HISTORY_MS) < t) daySums.delete(s);
+      shelf.put('daysum', t, buildDaySum(t, daySums));
+    }
   }
   historyAt = slot;
-  state.sampleHistory(t);
+  state.sampleHistory(t, endsOf);
 }
 
 // The live file, at the start of every 5-s slot.
@@ -253,6 +262,7 @@ const timetable = replayName
   ? createTimetable({ log, seed: { days: replayDays ?? [], rows: replayTimetable ?? [] } })
   : KEY ? createTimetable({ log, onLoaded: () => tapRound?.loaded() }) : null;
 if (timetable) {
+  endsOf = id => timetable.ends(id);
   stops.push(() => timetable.stop());
   if (replayName) { timetable.add(replayLater.splice(0)); replayAdd = rows => timetable.add(rows); }
   tapRound = createTapRound({ timetable, shelf });

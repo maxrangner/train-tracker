@@ -27,7 +27,7 @@ function lastAtOrBefore(list, t, key) {
 }
 
 export function createDayTrains({ net = null } = {}) {
-  const trains = new Map();   // id -> { id, number, brand, spans: [{ from, until }], points: [...], way: Map(i -> poly | null) }
+  const trains = new Map();   // id -> { id, number, brand, start, end, spans: [{ from, until }], points: [...], way: Map(i -> poly | null) }
   const slots = new Set();
   const counts = { ways: 0, straight: 0 };
 
@@ -40,8 +40,9 @@ export function createDayTrains({ net = null } = {}) {
     for (const row of rows) {
       const h = historyOf(row, file.t);
       let tr = trains.get(h.id);
-      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, spans: [], points: [], way: new Map() });
+      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, start: null, end: null, spans: [], points: [], way: new Map() });
       if (h.brand) tr.brand = h.brand;
+      tr.start ??= h.start; tr.end ??= h.end;   // (its trip's ends: from files since 2026-11-27)
       // From its first report on (a train is first sampled up to a minute after its report came), until the next sample.
       tr.spans.push({ from: Math.min(h.from, h.points[0]?.time ?? h.from), until: h.until + (file.every ?? HISTORY_EVERY_MS) });
       const last = tr.points.at(-1)?.time ?? -Infinity;
@@ -84,7 +85,7 @@ export function createDayTrains({ net = null } = {}) {
     const i = lastAtOrBefore(pts, T, 'time');
     const a = pts[Math.max(0, i)], b = i >= 0 ? pts[i + 1] : null;
     const base = { id: tr.id, syncing: false, stale: false, extra: 0, number: tr.number, brand: tr.brand ?? null,
-      speed: a.speed, late: a.late, time: a.time };
+      start: tr.start, end: tr.end, speed: a.speed, late: a.late, time: a.time };
     if (!b || i < 0 || b.time - a.time > MAX_GAP_MS) {
       return { ...base, lon: a.lon, lat: a.lat, bearing: a.bearing ?? 0, v: 0 };
     }
