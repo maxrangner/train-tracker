@@ -79,7 +79,7 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
     map.tick(ts);
     map.setSelectedPlace(one || null, one ? pastProps(one) : null);
     if (one) map.drawIfMoved(one);
-    view.placeBubble((lon, lat) => map.project(lon, lat));
+    view.placeBubble((...a) => map.labelAt(...a));
     if (ts - sunDrawnAt > DAY_SUN_MS) { sunDrawnAt = ts; map.sunUpdate(); }   // (it draws itself again only a minute on)
   }
 

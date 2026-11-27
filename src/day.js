@@ -8,7 +8,7 @@
 // on the map stops following, the next one lets it go. Back to live (Live, ×, a play's end) it goes on as live: its
 // card, followed, when it is on the map then.
 //
-// createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay, buzz, openTrain }) -> { view
+// createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay, buzz, openTrain, stationName }) -> { view
 //   (null until opened), past, toggle(), tap(id) (a tap on the map at an earlier moment: true when it was The day's),
 //   bubble(ids) (a group tapped), back() (Esc's step: its bubble, then the ribbon at Home at rest), held(), pad(h)
 //   (the sheet's resting height came) }; stack and feeds are getters; openTrain(id) -> bool: its live card, followed.
@@ -18,7 +18,7 @@ import { t } from './i18n.js';
 
 const SQUEEZE = { over: 74, slider: 190, room: 52 };   // the scale slider (74 px over the sheet, 190 tall) goes when it would reach the live mark
 
-export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay, buzz = () => {}, openTrain = () => false }) {
+export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromFiles, now, drawDelay, buzz = () => {}, openTrain = () => false, stationName = sig => sig }) {
   let view = null, sheetPad = 0;
 
   function pad() {
@@ -47,7 +47,7 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
   }
 
   function make() {
-    view = createDayView({ history: (a, b) => feeds().history(a, b), now, delay: drawDelay, net,
+    view = createDayView({ history: (a, b) => feeds().history(a, b), overview: () => feeds().fileOf('daysum').catch(() => null), stationName, now, delay: drawDelay, net,
       onMode(past, picked) {
         frame.invalidate(!past);   // (back to live: the live trains at once, from the next frame)
         if (past) { stack().home(0); map.unfollow(); }
@@ -65,6 +65,8 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
       onPick: pick,
       onGone() { map.unfollow(); map.select(null); },
       onClose: pad });
+    // (its bubble kept by its train as the camera moves, before the map draws: as the live label, src/map.js)
+    map.onMove(() => view.placeBubble());
     if (import.meta.env.DEV) window.__day = view;   // (tools/day-check.mjs)
   }
   return {
