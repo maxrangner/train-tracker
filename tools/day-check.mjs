@@ -196,6 +196,14 @@ try {
   expect(bubble.top === 'home', `a tap on a train at an earlier moment opened a page (${bubble.top})`);
   expect(bubble.picked === pick.h.id && bubble.follow === 'true', `a tap on train ${pick.h.number} at an earlier moment: picked ${bubble.picked}, Follow ${bubble.follow}`);
   expect(/Stockholm C → Göteborg C/.test(bubble.text), `the bubble does not say the trip's ends: "${bubble.text}"`);
+  // its trip so far on the map (Max, 2026-11-27: "Yes"): a line ending at the train
+  await sleep(400);
+  const trail = await page.evaluate((id) => {
+    const d = window.__map.getSource('day-trail')?.serialize?.().data, lines = d?.geometry?.coordinates ?? [], end = lines.at(-1)?.at(-1);
+    const x = (window.__last3d ?? []).find(t => t.id === id);
+    return { points: lines.flat().length, off: end && x ? Math.hypot((end[0] - x.lon) * 0.5, end[1] - x.lat) * 111195 : null };
+  }, pick.h.id);
+  expect(trail.points >= 3 && trail.off !== null && trail.off < 300, `the picked train's trip so far: ${JSON.stringify(trail)}`);
   // followed as the moment moves: held on its focus (src/map.js window.__followFocus)
   const onFocus = () => page.evaluate((id) => {
     const x = (window.__last3d ?? []).find(t => t.id === id), f = window.__followFocus?.();
@@ -307,8 +315,9 @@ try {
   expect((await day()).rate === 0 && c === d, `pause: rate ${(await day()).rate}, moved ${d - c} ms`);
   await page.click('#day .day-live');
   await sleep(300);
-  const back = await page.evaluate(() => ({ past: window.__day.past, frame: !document.getElementById('day-frame').hidden, status: getComputedStyle(document.getElementById('status')).visibility }));
-  expect(!back.past && !back.frame && back.status === 'visible', `Live: ${JSON.stringify(back)}`);
+  const back = await page.evaluate(() => ({ past: window.__day.past, frame: !document.getElementById('day-frame').hidden, status: getComputedStyle(document.getElementById('status')).visibility,
+    trail: window.__map.getSource('day-trail')?.serialize?.().data?.features?.length ?? 0 }));
+  expect(!back.past && !back.frame && back.status === 'visible' && !back.trail, `Live: ${JSON.stringify(back)}`);
   // ☰'s menu over the ribbon (Max, 2026-11-27: "Menu is hidden behind the rewind UI")
   await openMenu(page);
   const onTop = await page.evaluate(() => {

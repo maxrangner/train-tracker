@@ -27,6 +27,7 @@
 //   day.open() / day.close() / day.live() / day.seek(T) / day.play() (play or pause) / day.setSpeed(i) (SPEEDS[i])
 //   day.tick(ts) each frame: moves the moment on while playing; true when it moved
 //   day.at(T, near) the trains at T (src/day-trains.js at; near(lon, lat): only those are routed along the rails)
+//   day.trail(): the picked train's trip so far as lines [[lon, lat], ...] (the same array while unchanged), or null
 //   day.bubble(ids, picked) / day.hideBubble() / day.placeBubble(place) / day.picked: the small bubble by a tapped
 //   train (picked: that train is ringed and its bubble has Follow); place(hold, lon, lat, w, h): src/map.js labelAt
 import { createDayTrains } from './day-trains.js';
@@ -48,6 +49,7 @@ const AT_ONCE = 2;                    // files asked at the same time
 const RETRY_MS = 30000;               // a slot just finished whose file isn't there yet: asked again this often
 const FRESH_MS = 8 * 60000;           // ... for this long after its end (the fetcher writes it, then uploads it)
 const AHEAD_S = 25;                   // a play fetches the slots it reaches within this many seconds
+const TRAIL_MS = 200;                 // the picked train's line worked out again at most this often
 
 export function createDayView({ history, overview = async () => null, stationName = sig => sig, now, delay, net, onMode = () => {}, onClose = () => {}, following = () => false, onFollow = () => {}, onPick = () => {}, onGone = () => {} }) {
   const root = document.documentElement;
@@ -365,6 +367,17 @@ export function createDayView({ history, overview = async () => null, stationNam
     bubbleW = null;   // (measured again where it is placed)
     if (!same) hold.held = null;
   }
+  // The picked train's trip so far (src/day-trains.js trailOf), for the map's line: worked out again when its files
+  // change, else at most every TRAIL_MS (the line's end follows the train), null when no train is picked.
+  let trailKey = null, trailLines = null, trailAt = 0;
+  function trail() {
+    if (!picked || T === null || !day) { trailKey = null; trailLines = null; return null; }
+    const key = `${picked}|${day.slots.length}`, now = performance.now();
+    if (key === trailKey && now - trailAt < TRAIL_MS) return trailLines;
+    trailKey = key; trailAt = now;
+    trailLines = day.trailOf(picked, T, { budgetMs: 6 });
+    return trailLines;
+  }
   function hideBubble() { bubbleIds = null; picked = null; bubbleEl.hidden = true; hold.held = null; }
   bubbleEl.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -425,7 +438,7 @@ export function createDayView({ history, overview = async () => null, stationNam
   }
 
   return {
-    el, open, close, live, seek, play, setSpeed, tick, relabel, draw, bubble, hideBubble, placeBubble,
+    el, open, close, live, seek, play, setSpeed, tick, relabel, draw, bubble, hideBubble, placeBubble, trail,
     at: (at, near) => (day ? day.at(at, { near, budgetMs: 6 }) : []),   // (6 ms a frame for new ways along the rails)
     placeOf: id => (day && T !== null ? day.placeOf(id, T) : null),     // (one train at the moment shown)
     get isOpen() { return shown; },

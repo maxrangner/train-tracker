@@ -22,6 +22,7 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
   let lastDraw = 0, lightTest = null;
   let dayDrawn = null, liveAllAt = 0, sunDrawnAt = 0;
   let dayById = new Map();   // The day's trains as last drawn (id -> place)
+  let trailShown = null;     // the picked train's trip so far as on the map (Rewind)
 
   // The sun's line (Settings → Day and night): night where the sun is below the horizon; its place once a minute.
   let sunMinute = null, sunPlace = null;
@@ -80,12 +81,15 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
     map.setSelectedPlace(one || null, one ? pastProps(one) : null);
     if (one) map.drawIfMoved(one);
     view.placeBubble((...a) => map.labelAt(...a));
+    const trail = view.trail();
+    if (trail !== trailShown) { trailShown = trail; map.setTrail(trail); }
     if (ts - sunDrawnAt > DAY_SUN_MS) { sunDrawnAt = ts; map.sunUpdate(); }   // (it draws itself again only a minute on)
   }
 
   function frame(ts) {
     const view = day();
     if (view?.past) { dayFrame(ts, view); requestAnimationFrame(frame); return; }
+    if (trailShown) { trailShown = null; map.setTrail(null); }   // (back to live: the Rewind train's line goes)
     const t = now() - drawDelay;
     const openId = panel.openId;
     const due = ts - lastDraw >= map.trainsEvery(Boolean(openId && map.following));

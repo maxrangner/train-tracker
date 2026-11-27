@@ -2180,6 +2180,21 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       if (selShown) { const r = selEl.getBoundingClientRect(); dy = Math.max(dy, r.height / 2 + 6); dx = Math.max(dx, r.width / 2 + 6); }
       return placeBy(hold, p, w, h, dy, dx, true);
     },
+    // Rewind: the picked train's trip so far (src/day-view.js trail): lines [[lon, lat], ...] in the accent with a soft
+    // edge, under the trains; null takes it away. Its layers come with the first line (and again after the map's style
+    // was swapped, light/dark).
+    setTrail(lines) {
+      if (!isReady) return;
+      const data = lines?.length ? { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } } : empty();
+      if (map.getSource('day-trail')) { map.getSource('day-trail').setData(data); return; }
+      if (!lines?.length) return;
+      map.addSource('day-trail', { type: 'geojson', data });
+      const before = ['train-glow', 'train-dots', 'trains-3d'].find(id => map.getLayer(id));
+      const accent = accentOf(dark).c;   // (as the live train's route line)
+      const round = { 'line-cap': 'round', 'line-join': 'round' };
+      map.addLayer({ id: 'day-trail-edge', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': dark ? '#0b1220' : '#ffffff', 'line-width': 8, 'line-opacity': 0.55 } }, before);
+      map.addLayer({ id: 'day-trail', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': accent, 'line-width': 4.5 } }, before);
+    },
     // fn() after every move of the camera, before the map draws it (a label kept with its train); -> stop
     onMove(fn) { map.on('move', fn); return () => map.off('move', fn); },   // (#map fills the window from its top left)
     get slider() { return slider; },

@@ -190,6 +190,10 @@ for (const tz of [null, 'UTC', 'America/New_York']) {
   ok(day.at(t + HISTORY_MS + 300000).length === 0, 'nothing in a gap (no file)');
   const back = day.placeOf('42/2026-11-22', t + 2 * HISTORY_MS + 5000);
   ok(back && back.lon === 18.1, 'back in the slot after the gap, at its new point');
+  // its trip so far (Rewind's line): the points up to T, the last piece to its place then
+  const trail = day.trailOf('42/2026-11-22', t + 100000), line = trail[0] ?? [], end = line.at(-1);
+  ok(trail.length === 1 && line.length === 3 && line[0][1] === 59.0 && line[1][1] === 59.01 && end && Math.abs(end[0] - 18.01) < 1e-9 && end[1] === 59.01,
+    `the trip so far at 1:40: ${JSON.stringify(trail)}`);
   const keys = Object.keys(mid).sort().join();
   ok(['id', 'lon', 'lat', 'bearing', 'syncing', 'stale', 'v', 'extra'].every(k => k in mid), `the shape of src/trains.js placedAt (${keys})`);
 }
