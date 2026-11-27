@@ -96,6 +96,8 @@ try {
   const page = await waitForMap(browser, { files, view: '7/58.2/15.2', lang: 'en', theme: 'light', slider: '1' });
   expect(!page.errors.length, `errors on the page: ${page.errors.join(' | ')}`);
   const day = () => page.evaluate(() => window.__day?.state());
+  // (the play button that shows: the compact row's while it plays, src/day-view.js)
+  const clickPlay = async () => page.click(await page.evaluate(() => (document.getElementById('day').classList.contains('compact') ? '#day .day-mini-play' : '#day .day-row .day-play')));
 
   // ---- The ribbon: in its place from its first frame (Max, 2026-11-27: the chips came back late and pushed it) ----
   await openMenu(page);
@@ -232,13 +234,13 @@ try {
   }, pick.h.id);
   expect(clear && Math.max(clear.dx, clear.dy) >= 8, `the bubble covers the train: ${JSON.stringify(clear)}`);
   await page.evaluate(() => { const el = document.querySelector('#day .day-speed'); el.value = '1'; el.dispatchEvent(new Event('input', { bubbles: true })); });
-  await page.click('#day .day-play');
+  await clickPlay();
   const moves = await page.evaluate(() => new Promise((res) => {
     const seen = []; const t0 = performance.now();
     const f = () => { const b = document.getElementById('day-bubble').getBoundingClientRect(); seen.push([b.left, b.top, window.__day.state().side, b.width, b.height]); if (performance.now() - t0 < 1500) requestAnimationFrame(f); else res(seen); };
     requestAnimationFrame(f);
   }));
-  await page.click('#day .day-play');
+  await clickPlay();
   // (a station's name coming under it moves it to another side, as the live label: counted apart, a few at most)
   let steps = 0, most = 0, flips = 0;
   for (let i = 1; i < moves.length; i++) {
@@ -294,7 +296,7 @@ try {
   const speedTo = i => page.evaluate((i) => { const el = document.querySelector('#day .day-speed'); el.value = String(i); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
   await page.evaluate(t => window.__day.seek(t), slots[2] * HISTORY_MS);
   await speedTo(4);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(1500);
   const playing = await day();
   expect(playing.rate === 600 && playing.T > slots[2] * HISTORY_MS + 4 * 60000, `×600: ${playing.rate}, moved ${Math.round((playing.T - slots[2] * HISTORY_MS) / 60000)} min in 1.5 s`);
@@ -302,16 +304,26 @@ try {
   expect(ended, '×600 did not come back to live at the end of the files');
   // play at the live end: from an hour back; ×1 real time; pause
   await speedTo(0);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(1200);
   const hour = await day();
   expect(hour.T !== null && hour.rate === 1 && Math.abs(hour.edge - hour.T - 3600000) < 60000, `play at the live end, ×1: rate ${hour.rate}, ${hour.T === null ? 'live' : `${Math.round((hour.edge - hour.T) / 60000)} min back`}`);
+  // compact while it plays (Max, 2026-11-27: "Yes" to its sketch): one row, the search card and the chips away
+  const small = await page.evaluate(() => { const d = document.getElementById('day').getBoundingClientRect(), v = s => getComputedStyle(document.querySelector(s)).visibility;
+    return { compact: window.__day.state().compact, h: Math.round(d.height), sheet: v('#sheet'), chips: v('#chips') }; });
+  expect(small.compact && small.h <= 80 && small.sheet === 'hidden' && small.chips === 'hidden', `playing, compact: ${JSON.stringify(small)}`);
   const a = (await day()).T; await sleep(2000); const b = (await day()).T;
   expect(b - a > 1000 && b - a < 4000, `×1 moved ${Math.round((b - a) / 100) / 10} s in 2 s`);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(300);
   const c = (await day()).T; await sleep(800); const d = (await day()).T;
   expect((await day()).rate === 0 && c === d, `pause: rate ${(await day()).rate}, moved ${d - c} ms`);
+  // paused it stays compact; a tap on its row brings the whole bar back
+  expect((await day()).compact, 'pausing left the compact row');
+  await page.click('#day .day-mini-track');
+  await sleep(300);
+  const full = await page.evaluate(() => ({ compact: window.__day.state().compact, h: Math.round(document.getElementById('day').getBoundingClientRect().height), sheet: getComputedStyle(document.getElementById('sheet')).visibility }));
+  expect(!full.compact && full.h > 100 && full.sheet === 'visible', `a tap on the compact row: ${JSON.stringify(full)}`);
   await page.click('#day .day-live');
   await sleep(300);
   const back = await page.evaluate(() => ({ past: window.__day.past, frame: !document.getElementById('day-frame').hidden, status: getComputedStyle(document.getElementById('status')).visibility,

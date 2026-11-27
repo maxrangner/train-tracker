@@ -25,7 +25,8 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
   // A computer: the bar inside the search card, under the search box (src/css/day.css; Max, 2026-11-27: "always sit on
   // top where it is when active"); a phone: on its own, on the sheet's top edge.
   function place() {
-    const root = document.documentElement, inside = Boolean(view?.isOpen) && isWide();
+    // (compact, a computer too: on its own at the top, the search card stepped away; src/css/day.css)
+    const root = document.documentElement, inside = Boolean(view?.isOpen) && isWide() && !view.compact;
     const head = document.querySelector('#sheet .sh-head'), el = view?.el;
     if (el && inside && el.parentElement !== head) head.append(el);
     if (el && !inside && el.parentElement !== document.body) document.body.insertBefore(el, document.getElementById('day-bubble'));
@@ -42,8 +43,9 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
     // (not while the card's "to …" chooser is open: it shuts back to the same height, and the map stays still)
     const st = stack();
     const choosing = panelEl.classList.contains('picking') && panel.openId && !panel.hidden && st?.top() === `train:${panel.openId}`;
-    if (!choosing) map.setSheet(sheetPad + h);
-    root.classList.toggle('scale-squeezed', innerHeight - (!isWide() ? sheetPad + h : 0) - SQUEEZE.over - SQUEEZE.slider < SQUEEZE.room);
+    const below = view?.compact ? h : sheetPad + h;   // (compact: the bar alone at the bottom, the sheet stepped away)
+    if (!choosing) map.setSheet(below);
+    root.classList.toggle('scale-squeezed', innerHeight - (!isWide() ? below : 0) - SQUEEZE.over - SQUEEZE.slider < SQUEEZE.room);
   }
   addEventListener('resize', () => { if (view?.isOpen) { pad(); view.draw(); } });
 
@@ -78,12 +80,16 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
         map.sunUpdate(true);
       },
       onPick: pick,
+      onCompact: () => pad(),
       onGone() { map.unfollow(); map.select(null); },
       onClose: pad });
     // (its bubble kept by its train as the camera moves, before the map draws: as the live label, src/map.js)
     map.onMove(() => view.placeBubble());
     // (the computer's label under the mouse, at an earlier moment: the company and the trip's ends too)
     map.hoverMore(id => (view.past ? view.aboutOf(id) : null));
+    // (a page or the search opening while it is compact, a station tapped on the map: the whole bar and the search card
+    // back, or the page would open unseen)
+    stack().onSettled?.(() => { const st = stack(); if (view.compact && (st.top() !== 'home' || st.level > 0 || st.searching)) view.expand(); });
     if (import.meta.env.DEV) window.__day = view;   // (tools/day-check.mjs)
   }
   return {

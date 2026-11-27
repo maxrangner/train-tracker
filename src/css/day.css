@@ -108,6 +108,29 @@
     .day-open:not(.sheet-high) #chips { transform: none; }
   }
 
+  /* The compact stage while it plays (src/day-view.js setCompact): one row, play/pause, a thin timeline, ✕; the search
+     card and the chips step away; a phone: at the bottom edge, the map's buttons over it; a computer: alone at the top */
+  .day-mini { display: none; align-items: center; gap: 12px; cursor: pointer; }
+  #day.compact > :not(.day-mini) { display: none; }
+  #day.compact .day-mini { display: flex; }
+  .day-mini-track { position: relative; flex: 1; height: 4px; border-radius: 2px; background: var(--hover); }
+  .day-mini-track i { position: absolute; left: 0; top: 0; bottom: 0; width: var(--at, 0%); border-radius: 2px; background: var(--accent); }
+  .day-mini-track b { position: absolute; top: 50%; left: var(--at, 0%); width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: var(--card);
+    border: 3px solid var(--accent); box-sizing: border-box; }
+  .day-snap :is(#day, #chips, #sheet, .maplibregl-ctrl-bottom-right, .scale, #credit) { transition: none !important; }
+  .day-compact :is(#sheet, #sheet-grip) { visibility: hidden; }
+  .day-compact #chips { opacity: 0; visibility: hidden; pointer-events: none; }
+  .day-compact #day { bottom: 0; padding: 12px calc(14px + env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px)); }
+  @media (max-width: 439px) {
+    .day-compact .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--day-h, 0px) + env(safe-area-inset-bottom, 0px)); }
+    .day-compact .scale { bottom: calc(var(--day-h, 0px) + 74px + env(safe-area-inset-bottom, 0px)); }
+    .day-compact #credit { bottom: calc(var(--day-h, 0px) + 10px + env(safe-area-inset-bottom, 0px)); }
+  }
+  @media (min-width: 440px) {
+    .day-compact #day { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; width: var(--sheet-w); bottom: auto;
+      top: calc(var(--sheet-inset) + env(safe-area-inset-top, 0px)); padding: 10px 12px; border-radius: var(--radius); box-shadow: var(--shadow); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     #day { transition: none; }
     .day-shimmer { animation: none; background: color-mix(in srgb, var(--accent) 30%, transparent); }

@@ -23,7 +23,8 @@
 //     or back to live (false; picked: the train picked then, or null); onClose(): the ribbon closed;
 //     onPick(id): a row of a group's bubble tapped; onGone(): the picked
 //     train's bubble went by itself (its history ends there).
-//   day.open() / day.close() / day.live() / day.seek(T) / day.play() (play or pause) / day.setSpeed(i) (SPEEDS[i])
+//   day.open() / day.close() / day.live() / day.seek(T) / day.play() (play or pause; playing makes the bar compact) /
+//   day.setSpeed(i) (SPEEDS[i]); day.compact: the bar in its compact stage (onCompact(on) when it changes)
 //   day.tick(ts) each frame: moves the moment on while playing; true when it moved
 //   day.at(T, near) the trains at T (src/day-trains.js at; near(lon, lat): only those are routed along the rails)
 //   day.trail(): the picked train's trip so far as lines [[lon, lat], ...] (the same array while unchanged), or null
@@ -50,7 +51,7 @@ const FRESH_MS = 8 * 60000;           // ... for this long after its end (the fe
 const AHEAD_S = 25;                   // a play fetches the slots it reaches within this many seconds
 const TRAIL_MS = 200;                 // the picked train's line worked out again at most this often
 
-export function createDayView({ history, overview = async () => null, stationName = sig => sig, now, delay, net, onMode = () => {}, onClose = () => {}, onPick = () => {}, onGone = () => {} }) {
+export function createDayView({ history, overview = async () => null, stationName = sig => sig, now, delay, net, onMode = () => {}, onClose = () => {}, onPick = () => {}, onGone = () => {}, onCompact = () => {} }) {
   const root = document.documentElement;
   let day = null;                     // src/day-trains.js, made at the first open (the rail network is there by then)
   let shown = false, T = null, rate = 0, speed = FIRST_SPEED, lastTs = null, waiting = false, timer = null;
@@ -68,12 +69,16 @@ export function createDayView({ history, overview = async () => null, stationNam
     `<input type="range" class="day-speed" min="0" max="${SPEEDS.length - 1}" step="1" value="${FIRST_SPEED}"><output class="day-rate"></output>` +
     `<i class="day-grow"></i><button type="button" class="day-x">${icon('close', 18)}</button></div>` +
     '<div class="day-track-row"><div class="day-track" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="100"><canvas></canvas><b class="day-handle"></b></div>' +
-    '<button type="button" class="day-live"><i></i><span></span></button></div><div class="day-ticks"></div>';
+    '<button type="button" class="day-live"><i></i><span></span></button></div><div class="day-ticks"></div>' +
+    // the compact stage while it plays (Max, 2026-11-27: "Needs a compact view stage. Most compact can remove search, and
+    // thin the scroll bar"; "Yes" to its sketch): play/pause, a thin timeline, ✕; a tap on it brings the whole bar back
+    `<div class="day-mini"><button type="button" class="day-play day-mini-play"></button><div class="day-mini-track"><i></i><b></b></div><button type="button" class="day-x day-mini-x">${icon('close', 18)}</button></div>`;
   const track = el.querySelector('.day-track'), canvas = track.querySelector('canvas'), handle = track.querySelector('.day-handle');
   const shimmer = Object.assign(document.createElement('i'), { className: 'day-shimmer', hidden: true });   // the slot loading
   track.insertBefore(shimmer, handle);
   const ticksEl = el.querySelector('.day-ticks'), liveBtn = el.querySelector('.day-live');
-  const playBtn = el.querySelector('.day-play'), speedEl = el.querySelector('.day-speed'), rateEl = el.querySelector('.day-rate');
+  const miniPlay = el.querySelector('.day-mini-play'), miniTrack = el.querySelector('.day-mini-track');
+  const playBtn = el.querySelector('.day-row .day-play'), speedEl = el.querySelector('.day-speed'), rateEl = el.querySelector('.day-rate');
   const clock = Object.assign(document.createElement('div'), { id: 'day-clock', hidden: true });
   clock.setAttribute('aria-live', 'polite');
   const frameEl = Object.assign(document.createElement('div'), { id: 'day-frame', hidden: true });
@@ -178,7 +183,22 @@ export function createDayView({ history, overview = async () => null, stationNam
     setMode(true);
     draw();
   }
+  // Compact while it plays: pressing play makes it so, a tap on the compact row (or Live, ✕) brings the whole bar back;
+  // pausing leaves it as it is. onCompact(): src/day.js places the bar and steps the search card and chips away.
+  let compact = false;
+  function setCompact(on) {
+    if (compact === on) return;
+    compact = on;
+    // (in its place at once, both ways: gliding, the row slid through the map where the search bar had just gone)
+    root.classList.add('day-snap');
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('day-snap')));
+    el.classList.toggle('compact', on);
+    root.classList.toggle('day-compact', on);
+    onCompact(on);
+    draw();
+  }
   function live() {
+    setCompact(false);
     rate = 0; waiting = false;
     T = null;
     setMode(false);
@@ -191,6 +211,7 @@ export function createDayView({ history, overview = async () => null, stationNam
     const at = Math.max(startT(), T ?? edge() - BACK_FROM_LIVE);
     rate = SPEEDS[speed]; lastTs = null;
     seek(at, { keep: true });
+    setCompact(true);
   }
   // A new speed: at once while playing.
   function setSpeed(i) {
@@ -281,7 +302,11 @@ export function createDayView({ history, overview = async () => null, stationNam
     if (ticksEl.innerHTML !== ticksHtml) ticksEl.innerHTML = ticksHtml;
     // the buttons and the clock
     const playing = rate > 0;
-    if (playBtn.dataset.on !== String(playing)) { playBtn.dataset.on = String(playing); playBtn.innerHTML = icon(playing ? 'pause' : 'play', 18); playBtn.setAttribute('aria-label', t(playing ? 'dayPause' : 'dayPlay')); }
+    for (const b of [playBtn, miniPlay]) if (b.dataset.on !== String(playing)) { b.dataset.on = String(playing); b.innerHTML = icon(playing ? 'pause' : 'play', 18); b.setAttribute('aria-label', t(playing ? 'dayPause' : 'dayPlay')); }
+    if (compact) {   // (its thin timeline: the moment's place on the whole span)
+      const pct = `${((T === null ? 1 : Math.max(0, Math.min(1, (T - t0) / span))) * 100).toFixed(2)}%`;
+      miniTrack.style.setProperty('--at', pct);
+    }
     playBtn.setAttribute('aria-pressed', String(playing));
     if (Number(speedEl.value) !== speed) speedEl.value = String(speed);
     const word = `×${SPEEDS[speed]}`;
@@ -331,6 +356,9 @@ export function createDayView({ history, overview = async () => null, stationNam
     seek((T ?? edge()) + (back ? -step : step));
   });
   playBtn.addEventListener('click', (e) => { e.stopPropagation(); play(); });
+  miniPlay.addEventListener('click', (e) => { e.stopPropagation(); play(); });
+  el.querySelector('.day-mini-x').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+  el.querySelector('.day-mini').addEventListener('click', (e) => { e.stopPropagation(); setCompact(false); });
   speedEl.addEventListener('input', () => setSpeed(Number(speedEl.value)));
   liveBtn.addEventListener('click', (e) => { e.stopPropagation(); live(); });
   el.querySelector('.day-x').addEventListener('click', (e) => { e.stopPropagation(); close(); });
@@ -442,6 +470,7 @@ export function createDayView({ history, overview = async () => null, stationNam
   function close() {
     if (!shown) return;
     live();
+    setCompact(false);
     shown = false;
     el.hidden = true;
     root.classList.remove('day-open');
@@ -454,6 +483,8 @@ export function createDayView({ history, overview = async () => null, stationNam
     at: (at, near) => (day ? day.at(at, { near, budgetMs: 6 }) : []),   // (6 ms a frame for new ways along the rails)
     placeOf: id => (day && T !== null ? day.placeOf(id, T) : null),     // (one train at the moment shown)
     get isOpen() { return shown; },
+    get compact() { return compact; },
+    expand: () => setCompact(false),
     get past() { return T !== null; },
     get moment() { return T; },
     get rate() { return rate; },
@@ -465,6 +496,6 @@ export function createDayView({ history, overview = async () => null, stationNam
     // For the checks (tools/day-check.mjs): what each slot holds and the ribbon's span.
     state: () => ({ open: shown, T, rate, waiting, start: startT(), upTo: upTo(), edge: edge(),
       slots: Object.fromEntries([...slots].map(([s, v]) => [s, v.state])), trains: day?.size ?? 0,
-      overview: sum ? [...sum.keys()] : null, side: bubbleIds ? hold.side : null, walking: walking() }),
+      overview: sum ? [...sum.keys()] : null, side: bubbleIds ? hold.side : null, walking: walking(), compact }),
   };
 }
