@@ -204,7 +204,9 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
   // pageKey: the page they sit on; editKey: the page the pencil opens; remove(): forgets the trip or change.
   const DELETE_ARMED_MS = 4000, DELETE_GAP_MS = 450;
   function editDelete(pageKey, editKey, remove) {
-    let armedAt = 0, disarm = 0;
+    // (never armed until tapped: from 0 it counted from the page's start, so for its first 4 s one tap deleted; Max,
+    // 2026-11-27: "Yes" to the fix)
+    let armedAt = -Infinity, disarm = 0;
     const armed = () => performance.now() - armedAt < DELETE_ARMED_MS;
     return {
       acts: () => [{ id: 'edit', icon: 'edit', label: t('tripEdit') },
@@ -226,7 +228,7 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         clearTimeout(disarm);
         disarm = setTimeout(() => { if (stack.top() === pageKey) stack.refreshBar(); }, DELETE_ARMED_MS + 50);
       },
-      reset() { armedAt = 0; },
+      reset() { armedAt = -Infinity; },
       stop() { clearTimeout(disarm); },
     };
   }
@@ -255,10 +257,14 @@ export function createMyTrains({ stack, line, stationName, findStations, openTra
         // and able to click on train to see more info. Show on map as well"). The list under it: the trains after it
         // ("shows the same train again. Maybe 'more departures'").
         const d = n.next.dep, a = n.next.arr, stop = trip.via ?? trip.to;
+        // Easier to read (Max, 2026-11-27: "Track should be in the accent color and bigger, since that is what you need
+        // most apart from the time. Maybe put train number, operator -> destination on one row and the Track number bigger
+        // above to the right"): the time and the track big on one row, the train and where it goes on the next.
         const big = `<button type="button" class="trip-next" data-train="${trainAttr(d)}"><small>${esc(t('nextTrain'))}</small>` +
-          `<b>${hhmm(d.planned)}${late(d) > 0 ? ` <span class="m ${late(d) >= 6 ? 'late' : 'some'}">${hhmm(when(d))}</span>` : ''}</b>` +
-          `<span>${esc([`${n.next.number} ${d.product ?? ''}`.trim(), trackText(d.track)].filter(Boolean).join(' · '))}</span>` +
-          `<span class="tn-to">${esc(`→ ${stationName(stop)} ${hhmm(when(a))}`)}</span>${lateTag(d)}<span class="tn-go">${icon('chevron', 20)}</span></button>` +
+          `<b class="tn-time">${hhmm(d.planned)}${late(d) > 0 ? ` <span class="m ${late(d) >= 6 ? 'late' : 'some'}">${hhmm(when(d))}</span>` : ''}</b>` +
+          (d.track ? `<span class="tn-track"><small>${esc(t('track'))}</small><b>${esc(d.track)}</b></span>` : '') +
+          `<span class="tn-line">${esc(`${n.next.number} ${d.product ?? ''}`.trim())} <span class="tn-to">${esc(`→ ${stationName(stop)} ${hhmm(when(a))}`)}</span></span>` +
+          `${lateTag(d)}<span class="tn-go">${icon('chevron', 20)}</span></button>` +
           (n.pair ? `<div class="trip-next-chg">${chgBox(n.pair.change, n.pair.second, n.pair.rescue, trip.via, r.partial)}${n.pair.second ? legRow(n.pair.second, trip.to) : ''}</div>` : '') +
           (n.after ? `<p class="trip-fails">${esc(t('ifItFails', hhmm(when(n.after.dep))))}</p>` : `<p class="trip-fails">${esc(t('lastToday'))}</p>`);
         let list;

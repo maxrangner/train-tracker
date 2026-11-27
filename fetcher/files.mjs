@@ -27,9 +27,11 @@ export const KINDS = {
   'taps-add': [30000, 3 * MIN],
   'taps-index': [10 * MIN, 15 * MIN],
   messages: [2 * MIN, 5 * MIN],
-  // The day (build plan part 4, 2026-11-22): one file per 15-minute slot, made when the slot ends, kept until 01:00
-  // Swedish time the night after its day (keptUntil below, not this number: the longest it can be is about 25 h).
-  history: [HISTORY_MS, 25 * 60 * MIN],
+  // The day (build plan part 4, 2026-11-22): one file per 15-minute slot, made when the slot ends, kept a day after
+  // the slot's end (keptUntil below, src/live-file.js historyUntil; until 2026-11-27 until 01:00 the night after).
+  history: [HISTORY_MS, 24 * 60 * MIN],
+  // ... and the day's overview, every slot's counts (src/live-file.js daySumOf), with each history file.
+  daysum: [HISTORY_MS, 45 * MIN],
 };
 // Kinds whose newest file is late: older than 3 times its period, at least 10 minutes (2026-11-24, the hang review,
 // finding 4: a kind whose question kept failing, or the timetable never loading, froze while the live file went on
@@ -90,6 +92,10 @@ export const buildHistory = (slot, trains) => {
   const t = slot * HISTORY_MS;
   return { v: FORMAT, t, kind: 'history', slot, every: HISTORY_EVERY_MS, trains: trains.map(tr => historyRow(tr, t)) };
 };
+
+// The day's overview: sums is slot -> historyCounts (fetcher/main.mjs keeps the last day's); t: when made.
+export const buildDaySum = (t, sums) => ({ v: FORMAT, t, kind: 'daysum', every: HISTORY_MS,
+  slots: [...sums].sort((a, b) => a[0] - b[0]).map(([slot, c]) => [slot, ...c]) });
 
 // The shelf: name -> { kind, at, until (kept until), json, gz }. onAdd/onRemove let the uploader follow it.
 export function createShelf({ onAdd = () => {}, onRemove = () => {} } = {}) {

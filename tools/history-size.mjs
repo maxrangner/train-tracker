@@ -9,7 +9,9 @@
 // Drawn: every real report between two points against the train placed at that report's time by src/day-trains.js,
 // straight and along the rails (src/rail-net.js); trains moving (over 100 m between the points). Also how long a
 // frame of every train takes (day.at(T)), at x60 and x600 (60 frames a second).
-// Run: node tools/history-size.mjs [recording names...] [--no-draw]
+// --ends: each train's trip ends (start, end; 2026-11-27) filled from the recording's saved routes (data/routes-<name>.jsonl),
+// as the fetcher fills them from its timetable: run with and without it for what they add.
+// Run: node tools/history-size.mjs [recording names...] [--no-draw] [--ends]
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { historyRow, historySlot, HISTORY_MS, FORMAT } from '../src/live-file.js';
@@ -19,7 +21,23 @@ import { createState } from '../fetcher/state.mjs';
 import { eventsOf, feed } from './lib/history-play.mjs';
 
 const args = process.argv.slice(2);
-const DRAW = !args.includes('--no-draw');
+const DRAW = !args.includes('--no-draw'), ENDS = args.includes('--ends');
+// (a recording's trips' ends by train id, from its saved routes; src/trip.js takes the first of each list)
+function endsOf(name) {
+  const m = new Map();
+  let text = '';
+  try { text = readFileSync(`data/routes-${name}.jsonl`, 'utf8'); } catch { return () => null; }
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    const a = JSON.parse(line);
+    if (a.Deleted) continue;
+    const k = `${a.OperationalTrainNumber}/${(a.ScheduledDepartureDateTime ?? '').slice(0, 10)}`;
+    const e = m.get(k) ?? m.set(k, { start: null, end: null }).get(k);
+    e.start ??= a.FromLocation?.[0]?.LocationName ?? null;
+    e.end ??= a.ToLocation?.[0]?.LocationName ?? null;
+  }
+  return id => m.get(id) ?? null;
+}
 const given = args.filter(a => !a.startsWith('--'));
 const RECS = given.length ? given.map(n => [n, null]) : [
   ['2026-11-17T15-00-00-001Z', 'rush'], ['2026-11-19T10-30-00-013Z', 'day'], ['2026-11-19T22-28-02-750Z', 'night']];
@@ -43,6 +61,7 @@ for (const [name, role] of RECS) {
   const first = events[0][1], last = events.at(-1)[1];
   // (every 10 s only as a yardstick for the drawing: how far off the trains are when points are close)
   const runs = [30000, 60000, ...(DRAW ? [10000] : [])].map(every => ({ every, state: createState(), next: Math.ceil(first / every) * every + 50, slot: null, files: [] }));
+  const ends = ENDS ? endsOf(name) : null;
   const truth = new Map();   // train id -> its reports [{ time, lon, lat }] (not the first answer's)
   const sample = (run, t) => {
     const slot = historySlot(t);
@@ -53,7 +72,7 @@ for (const [name, role] of RECS) {
         plain: gz(plainOf(trs, st, run.slot, run.every)), steps: gz(stepsOf(trs, st, run.slot, run.every)), file: stepsOf(trs, st, run.slot, run.every) });
     }
     run.slot = slot;
-    run.state.sampleHistory(t);
+    run.state.sampleHistory(t, ends);
   };
   // (several samplings side by side in one pass: tools/lib/history-play.mjs play() takes one)
   for (const e of events) {

@@ -39,7 +39,7 @@ const EN = {
   theDay: 'Rewind', aboutApp: 'About Spårat',
   // The day (build plan part 4, 2026-11-23), the scale slider (idea 10) and the sun's line (idea 6).
   dayPlay: 'Play', dayPause: 'Pause', daySpeed: 'Speed', dayLive: 'Live', dayBackLive: 'Back to live', dayEarlier: 'earlier today', dayYesterday: 'yesterday', dayLoading: 'loading',
-  dayNow: 'now', dayDrag: 'Rewind: drag back in time', dayClose: 'Close Rewind', dayThen: c => `at ${c}`, dayLateUnknown: 'lateness not known',
+  dayNow: 'now', dayYesterdayTick: 'Yesterday', dayTodayTick: 'Today', dayDrag: 'Rewind: drag back in time', dayClose: 'Close Rewind', dayThen: c => `at ${c}`, dayLateUnknown: 'lateness not known',
   dayOnlyLive: 'Only live. Back to live?', dayOnlyLiveSub: 'Rewind shows the map only: no cards or boards for an earlier moment.',
   dayNeedsFiles: "Rewind needs the server's files (what our server kept of today). This page asks Trafikverket itself, so it has none.",
   scale_sweden: 'Sweden', scale_town: 'Town', scale_trackside: 'Trackside',
@@ -349,7 +349,7 @@ const SV = {
   filterHead: 'Filter', coMore: n => `${n} till`, coFewer: 'Färre',
   theDay: 'Rewind', aboutApp: 'Om Spårat',
   dayPlay: 'Spela', dayPause: 'Pausa', daySpeed: 'Hastighet', dayLive: 'Live', dayBackLive: 'Tillbaka till live', dayEarlier: 'tidigare i dag', dayYesterday: 'i går', dayLoading: 'hämtar',
-  dayNow: 'nu', dayDrag: 'Rewind: dra bakåt i tiden', dayClose: 'Stäng Rewind', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
+  dayNow: 'nu', dayYesterdayTick: 'Igår', dayTodayTick: 'Idag', dayDrag: 'Rewind: dra bakåt i tiden', dayClose: 'Stäng Rewind', dayThen: c => `kl. ${c}`, dayLateUnknown: 'försening okänd',
   dayOnlyLive: 'Bara live. Tillbaka till live?', dayOnlyLiveSub: 'Rewind visar bara kartan: inga kort eller tavlor för en tidigare tid.',
   dayNeedsFiles: 'Rewind behöver serverns filer (det vår server sparat av dagen). Den här sidan frågar Trafikverket själv, så den har inga.',
   scale_sweden: 'Sverige', scale_town: 'Stad', scale_trackside: 'Vid spåret',

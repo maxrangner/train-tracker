@@ -47,21 +47,28 @@ const dayOpen = async (p) => {
   await toRest(p);
   if (await p.evaluate(() => window.__day?.isOpen)) return;
   await openMenu(p); await p.click('#open-day');
-  await until(p, () => Object.values(window.__day?.state().slots ?? {}).some(v => v === 'ok'), 20000); await sleep(800);
+  // (the day's overview there, or a slot read: an older fetcher without one)
+  await until(p, () => Boolean(window.__day?.state().overview?.length) || Object.values(window.__day?.state().slots ?? {}).some(v => v === 'ok'), 20000); await sleep(800);
 };
-const dayBack = async (p) => { await dayOpen(p); await p.evaluate(() => { const s = window.__day.state(); window.__day.seek(s.edge - 30 * 60000); }); await sleep(800); };
-// (a moving train near the middle that is still on the live map, the map at zoom 12 over it; its screen point)
-const dayTrain = p => p.evaluate(async () => {
+const dayBack = async (p) => { await dayOpen(p); await p.evaluate(() => { const s = window.__day.state(); window.__day.seek(s.edge - 30 * 60000); }); await until(p, () => !window.__day.state().waiting, 8000); await sleep(800); };
+// (a moving train near the middle, alone, that is still on the live map, the map at zoom 12 (or z) over it; its screen point)
+const dayTrain = (p, z = 12) => p.evaluate(async (z) => {
   const s = document.getElementById('sheet').getBoundingClientRect(), mid = { x: innerWidth > 600 ? (s.right + innerWidth) / 2 : innerWidth / 2, y: innerWidth > 600 ? innerHeight / 2 : s.top / 2 };
-  const x = (window.__last3d ?? []).filter(t => window.__trains.get(t.id) && (t.speed ?? 0) > 30).map(t => ({ t, p: window.__map.project([t.lon, t.lat]) }))
+  // (alone: no other train within 400 m, so a tap picks it rather than a group)
+  const all = window.__last3d ?? [], alone = t => !all.some(o => o !== t && Math.hypot((o.lon - t.lon) * 0.5, o.lat - t.lat) * 111195 < 400);
+  // (one still on the live map first, for "live with a train"; else any: a replay's live trains may carry other days)
+  const pool = all.filter(t => (t.speed ?? 0) > 30 && alone(t)), onLive = pool.filter(t => window.__trains.get(t.id));
+  const x = (onLive.length ? onLive : pool).map(t => ({ t, p: window.__map.project([t.lon, t.lat]) }))
     .sort((a, b) => Math.hypot(a.p.x - mid.x, a.p.y - mid.y) - Math.hypot(b.p.x - mid.x, b.p.y - mid.y))[0]?.t;
   if (!x) return null;
-  window.__map.jumpTo({ center: [x.lon, x.lat], zoom: 12 });
+  window.__map.jumpTo({ center: [x.lon, x.lat], zoom: z });
   await new Promise(r => setTimeout(r, 900));
   const now = (window.__last3d ?? []).find(t => t.id === x.id);
   return now && { id: x.id, ...window.__map.project([now.lon, now.lat]) };
-});
-const dayPicked = async (p) => { await dayBack(p); const t = await dayTrain(p); if (t) { await p.mouse.click(t.x, t.y); await sleep(1500); } };
+}, z);
+const dayPicked = async (p, z = 12) => { await dayBack(p); const t = await dayTrain(p, z); if (t) { await p.mouse.click(t.x, t.y); await sleep(1500); } };
+// (the play button that shows: the compact row's while it plays)
+const playClick = async p => p.click(await p.evaluate(() => (document.getElementById('day').classList.contains('compact') ? '#day .day-mini-play' : '#day .day-row .day-play')));
 const speedTo = (p, i) => p.evaluate((i) => { const el = document.querySelector('#day .day-speed'); el.value = String(i); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
 const dayClosed = async (p) => { if (await p.evaluate(() => window.__day?.isOpen)) { await p.click('#day .day-x'); await sleep(800); } };
 
@@ -102,13 +109,23 @@ const SCENES = [
   // (Rewind: the bar in its place at once, the chips with it; Max, 2026-11-27: "after a short moment the störningar,
   // sparade and statistik pills reappear and push it down")
   { name: 'rewind open', files: true, setup: async (p) => { await dayClosed(p); await toRest(p); await openMenu(p); }, act: p => p.click('#open-day'), ms: 1300 },
-  { name: 'rewind play', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 2); }, act: p => p.click('#day .day-play'), ms: 1500 },
-  { name: 'rewind speed', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 1); await p.click('#day .day-play'); await sleep(800); }, act: p => speedTo(p, 4), ms: 1200 },
-  { name: 'rewind pause', files: true, setup: async (p) => { await dayBack(p); await p.click('#day .day-play'); await sleep(800); }, act: p => p.click('#day .day-play'), ms: 900 },
+  // (Max, 2026-11-27: load only what is shown, with feedback: the first slot, not fetched yet, says Loading and shimmers)
+  { name: 'rewind loading', files: true, setup: async (p) => { await dayOpen(p); }, act: p => p.evaluate(() => { const s = window.__day.state(); window.__day.seek(s.start + 5 * 60000); }), ms: 1500 },
+  // (☰'s menu over the bar: Max, 2026-11-27, "Menu is hidden behind the rewind UI")
+  { name: 'menu over rewind', files: true, setup: async (p) => { await dayOpen(p); }, act: p => p.click('#nav-button'), ms: 900 },
+  { name: 'rewind play', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 2); }, act: p => playClick(p), ms: 1500 },
+  { name: 'rewind speed', files: true, setup: async (p) => { await dayBack(p); await speedTo(p, 1); await playClick(p); await sleep(800); await p.click('#day .day-mini-track'); await sleep(600); }, act: p => speedTo(p, 4), ms: 1200 },
+  // (the compact row while it plays, and a tap on it: the whole bar back; Max, 2026-11-27: "Yes")
+  { name: 'rewind compact tap', files: true, setup: async (p) => { await dayBack(p); await playClick(p); await sleep(1200); }, act: p => p.click('#day .day-mini-track'), ms: 1200 },
+  { name: 'rewind pause', files: true, setup: async (p) => { await dayBack(p); await playClick(p); await sleep(800); }, act: p => playClick(p), ms: 900 },
   { name: 'rewind follow', files: true, setup: async (p) => { await dayBack(p); p.__dayTrain = await dayTrain(p); }, act: async (p) => { if (p.__dayTrain) await p.mouse.click(p.__dayTrain.x, p.__dayTrain.y); }, ms: 1800 },
-  { name: 'rewind follow playing', files: true, setup: async (p) => { await dayPicked(p); await speedTo(p, 2); }, act: p => p.click('#day .day-play'), ms: 1800 },
+  { name: 'rewind follow playing', files: true, setup: async (p) => { await dayPicked(p); await speedTo(p, 2); }, act: p => playClick(p), ms: 1800 },
+  // (close in, the 3D train: its bubble beside it, not over it; still while it plays: Max, 2026-11-27, "Following label
+  // covers the train", "the label jitter when moving")
+  { name: 'rewind follow close', files: true, setup: async (p) => { await dayBack(p); p.__dayTrain = await dayTrain(p, 15.5); }, act: async (p) => { if (p.__dayTrain) await p.mouse.click(p.__dayTrain.x, p.__dayTrain.y); }, ms: 1800 },
+  { name: 'rewind follow close playing', files: true, setup: async (p) => { await dayPicked(p, 15.5); await speedTo(p, 1); }, act: p => playClick(p), ms: 2500 },
   { name: 'rewind map tap', files: true, setup: dayPicked, act: clickMap, ms: 900 },
-  { name: 'rewind live with a train', files: true, setup: dayPicked, act: p => p.click('#day .day-live'), ms: 2200 },
+  { name: 'rewind live with a train', files: true, setup: dayPicked, act: async (p) => { if (await p.evaluate(() => window.__day.compact)) { await p.click('#day .day-mini-track'); await sleep(400); } await p.click('#day .day-live'); }, ms: 2200 },
   { name: 'rewind close', files: true, setup: async (p) => { await dayBack(p); }, act: p => p.click('#day .day-x'), ms: 1200 },
 ];
 

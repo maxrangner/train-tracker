@@ -3,24 +3,30 @@
 // Needs the dev page running (npm run dev). Exit code 0: all good; 1: something failed (it says what); 2: no page.
 // How: the rush-hour recording's history files (tools/history-files.mjs --end-now: its last slot ends where the slot
 // running now begins), one of them taken away (a gap); a fetcher replaying the same recording for the live files
-// (fetcher/main.mjs --replay --serve); a tiny server here hands out the history files from the folder and everything
-// else from that fetcher. The page reads it with #files=.
+// (fetcher/main.mjs --replay --serve); a tiny server here hands out the history files from the folder (each a moment
+// late, so the waiting shows), the day's overview made from them (named in the live files), and everything else from
+// that fetcher. The page reads it with #files=. Every train is given the trip ends Cst → G.
 // Checked:
 //   The day: ☰ → The day opens the ribbon above the search bar (the sheet at rest, the slider and the buttons above
-//   it); every slot is fetched (the taken one a gap, striped); a drag back on the ribbon shows that moment: the frame,
+//   it); its bars come from the day's overview and no slot is fetched until shown (the taken one a gap, striped; the
+//   ribbon starts at the first file); a drag back on the ribbon says "Loading…" and shimmers its slot until the file
+//   is there, then shows that moment: the frame,
 //   "hh:mm · earlier today" in the live mark's place, every train where its history file has it then (a few metres);
-//   in the gap no trains; a tap on a train shows the bubble with its number and Following, the map follows it (held
-//   on its focus as the moment moves), a tap on the map stops following (Follow), the next lets it go, Esc takes the
+//   in the gap no trains; a tap on a train picks it: its label (number, its trip's ends Stockholm C → Göteborg C, no
+//   time, no Follow), not over the train, and still while it plays; the map follows it (held on its focus as the
+//   moment moves); its whole trip in the files as a line (its earlier slots fetched first; meanwhile no line, the
+//   clock says Loading); one tap on the map lets it go, Esc takes the
 //   bubble away; a train's page says "Only live" and its button goes back to live with the real page; play at ×600
 //   plays on and comes back to live by itself; play at the live end starts an hour back; the speed slider's ×1 plays
 //   in real time; pause; Live; × closes it; Esc steps back; ☰ → Rewind puts the bar in its place at once (the chips
-//   back with it, nothing pushes it after). Without files (a replay): ☰ → The day says it needs the server's files.
+//   back with it, nothing pushes it after); ☰'s menu shows over the ribbon. Without files (a replay): ☰ → The day says
+//   it needs the server's files.
 //   The slider: its three names (Sweden all of Sweden flat, Town zoom 11 flat, Trackside zoom 16.2 tilted 60°), the
 //   compass only while turned or tilted, the thumb following a zoom by other means; a followed train stays where it
 //   is held while the slider zooms.
 //   The sun's line: its layer under the cover outside Sweden, Settings → Day and night hides it, night trains marked.
 // Not checkable here: real speed (the test browser draws with the processor), a phone's touch on the ribbon.
-import { mkdirSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
@@ -28,7 +34,8 @@ import { createServer } from 'node:http';
 import { createServer as netServer } from 'node:net';
 import { launch, sleep, PAGE, RUSH_HOUR } from './lib/browser.mjs';
 import { waitForMap, until, openFromMenu, openMenu, toRest } from './lib/screen.mjs';
-import { historyOf, HISTORY_MS } from '../src/live-file.js';
+import { historyOf, historyCounts, HISTORY_MS } from '../src/live-file.js';
+import { buildDaySum } from '../fetcher/files.mjs';
 
 try { await fetch(PAGE); } catch { console.log(`day-check skipped: nothing answers at ${PAGE} (start it with npm run dev)`); process.exit(2); }
 const HOLD = process.argv.includes('--hold');   // (keep the servers going and print the address: for pictures by hand)
@@ -45,14 +52,24 @@ const slots = names.map(f => Number(f.slice(8, -5)));
 if (slots.length < 4) { console.log(`FAIL day-check: the recording gave ${slots.length} history files, 4 wanted`); process.exit(1); }
 const GAP = slots[1];   // taken away: a gap
 rmSync(join(dir, `history-${GAP}.json`));
+// every train's trip ends (positions 11, 12; src/live-file.js historyRow), and the day's overview of the files left
+for (const slot of slots) if (slot !== GAP) {
+  const p = join(dir, `history-${slot}.json`), f = JSON.parse(readFileSync(p, 'utf8'));
+  for (const r of f.trains) { r[11] = 'Cst'; r[12] = 'G'; }
+  writeFileSync(p, JSON.stringify(f));
+}
+const daySum = JSON.stringify(buildDaySum(Date.now(), new Map(slots.filter(x => x !== GAP).map(x => [x, historyCounts(JSON.parse(readFileSync(join(dir, `history-${x}.json`), 'utf8')).trains)]))));
+const SLOW_MS = 400;   // each history file this late (the page's waiting shows meanwhile)
 const fileOf = slot => JSON.parse(readFileSync(join(dir, `history-${slot}.json`), 'utf8'));
 
 const live = await freePort(), port = await freePort();
-const fetcher = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(live), '--minutes', '10'], { stdio: 'ignore' });
+const fetcher = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(live), '--minutes', HOLD ? '120' : '10'], { stdio: 'ignore' });   // (held for filming: long enough for a whole film)
 const server = createServer(async (req, res) => {
   const name = decodeURIComponent(new URL(req.url, 'http://x').pathname.slice(1));
   const head = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+  if (name === 'daysum-test.json') { res.writeHead(200, head); return res.end(daySum); }
   if (/^history-\d+\.json$/.test(name)) {
+    await sleep(SLOW_MS);
     const f = join(dir, name);
     if (!existsSync(f)) { res.writeHead(404, { ...head, 'Cache-Control': 'no-store' }); return res.end('{}'); }
     res.writeHead(200, head); return res.end(readFileSync(f));
@@ -60,7 +77,10 @@ const server = createServer(async (req, res) => {
   try {
     const r = await fetch(`http://127.0.0.1:${live}/${name}`);
     res.writeHead(r.status, { ...head, 'Cache-Control': r.headers.get('cache-control') ?? 'no-store', ...(r.headers.get('date') ? { Date: r.headers.get('date') } : {}) });
-    res.end(Buffer.from(await r.arrayBuffer()));
+    let body = Buffer.from(await r.arrayBuffer());
+    // (the live file names the day's overview made here)
+    if (r.ok && /^live-\d+\.json$/.test(name)) { const j = JSON.parse(body); j.files = { ...j.files, daysum: 'daysum-test.json' }; body = Buffer.from(JSON.stringify(j)); }
+    res.end(body);
   } catch { res.writeHead(502, head); res.end('{}'); }
 }).listen(port, '127.0.0.1');
 const files = `http://localhost:${port}/`;
@@ -76,6 +96,8 @@ try {
   const page = await waitForMap(browser, { files, view: '7/58.2/15.2', lang: 'en', theme: 'light', slider: '1' });
   expect(!page.errors.length, `errors on the page: ${page.errors.join(' | ')}`);
   const day = () => page.evaluate(() => window.__day?.state());
+  // (the play button that shows: the compact row's while it plays, src/day-view.js)
+  const clickPlay = async () => page.click(await page.evaluate(() => (document.getElementById('day').classList.contains('compact') ? '#day .day-mini-play' : '#day .day-row .day-play')));
 
   // ---- The ribbon: in its place from its first frame (Max, 2026-11-27: the chips came back late and pushed it) ----
   await openMenu(page);
@@ -87,14 +109,24 @@ try {
   const tops = await page.evaluate(() => [...new Set(window.__tops)]);
   expect(tops.length === 1, `the ribbon moved after it came: its top ${tops.join(' → ')}`);
   expect(await page.evaluate(() => !document.documentElement.classList.contains('chips-off')), 'the chips are not back with the ribbon');
-  const known = await until(page, (want) => { const s = window.__day.state().slots; return want.every(k => s[k] === 'ok' || s[k] === 'gap'); }, 15000, [...slots]);
-  // the slots before the first file (from 04:00) are found missing too, and the ribbon then starts at the first file
-  await until(page, s0 => window.__day.state().start === s0, 20000, slots[0] * HISTORY_MS);
+  // the day's overview: every slot with a file, nothing fetched but the slot before the first (a gap: the ribbon then
+  // starts at the first file)
+  const known = await until(page, (want) => (window.__day.state().overview ?? []).join() === want.join(), 8000, slots.filter(x => x !== GAP));
+  await sleep(SLOW_MS + 600);
   const st = await day();
-  expect(known, `not every slot fetched: ${JSON.stringify(st.slots)}`);
-  expect(st.slots[GAP] === 'gap', `the slot taken away is not a gap: ${st.slots[GAP]}`);
-  expect(slots.filter(s => s !== GAP).every(s => st.slots[s] === 'ok'), `a slot with a file is not read: ${JSON.stringify(st.slots)}`);
+  expect(known, `the day's overview not taken: ${JSON.stringify(st.overview)}`);
+  const fetched = Object.keys(st.slots).map(Number);
+  expect(fetched.every(x => x === slots[0] - 1), `slots fetched at opening (only the one before the first wanted): ${JSON.stringify(st.slots)}`);
   expect(Math.abs(st.start - slots[0] * HISTORY_MS) < 1000, `the ribbon starts at ${new Date(st.start).toISOString()}, not at the first file (${new Date(slots[0] * HISTORY_MS).toISOString()})`);
+  // the bars there before any file: the last slot's part of the ribbon is coloured
+  const barPx = await page.evaluate((l) => {
+    const c = document.querySelector('#day canvas'), s = window.__day.state(), span = s.edge - s.start;
+    const x0 = Math.ceil((l * 900000 - s.start) / span * c.width) + 2, x1 = Math.floor(((l + 1) * 900000 - s.start) / span * c.width) - 2;
+    const d = c.getContext('2d').getImageData(x0, 0, Math.max(1, x1 - x0), c.height).data;
+    let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 200 && (Math.abs(d[i] - d[i + 1]) > 30 || Math.abs(d[i + 1] - d[i + 2]) > 30)) n++;
+    return n;
+  }, slots.at(-1));
+  expect(barPx > 50, `the last slot's bar is not drawn from the overview (${barPx} coloured pixels)`);
   const box = await page.evaluate(() => {
     const r = (s) => { const b = document.querySelector(s)?.getBoundingClientRect(); return b && { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
     return { day: r('#day'), sheet: r('#sheet'), scale: r('.scale'), geo: r('.maplibregl-ctrl-geolocate'), level: window.__stack.level };
@@ -124,6 +156,12 @@ try {
     await page.mouse.move(pt.x + 30, pt.y); await page.mouse.down(); await page.mouse.move(pt.x + 10, pt.y, { steps: 3 }); await page.mouse.move(pt.x, pt.y); await page.mouse.up();
   };
   await dragTo(pick.p.time);
+  const wait1 = await page.evaluate(() => ({ clock: document.getElementById('day-clock').textContent, shimmer: !document.querySelector('#day .day-shimmer').hidden }));
+  expect(/Loading/.test(wait1.clock) && wait1.shimmer, `a drag into a slot not fetched yet: the clock says "${wait1.clock}", the slot ${wait1.shimmer ? 'shimmers' : 'does not shimmer'}`);
+  const loaded = await until(page, () => document.querySelector('#day .day-shimmer').hidden && !/Loading/.test(document.getElementById('day-clock').textContent), 4000);
+  expect(loaded, 'the waiting did not end when the file came');
+  const fetchedNow = Object.keys((await day()).slots).length;
+  expect(fetchedNow <= 5, `a drag fetched ${fetchedNow} slots (its own and its neighbours wanted)`);
   const past = await until(page, () => window.__day.past, 2000);
   expect(past, 'a drag back on the ribbon did not show an earlier moment');
   const T = (await day()).T;
@@ -156,10 +194,25 @@ try {
   await page.mouse.click(at.x, at.y);
   await sleep(400);
   const bubble = await page.evaluate(() => ({ shown: !document.getElementById('day-bubble').hidden, text: document.getElementById('day-bubble').textContent, top: window.__stack.top(),
-    picked: window.__day.picked, follow: document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') }));
+    picked: window.__day.picked, following: Boolean(window.__followFocus?.()), button: Boolean(document.querySelector('#day-bubble button')) }));
   expect(bubble.shown && bubble.text.includes(String(pick.h.number)), `a tap on train ${pick.h.number} at an earlier moment: bubble ${bubble.shown ? `"${bubble.text}"` : 'not shown'}`);
   expect(bubble.top === 'home', `a tap on a train at an earlier moment opened a page (${bubble.top})`);
-  expect(bubble.picked === pick.h.id && bubble.follow === 'true', `a tap on train ${pick.h.number} at an earlier moment: picked ${bubble.picked}, Follow ${bubble.follow}`);
+  expect(bubble.picked === pick.h.id && bubble.following && !bubble.button, `a tap on train ${pick.h.number} at an earlier moment: picked ${bubble.picked}, followed ${bubble.following}, a button in its label ${bubble.button}`);
+  expect(/Stockholm C → Göteborg C/.test(bubble.text) && !/at \d\d:\d\d/.test(bubble.text), `the label: "${bubble.text}" (its trip's ends wanted, no time)`);
+  // its whole trip in the files on the map (Max, 2026-11-27: "Either all or nothing"): the slots before fetched while it
+  // has a row in them, then a line from its first point there to the train
+  const done = await until(page, () => !window.__day.state().walking && Boolean(window.__map.getSource('day-trail')?.serialize?.().data?.geometry), 8000);
+  const trail = await page.evaluate((id) => {
+    const d = window.__map.getSource('day-trail')?.serialize?.().data, lines = d?.geometry?.coordinates ?? [], end = lines.at(-1)?.at(-1);
+    const x = (window.__last3d ?? []).find(t => t.id === id);
+    return { first: lines[0]?.[0] ?? null, points: lines.flat().length, off: end && x ? Math.hypot((end[0] - x.lon) * 0.5, end[1] - x.lat) * 111195 : null };
+  }, pick.h.id);
+  let firstSlot = slot;   // (its first point: back from the moment's slot while its files have it; the gap stops it)
+  while (slots.includes(firstSlot - 1) && firstSlot - 1 !== GAP && fileOf(firstSlot - 1).trains.some(r => r[0] === pick.h.id)) firstSlot--;
+  const ff = fileOf(firstSlot), fp = historyOf(ff.trains.find(r => r[0] === pick.h.id), ff.t).points[0];
+  const fromOff = trail.first ? Math.hypot((trail.first[0] - fp.lon) * 0.5, trail.first[1] - fp.lat) * 111195 : null;
+  expect(done && trail.points >= 3 && trail.off !== null && trail.off < 300 && fromOff !== null && fromOff < 5,
+    `the picked train's whole trip: ${JSON.stringify({ ...trail, fromOff, firstSlot: firstSlot - slot })}`);
   // followed as the moment moves: held on its focus (src/map.js window.__followFocus)
   const onFocus = () => page.evaluate((id) => {
     const x = (window.__last3d ?? []).find(t => t.id === id), f = window.__followFocus?.();
@@ -172,21 +225,38 @@ try {
   await sleep(1500);
   const heldPx = await onFocus();
   expect(heldPx !== null && heldPx < 4, `the followed train at an earlier moment is ${heldPx === null ? "not followed" : `${Math.round(heldPx)} px off where it is held`} after the moment moved`);
-  // a tap on the map stops following, the next lets it go
+  // the bubble beside the train, not over it (its box clear of the train's point by its ring), and still while it plays
+  // followed (Max, 2026-11-27: "Following label covers the train"; "the label jitter when moving")
+  const clear = await page.evaluate((id) => {
+    const x = (window.__last3d ?? []).find(t => t.id === id), b = document.getElementById('day-bubble').getBoundingClientRect();
+    const p = x && window.__map.project([x.lon, x.lat]);
+    return p && { dx: Math.max(b.left - p.x, p.x - b.right, 0), dy: Math.max(b.top - p.y, p.y - b.bottom, 0), side: window.__day.state().side };
+  }, pick.h.id);
+  expect(clear && Math.max(clear.dx, clear.dy) >= 8, `the bubble covers the train: ${JSON.stringify(clear)}`);
+  await page.evaluate(() => { const el = document.querySelector('#day .day-speed'); el.value = '1'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+  await clickPlay();
+  const moves = await page.evaluate(() => new Promise((res) => {
+    const seen = []; const t0 = performance.now();
+    const f = () => { const b = document.getElementById('day-bubble').getBoundingClientRect(); seen.push([b.left, b.top, window.__day.state().side, b.width, b.height]); if (performance.now() - t0 < 1500) requestAnimationFrame(f); else res(seen); };
+    requestAnimationFrame(f);
+  }));
+  await clickPlay();
+  // (a station's name coming under it moves it to another side, as the live label: counted apart, a few at most)
+  let steps = 0, most = 0, flips = 0;
+  for (let i = 1; i < moves.length; i++) {
+    if (moves[i][2] !== moves[i - 1][2]) { flips++; continue; }
+    const d = Math.hypot(moves[i][0] - moves[i - 1][0], moves[i][1] - moves[i - 1][1]);
+    if (d > 0) steps++;
+    most = Math.max(most, d);
+  }
+  expect(steps <= 3 && most <= 2 && flips <= 2, `the bubble of a followed train playing ×10 moved in ${steps} of ${moves.length} frames, at most ${most.toFixed(2)} px; changed sides ${flips} times`);
+  // one tap on the map lets it go (its label and line go, the map stops following)
   const emptyAt = await page.evaluate(() => (innerWidth > 600 ? { x: innerWidth - 120, y: innerHeight - 120 } : { x: 30, y: 120 }));
   await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(400);
-  const tap1 = await page.evaluate(() => ({ picked: window.__day.picked, following: Boolean(window.__followFocus?.()), follow: document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') }));
-  expect(tap1.picked === pick.h.id && !tap1.following && tap1.follow === 'false', `a tap on the map while following at an earlier moment: ${JSON.stringify(tap1)}`);
-  await page.click('#day-bubble .db-follow');
-  await sleep(400);
-  expect(await page.evaluate(() => Boolean(window.__followFocus?.()) && document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') === 'true'), 'Follow in the bubble did not follow again');
-  await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(300);
-  await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(400);
-  const tap2 = await page.evaluate(() => ({ picked: window.__day.picked, hidden: document.getElementById('day-bubble').hidden }));
-  expect(!tap2.picked && tap2.hidden, `the second tap on the map did not let the train go: ${JSON.stringify(tap2)}`);
+  await sleep(500);
+  const tap1 = await page.evaluate(() => ({ picked: window.__day.picked, hidden: document.getElementById('day-bubble').hidden, following: Boolean(window.__followFocus?.()),
+    line: Boolean(window.__map.getSource('day-trail')?.serialize?.().data?.geometry) }));
+  expect(!tap1.picked && tap1.hidden && !tap1.following && !tap1.line, `a tap on the map did not let the train go: ${JSON.stringify(tap1)}`);
   await page.evaluate(t => window.__day.seek(t), pick.p.time);
   await page.evaluate(p => window.__map.jumpTo({ center: [p.lon, p.lat], zoom: 12 }), pick.p);
   await sleep(900);
@@ -226,7 +296,7 @@ try {
   const speedTo = i => page.evaluate((i) => { const el = document.querySelector('#day .day-speed'); el.value = String(i); el.dispatchEvent(new Event('input', { bubbles: true })); }, i);
   await page.evaluate(t => window.__day.seek(t), slots[2] * HISTORY_MS);
   await speedTo(4);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(1500);
   const playing = await day();
   expect(playing.rate === 600 && playing.T > slots[2] * HISTORY_MS + 4 * 60000, `×600: ${playing.rate}, moved ${Math.round((playing.T - slots[2] * HISTORY_MS) / 60000)} min in 1.5 s`);
@@ -234,20 +304,42 @@ try {
   expect(ended, '×600 did not come back to live at the end of the files');
   // play at the live end: from an hour back; ×1 real time; pause
   await speedTo(0);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(1200);
   const hour = await day();
   expect(hour.T !== null && hour.rate === 1 && Math.abs(hour.edge - hour.T - 3600000) < 60000, `play at the live end, ×1: rate ${hour.rate}, ${hour.T === null ? 'live' : `${Math.round((hour.edge - hour.T) / 60000)} min back`}`);
+  // compact while it plays (Max, 2026-11-27: "Yes" to its sketch): one row, the search card and the chips away
+  const small = await page.evaluate(() => { const d = document.getElementById('day').getBoundingClientRect(), v = s => getComputedStyle(document.querySelector(s)).visibility;
+    return { compact: window.__day.state().compact, h: Math.round(d.height), sheet: v('#sheet'), chips: v('#chips') }; });
+  expect(small.compact && small.h <= 80 && small.sheet === 'hidden' && small.chips === 'hidden', `playing, compact: ${JSON.stringify(small)}`);
   const a = (await day()).T; await sleep(2000); const b = (await day()).T;
   expect(b - a > 1000 && b - a < 4000, `×1 moved ${Math.round((b - a) / 100) / 10} s in 2 s`);
-  await page.click('#day .day-play');
+  await clickPlay();
   await sleep(300);
   const c = (await day()).T; await sleep(800); const d = (await day()).T;
   expect((await day()).rate === 0 && c === d, `pause: rate ${(await day()).rate}, moved ${d - c} ms`);
+  // paused it stays compact; a tap on its row brings the whole bar back
+  expect((await day()).compact, 'pausing left the compact row');
+  await page.click('#day .day-mini-track');
+  await sleep(300);
+  const full = await page.evaluate(() => ({ compact: window.__day.state().compact, h: Math.round(document.getElementById('day').getBoundingClientRect().height), sheet: getComputedStyle(document.getElementById('sheet')).visibility }));
+  expect(!full.compact && full.h > 100 && full.sheet === 'visible', `a tap on the compact row: ${JSON.stringify(full)}`);
   await page.click('#day .day-live');
   await sleep(300);
-  const back = await page.evaluate(() => ({ past: window.__day.past, frame: !document.getElementById('day-frame').hidden, status: getComputedStyle(document.getElementById('status')).visibility }));
-  expect(!back.past && !back.frame && back.status === 'visible', `Live: ${JSON.stringify(back)}`);
+  const back = await page.evaluate(() => ({ past: window.__day.past, frame: !document.getElementById('day-frame').hidden, status: getComputedStyle(document.getElementById('status')).visibility,
+    trail: window.__map.getSource('day-trail')?.serialize?.().data?.features?.length ?? 0 }));
+  expect(!back.past && !back.frame && back.status === 'visible' && !back.trail, `Live: ${JSON.stringify(back)}`);
+  // ☰'s menu over the ribbon (Max, 2026-11-27: "Menu is hidden behind the rewind UI")
+  await openMenu(page);
+  const onTop = await page.evaluate(() => {
+    const n = document.getElementById('nav').getBoundingClientRect(), d = document.getElementById('day').getBoundingClientRect();
+    const l = Math.max(n.left, d.left) + 4, r = Math.min(n.right, d.right) - 4, t = Math.max(n.top, d.top) + 4, b = Math.min(n.bottom, d.bottom) - 4;
+    if (r <= l || b <= t) return 'apart';
+    return document.elementFromPoint((l + r) / 2, (t + b) / 2)?.closest('#nav, #day')?.id ?? 'neither';
+  });
+  expect(onTop === 'nav' || onTop === 'apart', `☰'s menu with the ribbon open: ${onTop} on top where they meet`);
+  await page.click('#nav-button');
+  await until(page, () => document.getElementById('nav').hidden, 3000);
   // × closes; Esc too
   await page.click('#day .day-x');
   await sleep(300);

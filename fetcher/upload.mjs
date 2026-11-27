@@ -12,7 +12,7 @@
 // gives, per kind, the newest file uploaded and not yet let go by the shelf. A file still on its way is named by the
 // first live file made after it arrived; one refused 3 times is never named (the one before it stays named).
 // Every 10 minutes the folder is swept of our files nobody needs (also those left by an earlier run; today's history
-// files are kept, whichever run made them).
+// files are kept a day after their slot, whichever run made them).
 // Files go up packed (gzip, since 2026-11-16: about 5 times less to send); one.com hands them out as they are, saying
 // so in a header (fetcher/data.htaccess), and browsers unpack them by themselves.
 // The server's key is checked against SFTP_HOSTKEY (SHA256 fingerprints, comma-separated): a different server is
@@ -38,8 +38,8 @@ const WAITS = [1000, 2000, 5000, 10000, 30000];
 const TRIES = 3, TRY_AGAIN_MS = 5000;   // a refused file
 const REFUSED_WAIT = 10 * 60000;
 export const MARK = '.sparat-data';
-export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history)-\d+\.json$/;
-const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history)-\d+\.json\.tmp$/;
+export const NAME = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history|daysum)-\d+\.json$/;
+const TMP = /^(live|passings|passings-add|planned|planned-add|disruptions|stats|arrivals|arrivals-add|stations|card-\d\d|board-\d\d|day-\d\d|taps-add|taps-index|messages|history|daysum)-\d+\.json\.tmp$/;
 const HTACCESS = readFileSync(new URL('./data.htaccess', import.meta.url));
 
 const callOn = (s, fn, ...a) => new Promise((res, rej) => s[fn](...a, (e, v) => e ? rej(e) : res(v)));
@@ -302,8 +302,8 @@ export function createUploader(cfg, log, { keep = () => false, Client = ssh2.Cli
   }
 
   // Our files in the folder that nobody needs any more: older than 5 minutes and not kept by the shelf. A history file
-  // stays until its keep time (01:00 the night after its day) even when this run's shelf never had it: one made by an
-  // earlier run (a restart) is still today's (2026-11-22).
+  // stays until its keep time (a day after its slot; src/live-file.js historyUntil) even when this run's shelf never had
+  // it: one made by an earlier run (a restart) is still in the last day (2026-11-22).
   async function sweep() {
     if (!sftp || busyOn === sftp) return;
     try {

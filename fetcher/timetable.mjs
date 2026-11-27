@@ -197,6 +197,28 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
     return groups;
   };
   const ofTrains = g => byGroup().train.get(g) ?? [], ofStations = g => byGroup().station.get(g) ?? [];
+  // Each piece's ends (its internal number and day, as a train's id: src/trains-source.js trainKey): the first
+  // FromLocation and ToLocation on its rows (src/trip.js takes them so), made again only when the rows changed.
+  let endsBy = null;
+  const firstSig = (i, seen) => {
+    if (i < 0) return null;
+    if (!seen.has(i)) { let v = null; try { v = JSON.parse(w.list[i])?.[0]?.LocationName ?? null; } catch { /* not a list */ } seen.set(i, v); }
+    return seen.get(i);
+  };
+  const endsMap = () => {
+    if (endsBy?.version === rows.version) return endsBy.map;
+    const map = new Map(), seen = new Map();
+    for (const x of rows.values()) {
+      if (x.r[5] & 4) continue;   // (deleted)
+      const k = `${x.r[0]}/${x.day}`;
+      let e = map.get(k);
+      if (!e) map.set(k, e = { start: null, end: null });
+      e.start ??= firstSig(x.r[10], seen);
+      e.end ??= firstSig(x.r[11], seen);
+    }
+    endsBy = { version: rows.version, map };
+    return map;
+  };
   return {
     ready: () => Boolean(seed) || days.has(swedishDay(Date.now())),   // seeded: all there is, at once
     // Cards: yesterday's trains still running, today's, and tomorrow's that start within CARD_AHEAD_MS (whole: a train
@@ -227,6 +249,8 @@ export function createTimetable({ log, onChange = () => {}, onLoaded = () => {},
       return out(ofStations(g).filter(x => (x.r[5] & 1) && !(x.r[5] & 4) && x.r[6] !== null && dayOf(x.r[6] * 1000) === today)
         .sort((a, b) => a.r[6] - b.r[6]), { kind: `day-${g}`, t });
     },
+    // A train's trip ends by its id ("<internal number>/<day>"): { start, end } station codes, or null (not known).
+    ends: id => endsMap().get(id) ?? null,
     // Rows as they come (a replay's later rows, fetcher/replay.mjs): put in like the changes stream's.
     add(list) { let n = 0; for (const a of list) if (put(a)) n++; if (n) onChange(); return n; },
     changes: (since, t) => out(all().filter(x => x.mod >= since), { kind: 'taps-add', t, since }),

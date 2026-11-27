@@ -18,7 +18,7 @@ export function createState() {
   const lastPassing = new Map(); // train key -> its latest passing (for its lateness)
   const planned = new Map();    // train id -> { rows: Map(sig|activity|planned -> row), until, asked, brand }
   const lists = {};             // disruptions, cancelled, arrivals, stations: { at, data }
-  const history = new Map();    // 15-minute slot -> Map(train id -> { id, number, brand, from, until, points }): the day
+  const history = new Map();    // 15-minute slot -> Map(train id -> { id, number, brand, from, until, points, start, end }): the day
   let count = { records: 0, passings: 0 };
 
   return {
@@ -99,8 +99,9 @@ export function createState() {
     // (fetcher/main.mjs liveTick) a sample of every train on the map, gone ones left out: its latest report (a point
     // only when the report is new since its last point in this slot) and, every sample, `until` moved on. The points
     // gather per 15-minute slot; takeHistory(slot) hands a finished slot out and forgets it. Times to whole seconds and
-    // places to 1e-5 degrees here already, so the file gives back exactly these.
-    sampleHistory(t) {
+    // places to 1e-5 degrees here already, so the file gives back exactly these. endsOf(id) -> { start, end } (station
+    // codes) or null: the trip's ends from the timetable (fetcher/timetable.mjs ends), asked until both are known.
+    sampleHistory(t, endsOf = null) {
       const slot = historySlot(t);
       let b = history.get(slot);
       if (!b) history.set(slot, b = new Map());
@@ -109,17 +110,18 @@ export function createState() {
 
         let tr = b.get(r.id);
         const at = Math.round(t / 1000) * 1000;
-        if (!tr) b.set(r.id, tr = { id: r.id, number: r.number, brand: null, from: at, until: at, points: [] });
+        if (!tr) b.set(r.id, tr = { id: r.id, number: r.number, brand: null, from: at, until: at, points: [], start: null, end: null });
         tr.until = at;
         tr.number = r.number;
         const brand = planned.get(r.id)?.brand ?? lastPassing.get(r.id)?.brand ?? null;
         if (brand) tr.brand = brand;
+        if (endsOf && (tr.start === null || tr.end === null)) { const e = endsOf(r.id); if (e) { tr.start ??= e.start ?? null; tr.end ??= e.end ?? null; } }
         const time = Math.round(r.time / 1000) * 1000;
         if (tr.points.at(-1)?.time === time) continue;
         tr.points.push({ time, lon: r5(r.lon), lat: r5(r.lat), speed: r.speed ?? null, bearing: r.bearing ?? null, late: lastPassing.get(r.id)?.minutes ?? null });
       }
     },
-    // A slot's trains as gathered ([{ id, number, brand, from, until, points }]), and forgotten here; [] if none.
+    // A slot's trains as gathered ([{ id, number, brand, from, until, points, start, end }]), and forgotten here; [] if none.
     takeHistory(slot) {
       const b = history.get(slot);
       history.delete(slot);

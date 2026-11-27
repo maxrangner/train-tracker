@@ -16,13 +16,22 @@
   .trip-next b .m { font-size: 18px; }
   .trip-next > span:not(.tag) { grid-column: 1; color: var(--muted); font-size: 14.5px; font-weight: 600; }
   .trip-next > .tag { grid-column: 2; grid-row: 2 / span 2; justify-self: end; }
+  /* The track: next to the time, nearly as big, in the accent; the train and where it goes on one row under them (Max,
+     2026-11-27: "Track should be in the accent color and bigger") */
+  button.trip-next > small { grid-column: 1; }
+  .trip-next > span.tn-track { grid-column: 2; grid-row: 1 / span 2; align-self: end; justify-self: end; display: grid; justify-items: end; color: var(--accent); }
+  .trip-next > span.tn-track small { grid-column: auto; color: inherit; font-size: 11.5px; letter-spacing: .06em; }
+  button.trip-next > span.tn-track > b { color: var(--accent); font-size: 28px; line-height: 1.15; }
+  .trip-next > span.tn-track ~ .tag { grid-row: 3; }
+  .trip-next > span.tn-line { grid-column: 1 / 3; }
+  .trip-next > span.tn-track ~ span.tn-line, .trip-next > span.tn-line:has(~ .tag) { grid-column: 1; }
   .trip-next.tight { background: var(--t-some-bg); } .trip-next.tight b { color: var(--t-some); }
   .trip-next.lost { background: var(--t-late-bg); } .trip-next.lost b { color: var(--t-late); }
   .trip-next.ok b { color: var(--t-ontime); }
   button.trip-next { width: 100%; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; grid-template-columns: 1fr auto auto; }
   button.trip-next:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
   button.trip-next > .tag { grid-column: 2; }
-  .trip-next .tn-to { grid-column: 1; color: var(--ink); font-size: 15px; font-weight: 700; }
+  .trip-next .tn-to { color: var(--ink); font-size: 15px; font-weight: 700; }
   button.trip-next > b { grid-column: 1; }
   button.trip-next > span.tn-go { grid-column: 3; grid-row: 2 / span 3; align-self: center; color: var(--muted); display: grid; }
   .trip-next-chg { display: grid; gap: 4px; padding: 6px 12px 0; }

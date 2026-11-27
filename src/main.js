@@ -202,7 +202,7 @@ const about = createAbout({ map, panel, trains, lateness, mode: modeName, debugA
 
 // ---- ☰'s menu, The day, the way back ----
 const day = createDay({ map, panel, panelEl, stack: () => stack, frame, feeds: () => feeds, net: () => net, fromFiles, now, drawDelay: DRAW_DELAY_MS,
-  buzz, openTrain: id => trainPages.open(id) });
+  buzz, openTrain: id => trainPages.open(id), stationName: sig => stations.name(sig) });
 const nav = createNavMenu({ stack: () => stack, mapEl, onDay: () => day.toggle(), onState: () => chips?.sync() });
 const back = createBack({ nav, day, stack: () => stack });
 

@@ -6,6 +6,7 @@
 //                                           // same slot twice is ignored)
 //   day.at(T)                               // every train on the map at moment T, in the shape src/trains.js placedAt
 //                                           // gives, plus what the map shows about it (below)
+//   day.trailOf(id, T)                      // where it has been up to T in the files there are: [[lon, lat], ...] lines
 // Between two points a train moves at an even pace from the one to the next: along the rails when the network finds
 // a way between them no longer than 1.5 times the straight line + 300 m (else straight). Each way is worked out once,
 // when a train first needs it, and kept. Before its first point and after its last a train stands at that point; it is
@@ -27,7 +28,7 @@ function lastAtOrBefore(list, t, key) {
 }
 
 export function createDayTrains({ net = null } = {}) {
-  const trains = new Map();   // id -> { id, number, brand, spans: [{ from, until }], points: [...], way: Map(i -> poly | null) }
+  const trains = new Map();   // id -> { id, number, brand, start, end, spans: [{ from, until }], points: [...], way: Map(i -> poly | null) }
   const slots = new Set();
   const counts = { ways: 0, straight: 0 };
 
@@ -40,8 +41,10 @@ export function createDayTrains({ net = null } = {}) {
     for (const row of rows) {
       const h = historyOf(row, file.t);
       let tr = trains.get(h.id);
-      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, spans: [], points: [], way: new Map() });
+      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, start: null, end: null, spans: [], points: [], way: new Map(), inSlots: new Set() });
+      tr.inSlots.add(file.slot);
       if (h.brand) tr.brand = h.brand;
+      tr.start ??= h.start; tr.end ??= h.end;   // (its trip's ends: from files since 2026-11-27)
       // From its first report on (a train is first sampled up to a minute after its report came), until the next sample.
       tr.spans.push({ from: Math.min(h.from, h.points[0]?.time ?? h.from), until: h.until + (file.every ?? HISTORY_EVERY_MS) });
       const last = tr.points.at(-1)?.time ?? -Infinity;
@@ -84,7 +87,7 @@ export function createDayTrains({ net = null } = {}) {
     const i = lastAtOrBefore(pts, T, 'time');
     const a = pts[Math.max(0, i)], b = i >= 0 ? pts[i + 1] : null;
     const base = { id: tr.id, syncing: false, stale: false, extra: 0, number: tr.number, brand: tr.brand ?? null,
-      speed: a.speed, late: a.late, time: a.time };
+      start: tr.start, end: tr.end, speed: a.speed, late: a.late, time: a.time };
     if (!b || i < 0 || b.time - a.time > MAX_GAP_MS) {
       return { ...base, lon: a.lon, lat: a.lat, bearing: a.bearing ?? 0, v: 0 };
     }
@@ -98,6 +101,28 @@ export function createDayTrains({ net = null } = {}) {
     }
     return { ...base, lon: a.lon + (b.lon - a.lon) * f, lat: a.lat + (b.lat - a.lat) * f,
       bearing: d > 5 ? bearingOf(a, b) : a.bearing ?? 0, v };
+  }
+
+  // Where a train has been up to T (Max, 2026-11-27: "Yes" to the picked train's trip so far): along the rails as it is
+  // drawn (each way worked out once, at most budgetMs a call: the rest straight until a later call), a new line after a
+  // gap with no report (MAX_GAP_MS), the last piece up to its place at T. -> [[[lon, lat], ...], ...]
+  function trailOf(tr, T, budgetMs) {
+    const pts = tr.points, end = lastAtOrBefore(pts, T, 'time'), stop = performance.now() + budgetMs, lines = [];
+    let cur = [];
+    const wayFor = (i, a, b) => (tr.way.has(i) ? tr.way.get(i) : performance.now() < stop ? wayOf(tr, i, a, b) : null);
+    for (let i = 0; i <= end; i++) {
+      const a = pts[i], b = pts[i + 1], last = i === end;
+      if (!cur.length) cur.push([a.lon, a.lat]);
+      if (!b || b.time - a.time > MAX_GAP_MS) { if (!last) { if (cur.length > 1) lines.push(cur); cur = []; } continue; }
+      const poly = wayFor(i, a, b), upTo = last ? (T - a.time) / (b.time - a.time) : 1;
+      if (poly) {
+        const len = poly.cum.at(-1) * upTo;
+        for (let k = 1; k < poly.lon.length && poly.cum[k] < len; k++) cur.push([poly.lon[k], poly.lat[k]]);
+        if (last) { const p = polyAt(poly, len); cur.push([p.lon, p.lat]); } else cur.push([b.lon, b.lat]);
+      } else cur.push([a.lon + (b.lon - a.lon) * upTo, a.lat + (b.lat - a.lat) * upTo]);
+    }
+    if (cur.length > 1) lines.push(cur);
+    return lines;
   }
 
   // Is the train's point before T near the view?
@@ -124,6 +149,9 @@ export function createDayTrains({ net = null } = {}) {
       return out;
     },
     placeOf: (id, T) => (trains.has(id) ? placeOf(trains.get(id), T) : null),
+    // Whether the train has a row in that slot's file (Rewind fetches a picked train's earlier slots until one hasn't).
+    inSlot: (id, slot) => Boolean(trains.get(id)?.inSlots.has(slot)),
+    trailOf: (id, T, { budgetMs = Infinity } = {}) => (trains.has(id) ? trailOf(trains.get(id), T, budgetMs) : []),
     has: slot => slots.has(slot),
     get slots() { return [...slots].sort((a, b) => a - b); },
     get size() { return trains.size; },

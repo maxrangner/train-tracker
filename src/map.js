@@ -1119,7 +1119,9 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // train dynamically moving around"), like the other trains' bubbles. A side is free where no station's name is: close
   // in the names' boxes (placeStationNames), further out the map's own names there. It keeps its side while that is
   // free, looked at again at most every SEL_SIDE_MS.
-  let labelHeld = null, selSide = 'down', selSideAt = 0;
+  // (The same placing for Rewind's bubble over a picked train, src/day-view.js, through labelAt below: Max, 2026-11-27,
+  // its bubble "covers the train" and "jitters"; it sat 14 px over the train's middle, on whole CSS pixels.)
+  const selHold = { side: 'down', sideAt: 0, held: null };
   const SEL_SIDE_MS = 200;
   const selBox = (side, p, w, h, dy, dx) => {
     const x = side === 'right' ? p.x + dx : side === 'left' ? p.x - dx - w : p.x - w / 2;
@@ -1163,36 +1165,54 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     }
     return `${d}Z`;
   }
+  // A label w × h by a train's screen point p: its side (under it first, else above, right, left: where no station's
+  // name is; looked at again at most every SEL_SIDE_MS) and its top left, held on whole device pixels until the train
+  // has gone 0.75 of one. hold: the label's own { side, sideAt, held } (held: { x, y }, null to place it afresh).
+  // dy, dx: how far below/beside the point it starts (clear of the ring). onScreen: a side that would leave the screen
+  // isn't free either (under or over it, the owner slides it along the screen; beside it, it can't: Rewind's bubble
+  // ran off the right edge, 2026-11-27).
+  function placeBy(hold, p, w, h, dy, dx, onScreen = false) {
+    const now = performance.now();
+    const { clientWidth: W, clientHeight: H } = box;
+    const fits = (s, b) => !onScreen || (s === 'down' || s === 'up' ? b.t >= 4 && b.b <= H - 4 : b.l >= 4 && b.r <= W - 4 && b.t >= 4 && b.b <= H - 4);
+    const free = s => { const b = selBox(s, p, w, h, dy, dx); return fits(s, b) && selSideFree(b); };
+    if (!hold.held || now - hold.sideAt > SEL_SIDE_MS) {
+      hold.sideAt = now;
+      let side = hold.side;
+      if (!free(side)) side = SIDES.find(free) ?? 'down';
+      else if (side !== 'down') side = SIDES.find(s => s === side || free(s));   // back under it when free
+      if (side !== hold.side) { hold.side = side; hold.held = null; }
+    }
+    const { x, y } = selBox(hold.side, p, w, h, dy, dx);
+    const dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
+    if (!hold.held || Math.abs(x - hold.held.x) > slack || Math.abs(y - hold.held.y) > slack) {
+      hold.held = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
+    }
+    return hold;
+  }
+  // How far from a train's point a label starts: from a 3D train's point, else clear of its ring (the selected train's
+  // marker, else a dot's).
+  function labelGap() {
+    const model = selShown ? selEl.classList.contains('model') : modelsAt(map.getZoom());
+    if (model) return { dy: LABEL_DY, dx: SIDE_DX };
+    return selShown ? { dy: selEl.offsetHeight / 2 + 8, dx: selEl.offsetWidth / 2 + 8 } : { dy: 19, dx: 19 };
+  }
   function holdLabel() {
     if (!selShown) return;
     const w = selLabel.offsetWidth, h = selLabel.offsetHeight;
     if (!w) return;
     if (selBg.parentNode !== selLabel) selLabel.prepend(selBg);
     const p = map.project(selMarker.getLngLat());   // where the map puts the marker's middle
-    const model = selEl.classList.contains('model');
-    const dy = model ? LABEL_DY : selEl.offsetHeight / 2 + 8, dx = model ? SIDE_DX : selEl.offsetWidth / 2 + 8;
-    const now = performance.now();
-    if (!labelHeld || now - selSideAt > SEL_SIDE_MS) {
-      selSideAt = now;
-      let side = selSide;
-      if (!selSideFree(selBox(side, p, w, h, dy, dx))) side = SIDES.find(s => selSideFree(selBox(s, p, w, h, dy, dx))) ?? 'down';
-      else if (side !== 'down') side = SIDES.find(s => s === side || selSideFree(selBox(s, p, w, h, dy, dx)));   // back under it when free
-      if (side !== selSide) {
-        selLabel.classList.remove(selSide);
-        if (side !== 'down') selLabel.classList.add(side);
-        selSide = side;
-        labelHeld = null;
-      }
+    const { dy, dx } = labelGap(), was = selHold.side;
+    placeBy(selHold, p, w, h, dy, dx);
+    if (selHold.side !== was) {
+      selLabel.classList.remove(was);
+      if (selHold.side !== 'down') selLabel.classList.add(selHold.side);
     }
     // The outline drawn round the label, its ring 2 px out from it as before (the path 1 px out, its stroke 2 px).
-    const bgFor = `${w}|${h}|${selSide}`;
-    if (bgFor !== selBgFor) { selBgFor = bgFor; selBgPath.setAttribute('d', bubblePath(w + 2, h + 2, selSide)); }
-    const { x, y } = selBox(selSide, p, w, h, dy, dx);
-    const dpr = window.devicePixelRatio || 1, slack = 0.75 / dpr;
-    if (!labelHeld || Math.abs(x - labelHeld.x) > slack || Math.abs(y - labelHeld.y) > slack) {
-      labelHeld = { x: Math.round(x * dpr) / dpr, y: Math.round(y * dpr) / dpr };
-    }
-    const tf = `translate(${labelHeld.x}px, ${labelHeld.y}px)`;
+    const bgFor = `${w}|${h}|${selHold.side}`;
+    if (bgFor !== selBgFor) { selBgFor = bgFor; selBgPath.setAttribute('d', bubblePath(w + 2, h + 2, selHold.side)); }
+    const tf = `translate(${selHold.held.x}px, ${selHold.held.y}px)`;
     if (selLabel.style.transform !== tf) selLabel.style.transform = tf;
   }
 
@@ -1208,7 +1228,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
   // The label of the train under the mouse (a computer), as a close-in bubble; null takes it away.
   const hoverEl = Object.assign(document.createElement('div'), { className: 'near-label hover' });
-  let hoverId = null;
+  let hoverId = null, hoverMoreOf = null;   // (hoverMore: Rewind adds the company and the trip's ends)
   function hoverLabel(f) {
     const id = f && !f.properties.point_count ? f.properties.id : null;
     if (!id || id === selected || nearEls.has(id)) { if (hoverId) { hoverEl.remove(); hoverId = null; } return; }
@@ -1217,7 +1237,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const { number, minutes, rest } = splitLabel(f.properties.label ?? '');
       const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
       hoverEl.classList.toggle('stale', f.properties.stale === true);
-      hoverEl.replaceChildren(el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      const more = hoverMoreOf?.(id);
+      hoverEl.replaceChildren(...(more?.company ? [el('span', 'co', more.company)] : []), el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []),
+        ...(more?.ends ? [el('span', 'ends', more.ends)] : []));
+      hoverEl.classList.toggle('more', Boolean(more));
       if (!hoverEl.isConnected) nearBox.appendChild(hoverEl);
     }
     const q = map.project(f.geometry.coordinates);
@@ -2082,7 +2105,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       // Moved only when the train moved (the map moves it with the camera itself).
       const ll = selMarker.getLngLat();
       if (!selShown || ll.lng !== place.lon || ll.lat !== place.lat) selMarker.setLngLat([place.lon, place.lat]);
-      if (!selShown) { selMarker.addTo(map); selShown = true; map.getCanvasContainer().appendChild(selLabel); selLabel.hidden = false; labelHeld = null; map.on('move', holdLabel); }
+      if (!selShown) { selMarker.addTo(map); selShown = true; map.getCanvasContainer().appendChild(selLabel); selLabel.hidden = false; selHold.held = null; map.on('move', holdLabel); }
       // The same bubble as the others (company small above, the number, the minutes in their colour), ringed in the accent.
       const company = props.company && map.getZoom() >= modelZoom() ? props.company : '';
       const text = `${company}|${props.label}`;
@@ -2149,7 +2172,36 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     sunUpdate(force = false) { if (isReady && settings.dayNight) sun.update(force); },
     sunShow() { if (isReady) sun.show(); },
     // A place on the screen ({ x, y } in the page), e.g. for The day's bubble over a train.
-    project(lon, lat) { const p = map.project([lon, lat]); return { x: p.x, y: p.y }; },   // (#map fills the window from its top left)
+    project(lon, lat) { const p = map.project([lon, lat]); return { x: p.x, y: p.y }; },
+    // A label of w × h by the train at lon/lat, placed as the selected train's own label (placeBy), but clear of its
+    // whole ring as drawn (tilted with the map): a bubble taller than the label would cover a 3D train from 16 px
+    // (Max, 2026-11-27: "Following label covers the train"). hold is that label's { side, sideAt, held }, kept by its
+    // owner (Rewind's bubble, src/day-view.js). -> hold
+    labelAt(hold, lon, lat, w, h) {
+      const p = map.project([lon, lat]);
+      let { dy, dx } = labelGap();
+      if (selShown) { const r = selEl.getBoundingClientRect(); dy = Math.max(dy, r.height / 2 + 6); dx = Math.max(dx, r.width / 2 + 6); }
+      return placeBy(hold, p, w, h, dy, dx, true);
+    },
+    // Rewind: the picked train's trip so far (src/day-view.js trail): lines [[lon, lat], ...] in the accent with a soft
+    // edge, under the trains; null takes it away. Its layers come with the first line (and again after the map's style
+    // was swapped, light/dark).
+    setTrail(lines) {
+      if (!isReady) return;
+      const data = lines?.length ? { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } } : empty();
+      if (map.getSource('day-trail')) { map.getSource('day-trail').setData(data); return; }
+      if (!lines?.length) return;
+      map.addSource('day-trail', { type: 'geojson', data });
+      const before = ['train-glow', 'train-dots', 'trains-3d'].find(id => map.getLayer(id));
+      const accent = accentOf(dark).c;   // (as the live train's route line)
+      const round = { 'line-cap': 'round', 'line-join': 'round' };
+      map.addLayer({ id: 'day-trail-edge', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': dark ? '#0b1220' : '#ffffff', 'line-width': 8, 'line-opacity': 0.55 } }, before);
+      map.addLayer({ id: 'day-trail', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': accent, 'line-width': 4.5 } }, before);
+    },
+    // fn(id) -> { company, ends } or null: more for the label under the mouse (Rewind: the train as it was then)
+    hoverMore(fn) { hoverMoreOf = fn; hoverId = null; },
+    // fn() after every move of the camera, before the map draws it (a label kept with its train); -> stop
+    onMove(fn) { map.on('move', fn); return () => map.off('move', fn); },   // (#map fills the window from its top left)
     get slider() { return slider; },
     sliderShow,
     // After a settings change (look, toys, zoom): our layers again, and for light/dark the other base map

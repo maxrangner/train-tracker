@@ -2,9 +2,12 @@
 //   - a recording (19 Nov, late evening) through the fetcher's memory (fetcher/state.mjs sampleHistory) and files
 //     (fetcher/files.mjs buildHistory), packed as JSON and read back (src/live-file.js historyOf): every train's every
 //     point unchanged, every train the recording had on the map in the files;
-//   - slot names, and how long the files are kept (01:00 the next night): around midnight, the 23- and 25-hour days,
-//     in Swedish time and with the computer in UTC and in New York; the shelf (fetcher/files.mjs) lets go of a file
-//     only then;
+//   - slot names, and how long the files are kept (a day after the slot ends, 2026-11-27: a rolling day): around
+//     midnight, the 23- and 25-hour days, in Swedish time and with the computer in UTC and in New York; the shelf
+//     (fetcher/files.mjs) lets go of a file only then;
+//   - a train's trip ends (start, end: fetcher/timetable.mjs ends, sampled by fetcher/state.mjs) read back; an older
+//     row without them reads as null; the day's overview (daysum) counts each slot as the page's bars do; Rewind's
+//     timeline labels (src/day-ticks.js): Yesterday, the hours, Today at Swedish midnight, now;
 //   - the page's reader (src/files-source.js history()) on a pretend site: every slot asked by its name, a missing one
 //     a gap (rows null), the slot running now not asked;
 //   - src/day-trains.js: a train between its two points (half-way at half time), standing at its last point, gone after
@@ -12,9 +15,11 @@
 // Run: node tools/history-check.mjs     exit code 0: all hold; 1: one failed
 import { gzipSync } from 'node:zlib';
 import { isDeepStrictEqual } from 'node:util';
-import { historyOf, historyRow, historyName, historySlot, historyUntil, HISTORY_MS, HISTORY_EVERY_MS, FORMAT } from '../src/live-file.js';
+import { historyOf, historyRow, historyName, historySlot, historyUntil, historyCounts, daySumOf, HISTORY_MS, HISTORY_EVERY_MS, FORMAT } from '../src/live-file.js';
 import { createState } from '../fetcher/state.mjs';
-import { buildHistory, createShelf } from '../fetcher/files.mjs';
+import { buildHistory, buildDaySum, createShelf } from '../fetcher/files.mjs';
+import { createTimetable } from '../fetcher/timetable.mjs';
+import { ticksFor } from '../src/day-ticks.js';
 import { startFilesSource } from '../src/files-source.js';
 import { createDayTrains } from '../src/day-trains.js';
 import { eventsOf, play } from './lib/history-play.mjs';
@@ -62,13 +67,13 @@ else {
 const Z = s => Date.parse(s);
 const keepCases = [
   // [slot start (UTC), kept until (UTC), what]
-  ['2026-11-22T22:45:00Z', '2026-11-23T00:00:00Z', '23:45 kept until 01:00 the next night'],
-  ['2026-11-22T23:00:00Z', '2026-11-24T00:00:00Z', 'midnight (00:00) kept until 01:00 the night after'],
-  ['2026-11-22T11:00:00Z', '2026-11-23T00:00:00Z', 'midday kept until 01:00 the next night'],
-  ['2026-10-24T22:00:00Z', '2026-10-26T00:00:00Z', 'the 25-hour day (25 Oct 2026) from its midnight: 26 h'],
-  ['2026-10-25T22:45:00Z', '2026-10-26T00:00:00Z', 'the 25-hour day, 23:45'],
-  ['2026-03-28T23:00:00Z', '2026-03-29T23:00:00Z', 'the 23-hour day (29 Mar 2026) from its midnight: 24 h'],
-  ['2026-07-01T21:45:00Z', '2026-07-01T23:00:00Z', 'summer time, 23:45'],
+  ['2026-11-22T22:45:00Z', '2026-11-23T23:00:00Z', '23:45 kept until 00:00 the next night (a day after its end)'],
+  ['2026-11-22T23:00:00Z', '2026-11-23T23:15:00Z', 'midnight (00:00) kept until 00:15 the next night'],
+  ['2026-11-22T11:00:00Z', '2026-11-23T11:15:00Z', 'midday kept until 12:15 the next day'],
+  ['2026-10-24T22:00:00Z', '2026-10-25T22:15:00Z', 'the 25-hour day (25 Oct 2026) from its midnight: 24 real hours after its end'],
+  ['2026-10-25T22:45:00Z', '2026-10-26T23:00:00Z', 'the 25-hour day, 23:45'],
+  ['2026-03-28T23:00:00Z', '2026-03-29T23:15:00Z', 'the 23-hour day (29 Mar 2026) from its midnight: 24 real hours after its end'],
+  ['2026-07-01T21:45:00Z', '2026-07-02T22:00:00Z', 'summer time, 23:45'],
 ];
 for (const tz of [null, 'UTC', 'America/New_York']) {
   const was = process.env.TZ;
@@ -87,10 +92,51 @@ for (const tz of [null, 'UTC', 'America/New_York']) {
   const shelf = createShelf({ onRemove: n => gone.push(n) });
   const a = Z('2026-11-22T22:45:00Z'), b = a + HISTORY_MS;
   const na = shelf.put('history', a, { a: 1 }), nb = shelf.put('history', b, { b: 1 });
-  shelf.sweep(Z('2026-11-23T00:00:00Z'));
-  const keptAtOne = !gone.length;
-  shelf.sweep(Z('2026-11-23T00:00:01Z'));
-  ok(na === historyName(historySlot(a)) && nb !== na && keptAtOne && gone.join() === na && shelf.get(nb), `the shelf keeps 23:45's file until 01:00 the next night, then lets go (${gone.join(', ') || 'nothing'})`);
+  shelf.sweep(Z('2026-11-23T23:00:00Z'));
+  const keptADay = !gone.length;
+  shelf.sweep(Z('2026-11-23T23:00:01Z'));
+  ok(na === historyName(historySlot(a)) && nb !== na && keptADay && gone.join() === na && shelf.get(nb), `the shelf keeps 23:45's file a day after its end, then lets go (${gone.join(', ') || 'nothing'})`);
+}
+
+// ---------- 2b. a trip's ends, and the day's overview ----------
+{
+  const loc = sig => [{ LocationName: sig, Priority: 1, Order: 0 }];
+  const row = (op, sig, at, from, to) => ({ OperationalTrainNumber: op, AdvertisedTrainIdent: op, ScheduledDepartureDateTime: '2026-11-22T00:00:00.000+01:00',
+    LocationSignature: sig, ActivityType: 'Avgang', Advertised: true, AdvertisedTimeAtLocation: at, ...(from ? { FromLocation: loc(from) } : {}), ...(to ? { ToLocation: loc(to) } : {}) });
+  const tt = createTimetable({ log() {}, seed: { days: ['2026-11-22'], rows: [
+    row('42', 'Mra', '2026-11-22T08:00:00.000+01:00', 'Mra', 'Cst'), row('42', 'Bl', '2026-11-22T09:00:00.000+01:00', 'Mra', 'Cst'),
+    row('7', 'G', '2026-11-22T08:00:00.000+01:00', null, null)] } });
+  const e42 = tt.ends('42/2026-11-22'), e7 = tt.ends('7/2026-11-22'), none = tt.ends('42/2026-11-21');
+  ok(e42?.start === 'Mra' && e42?.end === 'Cst' && e7?.start === null && e7?.end === null && none === null,
+    `the timetable's trip ends by train id (42: ${e42?.start} → ${e42?.end}; no ends: null; another day: ${none})`);
+  tt.stop();
+  // sampled into the history and read back; an older row (11 positions) reads as no ends
+  const st = createState(), t = Z('2026-11-22T08:05:00Z');
+  st.addRecords([{ id: '42/2026-11-22', number: '42', lon: 18, lat: 59, speed: 80, bearing: 0, time: t - 2000 }], t);
+  st.sampleHistory(t, id => tt.ends(id));
+  const [tr] = st.takeHistory(historySlot(t)), f = buildHistory(historySlot(t), [tr]);
+  const h = historyOf(JSON.parse(JSON.stringify(f)).trains[0], f.t), old = historyOf(f.trains[0].slice(0, 11), f.t);
+  ok(tr.start === 'Mra' && tr.end === 'Cst' && h.start === 'Mra' && h.end === 'Cst' && f.trains[0].length === 13 && old.start === null && old.end === null,
+    `a train's ends at the row's end (positions 11, 12: ${h.start} → ${h.end}); an older row without them: ${old.start}, ${old.end}`);
+  // the overview: every slot's counts as the bars count them, read back by the page's reader
+  const rows = [[0, 0, 0, 0, 0, [], [], [], [], [], [1, null]], [0, 0, 0, 0, 0, [], [], [], [], [], [4]], [0, 0, 0, 0, 0, [], [], [], [], [], [9, 12]], [0, 0, 0, 0, 0, [], [], [], [], [], [null]]];
+  const c = historyCounts(rows);
+  const sum = JSON.parse(JSON.stringify(buildDaySum(t, new Map([[101, c], [100, [2, 1, 1, 0, 0]]])))), back = daySumOf(sum);
+  ok(c.join() === '4,1,1,1,1' && sum.kind === 'daysum' && sum.slots[0][0] === 100 && back.get(101)?.n === 4 && back.get(101)?.c.late === 1 && back.get(100)?.c.some === 1,
+    `the day's overview: a slot's trains by lateness (${c.join(' ')}), slots in order, read back`);
+}
+
+// ---------- 2c. Rewind's timeline labels (src/day-ticks.js) ----------
+{
+  const words = { yesterday: 'Igår', today: 'Idag', now: 'nu' }, show = r => r.ticks.map(t => t.text).join(' ');
+  const day = ticksFor(Z('2026-11-26T11:40:00Z'), Z('2026-11-27T11:40:00Z'), 300, words);   // a phone: 300 px for 24 h
+  const mid = (Z('2026-11-26T23:00:00Z') - Z('2026-11-26T11:40:00Z')) / 864e5 * 300;
+  ok(show(day) === 'Igår 18 21 Idag 03 06 09 nu' && Math.abs(day.midnight - mid) < 0.01, `24 h on a phone: ${show(day)}, midnight at ${day.midnight?.toFixed(1)} px`);
+  const short = ticksFor(Z('2026-11-27T10:15:00Z'), Z('2026-11-27T11:40:00Z'), 300, words);
+  ok(short.midnight === null && !show(short).includes('Igår') && show(short).startsWith('12') && show(short).endsWith('nu'), `a morning's hour and a half: ${show(short)}, no midnight`);
+  const summer = ticksFor(Z('2026-07-01T10:00:00Z'), Z('2026-07-02T10:00:00Z'), 300, words);
+  const at = summer.ticks.find(t => t.kind === 'today');
+  ok(at && Math.abs(at.x - (Z('2026-07-01T22:00:00Z') - Z('2026-07-01T10:00:00Z')) / 864e5 * 300) < 0.01, `summer time: "Idag" at Swedish midnight (${at?.x.toFixed(1)} px)`);
 }
 
 // ---------- 3. the page's reader ----------
@@ -128,7 +174,7 @@ for (const tz of [null, 'UTC', 'America/New_York']) {
 // ---------- 4. day-trains ----------
 {
   const t = Z('2026-11-22T15:00:00Z'), slot = historySlot(t);
-  const tr = { id: '42/2026-11-22', number: '42', brand: 'SJ Snabbtåg', from: t, until: t + 3 * 60000, points: [
+  const tr = { id: '42/2026-11-22', number: '42', brand: 'SJ Snabbtåg', start: 'Mra', end: 'Cst', from: t, until: t + 3 * 60000, points: [
     { time: t + 10000, lon: 18.0, lat: 59.0, speed: 100, bearing: 0, late: 2 },
     { time: t + 70000, lon: 18.0, lat: 59.01, speed: 120, bearing: 0, late: 2 },
     { time: t + 130000, lon: 18.02, lat: 59.01, speed: 0, bearing: 90, late: 3 }] };
@@ -137,13 +183,17 @@ for (const tz of [null, 'UTC', 'America/New_York']) {
   day.add(buildHistory(slot + 2, [{ ...tr, from: t + 2 * HISTORY_MS, until: t + 2 * HISTORY_MS, points: [{ time: t + 2 * HISTORY_MS, lon: 18.1, lat: 59.1, speed: 0, bearing: 0, late: 1 }] }]));
   const mid = day.placeOf('42/2026-11-22', t + 40000), still = day.placeOf('42/2026-11-22', t + 200000), before = day.placeOf('42/2026-11-22', t + 1000);
   const near = (a, b) => Math.abs(a - b) < 1e-9;
-  ok(mid && near(mid.lat, 59.005) && near(mid.lon, 18) && near(mid.bearing, 0) && mid.v > 18 && mid.v < 19 && mid.number === '42' && mid.brand === 'SJ Snabbtåg' && mid.late === 2,
-    `half-way at half time, its number, company, lateness and pace (${mid && `${mid.lat.toFixed(4)}, ${mid.v.toFixed(1)} m/s`})`);
+  ok(mid && near(mid.lat, 59.005) && near(mid.lon, 18) && near(mid.bearing, 0) && mid.v > 18 && mid.v < 19 && mid.number === '42' && mid.brand === 'SJ Snabbtåg' && mid.late === 2 && mid.start === 'Mra' && mid.end === 'Cst',
+    `half-way at half time, its number, company, lateness, ends and pace (${mid && `${mid.lat.toFixed(4)}, ${mid.v.toFixed(1)} m/s`})`);
   ok(still && still.lon === 18.02 && still.v === 0 && before?.lat === 59.0, 'standing at its last point after it, at its first before it');
   ok(day.placeOf('42/2026-11-22', t + 3 * 60000 + HISTORY_EVERY_MS + 1000) === null, 'off the map after its slot says it was');
   ok(day.at(t + HISTORY_MS + 300000).length === 0, 'nothing in a gap (no file)');
   const back = day.placeOf('42/2026-11-22', t + 2 * HISTORY_MS + 5000);
   ok(back && back.lon === 18.1, 'back in the slot after the gap, at its new point');
+  // its trip so far (Rewind's line): the points up to T, the last piece to its place then
+  const trail = day.trailOf('42/2026-11-22', t + 100000), line = trail[0] ?? [], end = line.at(-1);
+  ok(trail.length === 1 && line.length === 3 && line[0][1] === 59.0 && line[1][1] === 59.01 && end && Math.abs(end[0] - 18.01) < 1e-9 && end[1] === 59.01,
+    `the trip so far at 1:40: ${JSON.stringify(trail)}`);
   const keys = Object.keys(mid).sort().join();
   ok(['id', 'lon', 'lat', 'bearing', 'syncing', 'stale', 'v', 'extra'].every(k => k in mid), `the shape of src/trains.js placedAt (${keys})`);
 }

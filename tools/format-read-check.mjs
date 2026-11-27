@@ -87,7 +87,7 @@ const files = [
   ['passings', buildPassings(state, T).passings.map(r => [r]), 'passingOf'],
   ['planned', (f => f.rows.map(r => [r, f.brands]))(buildPlanned(state, T, [], 0)), 'plannedOf'],
   // The day's history (2026-11-22): a train with two points, every field its own value.
-  ['history', (f => f.trains.map(r => [r, f.t]))(buildHistory(historySlot(T), [{ id: '1234/2026-11-19', number: '5678', brand: 'SJ Regional',
+  ['history', (f => f.trains.map(r => [r, f.t]))(buildHistory(historySlot(T), [{ id: '1234/2026-11-19', number: '5678', brand: 'SJ Regional', start: 'Mra', end: 'Cst',
     from: T + 60000, until: T + 240000, points: [{ time: T + 37000, lon: 18.12345, lat: 59.54321, speed: 87, bearing: 213, late: 3 },
       { time: T + 101000, lon: 18.13456, lat: 59.55432, speed: null, bearing: null, late: -1 }] }])), 'historyOf'],
 ];
