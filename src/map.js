@@ -1168,14 +1168,19 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   // A label w × h by a train's screen point p: its side (under it first, else above, right, left: where no station's
   // name is; looked at again at most every SEL_SIDE_MS) and its top left, held on whole device pixels until the train
   // has gone 0.75 of one. hold: the label's own { side, sideAt, held } (held: { x, y }, null to place it afresh).
-  // dy, dx: how far below/beside the point it starts (clear of the ring).
-  function placeBy(hold, p, w, h, dy, dx) {
+  // dy, dx: how far below/beside the point it starts (clear of the ring). onScreen: a side that would leave the screen
+  // isn't free either (under or over it, the owner slides it along the screen; beside it, it can't: Rewind's bubble
+  // ran off the right edge, 2026-11-27).
+  function placeBy(hold, p, w, h, dy, dx, onScreen = false) {
     const now = performance.now();
+    const { clientWidth: W, clientHeight: H } = box;
+    const fits = (s, b) => !onScreen || (s === 'down' || s === 'up' ? b.t >= 4 && b.b <= H - 4 : b.l >= 4 && b.r <= W - 4 && b.t >= 4 && b.b <= H - 4);
+    const free = s => { const b = selBox(s, p, w, h, dy, dx); return fits(s, b) && selSideFree(b); };
     if (!hold.held || now - hold.sideAt > SEL_SIDE_MS) {
       hold.sideAt = now;
       let side = hold.side;
-      if (!selSideFree(selBox(side, p, w, h, dy, dx))) side = SIDES.find(s => selSideFree(selBox(s, p, w, h, dy, dx))) ?? 'down';
-      else if (side !== 'down') side = SIDES.find(s => s === side || selSideFree(selBox(s, p, w, h, dy, dx)));   // back under it when free
+      if (!free(side)) side = SIDES.find(free) ?? 'down';
+      else if (side !== 'down') side = SIDES.find(s => s === side || free(s));   // back under it when free
       if (side !== hold.side) { hold.side = side; hold.held = null; }
     }
     const { x, y } = selBox(hold.side, p, w, h, dy, dx);
@@ -2173,7 +2178,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const p = map.project([lon, lat]);
       let { dy, dx } = labelGap();
       if (selShown) { const r = selEl.getBoundingClientRect(); dy = Math.max(dy, r.height / 2 + 6); dx = Math.max(dx, r.width / 2 + 6); }
-      return placeBy(hold, p, w, h, dy, dx);
+      return placeBy(hold, p, w, h, dy, dx, true);
     },
     // fn() after every move of the camera, before the map draws it (a label kept with its train); -> stop
     onMove(fn) { map.on('move', fn); return () => map.off('move', fn); },   // (#map fills the window from its top left)
