@@ -62,7 +62,7 @@ const SLOW_MS = 400;   // each history file this late (the page's waiting shows 
 const fileOf = slot => JSON.parse(readFileSync(join(dir, `history-${slot}.json`), 'utf8'));
 
 const live = await freePort(), port = await freePort();
-const fetcher = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(live), '--minutes', '10'], { stdio: 'ignore' });
+const fetcher = spawn(process.execPath, ['fetcher/main.mjs', '--env', '.env', '--replay', RUSH_HOUR, '--serve', String(live), '--minutes', HOLD ? '120' : '10'], { stdio: 'ignore' });   // (held for filming: long enough for a whole film)
 const server = createServer(async (req, res) => {
   const name = decodeURIComponent(new URL(req.url, 'http://x').pathname.slice(1));
   const head = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };

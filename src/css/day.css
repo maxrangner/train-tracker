@@ -83,7 +83,9 @@
 
   /* A computer: above the sheet at the left, as wide as it */
   @media (min-width: 440px) {
-    #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + var(--chips-h, 0px) + env(safe-area-inset-top, 0px)); }
+    #day { right: auto; width: var(--sheet-w); left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); bottom: auto; top: calc(var(--sheet-shown, 80px) + 20px + var(--chips-h, 0px) + env(safe-area-inset-top, 0px));
+      /* (it glides with the chips' room, as on a phone: ☰ hides the chips and it jumped up under them in one frame) */
+      transition: top var(--t-glide) var(--ez), opacity .18s; }
   }
 
   @media (prefers-reduced-motion: reduce) {

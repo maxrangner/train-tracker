@@ -2165,10 +2165,14 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
     sunShow() { if (isReady) sun.show(); },
     // A place on the screen ({ x, y } in the page), e.g. for The day's bubble over a train.
     project(lon, lat) { const p = map.project([lon, lat]); return { x: p.x, y: p.y }; },
-    // A label of w × h by the train at lon/lat, placed as the selected train's own label (placeBy): hold is that
-    // label's { side, sideAt, held }, kept by its owner (Rewind's bubble, src/day-view.js). -> hold
+    // A label of w × h by the train at lon/lat, placed as the selected train's own label (placeBy), but clear of its
+    // whole ring as drawn (tilted with the map): a bubble taller than the label would cover a 3D train from 16 px
+    // (Max, 2026-11-27: "Following label covers the train"). hold is that label's { side, sideAt, held }, kept by its
+    // owner (Rewind's bubble, src/day-view.js). -> hold
     labelAt(hold, lon, lat, w, h) {
-      const p = map.project([lon, lat]), { dy, dx } = labelGap();
+      const p = map.project([lon, lat]);
+      let { dy, dx } = labelGap();
+      if (selShown) { const r = selEl.getBoundingClientRect(); dy = Math.max(dy, r.height / 2 + 6); dx = Math.max(dx, r.width / 2 + 6); }
       return placeBy(hold, p, w, h, dy, dx);
     },
     // fn() after every move of the camera, before the map draws it (a label kept with its train); -> stop
