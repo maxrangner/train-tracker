@@ -23,8 +23,9 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
   let view = null, sheetPad = 0;
 
   function pad() {
-    const h = view?.isOpen ? view.el.offsetHeight + 10 : 0, root = document.documentElement;
+    const h = view?.isOpen ? view.el.offsetHeight : 0, root = document.documentElement;
     root.style.setProperty('--ribbon-h', !isWide() && h ? `${h}px` : '0px');
+    root.style.setProperty('--day-h', `${h}px`);   // (the pills step past it: src/css/day.css)
     // (not while the card's "to …" chooser is open: it shuts back to the same height, and the map stays still)
     const st = stack();
     const choosing = panelEl.classList.contains('picking') && panel.openId && !panel.hidden && st?.top() === `train:${panel.openId}`;
