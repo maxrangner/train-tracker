@@ -108,8 +108,8 @@
     .day-open:not(.sheet-high) #chips { transform: none; }
   }
 
-  /* The compact stage while it plays (src/day-view.js setCompact): one row, play/pause, a thin timeline, ✕; the search
-     card and the chips step away; a phone: at the bottom edge, the map's buttons over it; a computer: alone at the top */
+  /* The compact stage while it plays, a phone only (src/day-view.js setCompact): one row, play/pause, a thin timeline, ✕;
+     the search card and the chips step away; at the bottom edge, the map's buttons over it */
   .day-mini { display: none; align-items: center; gap: 12px; cursor: pointer; }
   #day.compact > :not(.day-mini) { display: none; }
   #day.compact .day-mini { display: flex; }
@@ -125,10 +125,6 @@
     .day-compact .maplibregl-map .maplibregl-ctrl-bottom-right { bottom: calc(var(--day-h, 0px) + env(safe-area-inset-bottom, 0px)); }
     .day-compact .scale { bottom: calc(var(--day-h, 0px) + 74px + env(safe-area-inset-bottom, 0px)); }
     .day-compact #credit { bottom: calc(var(--day-h, 0px) + 10px + env(safe-area-inset-bottom, 0px)); }
-  }
-  @media (min-width: 440px) {
-    .day-compact #day { left: calc(var(--sheet-inset) + env(safe-area-inset-left, 0px)); right: auto; width: var(--sheet-w); bottom: auto;
-      top: calc(var(--sheet-inset) + env(safe-area-inset-top, 0px)); padding: 10px 12px; border-radius: var(--radius); box-shadow: var(--shadow); }
   }
 
   @media (prefers-reduced-motion: reduce) {

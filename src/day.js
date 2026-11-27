@@ -25,7 +25,6 @@ export function createDay({ map, panel, panelEl, stack, frame, feeds, net, fromF
   // A computer: the bar inside the search card, under the search box (src/css/day.css; Max, 2026-11-27: "always sit on
   // top where it is when active"); a phone: on its own, on the sheet's top edge.
   function place() {
-    // (compact, a computer too: on its own at the top, the search card stepped away; src/css/day.css)
     const root = document.documentElement, inside = Boolean(view?.isOpen) && isWide() && !view.compact;
     const head = document.querySelector('#sheet .sh-head'), el = view?.el;
     if (el && inside && el.parentElement !== head) head.append(el);

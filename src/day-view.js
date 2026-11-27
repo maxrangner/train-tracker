@@ -40,6 +40,7 @@ import { icon } from './icons.js';
 import { esc } from './html.js';
 import { ticksFor } from './day-ticks.js';
 import { ms, reduceMotion } from './motion.js';
+import { isWide, onWideChange } from './layout.js';
 
 // The play speeds: real time, then ten minutes a minute, an hour a minute, three hours a minute, ten hours a minute.
 export const SPEEDS = [1, 10, 60, 180, 600];
@@ -183,7 +184,8 @@ export function createDayView({ history, overview = async () => null, stationNam
     setMode(true);
     draw();
   }
-  // Compact while it plays: pressing play makes it so, a tap on the compact row (or Live, ✕) brings the whole bar back;
+  // Compact while it plays, on a phone only (Max, 2026-11-27: "I did NOT want those changes for pc. That was a phone
+  // conversation"): pressing play makes it so, a tap on the compact row (or Live, ✕) brings the whole bar back;
   // pausing leaves it as it is. onCompact(): src/day.js places the bar and steps the search card and chips away.
   let compact = false;
   function setCompact(on) {
@@ -197,6 +199,7 @@ export function createDayView({ history, overview = async () => null, stationNam
     onCompact(on);
     draw();
   }
+  onWideChange(() => { if (isWide()) setCompact(false); });   // (turned into a computer's width: the whole bar)
   function live() {
     setCompact(false);
     rate = 0; waiting = false;
@@ -211,7 +214,7 @@ export function createDayView({ history, overview = async () => null, stationNam
     const at = Math.max(startT(), T ?? edge() - BACK_FROM_LIVE);
     rate = SPEEDS[speed]; lastTs = null;
     seek(at, { keep: true });
-    setCompact(true);
+    if (!isWide()) setCompact(true);
   }
   // A new speed: at once while playing.
   function setSpeed(i) {
