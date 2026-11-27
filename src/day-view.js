@@ -16,13 +16,12 @@
 // ribbon shimmers. Without an overview (an older fetcher) the whole day follows in the background as before (a day is
 // about 3 MB packed, docs/data.md "The day"). Each file once per session (files-source.js keeps them in a store of
 // their own).
-//   const day = createDayView({ history, overview, stationName, now, delay, net, onMode, onClose, following, onFollow,
-//     onPick, onGone })
+//   const day = createDayView({ history, overview, stationName, now, delay, net, onMode, onClose, onPick, onGone })
 //     history(from, to): src/files-source.js history(); overview(): the newest daysum file or null; stationName(sig);
 //     now(): the page's clock; delay: how far the live map is drawn
 //     behind (ms); net(): the rail network or null; onMode(past, picked): the map turned to an earlier moment (true)
-//     or back to live (false; picked: the train picked then, or null); onClose(): the ribbon closed; following() -> bool: the map follows the picked train;
-//     onFollow(): its bubble's Follow pressed; onPick(id): a row of a group's bubble tapped; onGone(): the picked
+//     or back to live (false; picked: the train picked then, or null); onClose(): the ribbon closed;
+//     onPick(id): a row of a group's bubble tapped; onGone(): the picked
 //     train's bubble went by itself (its history ends there).
 //   day.open() / day.close() / day.live() / day.seek(T) / day.play() (play or pause) / day.setSpeed(i) (SPEEDS[i])
 //   day.tick(ts) each frame: moves the moment on while playing; true when it moved
@@ -51,7 +50,7 @@ const FRESH_MS = 8 * 60000;           // ... for this long after its end (the fe
 const AHEAD_S = 25;                   // a play fetches the slots it reaches within this many seconds
 const TRAIL_MS = 200;                 // the picked train's line worked out again at most this often
 
-export function createDayView({ history, overview = async () => null, stationName = sig => sig, now, delay, net, onMode = () => {}, onClose = () => {}, following = () => false, onFollow = () => {}, onPick = () => {}, onGone = () => {} }) {
+export function createDayView({ history, overview = async () => null, stationName = sig => sig, now, delay, net, onMode = () => {}, onClose = () => {}, onPick = () => {}, onGone = () => {} }) {
   const root = document.documentElement;
   let day = null;                     // src/day-trains.js, made at the first open (the rail network is there by then)
   let shown = false, T = null, rate = 0, speed = FIRST_SPEED, lastTs = null, waiting = false, timer = null;
@@ -120,7 +119,7 @@ export function createDayView({ history, overview = async () => null, stationNam
         if (x?.rows) { day.add(x); slots.set(slot, { state: 'ok', ...statsOf(x.rows) }); if (T !== null) draw(); }
         else slots.set(slot, { state: 'gap', at: Date.now() });
       }).catch(() => slots.set(slot, { state: 'gap', at: Date.now() }))
-        .finally(() => { active--; if (shown) draw(); pump(); });
+        .finally(() => { active--; stepWalk(); if (shown) draw(); pump(); });
     }
   }
   // A slot's bar: its trains, by their lateness at their last point in it (counted as the fetcher counts the overview).
@@ -295,7 +294,7 @@ export function createDayView({ history, overview = async () => null, stationNam
   }
   function showClock() {
     if (T === null) return;
-    const text = `${hhmm(T)} · ${t(swedishDay(T) === swedishDay(edge()) ? 'dayEarlier' : 'dayYesterday')}${rate ? ` · ×${rate}` : ''}${waiting ? ` · ${t('loading')}` : ''}`;
+    const text = `${hhmm(T)} · ${t(swedishDay(T) === swedishDay(edge()) ? 'dayEarlier' : 'dayYesterday')}${rate ? ` · ×${rate}` : ''}${waiting || walking() ? ` · ${t('loading')}` : ''}`;
     if (clock.textContent !== text) clock.textContent = text;
   }
   function relabel() {
@@ -339,9 +338,10 @@ export function createDayView({ history, overview = async () => null, stationNam
   for (const type of ['pointerdown', 'wheel', 'touchstart']) el.addEventListener(type, e => e.stopPropagation(), { passive: true });
 
   // ---------- the bubble over a tapped train ----------
-  // pick: the one train tapped (ringed and followed: src/day.js), its bubble with Follow; else a group's trains, a row
-  // each, a tap on a row picks it.
-  let bubbleIds = null, bubbleAll = null, bubbleFor = null, bubbleW = null, bubbleH = null, picked = null, bubbleFollow = null;
+  // pick: the one train tapped (ringed and always followed: src/day.js), its label: company, number, lateness then, and
+  // its trip's start → end (Max, 2026-11-27: no time, it is at the top; no Follow, "just follow whatever train is
+  // selected"); else a group's trains, a row each, a tap on a row picks it.
+  let bubbleIds = null, bubbleAll = null, bubbleFor = null, bubbleW = null, bubbleH = null, picked = null;
   const hold = { side: 'down', sideAt: 0, held: null };   // where it sits by its train (src/map.js labelAt)
   function bubble(ids, pick = null) {
     if (!day || T === null || !ids?.length) { hideBubble(); return; }
@@ -353,35 +353,47 @@ export function createDayView({ history, overview = async () => null, stationNam
     if (!rows.length) { hideBubble(); return; }
     const row = p => `${p.brand ? `<span class="co">${esc(p.brand)}</span>` : ''}<b>${esc(String(p.number))}</b>` +
       `<span class="m ${lateClass(p.late)}">${p.late === null || p.late === undefined ? esc(t('dayLateUnknown')) : esc(minutesText(p.late))}</span>`;
-    const on = following();
     const p0 = rows[0], ends = picked && (p0.start || p0.end) ? `${p0.start ? stationName(p0.start) : '…'} → ${p0.end ? stationName(p0.end) : '…'}` : '';
     bubbleEl.innerHTML = (picked ? `<div class="db-row">${row(rows[0])}</div>${ends ? `<div class="db-ends">${esc(ends)}</div>` : ''}`
       : rows.map(p => `<button type="button" class="db-row db-pick" data-id="${esc(String(p.id))}">${row(p)}</button>`).join('')) +
-      (ids.length > bubbleIds.length ? `<div class="db-more">+${ids.length - bubbleIds.length}</div>` : '') +
-      `<small>${esc(t('dayThen', hhmm(T)))}</small>` +
-      (picked ? `<button type="button" class="sh-follow db-follow" aria-pressed="${on}">${icon('follow', 18)}<span>${esc(t(on ? 'following' : 'follow'))}</span></button>` : '');
-    bubbleFollow = picked ? on : null;
+      (ids.length > bubbleIds.length ? `<div class="db-more">+${ids.length - bubbleIds.length}</div>` : '');
     bubbleEl.classList.toggle('picked', Boolean(picked));
+    if (picked && walk?.id !== picked) startWalk(picked);
     bubbleEl.hidden = false;
     bubbleFor = Math.floor(T / 60000);
     bubbleW = null;   // (measured again where it is placed)
     if (!same) hold.held = null;
   }
-  // The picked train's trip so far (src/day-trains.js trailOf), for the map's line: worked out again when its files
-  // change, else at most every TRAIL_MS (the line's end follows the train), null when no train is picked.
+  // The picked train's whole trip so far (Max, 2026-11-27: "Either all or nothing"): its earlier slots are fetched, newest
+  // first, one at a time, until one it isn't in (or no file, or the oldest kept); meanwhile the clock says Loading and
+  // no line shows. ~40 kB a slot packed (a 3-hour trip ~0.5 MB), each once a session.
+  let walk = null;   // { id, s (the next slot to look at), done }
+  function startWalk(id) { walk = { id, s: (T === null ? historySlot(upTo()) : historySlot(T)) - 1, done: false }; stepWalk(); }
+  function stepWalk() {
+    if (!walk || walk.done || !day) return;
+    for (;;) {
+      const s = walk.s, st = slots.get(s)?.state;
+      const noFile = st === 'gap' || (sum && s >= sumFirst && !sum.has(s) && (s + 1) * HISTORY_MS <= sumAt);
+      if (s < firstSlot() || noFile || (st === 'ok' && !day.inSlot(walk.id, s))) { walk.done = true; if (shown) draw(); return; }
+      if (st !== 'ok') { want(s, true); return; }   // (asked for: pump() steps on when it has come)
+      walk.s--;
+    }
+  }
+  const walking = () => Boolean(picked && walk && !walk.done);
+  // The line for the map: worked out again when its files change, else at most every TRAIL_MS (the line's end follows
+  // the train); null while its earlier slots come, or when no train is picked.
   let trailKey = null, trailLines = null, trailAt = 0;
   function trail() {
-    if (!picked || T === null || !day) { trailKey = null; trailLines = null; return null; }
+    if (!picked || T === null || !day || walking()) { trailKey = null; trailLines = null; return null; }
     const key = `${picked}|${day.slots.length}`, now = performance.now();
     if (key === trailKey && now - trailAt < TRAIL_MS) return trailLines;
     trailKey = key; trailAt = now;
     trailLines = day.trailOf(picked, T, { budgetMs: 6 });
     return trailLines;
   }
-  function hideBubble() { bubbleIds = null; picked = null; bubbleEl.hidden = true; hold.held = null; }
+  function hideBubble() { bubbleIds = null; picked = null; walk = null; bubbleEl.hidden = true; hold.held = null; }
   bubbleEl.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (e.target.closest('.db-follow')) { onFollow(); return; }
     const row = e.target.closest('.db-pick');
     if (row) onPick(bubbleIds.find(id => String(id) === row.dataset.id) ?? row.dataset.id);
   });
@@ -396,7 +408,7 @@ export function createDayView({ history, overview = async () => null, stationNam
     if (!bubbleIds || T === null || !place) return;
     const p = day.placeOf(bubbleIds[0], T);
     if (!p) { const was = picked; hideBubble(); if (was) onGone(); return; }
-    if (bubbleFor !== Math.floor(T / 60000) || (picked && bubbleFollow !== following())) bubble(bubbleAll, picked);
+    if (bubbleFor !== Math.floor(T / 60000)) bubble(bubbleAll, picked);
     if (bubbleW === null) { bubbleW = bubbleEl.offsetWidth; bubbleH = bubbleEl.offsetHeight; }
     const was = hold.side;
     place(hold, p.lon, p.lat, bubbleW, bubbleH);
@@ -448,9 +460,11 @@ export function createDayView({ history, overview = async () => null, stationNam
     get speed() { return SPEEDS[speed]; },
     get picked() { return picked; },
     get bubbleShown() { return Boolean(bubbleIds); },
+    // A train's company and trip ends at the moment shown (the computer's label under the mouse, src/map.js hoverMore)
+    aboutOf(id) { const p = day && T !== null ? day.placeOf(id, T) : null; return p && { company: p.brand ?? '', ends: p.start || p.end ? `${p.start ? stationName(p.start) : '…'} → ${p.end ? stationName(p.end) : '…'}` : '' }; },
     // For the checks (tools/day-check.mjs): what each slot holds and the ribbon's span.
     state: () => ({ open: shown, T, rate, waiting, start: startT(), upTo: upTo(), edge: edge(),
       slots: Object.fromEntries([...slots].map(([s, v]) => [s, v.state])), trains: day?.size ?? 0,
-      overview: sum ? [...sum.keys()] : null, side: bubbleIds ? hold.side : null }),
+      overview: sum ? [...sum.keys()] : null, side: bubbleIds ? hold.side : null, walking: walking() }),
   };
 }

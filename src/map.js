@@ -1228,7 +1228,7 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
   map.getCanvasContainer().appendChild(nearBox);   // before the selection marker, which is added later: it stays on top
   // The label of the train under the mouse (a computer), as a close-in bubble; null takes it away.
   const hoverEl = Object.assign(document.createElement('div'), { className: 'near-label hover' });
-  let hoverId = null;
+  let hoverId = null, hoverMoreOf = null;   // (hoverMore: Rewind adds the company and the trip's ends)
   function hoverLabel(f) {
     const id = f && !f.properties.point_count ? f.properties.id : null;
     if (!id || id === selected || nearEls.has(id)) { if (hoverId) { hoverEl.remove(); hoverId = null; } return; }
@@ -1237,7 +1237,10 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       const { number, minutes, rest } = splitLabel(f.properties.label ?? '');
       const el = (tag, cls, txt) => Object.assign(document.createElement(tag), { className: cls, textContent: txt });
       hoverEl.classList.toggle('stale', f.properties.stale === true);
-      hoverEl.replaceChildren(el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []));
+      const more = hoverMoreOf?.(id);
+      hoverEl.replaceChildren(...(more?.company ? [el('span', 'co', more.company)] : []), el('b', '', number), ...(minutes === null || minutes === 0 ? [] : [el('span', `m ${lateClass(minutes)}`, minutesText(minutes))]), ...(rest ? [rest] : []),
+        ...(more?.ends ? [el('span', 'ends', more.ends)] : []));
+      hoverEl.classList.toggle('more', Boolean(more));
       if (!hoverEl.isConnected) nearBox.appendChild(hoverEl);
     }
     const q = map.project(f.geometry.coordinates);
@@ -2195,6 +2198,8 @@ export function createMap(container, { onTrainTap, onStationTap, onGroupTap, onD
       map.addLayer({ id: 'day-trail-edge', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': dark ? '#0b1220' : '#ffffff', 'line-width': 8, 'line-opacity': 0.55 } }, before);
       map.addLayer({ id: 'day-trail', type: 'line', source: 'day-trail', layout: round, paint: { 'line-color': accent, 'line-width': 4.5 } }, before);
     },
+    // fn(id) -> { company, ends } or null: more for the label under the mouse (Rewind: the train as it was then)
+    hoverMore(fn) { hoverMoreOf = fn; hoverId = null; },
     // fn() after every move of the camera, before the map draws it (a label kept with its train); -> stop
     onMove(fn) { map.on('move', fn); return () => map.off('move', fn); },   // (#map fills the window from its top left)
     get slider() { return slider; },

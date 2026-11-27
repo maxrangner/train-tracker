@@ -12,9 +12,10 @@
 //   ribbon starts at the first file); a drag back on the ribbon says "Loading…" and shimmers its slot until the file
 //   is there, then shows that moment: the frame,
 //   "hh:mm · earlier today" in the live mark's place, every train where its history file has it then (a few metres);
-//   in the gap no trains; a tap on a train shows the bubble with its number, Following and its trip's ends
-//   (Stockholm C → Göteborg C), not over the train, and still while it plays followed; the map follows it (held
-//   on its focus as the moment moves), a tap on the map stops following (Follow), the next lets it go, Esc takes the
+//   in the gap no trains; a tap on a train picks it: its label (number, its trip's ends Stockholm C → Göteborg C, no
+//   time, no Follow), not over the train, and still while it plays; the map follows it (held on its focus as the
+//   moment moves); its whole trip in the files as a line (its earlier slots fetched first; meanwhile no line, the
+//   clock says Loading); one tap on the map lets it go, Esc takes the
 //   bubble away; a train's page says "Only live" and its button goes back to live with the real page; play at ×600
 //   plays on and comes back to live by itself; play at the live end starts an hour back; the speed slider's ×1 plays
 //   in real time; pause; Live; × closes it; Esc steps back; ☰ → Rewind puts the bar in its place at once (the chips
@@ -191,19 +192,25 @@ try {
   await page.mouse.click(at.x, at.y);
   await sleep(400);
   const bubble = await page.evaluate(() => ({ shown: !document.getElementById('day-bubble').hidden, text: document.getElementById('day-bubble').textContent, top: window.__stack.top(),
-    picked: window.__day.picked, follow: document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') }));
+    picked: window.__day.picked, following: Boolean(window.__followFocus?.()), button: Boolean(document.querySelector('#day-bubble button')) }));
   expect(bubble.shown && bubble.text.includes(String(pick.h.number)), `a tap on train ${pick.h.number} at an earlier moment: bubble ${bubble.shown ? `"${bubble.text}"` : 'not shown'}`);
   expect(bubble.top === 'home', `a tap on a train at an earlier moment opened a page (${bubble.top})`);
-  expect(bubble.picked === pick.h.id && bubble.follow === 'true', `a tap on train ${pick.h.number} at an earlier moment: picked ${bubble.picked}, Follow ${bubble.follow}`);
-  expect(/Stockholm C → Göteborg C/.test(bubble.text), `the bubble does not say the trip's ends: "${bubble.text}"`);
-  // its trip so far on the map (Max, 2026-11-27: "Yes"): a line ending at the train
-  await sleep(400);
+  expect(bubble.picked === pick.h.id && bubble.following && !bubble.button, `a tap on train ${pick.h.number} at an earlier moment: picked ${bubble.picked}, followed ${bubble.following}, a button in its label ${bubble.button}`);
+  expect(/Stockholm C → Göteborg C/.test(bubble.text) && !/at \d\d:\d\d/.test(bubble.text), `the label: "${bubble.text}" (its trip's ends wanted, no time)`);
+  // its whole trip in the files on the map (Max, 2026-11-27: "Either all or nothing"): the slots before fetched while it
+  // has a row in them, then a line from its first point there to the train
+  const done = await until(page, () => !window.__day.state().walking && Boolean(window.__map.getSource('day-trail')?.serialize?.().data?.geometry), 8000);
   const trail = await page.evaluate((id) => {
     const d = window.__map.getSource('day-trail')?.serialize?.().data, lines = d?.geometry?.coordinates ?? [], end = lines.at(-1)?.at(-1);
     const x = (window.__last3d ?? []).find(t => t.id === id);
-    return { points: lines.flat().length, off: end && x ? Math.hypot((end[0] - x.lon) * 0.5, end[1] - x.lat) * 111195 : null };
+    return { first: lines[0]?.[0] ?? null, points: lines.flat().length, off: end && x ? Math.hypot((end[0] - x.lon) * 0.5, end[1] - x.lat) * 111195 : null };
   }, pick.h.id);
-  expect(trail.points >= 3 && trail.off !== null && trail.off < 300, `the picked train's trip so far: ${JSON.stringify(trail)}`);
+  let firstSlot = slot;   // (its first point: back from the moment's slot while its files have it; the gap stops it)
+  while (slots.includes(firstSlot - 1) && firstSlot - 1 !== GAP && fileOf(firstSlot - 1).trains.some(r => r[0] === pick.h.id)) firstSlot--;
+  const ff = fileOf(firstSlot), fp = historyOf(ff.trains.find(r => r[0] === pick.h.id), ff.t).points[0];
+  const fromOff = trail.first ? Math.hypot((trail.first[0] - fp.lon) * 0.5, trail.first[1] - fp.lat) * 111195 : null;
+  expect(done && trail.points >= 3 && trail.off !== null && trail.off < 300 && fromOff !== null && fromOff < 5,
+    `the picked train's whole trip: ${JSON.stringify({ ...trail, fromOff, firstSlot: firstSlot - slot })}`);
   // followed as the moment moves: held on its focus (src/map.js window.__followFocus)
   const onFocus = () => page.evaluate((id) => {
     const x = (window.__last3d ?? []).find(t => t.id === id), f = window.__followFocus?.();
@@ -241,21 +248,13 @@ try {
     most = Math.max(most, d);
   }
   expect(steps <= 3 && most <= 2 && flips <= 2, `the bubble of a followed train playing ×10 moved in ${steps} of ${moves.length} frames, at most ${most.toFixed(2)} px; changed sides ${flips} times`);
-  // a tap on the map stops following, the next lets it go
+  // one tap on the map lets it go (its label and line go, the map stops following)
   const emptyAt = await page.evaluate(() => (innerWidth > 600 ? { x: innerWidth - 120, y: innerHeight - 120 } : { x: 30, y: 120 }));
   await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(400);
-  const tap1 = await page.evaluate(() => ({ picked: window.__day.picked, following: Boolean(window.__followFocus?.()), follow: document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') }));
-  expect(tap1.picked === pick.h.id && !tap1.following && tap1.follow === 'false', `a tap on the map while following at an earlier moment: ${JSON.stringify(tap1)}`);
-  await page.click('#day-bubble .db-follow');
-  await sleep(400);
-  expect(await page.evaluate(() => Boolean(window.__followFocus?.()) && document.querySelector('#day-bubble .db-follow')?.getAttribute('aria-pressed') === 'true'), 'Follow in the bubble did not follow again');
-  await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(300);
-  await page.mouse.click(emptyAt.x, emptyAt.y);
-  await sleep(400);
-  const tap2 = await page.evaluate(() => ({ picked: window.__day.picked, hidden: document.getElementById('day-bubble').hidden }));
-  expect(!tap2.picked && tap2.hidden, `the second tap on the map did not let the train go: ${JSON.stringify(tap2)}`);
+  await sleep(500);
+  const tap1 = await page.evaluate(() => ({ picked: window.__day.picked, hidden: document.getElementById('day-bubble').hidden, following: Boolean(window.__followFocus?.()),
+    line: Boolean(window.__map.getSource('day-trail')?.serialize?.().data?.geometry) }));
+  expect(!tap1.picked && tap1.hidden && !tap1.following && !tap1.line, `a tap on the map did not let the train go: ${JSON.stringify(tap1)}`);
   await page.evaluate(t => window.__day.seek(t), pick.p.time);
   await page.evaluate(p => window.__map.jumpTo({ center: [p.lon, p.lat], zoom: 12 }), pick.p);
   await sleep(900);

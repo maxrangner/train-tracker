@@ -142,6 +142,10 @@
   .near-label b { font-weight: 800; }
   .near-label i { font-style: normal; color: var(--muted); }
   .near-label .m, .sel-label .m { margin-left: 5px; }
+  /* (Rewind's label under the mouse: the company over it, the trip's ends under it; src/map.js hoverMore) */
+  .near-label.hover.more { text-align: center; }
+  .near-label.hover.more .co { display: block; font-size: 11px; font-weight: 600; color: var(--muted); }
+  .near-label.hover.more .ends { display: block; font-size: 11.5px; font-weight: 650; }
   .near-label.stale { opacity: 0.5; }
   .near-label.up::before { top: auto; bottom: -4px; border-radius: 0 0 2px 0; }   /* above its train: the pointer down */
   /* Beside its train (a station's name under and above it): the pointer sideways to it. */

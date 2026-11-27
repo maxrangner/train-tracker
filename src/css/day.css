@@ -76,7 +76,6 @@
   #day-bubble button { pointer-events: auto; }
   #day-bubble .db-pick { width: 100%; min-height: 32px; padding: 2px 4px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; align-items: center; }
   #day-bubble .db-pick:active { background: var(--hover); }
-  #day-bubble .db-follow { height: 34px; margin-top: 6px; padding: 0 13px; font: 700 13px var(--font); }
   /* (the picked train's own label: the bubble over it says it) */
   .day-past .sel-label { display: none; }
   .only-live { display: grid; gap: 12px; justify-items: start; padding: 6px 2px; }

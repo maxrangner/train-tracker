@@ -41,7 +41,8 @@ export function createDayTrains({ net = null } = {}) {
     for (const row of rows) {
       const h = historyOf(row, file.t);
       let tr = trains.get(h.id);
-      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, start: null, end: null, spans: [], points: [], way: new Map() });
+      if (!tr) trains.set(h.id, tr = { id: h.id, number: h.number, brand: h.brand, start: null, end: null, spans: [], points: [], way: new Map(), inSlots: new Set() });
+      tr.inSlots.add(file.slot);
       if (h.brand) tr.brand = h.brand;
       tr.start ??= h.start; tr.end ??= h.end;   // (its trip's ends: from files since 2026-11-27)
       // From its first report on (a train is first sampled up to a minute after its report came), until the next sample.
@@ -148,6 +149,8 @@ export function createDayTrains({ net = null } = {}) {
       return out;
     },
     placeOf: (id, T) => (trains.has(id) ? placeOf(trains.get(id), T) : null),
+    // Whether the train has a row in that slot's file (Rewind fetches a picked train's earlier slots until one hasn't).
+    inSlot: (id, slot) => Boolean(trains.get(id)?.inSlots.has(slot)),
     trailOf: (id, T, { budgetMs = Infinity } = {}) => (trains.has(id) ? trailOf(trains.get(id), T, budgetMs) : []),
     has: slot => slots.has(slot),
     get slots() { return [...slots].sort((a, b) => a - b); },
