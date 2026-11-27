@@ -21,6 +21,7 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
   let all = [], drawn = [], byId = new Map();
   let lastDraw = 0, lightTest = null;
   let dayDrawn = null, liveAllAt = 0, sunDrawnAt = 0;
+  let dayById = new Map();   // The day's trains as last drawn (id -> place)
 
   // The sun's line (Settings → Day and night): night where the sun is below the horizon; its place once a minute.
   let sunMinute = null, sunPlace = null;
@@ -56,7 +57,9 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
       dayDrawn = T;
       const near = map.nearView(), sun = settings.dayNight ? sunFor(T) : null, features = [];
       drawn = [];
+      dayById = new Map();
       for (const x of view.at(T, near)) {
+        dayById.set(x.id, x);
         if (filter.active && !filter.shows(x.brand, x.late === null || x.late === undefined ? 'unknown' : lateClass(x.late))) continue;
         x.night = nightAt(x, sun);
         drawn.push(x);
@@ -65,8 +68,17 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
       map.setTrains({ type: 'FeatureCollection', features });
       if (import.meta.env.DEV) window.__last3d = drawn;
     }
+    // The picked train (src/day.js): its place in every frame, so the camera following it glides (as the open train live)
+    const pk = view.picked, old = pk && dayById.get(pk), one = pk && view.placeOf(pk);
+    if (one) {
+      one.night = old?.night ?? 0;
+      dayById.set(pk, one);
+      const i = drawn.indexOf(old);
+      if (i >= 0) drawn[i] = one;
+    }
     map.tick(ts);
-    map.setSelectedPlace(null, null);
+    map.setSelectedPlace(one || null, one ? pastProps(one) : null);
+    if (one) map.drawIfMoved(one);
     view.placeBubble((lon, lat) => map.project(lon, lat));
     if (ts - sunDrawnAt > DAY_SUN_MS) { sunDrawnAt = ts; map.sunUpdate(); }   // (it draws itself again only a minute on)
   }
@@ -116,7 +128,7 @@ export function createFrame({ trains, lateness, map, panel, filter, settings, ro
     get all() { return all; },
     get drawn() { return drawn; },
     get byId() { return byId; },
-    placeNow: id => byId.get(id) ?? trains.placeOf(id, now() - drawDelay),
+    placeNow: id => (day()?.past ? dayById.get(id) ?? null : byId.get(id) ?? trains.placeOf(id, now() - drawDelay)),
     invalidate(fresh = false) { lastDraw = 0; if (fresh) { all = []; dayDrawn = null; } },
     light(fn) { lightTest = fn; lastDraw = 0; },
     start() { requestAnimationFrame(frame); },

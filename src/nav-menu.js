@@ -177,7 +177,25 @@ export function createNavMenu({ stack, mapEl, onDay, onState = () => {} }) {
   const fade = shown => (reduceMotion() ? Promise.resolve()
     : navEl.animate([{ opacity: shown ? 0 : 1 }, { opacity: shown ? 1 : 0 }], { duration: ms('fold') * 0.6, easing: 'linear', fill: 'forwards' }).finished.catch(() => {}));
   document.getElementById('open-filter').onclick = () => fromMenu('filter');
-  document.getElementById('open-day').onclick = () => { close(); onDay(); };
+  // (Rewind: the menu fades where it is and is closed at once, so the chips are back at once and Rewind's bar comes in
+  // its own place; sliding away it held the chips back, and when they came they pushed the bar; Max, 2026-11-27:
+  // "after a short moment the störningar, sparade and statistik pills reappear and push it down")
+  function fadeAway() {
+    if (state === 'closed') return;
+    if (!placed || state === 'parked') { close(); return; }
+    const mine = ++turn;
+    navEl.getAnimations().forEach(x => x.finish());
+    enter('closed');
+    navEl.hidden = false;
+    navEl.style.pointerEvents = 'none';
+    fade(false).then(() => {
+      navEl.style.pointerEvents = '';
+      if (turn !== mine || state !== 'closed') return;
+      navEl.hidden = true;
+      navEl.getAnimations().forEach(x => x.cancel());
+    });
+  }
+  document.getElementById('open-day').onclick = () => { fadeAway(); onDay(); };
   document.getElementById('open-settings').onclick = () => fromMenu('page:settings');
   document.getElementById('help-button').onclick = () => fromMenu('page:help');
 

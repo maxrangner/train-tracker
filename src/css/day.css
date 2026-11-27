@@ -8,9 +8,17 @@
   .day-open #line { display: none; }
   .day-row { display: flex; align-items: center; gap: 6px; }
   .day-grow { flex: 1; }
-  .day-chip { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 11px 0 9px; border: 0; border-radius: 16px; background: var(--hover); color: var(--ink);
-    font: 700 13px var(--font); white-space: nowrap; cursor: pointer; }
-  .day-chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  /* Play/pause, the speed slider (five stops: src/day-view.js SPEEDS) and its value */
+  .day-play { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  .day-play:focus-visible, .day-speed:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .day-speed { flex: 1 1 auto; min-width: 0; max-width: 190px; height: 32px; margin: 0 0 0 6px; padding: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; touch-action: none;
+    --fill: calc(10px + var(--f, .5) * (100% - 20px)); }
+  .day-speed::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--accent) var(--fill), var(--hover) var(--fill)); }
+  .day-speed::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); box-sizing: border-box; box-shadow: var(--shadow-s); }
+  .day-speed::-moz-range-track { height: 6px; border-radius: 3px; background: var(--hover); }
+  .day-speed::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+  .day-speed::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); box-sizing: border-box; }
+  .day-rate { flex: none; min-width: 42px; color: var(--ink); font: 700 13.5px var(--font); font-variant-numeric: tabular-nums; }
   .day-x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--hover); color: var(--muted); cursor: pointer; }
   .day-track-row { display: flex; align-items: stretch; gap: 8px; }
   .day-track { position: relative; flex: 1; min-width: 0; height: 46px; border-radius: 10px; background: color-mix(in srgb, var(--hover) 70%, transparent); cursor: ew-resize; touch-action: none; }
@@ -49,6 +57,12 @@
   #day-bubble .m.ontime { color: var(--t-ontime); } #day-bubble .m.some { color: var(--t-some); } #day-bubble .m.late { color: var(--t-late); } #day-bubble .m.unknown { color: var(--t-unknown); }
   #day-bubble small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 600; }
   #day-bubble .db-more { color: var(--muted); font-size: 11.5px; }
+  #day-bubble button { pointer-events: auto; }
+  #day-bubble .db-pick { width: 100%; min-height: 32px; padding: 2px 4px; border: 0; border-radius: 8px; background: none; color: inherit; font: inherit; cursor: pointer; align-items: center; }
+  #day-bubble .db-pick:active { background: var(--hover); }
+  #day-bubble .db-follow { height: 34px; margin-top: 6px; padding: 0 13px; font: 700 13px var(--font); }
+  /* (the picked train's own label: the bubble over it says it) */
+  .day-past .sel-label { display: none; }
   .only-live { display: grid; gap: 12px; justify-items: start; padding: 6px 2px; }
   .only-live p { margin: 0; font-size: 16px; font-weight: 650; }
   .only-live button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: var(--accent); color: var(--accent-ink); font: 700 15px var(--font); cursor: pointer; }
